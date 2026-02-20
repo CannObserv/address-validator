@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Address Validator</title>
+<style>
+  :root { --accent: #2563eb; --bg: #f8fafc; --card: #fff; --border: #e2e8f0; --text: #1e293b; --muted: #64748b; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; }
+  h1 { font-size: 1.6rem; margin-bottom: .25rem; }
+  .subtitle { color: var(--muted); font-size: .9rem; margin-bottom: 1.5rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: .75rem; padding: 1.5rem; width: 100%; max-width: 640px; margin-bottom: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  label { display: block; font-weight: 600; margin-bottom: .4rem; font-size: .9rem; }
+  input[type=text] { width: 100%; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: .5rem; font-size: 1rem; outline: none; transition: border-color .15s; }
+  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  button { background: var(--accent); color: #fff; border: none; padding: .6rem 1.5rem; border-radius: .5rem; font-size: .95rem; cursor: pointer; margin-top: .75rem; transition: background .15s; }
+  button:hover { background: #1d4ed8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .result-section { margin-top: .75rem; }
+  .result-section h3 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: .4rem; }
+  .std-line { font-size: 1.15rem; font-weight: 600; padding: .5rem .75rem; background: #f1f5f9; border-radius: .4rem; font-family: "SF Mono", "Cascadia Code", monospace; word-break: break-word; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .3rem; }
+  th, td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; width: 40%; }
+  .error { color: #dc2626; font-weight: 600; }
+  .examples { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
+  .examples span { cursor: pointer; text-decoration: underline; margin-right: .75rem; }
+  .examples span:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>🏠 Address Validator</h1>
+<p class="subtitle">Parse &amp; standardize US addresses per USPS Publication 28</p>
+
+<div class="card">
+  <label for="addr">Enter an address</label>
+  <input type="text" id="addr" placeholder="e.g. 1600 Pennsylvania Avenue NW, Washington, DC 20500" autocomplete="off">
+  <div class="examples">
+    Try:
+    <span onclick="fill('1600 Pennsylvania Avenue NW, Washington, DC 20500')">White House</span>
+    <span onclick="fill('350 Fifth Ave Suite 3300, New York, NY 10118')">Empire State</span>
+    <span onclick="fill('233 S Wacker Dr Ste 4700, Chicago, Illinois 60606')">Willis Tower</span>
+  </div>
+  <button id="btn" onclick="submit()">Standardize</button>
+</div>
+
+<div class="card" id="results" style="display:none">
+  <div class="result-section">
+    <h3>Standardized Address</h3>
+    <div class="std-line" id="stdLine"></div>
+  </div>
+  <div class="result-section" style="margin-top:1rem">
+    <h3>Components</h3>
+    <table><tbody id="compBody"></tbody></table>
+  </div>
+</div>
+
+<div class="card" id="errCard" style="display:none">
+  <p class="error" id="errMsg"></p>
+</div>
+
+<script>
+const addr = document.getElementById('addr');
+const btn  = document.getElementById('btn');
+
+function fill(v) { addr.value = v; }
+
+addr.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+async function submit() {
+  const raw = addr.value.trim();
+  if (!raw) return;
+  btn.disabled = true;
+  btn.textContent = 'Processing…';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('errCard').style.display = 'none';
+  try {
+    const res = await fetch('/api/standardize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({address: raw}),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
+    const data = await res.json();
+    document.getElementById('stdLine').textContent = data.standardized;
+    const tbody = document.getElementById('compBody');
+    tbody.innerHTML = '';
+    const display = {
+      'Address Line 1': data.address_line_1,
+      'Address Line 2': data.address_line_2,
+      'City': data.city,
+      'State': data.state,
+      'ZIP Code': data.zip_code,
+    };
+    for (const [k, v] of Object.entries(display)) {
+      if (!v) continue;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<th>${k}</th><td>${v}</td>`;
+      tbody.appendChild(tr);
+    }
+    // detailed components
+    for (const [k, v] of Object.entries(data.components || {})) {
+      const tr = document.createElement('tr');
+      const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      tr.innerHTML = `<th>${label}</th><td>${v}</td>`;
+      tbody.appendChild(tr);
+    }
+    document.getElementById('results').style.display = 'block';
+  } catch (err) {
+    document.getElementById('errMsg').textContent = err.message;
+    document.getElementById('errCard').style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Standardize';
+  }
+}
+</script>
+</body>
+</html>
