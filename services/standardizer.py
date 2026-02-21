@@ -193,6 +193,16 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     # --- city ---
     v = _get(components, "city")
     if v:
+        # usaddress sometimes folds a parenthesized street modifier
+        # into PlaceName, e.g. "(EAST), SEATTLE".  Split the leading
+        # parenthesized token out as a street_name_post_modifier and
+        # keep only the real city name.
+        paren_match = re.match(r"^\([^)]*\)[,;\s]*(.+)$", v)
+        if paren_match:
+            modifier = v[: v.index(")") + 1]  # e.g. "(EAST)"
+            if not std.get("street_name_post_modifier"):
+                std["street_name_post_modifier"] = modifier
+            v = paren_match.group(1).strip().strip(",;")
         std["city"] = v
 
     # --- state ---
