@@ -15,6 +15,17 @@ _ADDRESS_VOCABULARY: set[str] = (
     set(UNIT_MAP) | set(SUFFIX_MAP) | set(DIRECTIONAL_MAP) | set(STATE_MAP)
 )
 
+# Designators that never require an identifier (USPS Pub 28 Appendix H).
+# Only these are recognised as bare leading words in phase 2 of city
+# recovery.  Designators that require an identifier (KEY, LOT, UNIT,
+# STE …) are excluded to avoid false positives on city names like
+# KEY WEST or FRONT ROYAL.
+_NO_ID_DESIGNATORS: set[str] = {
+    "BASEMENT", "BSMT", "FRONT", "FRNT", "LOBBY", "LBBY",
+    "LOWER", "LOWR", "PENTHOUSE", "PH", "REAR", "SIDE",
+    "UPPER", "UPPR",
+}
+
 
 # Map usaddress tag names to friendlier keys.
 TAG_NAMES: dict[str, str] = {
@@ -141,33 +152,31 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
         break
 
     # --- Phase 2: bare leading designator (no comma) ---
+    # Only no-identifier designators (BSMT, FRNT, LOWR …) are stored
+    # into a slot here.  Designators like KEY, LOT, UNIT always expect
+    # an identifier, so a bare "KEY WEST" is almost certainly a city.
+    # However, when all unit slots are already full, any UNIT_MAP word
+    # at the start of city is stripped — it's leftover designator data,
+    # not a city name, and there's nowhere to store it.
     city = components.get("city", "")
     if not city or " " not in city:
         return
 
-    result = _try_extract_designator(city)
-    if result is None:
-        return
-
-    desig_type, desig_id = result
-    # desig_id here is everything after the designator word, which
-    # includes the real city.  A bare designator with no identifier
-    # means desig_id *is* the city.  A designator with an identifier
-    # would have the identifier then the city — but without a comma
-    # we can't reliably split those, so only handle the bare case.
-    # Bare: first word is designator, rest is city.
-    # We check that desig_id doesn't start with another UNIT_MAP word
-    # (which would indicate an identifier, not a city).
-    rest_parts = desig_id.split(None, 1) if desig_id else []
-    if rest_parts and rest_parts[0].upper().replace(".", "") in UNIT_MAP:
-        # Looks like "UNIT APT ..." — not a bare designator.
+    first, _, rest = city.partition(" ")
+    word = first.upper().replace(".", "")
+    rest = rest.strip()
+    if not rest:
         return
 
     slot = _next_free_unit_slot(components)
-    if slot:
-        components[slot[0]] = desig_type
-        # No identifier for the bare designator.
-    components["city"] = desig_id if desig_id else city
+
+    if word in _NO_ID_DESIGNATORS:
+        if slot:
+            components[slot[0]] = first
+        components["city"] = rest
+    elif word in UNIT_MAP and slot is None:
+        # All slots full — just strip the orphaned designator word.
+        components["city"] = rest
 
 
 def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
@@ -184,7 +193,13 @@ def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
     if not city or len(city) < 3:
         return
 
-    # Must start with exactly one letter then a space.
+    # Must start with exactly one letter then a space.  This is
+    # intentionally aggressive — a single leading letter is almost
+    # always a stray identifier fragment, not the start of a real city
+    # name.  The only guard is that an identifier field must already
+    # exist (so there is something to append to).  Edge cases like
+    # "O FALLON" (O'Fallon with dropped apostrophe) are theoretically
+    # possible but unlikely in practice with usaddress output.
     if not city[0].isalpha() or city[1] != " ":
         return
 

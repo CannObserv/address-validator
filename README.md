@@ -190,4 +190,8 @@ address-validator.service  # systemd unit file
 - Dual address numbers joined with hyphen (`1804 & 1810` → `1804-1810`)
 - Periods removed from all components
 - ZIP codes normalized to 5-digit or 5+4 format
+- Unit designators mis-tagged as city by the parser are recovered
+  (e.g. `BASEMENT, FREELAND` → line 2 `BSMT`, city `FREELAND`)
+- Non-address wayfinding words (e.g. `YARD`) dropped from city
+- Line 2 ordering: larger container (BLDG) before specific unit (STE)
 - Intersections formatted as `STREET1 & STREET2`
