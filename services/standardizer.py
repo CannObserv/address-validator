@@ -172,7 +172,15 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
             unit_id = unit_id[2:].strip()
         elif unit_id.startswith("#"):
             unit_id = unit_id[1:].strip()
-        unit_type = "#"
+        # usaddress may also fold a designator word into the
+        # identifier (e.g. "NO. 16" → cleaned "NO 16").  If the
+        # leading word is a known designator, split it out.
+        parts = unit_id.split(None, 1)
+        if len(parts) >= 2 and parts[0] in UNIT_MAP:
+            unit_type = UNIT_MAP[parts[0]]
+            unit_id = parts[1]
+        else:
+            unit_type = "#"
     if unit_type:
         std["occupancy_type"] = unit_type
     if unit_id:
