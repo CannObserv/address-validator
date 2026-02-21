@@ -13,18 +13,20 @@ FastAPI service that parses and standardizes US physical addresses per
   (Suite → STE), and ZIP code normalization.
 - **Intersection support** — `"Hollywood Blvd and Vine St"` →
   `"HOLLYWOOD BLVD & VINE ST"`.
+- **API key authentication** — `/api/*` endpoints require an
+  `X-API-Key` header; web UI and docs remain open.
 - **CORS enabled** — cross-origin requests are allowed from any origin.
 - **Web interface** for interactive use.
 
 ## Endpoints
 
-| Method | Path               | Description                                    |
-|--------|--------------------|------------------------------------------------|
-| `GET`  | `/`                | Web interface                                  |
-| `POST` | `/api/parse`       | Parse raw address string into components       |
-| `POST` | `/api/standardize` | Standardize address to USPS Pub 28 format      |
-| `GET`  | `/docs`            | Interactive Swagger UI                         |
-| `GET`  | `/redoc`           | ReDoc API documentation                        |
+| Method | Path               | Auth | Description                               |
+|--------|--------------------|------|-------------------------------------------|
+| `GET`  | `/`                |      | Web interface                             |
+| `POST` | `/api/parse`       | 🔒   | Parse raw address string into components  |
+| `POST` | `/api/standardize` | 🔒   | Standardize address to USPS Pub 28 format |
+| `GET`  | `/docs`            |      | Interactive Swagger UI                    |
+| `GET`  | `/redoc`           |      | ReDoc API documentation                   |
 
 All `POST` endpoints accept and return `application/json`.  Address
 inputs are limited to **1000 characters**.

@@ -68,6 +68,9 @@ minimum:
 - ZIP normalization edge cases (short, 5-digit, 9-digit, hyphenated).
 - Input length rejection (>1000 chars).
 - Whitespace-only and empty-body request rejection.
+- API key authentication: missing key → 401, wrong key → 403, valid
+  key → 200.
+- Service refuses to start when `API_KEY` env var is unset or empty.
 
 ## Sensitive areas
 
@@ -77,3 +80,9 @@ minimum:
   this; changes cascade everywhere.
 - **`models.py`** — changing field names or types is a breaking API
   change.
+- **`auth.py`** — the authentication gate for all `/api/*` endpoints.
+  The API key is read once at import time; changes to the loading
+  logic affect service startup.
+- **`/etc/address-validator/env`** — contains the `API_KEY` secret.
+  Owned by `root:exedev`, mode 640.  Editing requires root; the
+  service must be restarted to pick up a new key.

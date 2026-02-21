@@ -69,8 +69,9 @@ const btn    = document.getElementById('btn');
 const apikey = document.getElementById('apikey');
 
 // Persist API key in localStorage
-apikey.value = localStorage.getItem('api_key') || '';
-apikey.addEventListener('input', () => localStorage.setItem('api_key', apikey.value));
+apikey.value = localStorage.getItem('address_validator_api_key') || '';
+apikey.addEventListener('input', () => localStorage.setItem('address_validator_api_key', apikey.value));
+apikey.addEventListener('keydown', e => { if (e.key === 'Enter') submitAddress(); });
 
 function fill(v) { addr.value = v; }
 
