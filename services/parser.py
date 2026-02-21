@@ -48,44 +48,108 @@ TAG_NAMES: dict[str, str] = {
 }
 
 
-def _recover_unit_from_city(components: dict[str, str]) -> None:
-    """Move a unit designator mis-tagged as part of city back to occupancy.
+# Designator slots in priority order: occupancy first, then subaddress.
+_UNIT_SLOT_PAIRS = (
+    ("occupancy_type", "occupancy_identifier"),
+    ("subaddress_type", "subaddress_identifier"),
+)
 
-    usaddress sometimes tags a secondary designator (e.g. BASEMENT, REAR,
-    STE 200) that follows the street line as ``PlaceName``, concatenating
-    it with the real city: ``"BASEMENT, FREELAND"``.
 
-    If the city value begins with a token that is a known UNIT_MAP key
-    followed by a comma (with optional identifier in between), split it
-    out into ``occupancy_type`` / ``occupancy_identifier``.
+def _next_free_unit_slot(
+    components: dict[str, str],
+) -> tuple[str, str] | None:
+    """Return the first empty (type_key, id_key) pair, or *None*."""
+    for type_key, id_key in _UNIT_SLOT_PAIRS:
+        if not components.get(type_key) and not components.get(id_key):
+            return type_key, id_key
+    return None
+
+
+def _try_extract_designator(segment: str) -> tuple[str, str] | None:
+    """If *segment* starts with a UNIT_MAP key return (type, identifier).
+
+    Returns ``None`` when the leading word is not a known designator.
     """
+    segment = segment.strip()
+    if not segment:
+        return None
+    parts = segment.split(None, 1)
+    word = parts[0].upper().replace(".", "")
+    if word not in UNIT_MAP:
+        return None
+    identifier = parts[1] if len(parts) > 1 else ""
+    return parts[0], identifier
+
+
+def _recover_unit_from_city(components: dict[str, str]) -> None:
+    """Move unit designators mis-tagged as part of city back to occupancy.
+
+    usaddress sometimes tags secondary designators that follow the street
+    line as ``PlaceName``, concatenating them with the real city.  An
+    address like ``"BLDG 1, LOWR LEVEL, UNIT  SEATTLE"`` can produce
+    ``city = "LOWR LEVEL, UNIT SEATTLE"`` (after usaddress already
+    extracted BLDG).
+
+    This function peels off comma-separated leading segments whose first
+    word is a known unit designator, storing each in the next free
+    occupancy/subaddress slot.  After commas are exhausted it also
+    checks for a bare designator word (no comma) at the start of city.
+    Designators that cannot fit in any slot are still removed from city
+    since they are not city data.
+    """
+    # --- Phase 1: comma-separated leading designators ---
+    while True:
+        city = components.get("city", "")
+        if not city or "," not in city:
+            break
+
+        before, _, after = city.partition(",")
+        before = before.strip()
+        after = after.strip()
+        if not before or not after:
+            break
+
+        result = _try_extract_designator(before)
+        if result is None:
+            break
+
+        desig_type, desig_id = result
+        slot = _next_free_unit_slot(components)
+        if slot:
+            components[slot[0]] = desig_type
+            if desig_id:
+                components[slot[1]] = desig_id
+        # Either way, strip this segment from city.
+        components["city"] = after
+
+    # --- Phase 2: bare leading designator (no comma) ---
     city = components.get("city", "")
-    if not city or "," not in city:
+    if not city or " " not in city:
         return
 
-    # Already have occupancy — don't overwrite.
-    if components.get("occupancy_type") or components.get("occupancy_identifier"):
+    result = _try_extract_designator(city)
+    if result is None:
         return
 
-    # Split on the first comma: everything before may be designator +
-    # optional identifier; everything after is the real city.
-    before_comma, _, after_comma = city.partition(",")
-    before_comma = before_comma.strip()
-    after_comma = after_comma.strip()
-
-    if not before_comma or not after_comma:
+    desig_type, desig_id = result
+    # desig_id here is everything after the designator word, which
+    # includes the real city.  A bare designator with no identifier
+    # means desig_id *is* the city.  A designator with an identifier
+    # would have the identifier then the city — but without a comma
+    # we can't reliably split those, so only handle the bare case.
+    # Bare: first word is designator, rest is city.
+    # We check that desig_id doesn't start with another UNIT_MAP word
+    # (which would indicate an identifier, not a city).
+    rest_parts = desig_id.split(None, 1) if desig_id else []
+    if rest_parts and rest_parts[0].upper().replace(".", "") in UNIT_MAP:
+        # Looks like "UNIT APT ..." — not a bare designator.
         return
 
-    parts = before_comma.split(None, 1)
-    first_word = parts[0].upper().replace(".", "")
-
-    if first_word not in UNIT_MAP:
-        return
-
-    components["occupancy_type"] = parts[0]
-    if len(parts) > 1:
-        components["occupancy_identifier"] = parts[1]
-    components["city"] = after_comma
+    slot = _next_free_unit_slot(components)
+    if slot:
+        components[slot[0]] = desig_type
+        # No identifier for the bare designator.
+    components["city"] = desig_id if desig_id else city
 
 
 def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
