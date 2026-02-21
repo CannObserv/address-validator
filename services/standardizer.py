@@ -195,18 +195,6 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     # --- city ---
     v = _get(components, "city")
     if v:
-        # usaddress sometimes folds a trailing street modifier into
-        # PlaceName, e.g. "EAST, SEATTLE" (from input "(EAST),
-        # SEATTLE" after paren stripping).  When the text before the
-        # first comma is a known directional, split it out as a
-        # street_name_post_modifier and keep only the real city.
-        comma_match = re.match(r"^([^,]+),\s*(.+)$", v)
-        if comma_match:
-            candidate = comma_match.group(1).strip()
-            if candidate in DIRECTIONAL_MAP:
-                if not std.get("street_name_post_modifier"):
-                    std["street_name_post_modifier"] = candidate
-                v = comma_match.group(2).strip()
         std["city"] = v
 
     # --- state ---

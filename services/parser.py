@@ -1,5 +1,7 @@
 """Address parsing service using the usaddress library."""
 
+import re
+
 import usaddress
 
 from models import ParseResponse
@@ -53,8 +55,15 @@ def parse_address(raw: str) -> ParseResponse:
       - ``components``: dict of component_name -> value
       - ``type``: ``"Street Address"``, ``"Intersection"``, or ``"Ambiguous"``
     """
+    # USPS Pub 28 §354: parentheses are not valid in standardised
+    # addresses.  Parenthesized text is typically wayfinding notes
+    # (e.g. "(EAST)", "(UPPER LEVEL)") that confuse usaddress.  Strip
+    # it before parsing and collapse any resulting extra whitespace.
+    cleaned = re.sub(r"\([^)]*\)", "", raw)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+
     try:
-        tagged, addr_type = usaddress.tag(raw)
+        tagged, addr_type = usaddress.tag(cleaned)
     except usaddress.RepeatedLabelError as exc:
         # Fallback: return the raw token pairs when tagging is ambiguous.
         components: dict[str, str] = {}
