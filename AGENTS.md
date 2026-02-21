@@ -16,7 +16,9 @@ running uvicorn on port 8000.
   live here; business logic is delegated to services.
 - **`services/`** — Core logic.
   - `parser.py` wraps the `usaddress` library and maps its tag names
-    to snake_case keys.
+    to snake_case keys.  Post-parse recovery steps fix common
+    `usaddress` mis-tagging: unit designators absorbed into city,
+    stray identifier fragments, and single-word wayfinding text.
   - `standardizer.py` applies USPS Pub 28 abbreviation rules using
     lookup tables from `usps_data/`.
 - **`usps_data/`** — Pure-data modules exporting `dict[str, str]` maps
@@ -86,12 +88,27 @@ minimum:
 - Both occupancy and subaddress preserved on line 2
   (`"STE 300, SMP - 2"` → `"STE 300 SMP 2"`).
 - Trailing comma / semicolon stripping from component values.
+- Unit designator recovered from city
+  (`"BASEMENT, FREELAND"` → `occupancy_type=BSMT`, `city=FREELAND`).
+- Multiple designators in city
+  (`"LOWR LEVEL, UNIT SEATTLE"` → extracted, `city=SEATTLE`).
+- Stray identifier fragment moved from city to identifier
+  (`"K WALLA WALLA"` → appended to identifier, `city=WALLA WALLA`).
+- Single-word wayfinding text dropped from city
+  (`"YARD, SPOKANE"` → `city=SPOKANE`).
+- Line 2 ordering: larger container (BLDG) before specific unit (STE).
 
 ## Sensitive areas
 
 - **`services/parser.py` pre-processing** — parenthesized text and
   bare parentheses are stripped from every raw address before
   `usaddress` sees it.  Changes to this regex affect all parsing.
+- **`services/parser.py` post-parse recovery** —
+  `_recover_unit_from_city()`, `_recover_identifier_fragment_from_city()`,
+  and the `_ADDRESS_VOCABULARY` / `_NO_ID_DESIGNATORS` sets run on
+  every parsed address.  Changes here affect component assignment
+  for any address where `usaddress` mis-tags secondary designators
+  or wayfinding text as city data.
 - **`usps_data/` tables** — changes here affect all standardization
   output.  Verify against USPS Pub 28 before editing.
 - **`_get()` normalization** — every component value flows through
