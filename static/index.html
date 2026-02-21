@@ -12,8 +12,8 @@
   .subtitle { color: var(--muted); font-size: .9rem; margin-bottom: 1.5rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: .75rem; padding: 1.5rem; width: 100%; max-width: 640px; margin-bottom: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   label { display: block; font-weight: 600; margin-bottom: .4rem; font-size: .9rem; }
-  input[type=text] { width: 100%; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: .5rem; font-size: 1rem; outline: none; transition: border-color .15s; }
-  input[type=text]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+  input[type=text], input[type=password] { width: 100%; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: .5rem; font-size: 1rem; outline: none; transition: border-color .15s; }
+  input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
   button { background: var(--accent); color: #fff; border: none; padding: .6rem 1.5rem; border-radius: .5rem; font-size: .95rem; cursor: pointer; margin-top: .75rem; transition: background .15s; }
   button:hover { background: #1d4ed8; }
   button:disabled { opacity: .5; cursor: not-allowed; }
@@ -35,6 +35,8 @@
 <p class="subtitle">Parse &amp; standardize US addresses per USPS Publication 28</p>
 
 <div class="card">
+  <label for="apikey">API Key</label>
+  <input type="password" id="apikey" placeholder="Enter your API key" autocomplete="off" style="margin-bottom:.75rem">
   <label for="addr">Enter an address</label>
   <input type="text" id="addr" maxlength="1000" placeholder="e.g. 1600 Pennsylvania Avenue NW, Washington, DC 20500" autocomplete="off">
   <div class="examples">
@@ -62,8 +64,13 @@
 </div>
 
 <script>
-const addr = document.getElementById('addr');
-const btn  = document.getElementById('btn');
+const addr   = document.getElementById('addr');
+const btn    = document.getElementById('btn');
+const apikey = document.getElementById('apikey');
+
+// Persist API key in localStorage
+apikey.value = localStorage.getItem('api_key') || '';
+apikey.addEventListener('input', () => localStorage.setItem('api_key', apikey.value));
 
 function fill(v) { addr.value = v; }
 
@@ -94,9 +101,12 @@ async function submitAddress() {
   document.getElementById('results').style.display = 'none';
   document.getElementById('errCard').style.display = 'none';
   try {
+    const headers = {'Content-Type': 'application/json'};
+    const key = document.getElementById('apikey').value.trim();
+    if (key) headers['X-API-Key'] = key;
     const res = await fetch('/api/standardize', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers,
       body: JSON.stringify({address: raw}),
     });
     if (!res.ok) {

@@ -38,10 +38,21 @@ running uvicorn on port 8000.
 - The `standardized` field uses two-space separators between logical
   address lines (USPS single-line convention).
 
+## Authentication
+
+- API endpoints (`/api/*`) require an `X-API-Key` header.
+- The expected key is read from the `API_KEY` environment variable.
+- The key is stored in `/etc/address-validator/env` (mode 600) and
+  loaded via `EnvironmentFile=` in the systemd unit.
+- `auth.py` provides the `require_api_key` FastAPI dependency.
+- `GET /`, `/docs`, `/redoc`, and `/openapi.json` remain open.
+- The web UI persists the entered key in `localStorage`.
+
 ## Deployment
 
 - Python venv at `./venv/`.
 - systemd unit: `/etc/systemd/system/address-validator.service`.
+- Environment file: `/etc/address-validator/env` (contains `API_KEY=...`).
 - Restart after changes: `sudo systemctl restart address-validator`.
 - Logs: `journalctl -u address-validator -f`.
 

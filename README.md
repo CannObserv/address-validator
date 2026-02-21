@@ -115,12 +115,32 @@ ignored.
 The `standardized` field uses two-space separators between address
 lines, matching the USPS single-line format convention.
 
+## Authentication
+
+All `/api/*` endpoints require an `X-API-Key` header.  Set the expected
+key via the `API_KEY` environment variable:
+
+```bash
+export API_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+```
+
+Requests without a valid key receive `401` or `403`.  The web UI (`/`),
+Swagger (`/docs`), and ReDoc (`/redoc`) remain open.
+
+```bash
+curl -X POST http://localhost:8000/api/standardize \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: YOUR_KEY' \
+  -d '{"address": "350 Fifth Ave, New York, NY 10118"}'
+```
+
 ## Setup
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+export API_KEY="your-secret-key"
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -131,6 +151,7 @@ persistent deployment.
 
 ```
 main.py                  # FastAPI app entry point, CORS config
+auth.py                  # API key authentication dependency
 models.py                # Shared Pydantic request/response models
 routers/
   parse.py               # POST /api/parse

@@ -1,12 +1,13 @@
 """Standardize endpoint: normalise address per USPS Pub 28."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from auth import require_api_key
 from models import StandardizeRequest, StandardizeResponse
 from services.parser import parse_address
 from services.standardizer import standardize
 
-router = APIRouter(prefix="/api", tags=["standardize"])
+router = APIRouter(prefix="/api", tags=["standardize"], dependencies=[Depends(require_api_key)])
 
 
 @router.post("/standardize", response_model=StandardizeResponse)
