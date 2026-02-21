@@ -2,6 +2,7 @@
 
 import re
 
+from models import StandardizeResponse
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -31,70 +32,95 @@ def _std_zip(raw: str) -> str:
 
 
 def _get(components: dict[str, str], key: str) -> str:
-    """Return the value for *key* if present and non-empty, else ``""``."""
+    """Return the value for *key*, uppercased and period-stripped.
+
+    Returns ``""`` when the key is missing, ``None``, or blank.
+    """
     val = components.get(key, "")
     if val is None:
         return ""
-    return val.strip()
+    val = val.strip().upper().replace(".", "")
+    return val
 
 
-def standardize(components: dict[str, str]) -> dict:
-    """Return a standardized address dict from parsed *components*.
+# -- small helpers for assembling street fragments --------------------------
 
-    The returned dict has:
-      - ``address_line_1``
-      - ``address_line_2`` (secondary / unit, may be empty)
-      - ``city``
-      - ``state``
-      - ``zip_code``
-      - ``standardized`` – the full single-line USPS form
-      - ``components`` – the standardized individual fields
+def _street_parts(
+    std: dict[str, str],
+    prefix: str = "",
+) -> list[str]:
+    """Collect ordered street-line tokens from *std* using an optional key *prefix*.
+
+    When *prefix* is ``""`` the primary street keys are used; when it is
+    ``"second_"`` the intersection’s second-street keys are used.
     """
+    keys = (
+        f"{prefix}street_name_pre_directional",
+        f"{prefix}street_name_pre_modifier",
+        f"{prefix}street_name_pre_type",
+        f"{prefix}street_name",
+        f"{prefix}street_name_post_type",
+        f"{prefix}street_name_post_directional",
+        f"{prefix}street_name_post_modifier",
+    )
+    return [std[k] for k in keys if std.get(k)]
+
+
+def _standardize_street_fields(
+    components: dict[str, str],
+    std: dict[str, str],
+    prefix: str = "",
+) -> None:
+    """Populate *std* with standardised street fields for a given *prefix*."""
+    v = _get(components, f"{prefix}street_name_pre_directional")
+    if v:
+        std[f"{prefix}street_name_pre_directional"] = _lookup(v, DIRECTIONAL_MAP)
+
+    v = _get(components, f"{prefix}street_name_pre_modifier")
+    if v:
+        std[f"{prefix}street_name_pre_modifier"] = v
+
+    v = _get(components, f"{prefix}street_name_pre_type")
+    if v:
+        std[f"{prefix}street_name_pre_type"] = _lookup(v, SUFFIX_MAP)
+
+    v = _get(components, f"{prefix}street_name")
+    if v:
+        std[f"{prefix}street_name"] = v
+
+    v = _get(components, f"{prefix}street_name_post_type")
+    if v:
+        std[f"{prefix}street_name_post_type"] = _lookup(v, SUFFIX_MAP)
+
+    v = _get(components, f"{prefix}street_name_post_directional")
+    if v:
+        std[f"{prefix}street_name_post_directional"] = _lookup(v, DIRECTIONAL_MAP)
+
+    v = _get(components, f"{prefix}street_name_post_modifier")
+    if v:
+        std[f"{prefix}street_name_post_modifier"] = v
+
+
+def standardize(components: dict[str, str]) -> StandardizeResponse:
+    """Return a standardized address from parsed *components*."""
     std: dict[str, str] = {}
 
     # --- primary number ---
     v = _get(components, "address_number")
     if v:
-        std["address_number"] = v.upper()
+        std["address_number"] = v
     v = _get(components, "address_number_prefix")
     if v:
-        std["address_number_prefix"] = v.upper()
+        std["address_number_prefix"] = v
     v = _get(components, "address_number_suffix")
     if v:
-        std["address_number_suffix"] = v.upper()
+        std["address_number_suffix"] = v
 
-    # --- street pre-directional ---
-    v = _get(components, "street_name_pre_directional")
-    if v:
-        std["street_name_pre_directional"] = _lookup(v, DIRECTIONAL_MAP)
+    # --- primary street ---
+    _standardize_street_fields(components, std)
 
-    # --- street pre-modifier / pre-type ---
-    v = _get(components, "street_name_pre_modifier")
-    if v:
-        std["street_name_pre_modifier"] = v.upper()
-    v = _get(components, "street_name_pre_type")
-    if v:
-        std["street_name_pre_type"] = _lookup(v, SUFFIX_MAP)
-
-    # --- street name ---
-    v = _get(components, "street_name")
-    if v:
-        std["street_name"] = v.upper().replace(".", "")
-
-    # --- street suffix (post-type) ---
-    v = _get(components, "street_name_post_type")
-    if v:
-        std["street_name_post_type"] = _lookup(v, SUFFIX_MAP)
-
-    # --- street post-directional ---
-    v = _get(components, "street_name_post_directional")
-    if v:
-        std["street_name_post_directional"] = _lookup(v, DIRECTIONAL_MAP)
-
-    # --- street post-modifier ---
-    v = _get(components, "street_name_post_modifier")
-    if v:
-        std["street_name_post_modifier"] = v.upper()
+    # --- second street (intersections) ---
+    _standardize_street_fields(components, std, prefix="second_")
 
     # --- secondary / occupancy ---
     unit_type = ""
@@ -107,7 +133,7 @@ def standardize(components: dict[str, str]) -> dict:
     for id_key in ("occupancy_identifier", "subaddress_identifier"):
         v = _get(components, id_key)
         if v:
-            unit_id = v.upper().replace(".", "")
+            unit_id = v
             break
     if unit_type:
         std["occupancy_type"] = unit_type
@@ -117,7 +143,7 @@ def standardize(components: dict[str, str]) -> dict:
     # --- city ---
     v = _get(components, "city")
     if v:
-        std["city"] = v.upper().replace(".", "")
+        std["city"] = v
 
     # --- state ---
     v = _get(components, "state")
@@ -132,38 +158,39 @@ def standardize(components: dict[str, str]) -> dict:
     # --- PO Box ---
     v = _get(components, "usps_box_type")
     if v:
-        std["usps_box_type"] = v.upper()
+        std["usps_box_type"] = v
     v = _get(components, "usps_box_id")
     if v:
-        std["usps_box_id"] = v.upper()
+        std["usps_box_id"] = v
 
-    # --- assemble lines ---
-    line1_parts: list[str] = []
-    for k in (
-        "address_number_prefix",
-        "address_number",
-        "address_number_suffix",
-        "street_name_pre_directional",
-        "street_name_pre_modifier",
-        "street_name_pre_type",
-        "street_name",
-        "street_name_post_type",
-        "street_name_post_directional",
-        "street_name_post_modifier",
-    ):
+    # --- assemble address line 1 ---
+    number_parts: list[str] = []
+    for k in ("address_number_prefix", "address_number", "address_number_suffix"):
         val = std.get(k, "")
         if val:
-            line1_parts.append(val)
+            number_parts.append(val)
 
-    # PO Box alternative
-    if not line1_parts:
+    first_street = _street_parts(std)
+    second_street = _street_parts(std, prefix="second_")
+
+    if first_street and second_street:
+        # Intersection: FIRST ST & SECOND ST
+        line1 = " ".join(
+            [*number_parts, *first_street, "&", *second_street]
+        )
+    elif first_street or number_parts:
+        line1 = " ".join([*number_parts, *first_street])
+    elif std.get("usps_box_type") or std.get("usps_box_id"):
+        po_parts = []
         if std.get("usps_box_type"):
-            line1_parts.append(std["usps_box_type"])
+            po_parts.append(std["usps_box_type"])
         if std.get("usps_box_id"):
-            line1_parts.append(std["usps_box_id"])
+            po_parts.append(std["usps_box_id"])
+        line1 = " ".join(po_parts)
+    else:
+        line1 = ""
 
-    line1 = " ".join(line1_parts)
-
+    # --- address line 2 ---
     line2_parts: list[str] = []
     if unit_type:
         line2_parts.append(unit_type)
@@ -171,11 +198,12 @@ def standardize(components: dict[str, str]) -> dict:
         line2_parts.append(unit_id)
     line2 = " ".join(line2_parts)
 
+    # --- last line ---
     city = std.get("city", "")
     state = std.get("state", "")
     zip_code = std.get("zip_code", "")
 
-    last_line_parts = []
+    last_line_parts: list[str] = []
     if city and state:
         last_line_parts.append(f"{city}, {state}")
     elif city:
@@ -189,12 +217,12 @@ def standardize(components: dict[str, str]) -> dict:
     full_parts = [p for p in (line1, line2, last_line) if p]
     standardized = "  ".join(full_parts) if full_parts else ""
 
-    return {
-        "address_line_1": line1,
-        "address_line_2": line2,
-        "city": city,
-        "state": state,
-        "zip_code": zip_code,
-        "standardized": standardized,
-        "components": std,
-    }
+    return StandardizeResponse(
+        address_line_1=line1,
+        address_line_2=line2,
+        city=city,
+        state=state,
+        zip_code=zip_code,
+        standardized=standardized,
+        components=std,
+    )

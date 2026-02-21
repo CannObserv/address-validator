@@ -2,6 +2,8 @@
 
 import usaddress
 
+from models import ParseResponse
+
 
 # Map usaddress tag names to friendlier keys.
 TAG_NAMES: dict[str, str] = {
@@ -32,41 +34,49 @@ TAG_NAMES: dict[str, str] = {
     "IntersectionSeparator": "intersection_separator",
     "LandmarkName": "landmark_name",
     "CornerOf": "corner_of",
+    # Second street (intersections)
+    "SecondStreetName": "second_street_name",
+    "SecondStreetNamePreDirectional": "second_street_name_pre_directional",
+    "SecondStreetNamePreModifier": "second_street_name_pre_modifier",
+    "SecondStreetNamePreType": "second_street_name_pre_type",
+    "SecondStreetNamePostDirectional": "second_street_name_post_directional",
+    "SecondStreetNamePostModifier": "second_street_name_post_modifier",
+    "SecondStreetNamePostType": "second_street_name_post_type",
 }
 
 
-def parse_address(raw: str) -> dict:
+def parse_address(raw: str) -> ParseResponse:
     """Parse *raw* address string into labelled components.
 
-    Returns a dict with:
+    Returns a :class:`ParseResponse` with:
       - ``input``: the original string
       - ``components``: dict of component_name -> value
-      - ``type``: "Street Address" or "Intersection"
+      - ``type``: ``"Street Address"``, ``"Intersection"``, or ``"Ambiguous"``
     """
     try:
         tagged, addr_type = usaddress.tag(raw)
     except usaddress.RepeatedLabelError as exc:
         # Fallback: return the raw token pairs when tagging is ambiguous.
-        components = {}
+        components: dict[str, str] = {}
         for token, label in exc.parsed_string:
             key = TAG_NAMES.get(label, label)
             if key in components:
                 components[key] += f" {token}"
             else:
                 components[key] = token
-        return {
-            "input": raw,
-            "components": components,
-            "type": "Ambiguous",
-            "warning": "Repeated labels detected; parse may be inaccurate.",
-        }
+        return ParseResponse(
+            input=raw,
+            components=components,
+            type="Ambiguous",
+            warning="Repeated labels detected; parse may be inaccurate.",
+        )
 
     components = {
         TAG_NAMES.get(label, label): value
         for label, value in tagged.items()
     }
-    return {
-        "input": raw,
-        "components": components,
-        "type": addr_type,
-    }
+    return ParseResponse(
+        input=raw,
+        components=components,
+        type=addr_type,
+    )

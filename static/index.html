@@ -43,7 +43,7 @@
     <span onclick="fill('350 Fifth Ave Suite 3300, New York, NY 10118')">Empire State</span>
     <span onclick="fill('233 S Wacker Dr Ste 4700, Chicago, Illinois 60606')">Willis Tower</span>
   </div>
-  <button id="btn" onclick="submit()">Standardize</button>
+  <button id="btn" onclick="submitAddress()">Standardize</button>
 </div>
 
 <div class="card" id="results" style="display:none">
@@ -67,9 +67,26 @@ const btn  = document.getElementById('btn');
 
 function fill(v) { addr.value = v; }
 
-addr.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+addr.addEventListener('keydown', e => { if (e.key === 'Enter') submitAddress(); });
 
-async function submit() {
+function extractError(d, fallback) {
+  if (typeof d.detail === 'string') return d.detail;
+  if (Array.isArray(d.detail) && d.detail.length) return d.detail[0].msg || fallback;
+  return fallback;
+}
+
+function addRow(tbody, label, value) {
+  const tr = document.createElement('tr');
+  const th = document.createElement('th');
+  const td = document.createElement('td');
+  th.textContent = label;
+  td.textContent = value;
+  tr.appendChild(th);
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+}
+
+async function submitAddress() {
   const raw = addr.value.trim();
   if (!raw) return;
   btn.disabled = true;
@@ -82,7 +99,10 @@ async function submit() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({address: raw}),
     });
-    if (!res.ok) { const d = await res.json(); throw new Error(d.detail || res.statusText); }
+    if (!res.ok) {
+      const d = await res.json();
+      throw new Error(extractError(d, res.statusText));
+    }
     const data = await res.json();
     document.getElementById('stdLine').textContent = data.standardized;
     const tbody = document.getElementById('compBody');
@@ -96,25 +116,14 @@ async function submit() {
     };
     for (const [k, v] of Object.entries(display)) {
       if (!v) continue;
-      const tr = document.createElement('tr');
-      const th = document.createElement('th');
-      const td = document.createElement('td');
-      th.textContent = k;
-      td.textContent = v;
-      tr.appendChild(th);
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      addRow(tbody, k, v);
     }
-    // detailed components
+    // detailed components, skipping keys already shown in the summary
+    const shownKeys = new Set(['city', 'state', 'zip_code']);
     for (const [k, v] of Object.entries(data.components || {})) {
-      const tr = document.createElement('tr');
-      const th = document.createElement('th');
-      const td = document.createElement('td');
-      th.textContent = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      td.textContent = v;
-      tr.appendChild(th);
-      tr.appendChild(td);
-      tbody.appendChild(tr);
+      if (shownKeys.has(k)) continue;
+      const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      addRow(tbody, label, v);
     }
     document.getElementById('results').style.display = 'block';
   } catch (err) {
