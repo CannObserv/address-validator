@@ -44,6 +44,8 @@ def _get(components: dict[str, str], key: str) -> str:
     if val is None:
         return ""
     val = val.strip().upper().replace(".", "")
+    # usaddress keeps trailing commas/semicolons on tokens; strip them.
+    val = val.strip(",;")
     return val
 
 

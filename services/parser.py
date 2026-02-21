@@ -58,12 +58,32 @@ def parse_address(raw: str) -> ParseResponse:
     except usaddress.RepeatedLabelError as exc:
         # Fallback: return the raw token pairs when tagging is ambiguous.
         components: dict[str, str] = {}
+        prev_key: str | None = None
+        separator_before: bool = False
         for token, label in exc.parsed_string:
             key = TAG_NAMES.get(label, label)
+
+            # Track whether an IntersectionSeparator appeared right
+            # before a repeated AddressNumber — that signals a dual/
+            # range address ("1804 & 1810"), not a true intersection.
+            if key == "intersection_separator":
+                if prev_key == "address_number":
+                    separator_before = True
+                    prev_key = key
+                    continue  # don't emit the separator yet
+                # True intersection separator — emit normally.
+
             if key in components:
-                components[key] += f" {token}"
+                if key == "address_number" and separator_before:
+                    # Dual address: join with hyphen (USPS Pub 28 §232).
+                    components[key] += f"-{token}"
+                else:
+                    components[key] += f" {token}"
             else:
                 components[key] = token
+
+            separator_before = False
+            prev_key = key
         return ParseResponse(
             input=raw,
             components=components,
