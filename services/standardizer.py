@@ -10,7 +10,11 @@ from usps_data.units import UNIT_MAP
 
 
 def _lookup(value: str, table: dict[str, str]) -> str:
-    """Look up *value* (case-insensitive, stripped of periods) in *table*."""
+    """Return the USPS abbreviation for *value*, or *value* unchanged.
+
+    Performs its own defensive uppercasing / period-stripping so it is
+    safe to call with raw input as well as pre-cleaned values.
+    """
     cleaned = value.upper().replace(".", "").strip()
     return table.get(cleaned, cleaned)
 
@@ -135,6 +139,16 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         if v:
             unit_id = v
             break
+    # Per USPS Pub 28, a secondary identifier without a recognized
+    # designator should use '#' as the designator.
+    if unit_id and not unit_type:
+        # usaddress sometimes folds '#' into the identifier itself
+        # (e.g. "# 4B"); split it back out.
+        if unit_id.startswith("# "):
+            unit_id = unit_id[2:].strip()
+        elif unit_id.startswith("#"):
+            unit_id = unit_id[1:].strip()
+        unit_type = "#"
     if unit_type:
         std["occupancy_type"] = unit_type
     if unit_id:

@@ -13,8 +13,14 @@ router = APIRouter(prefix="/api", tags=["standardize"])
 def standardize_address(req: StandardizeRequest) -> StandardizeResponse:
     if req.components is not None and len(req.components) > 0:
         comps = req.components
-    elif req.address is not None and req.address.strip():
-        comps = parse_address(req.address.strip()).components
+    elif req.address is not None:
+        raw = req.address.strip()
+        if not raw:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide 'address' (non-empty string) or 'components' (non-empty object).",
+            )
+        comps = parse_address(raw).components
     else:
         raise HTTPException(
             status_code=400,
