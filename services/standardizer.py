@@ -258,16 +258,17 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         line1 = ""
 
     # --- address line 2 ---
+    # USPS Pub 28: larger container (building) before more specific
+    # unit (suite).  Subaddress first, then occupancy.
     line2_parts: list[str] = []
-    if unit_type:
-        line2_parts.append(unit_type)
-    if unit_id:
-        line2_parts.append(unit_id)
-    # Append subaddress when present alongside occupancy.
     if sub_type:
         line2_parts.append(sub_type)
     if sub_id:
         line2_parts.append(sub_id)
+    if unit_type:
+        line2_parts.append(unit_type)
+    if unit_id:
+        line2_parts.append(unit_id)
     line2 = " ".join(line2_parts)
 
     # --- last line ---

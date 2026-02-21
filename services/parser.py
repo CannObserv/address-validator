@@ -88,6 +88,38 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
     components["city"] = after_comma
 
 
+def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
+    """Move a stray single-letter unit qualifier from the start of city.
+
+    usaddress sometimes splits a compound identifier like ``120 K`` and
+    absorbs the trailing letter into ``PlaceName``, producing a city of
+    ``"K WALLA WALLA"`` instead of ``"WALLA WALLA"``.  When the city
+    begins with a single letter followed by a space and an occupancy or
+    subaddress identifier already exists, move that letter back onto the
+    identifier.
+    """
+    city = components.get("city", "")
+    if not city or len(city) < 3:
+        return
+
+    # Must start with exactly one letter then a space.
+    if not city[0].isalpha() or city[1] != " ":
+        return
+
+    fragment = city[0]
+    rest = city[2:].strip()
+
+    if not rest:
+        return
+
+    # Append to whichever identifier field is present.
+    for key in ("occupancy_identifier", "subaddress_identifier"):
+        if components.get(key):
+            components[key] += f" {fragment}"
+            components["city"] = rest
+            return
+
+
 def parse_address(raw: str) -> ParseResponse:
     """Parse *raw* address string into labelled components.
 
@@ -149,6 +181,7 @@ def parse_address(raw: str) -> ParseResponse:
     }
 
     _recover_unit_from_city(components)
+    _recover_identifier_fragment_from_city(components)
 
     return ParseResponse(
         input=raw,
