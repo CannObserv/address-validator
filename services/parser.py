@@ -5,7 +5,15 @@ import re
 import usaddress
 
 from models import ParseResponse
+from usps_data.directionals import DIRECTIONAL_MAP
+from usps_data.states import STATE_MAP
+from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
+
+# Combined lookup for tokens that are valid address vocabulary.
+_ADDRESS_VOCABULARY: set[str] = (
+    set(UNIT_MAP) | set(SUFFIX_MAP) | set(DIRECTIONAL_MAP) | set(STATE_MAP)
+)
 
 
 # Map usaddress tag names to friendlier keys.
@@ -110,17 +118,27 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
             break
 
         result = _try_extract_designator(before)
-        if result is None:
-            break
+        if result is not None:
+            desig_type, desig_id = result
+            slot = _next_free_unit_slot(components)
+            if slot:
+                components[slot[0]] = desig_type
+                if desig_id:
+                    components[slot[1]] = desig_id
+            # Either way, strip this segment from city.
+            components["city"] = after
+            continue
 
-        desig_type, desig_id = result
-        slot = _next_free_unit_slot(components)
-        if slot:
-            components[slot[0]] = desig_type
-            if desig_id:
-                components[slot[1]] = desig_id
-        # Either way, strip this segment from city.
-        components["city"] = after
+        # A single word before the comma that isn't in any address
+        # vocabulary is likely wayfinding text (e.g. "YARD", "GATE").
+        # Drop it.  Multi-word segments are left alone — they could
+        # be a real multi-word city name prefix.
+        word = before.upper().replace(".", "")
+        if " " not in before and word not in _ADDRESS_VOCABULARY:
+            components["city"] = after
+            continue
+
+        break
 
     # --- Phase 2: bare leading designator (no comma) ---
     city = components.get("city", "")
