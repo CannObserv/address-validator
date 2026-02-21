@@ -5,6 +5,7 @@ import re
 import usaddress
 
 from models import ParseResponse
+from usps_data.units import UNIT_MAP
 
 
 # Map usaddress tag names to friendlier keys.
@@ -45,6 +46,46 @@ TAG_NAMES: dict[str, str] = {
     "SecondStreetNamePostModifier": "second_street_name_post_modifier",
     "SecondStreetNamePostType": "second_street_name_post_type",
 }
+
+
+def _recover_unit_from_city(components: dict[str, str]) -> None:
+    """Move a unit designator mis-tagged as part of city back to occupancy.
+
+    usaddress sometimes tags a secondary designator (e.g. BASEMENT, REAR,
+    STE 200) that follows the street line as ``PlaceName``, concatenating
+    it with the real city: ``"BASEMENT, FREELAND"``.
+
+    If the city value begins with a token that is a known UNIT_MAP key
+    followed by a comma (with optional identifier in between), split it
+    out into ``occupancy_type`` / ``occupancy_identifier``.
+    """
+    city = components.get("city", "")
+    if not city or "," not in city:
+        return
+
+    # Already have occupancy — don't overwrite.
+    if components.get("occupancy_type") or components.get("occupancy_identifier"):
+        return
+
+    # Split on the first comma: everything before may be designator +
+    # optional identifier; everything after is the real city.
+    before_comma, _, after_comma = city.partition(",")
+    before_comma = before_comma.strip()
+    after_comma = after_comma.strip()
+
+    if not before_comma or not after_comma:
+        return
+
+    parts = before_comma.split(None, 1)
+    first_word = parts[0].upper().replace(".", "")
+
+    if first_word not in UNIT_MAP:
+        return
+
+    components["occupancy_type"] = parts[0]
+    if len(parts) > 1:
+        components["occupancy_identifier"] = parts[1]
+    components["city"] = after_comma
 
 
 def parse_address(raw: str) -> ParseResponse:
@@ -106,6 +147,9 @@ def parse_address(raw: str) -> ParseResponse:
         TAG_NAMES.get(label, label): value
         for label, value in tagged.items()
     }
+
+    _recover_unit_from_city(components)
+
     return ParseResponse(
         input=raw,
         components=components,
