@@ -141,6 +141,20 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         if v:
             unit_id = v
             break
+
+    # usaddress sometimes tags secondary-unit info (e.g. "BLD C") as
+    # LandmarkName.  When no explicit occupancy was found, check
+    # whether the landmark's leading word is a known unit designator
+    # and, if so, reinterpret it as occupancy_type + identifier.
+    if not unit_type and not unit_id:
+        lm = _get(components, "landmark_name")
+        if lm:
+            parts = lm.split(None, 1)
+            if parts and _lookup(parts[0], UNIT_MAP) != parts[0]:
+                unit_type = _lookup(parts[0], UNIT_MAP)
+                unit_id = parts[1] if len(parts) > 1 else ""
+            # If the leading word isn't a designator the landmark is
+            # left unhandled — we don't guess.
     # Per USPS Pub 28, a secondary identifier without a recognized
     # designator should use '#' as the designator.
     if unit_id and not unit_type:

@@ -3,7 +3,7 @@
 UNIT_MAP: dict[str, str] = {
     "APARTMENT": "APT", "APT": "APT",
     "BASEMENT": "BSMT", "BSMT": "BSMT",
-    "BUILDING": "BLDG", "BLDG": "BLDG",
+    "BUILDING": "BLDG", "BLDG": "BLDG", "BLD": "BLDG",
     "DEPARTMENT": "DEPT", "DEPT": "DEPT",
     "FLOOR": "FL", "FL": "FL",
     "FRONT": "FRNT", "FRNT": "FRNT",
