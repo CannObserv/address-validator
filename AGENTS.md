@@ -30,9 +30,13 @@ running uvicorn on port 8000.
 - Routers return Pydantic response models.  Services also return these
   models (not raw dicts).
 - The `_get()` helper in `standardizer.py` normalizes component values
-  (uppercase, strip whitespace, remove periods) before any further
-  processing.  The `_lookup()` function does its own defensive
-  normalization so it is safe to call with raw or pre-cleaned input.
+  (strip whitespace → uppercase → remove periods → remove parentheses
+  → strip trailing commas/semicolons) before any further processing.
+  Parenthesis stripping is redundant for parser output (which strips
+  parenthesized text pre-parse) but is retained for direct component
+  input via `/api/standardize`.  The `_lookup()` function does its
+  own defensive normalization so it is safe to call with raw or
+  pre-cleaned input.
 - Address input is limited to 1000 characters (enforced by Pydantic
   `Field(max_length=1000)` on both request models).
 - The `standardized` field uses two-space separators between logical
@@ -71,9 +75,23 @@ minimum:
 - API key authentication: missing key → 401, wrong key → 403, valid
   key → 200.
 - Service refuses to start when `API_KEY` env var is unset or empty.
+- Parenthesized wayfinding text stripped before parsing
+  (`"(UPPER LEVEL)"` removed, unmatched parens also stripped).
+- Dual address numbers joined with hyphen
+  (`"1804 & 1810"` → `"1804-1810"`).
+- Unit designator recovery from `BuildingName` / `LandmarkName`
+  fields (`"BLD C"` → `BLDG C`).
+- Designator word extracted from identifier
+  (`"NO. 16"` → `# 16`; bare designator word with no identifier).
+- Both occupancy and subaddress preserved on line 2
+  (`"STE 300, SMP - 2"` → `"STE 300 SMP 2"`).
+- Trailing comma / semicolon stripping from component values.
 
 ## Sensitive areas
 
+- **`services/parser.py` pre-processing** — parenthesized text and
+  bare parentheses are stripped from every raw address before
+  `usaddress` sees it.  Changes to this regex affect all parsing.
 - **`usps_data/` tables** — changes here affect all standardization
   output.  Verify against USPS Pub 28 before editing.
 - **`_get()` normalization** — every component value flows through
@@ -86,3 +104,16 @@ minimum:
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
+
+## Code review practice
+
+Number all comments, questions, and suggestions for easy reference.
+Use an ever-incrementing scheme starting at 1.
+
+Format:
+
+- Top-level items: 1., 2., 3.
+- Sub-items: 2a., 2b.
+
+This lets the user respond concisely and unambiguously:
+`"3: please fix"` or `"2b: stet"`.

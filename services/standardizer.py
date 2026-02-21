@@ -15,7 +15,14 @@ def _lookup(value: str, table: dict[str, str]) -> str:
     Performs its own defensive uppercasing / period-stripping so it is
     safe to call with raw input as well as pre-cleaned values.
     """
-    cleaned = value.upper().replace(".", "").strip()
+    cleaned = (
+        value.upper()
+        .replace(".", "")
+        .replace("(", "")
+        .replace(")", "")
+        .strip()
+        .strip(",;")
+    )
     return table.get(cleaned, cleaned)
 
 
@@ -36,9 +43,17 @@ def _std_zip(raw: str) -> str:
 
 
 def _get(components: dict[str, str], key: str) -> str:
-    """Return the value for *key*, uppercased and period-stripped.
+    """Return the value for *key* after the full cleanup chain.
+
+    The chain is: strip surrounding whitespace → uppercase → remove
+    periods → remove parentheses → strip trailing commas/semicolons.
 
     Returns ``""`` when the key is missing, ``None``, or blank.
+
+    Note: parenthesis stripping is redundant for values coming from the
+    parser (which removes parenthesized text pre-parse) but is retained
+    so that direct component input via ``/api/standardize`` is handled
+    correctly.
     """
     val = components.get(key, "")
     if val is None:
@@ -147,6 +162,8 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     # have tagged the unit info as LandmarkName or BuildingName (e.g.
     # "BLD C", "STE C&F 1").  Recover it if the leading word is a
     # known unit designator.
+    # If the leading word of a fallback field isn't a recognised
+    # designator the field is left unhandled — we don't guess.
     if not unit_type and not unit_id and not sub_type and not sub_id:
         for fallback_key in ("building_name", "landmark_name"):
             fb = _get(components, fallback_key)
@@ -156,8 +173,6 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
                     unit_type = UNIT_MAP[parts[0]]
                     unit_id = parts[1] if len(parts) > 1 else ""
                     break
-            # If the leading word isn't a designator the field is
-            # left unhandled — we don't guess.
 
     # If subaddress fields are present but occupancy fields are not,
     # promote subaddress to the primary unit slot.
@@ -178,9 +193,9 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         # identifier (e.g. "NO. 16" → cleaned "NO 16").  If the
         # leading word is a known designator, split it out.
         parts = unit_id.split(None, 1)
-        if len(parts) >= 2 and parts[0] in UNIT_MAP:
+        if parts and parts[0] in UNIT_MAP:
             unit_type = UNIT_MAP[parts[0]]
-            unit_id = parts[1]
+            unit_id = parts[1] if len(parts) > 1 else ""
         else:
             unit_type = "#"
     if unit_type:

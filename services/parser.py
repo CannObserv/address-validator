@@ -60,6 +60,8 @@ def parse_address(raw: str) -> ParseResponse:
     # (e.g. "(EAST)", "(UPPER LEVEL)") that confuse usaddress.  Strip
     # it before parsing and collapse any resulting extra whitespace.
     cleaned = re.sub(r"\([^)]*\)", "", raw)
+    # Strip any remaining unmatched parentheses (e.g. "123 Main) St").
+    cleaned = cleaned.replace("(", "").replace(")", "")
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
 
     try:
