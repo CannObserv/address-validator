@@ -175,11 +175,19 @@ address-validator.service  # systemd unit file
 ## Standardization Rules Applied
 
 - All output uppercased
+- Parenthesized text removed (USPS Pub 28 §354 — not valid in
+  standardized addresses; typically wayfinding notes)
+- Trailing commas, semicolons, and stray punctuation stripped
 - Street suffixes abbreviated (USPS Pub 28 Appendix C)
 - Directionals abbreviated (N, S, E, W, NE, NW, SE, SW)
 - State names converted to two-letter abbreviations
-- Secondary unit designators abbreviated (Suite → STE, Apartment → APT, etc.)
+- Secondary unit designators abbreviated (Suite → STE, Apartment → APT,
+  Building/Bldg/Bld → BLDG, etc.)
 - Unit identifiers without a designator default to `#`
+- Designator words folded into identifiers are extracted
+  (e.g. `NO. 16` → `# 16`)
+- Both occupancy and subaddress designators preserved when present
+- Dual address numbers joined with hyphen (`1804 & 1810` → `1804-1810`)
 - Periods removed from all components
 - ZIP codes normalized to 5-digit or 5+4 format
 - Intersections formatted as `STREET1 & STREET2`

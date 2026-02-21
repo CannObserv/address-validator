@@ -15,7 +15,14 @@ def _lookup(value: str, table: dict[str, str]) -> str:
     Performs its own defensive uppercasing / period-stripping so it is
     safe to call with raw input as well as pre-cleaned values.
     """
-    cleaned = value.upper().replace(".", "").strip()
+    cleaned = (
+        value.upper()
+        .replace(".", "")
+        .replace("(", "")
+        .replace(")", "")
+        .strip()
+        .strip(",;")
+    )
     return table.get(cleaned, cleaned)
 
 
@@ -36,14 +43,26 @@ def _std_zip(raw: str) -> str:
 
 
 def _get(components: dict[str, str], key: str) -> str:
-    """Return the value for *key*, uppercased and period-stripped.
+    """Return the value for *key* after the full cleanup chain.
+
+    The chain is: strip surrounding whitespace → uppercase → remove
+    periods → remove parentheses → strip trailing commas/semicolons.
 
     Returns ``""`` when the key is missing, ``None``, or blank.
+
+    Note: parenthesis stripping is redundant for values coming from the
+    parser (which removes parenthesized text pre-parse) but is retained
+    so that direct component input via ``/api/standardize`` is handled
+    correctly.
     """
     val = components.get(key, "")
     if val is None:
         return ""
     val = val.strip().upper().replace(".", "")
+    # USPS Pub 28 §354: remove parentheses from address data.
+    val = val.replace("(", "").replace(")", "")
+    # usaddress keeps trailing commas/semicolons on tokens; strip them.
+    val = val.strip(",;")
     return val
 
 
@@ -127,18 +146,40 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     _standardize_street_fields(components, std, prefix="second_")
 
     # --- secondary / occupancy ---
-    unit_type = ""
-    unit_id = ""
-    for type_key in ("occupancy_type", "subaddress_type"):
-        v = _get(components, type_key)
-        if v:
-            unit_type = _lookup(v, UNIT_MAP)
-            break
-    for id_key in ("occupancy_identifier", "subaddress_identifier"):
-        v = _get(components, id_key)
-        if v:
-            unit_id = v
-            break
+    # An address may have both an occupancy (STE 300) and a subaddress
+    # (SMP - 2).  Collect each pair independently, then combine.
+    unit_type = _get(components, "occupancy_type")
+    if unit_type:
+        unit_type = _lookup(unit_type, UNIT_MAP)
+    unit_id = _get(components, "occupancy_identifier")
+
+    sub_type = _get(components, "subaddress_type")
+    if sub_type:
+        sub_type = _lookup(sub_type, UNIT_MAP)
+    sub_id = _get(components, "subaddress_identifier")
+
+    # When neither occupancy nor subaddress was parsed, usaddress may
+    # have tagged the unit info as LandmarkName or BuildingName (e.g.
+    # "BLD C", "STE C&F 1").  Recover it if the leading word is a
+    # known unit designator.
+    # If the leading word of a fallback field isn't a recognised
+    # designator the field is left unhandled — we don't guess.
+    if not unit_type and not unit_id and not sub_type and not sub_id:
+        for fallback_key in ("building_name", "landmark_name"):
+            fb = _get(components, fallback_key)
+            if fb:
+                parts = fb.split(None, 1)
+                if parts and parts[0] in UNIT_MAP:
+                    unit_type = UNIT_MAP[parts[0]]
+                    unit_id = parts[1] if len(parts) > 1 else ""
+                    break
+
+    # If subaddress fields are present but occupancy fields are not,
+    # promote subaddress to the primary unit slot.
+    if not unit_type and not unit_id:
+        unit_type, unit_id = sub_type, sub_id
+        sub_type = sub_id = ""
+
     # Per USPS Pub 28, a secondary identifier without a recognized
     # designator should use '#' as the designator.
     if unit_id and not unit_type:
@@ -148,11 +189,23 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
             unit_id = unit_id[2:].strip()
         elif unit_id.startswith("#"):
             unit_id = unit_id[1:].strip()
-        unit_type = "#"
+        # usaddress may also fold a designator word into the
+        # identifier (e.g. "NO. 16" → cleaned "NO 16").  If the
+        # leading word is a known designator, split it out.
+        parts = unit_id.split(None, 1)
+        if parts and parts[0] in UNIT_MAP:
+            unit_type = UNIT_MAP[parts[0]]
+            unit_id = parts[1] if len(parts) > 1 else ""
+        else:
+            unit_type = "#"
     if unit_type:
         std["occupancy_type"] = unit_type
     if unit_id:
         std["occupancy_identifier"] = unit_id
+    if sub_type:
+        std["subaddress_type"] = sub_type
+    if sub_id:
+        std["subaddress_identifier"] = sub_id
 
     # --- city ---
     v = _get(components, "city")
@@ -210,6 +263,11 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         line2_parts.append(unit_type)
     if unit_id:
         line2_parts.append(unit_id)
+    # Append subaddress when present alongside occupancy.
+    if sub_type:
+        line2_parts.append(sub_type)
+    if sub_id:
+        line2_parts.append(sub_id)
     line2 = " ".join(line2_parts)
 
     # --- last line ---
