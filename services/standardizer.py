@@ -129,26 +129,23 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     _standardize_street_fields(components, std, prefix="second_")
 
     # --- secondary / occupancy ---
-    unit_type = ""
-    unit_id = ""
-    for type_key in ("occupancy_type", "subaddress_type"):
-        v = _get(components, type_key)
-        if v:
-            unit_type = _lookup(v, UNIT_MAP)
-            break
-    for id_key in ("occupancy_identifier", "subaddress_identifier"):
-        v = _get(components, id_key)
-        if v:
-            unit_id = v
-            break
+    # An address may have both an occupancy (STE 300) and a subaddress
+    # (SMP - 2).  Collect each pair independently, then combine.
+    unit_type = _get(components, "occupancy_type")
+    if unit_type:
+        unit_type = _lookup(unit_type, UNIT_MAP)
+    unit_id = _get(components, "occupancy_identifier")
 
-    # usaddress sometimes tags secondary-unit info (e.g. "BLD C",
-    # "STE C&F 1") as LandmarkName or BuildingName instead of
-    # OccupancyType/OccupancyIdentifier.  When no explicit occupancy
-    # was found, check whether the leading word of these fallback
-    # fields is a known unit designator and, if so, reinterpret it as
-    # occupancy_type + identifier.
-    if not unit_type and not unit_id:
+    sub_type = _get(components, "subaddress_type")
+    if sub_type:
+        sub_type = _lookup(sub_type, UNIT_MAP)
+    sub_id = _get(components, "subaddress_identifier")
+
+    # When neither occupancy nor subaddress was parsed, usaddress may
+    # have tagged the unit info as LandmarkName or BuildingName (e.g.
+    # "BLD C", "STE C&F 1").  Recover it if the leading word is a
+    # known unit designator.
+    if not unit_type and not unit_id and not sub_type and not sub_id:
         for fallback_key in ("building_name", "landmark_name"):
             fb = _get(components, fallback_key)
             if fb:
@@ -159,6 +156,13 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
                     break
             # If the leading word isn't a designator the field is
             # left unhandled — we don't guess.
+
+    # If subaddress fields are present but occupancy fields are not,
+    # promote subaddress to the primary unit slot.
+    if not unit_type and not unit_id:
+        unit_type, unit_id = sub_type, sub_id
+        sub_type = sub_id = ""
+
     # Per USPS Pub 28, a secondary identifier without a recognized
     # designator should use '#' as the designator.
     if unit_id and not unit_type:
@@ -173,6 +177,10 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         std["occupancy_type"] = unit_type
     if unit_id:
         std["occupancy_identifier"] = unit_id
+    if sub_type:
+        std["subaddress_type"] = sub_type
+    if sub_id:
+        std["subaddress_identifier"] = sub_id
 
     # --- city ---
     v = _get(components, "city")
@@ -230,6 +238,11 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
         line2_parts.append(unit_type)
     if unit_id:
         line2_parts.append(unit_id)
+    # Append subaddress when present alongside occupancy.
+    if sub_type:
+        line2_parts.append(sub_type)
+    if sub_id:
+        line2_parts.append(sub_id)
     line2 = " ".join(line2_parts)
 
     # --- last line ---
