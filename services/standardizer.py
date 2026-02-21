@@ -142,18 +142,22 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
             unit_id = v
             break
 
-    # usaddress sometimes tags secondary-unit info (e.g. "BLD C") as
-    # LandmarkName.  When no explicit occupancy was found, check
-    # whether the landmark's leading word is a known unit designator
-    # and, if so, reinterpret it as occupancy_type + identifier.
+    # usaddress sometimes tags secondary-unit info (e.g. "BLD C",
+    # "STE C&F 1") as LandmarkName or BuildingName instead of
+    # OccupancyType/OccupancyIdentifier.  When no explicit occupancy
+    # was found, check whether the leading word of these fallback
+    # fields is a known unit designator and, if so, reinterpret it as
+    # occupancy_type + identifier.
     if not unit_type and not unit_id:
-        lm = _get(components, "landmark_name")
-        if lm:
-            parts = lm.split(None, 1)
-            if parts and _lookup(parts[0], UNIT_MAP) != parts[0]:
-                unit_type = _lookup(parts[0], UNIT_MAP)
-                unit_id = parts[1] if len(parts) > 1 else ""
-            # If the leading word isn't a designator the landmark is
+        for fallback_key in ("building_name", "landmark_name"):
+            fb = _get(components, fallback_key)
+            if fb:
+                parts = fb.split(None, 1)
+                if parts and parts[0] in UNIT_MAP:
+                    unit_type = UNIT_MAP[parts[0]]
+                    unit_id = parts[1] if len(parts) > 1 else ""
+                    break
+            # If the leading word isn't a designator the field is
             # left unhandled — we don't guess.
     # Per USPS Pub 28, a secondary identifier without a recognized
     # designator should use '#' as the designator.
