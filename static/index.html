@@ -97,14 +97,23 @@ async function submit() {
     for (const [k, v] of Object.entries(display)) {
       if (!v) continue;
       const tr = document.createElement('tr');
-      tr.innerHTML = `<th>${k}</th><td>${v}</td>`;
+      const th = document.createElement('th');
+      const td = document.createElement('td');
+      th.textContent = k;
+      td.textContent = v;
+      tr.appendChild(th);
+      tr.appendChild(td);
       tbody.appendChild(tr);
     }
     // detailed components
     for (const [k, v] of Object.entries(data.components || {})) {
       const tr = document.createElement('tr');
-      const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      tr.innerHTML = `<th>${label}</th><td>${v}</td>`;
+      const th = document.createElement('th');
+      const td = document.createElement('td');
+      th.textContent = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      td.textContent = v;
+      tr.appendChild(th);
+      tr.appendChild(td);
       tbody.appendChild(tr);
     }
     document.getElementById('results').style.display = 'block';

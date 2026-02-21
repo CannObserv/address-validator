@@ -15,11 +15,27 @@ def _lookup(value: str, table: dict[str, str]) -> str:
 
 
 def _std_zip(raw: str) -> str:
-    """Normalise ZIP: keep 5 or 5+4 digits only."""
+    """Normalise ZIP: keep 5 or 5+4 digits only.
+
+    Returns the cleaned digit string.  If the input does not contain at
+    least 5 digits a warning suffix is *not* added here — the caller is
+    responsible for any validation messaging.
+    """
     digits = re.sub(r"[^\d]", "", raw)
-    if len(digits) > 5:
+    if len(digits) >= 9:
         return f"{digits[:5]}-{digits[5:9]}"
-    return digits[:5]
+    if len(digits) >= 5:
+        return digits[:5]
+    # Fewer than 5 digits — return what we have (may be empty).
+    return digits
+
+
+def _get(components: dict[str, str], key: str) -> str:
+    """Return the value for *key* if present and non-empty, else ``""``."""
+    val = components.get(key, "")
+    if val is None:
+        return ""
+    return val.strip()
 
 
 def standardize(components: dict[str, str]) -> dict:
@@ -37,49 +53,61 @@ def standardize(components: dict[str, str]) -> dict:
     std: dict[str, str] = {}
 
     # --- primary number ---
-    if v := components.get("address_number", ""):
-        std["address_number"] = v.upper().strip()
-    if v := components.get("address_number_prefix", ""):
-        std["address_number_prefix"] = v.upper().strip()
-    if v := components.get("address_number_suffix", ""):
-        std["address_number_suffix"] = v.upper().strip()
+    v = _get(components, "address_number")
+    if v:
+        std["address_number"] = v.upper()
+    v = _get(components, "address_number_prefix")
+    if v:
+        std["address_number_prefix"] = v.upper()
+    v = _get(components, "address_number_suffix")
+    if v:
+        std["address_number_suffix"] = v.upper()
 
     # --- street pre-directional ---
-    if v := components.get("street_name_pre_directional", ""):
+    v = _get(components, "street_name_pre_directional")
+    if v:
         std["street_name_pre_directional"] = _lookup(v, DIRECTIONAL_MAP)
 
     # --- street pre-modifier / pre-type ---
-    if v := components.get("street_name_pre_modifier", ""):
-        std["street_name_pre_modifier"] = v.upper().strip()
-    if v := components.get("street_name_pre_type", ""):
+    v = _get(components, "street_name_pre_modifier")
+    if v:
+        std["street_name_pre_modifier"] = v.upper()
+    v = _get(components, "street_name_pre_type")
+    if v:
         std["street_name_pre_type"] = _lookup(v, SUFFIX_MAP)
 
     # --- street name ---
-    if v := components.get("street_name", ""):
-        std["street_name"] = v.upper().replace(".", "").strip()
+    v = _get(components, "street_name")
+    if v:
+        std["street_name"] = v.upper().replace(".", "")
 
     # --- street suffix (post-type) ---
-    if v := components.get("street_name_post_type", ""):
+    v = _get(components, "street_name_post_type")
+    if v:
         std["street_name_post_type"] = _lookup(v, SUFFIX_MAP)
 
     # --- street post-directional ---
-    if v := components.get("street_name_post_directional", ""):
+    v = _get(components, "street_name_post_directional")
+    if v:
         std["street_name_post_directional"] = _lookup(v, DIRECTIONAL_MAP)
 
     # --- street post-modifier ---
-    if v := components.get("street_name_post_modifier", ""):
-        std["street_name_post_modifier"] = v.upper().strip()
+    v = _get(components, "street_name_post_modifier")
+    if v:
+        std["street_name_post_modifier"] = v.upper()
 
     # --- secondary / occupancy ---
     unit_type = ""
     unit_id = ""
     for type_key in ("occupancy_type", "subaddress_type"):
-        if v := components.get(type_key, ""):
+        v = _get(components, type_key)
+        if v:
             unit_type = _lookup(v, UNIT_MAP)
             break
     for id_key in ("occupancy_identifier", "subaddress_identifier"):
-        if v := components.get(id_key, ""):
-            unit_id = v.upper().replace(".", "").strip()
+        v = _get(components, id_key)
+        if v:
+            unit_id = v.upper().replace(".", "")
             break
     if unit_type:
         std["occupancy_type"] = unit_type
@@ -87,22 +115,27 @@ def standardize(components: dict[str, str]) -> dict:
         std["occupancy_identifier"] = unit_id
 
     # --- city ---
-    if v := components.get("city", ""):
-        std["city"] = v.upper().replace(".", "").strip()
+    v = _get(components, "city")
+    if v:
+        std["city"] = v.upper().replace(".", "")
 
     # --- state ---
-    if v := components.get("state", ""):
+    v = _get(components, "state")
+    if v:
         std["state"] = _lookup(v, STATE_MAP)
 
     # --- ZIP ---
-    if v := components.get("zip_code", ""):
+    v = _get(components, "zip_code")
+    if v:
         std["zip_code"] = _std_zip(v)
 
     # --- PO Box ---
-    if v := components.get("usps_box_type", ""):
-        std["usps_box_type"] = v.upper().strip()
-    if v := components.get("usps_box_id", ""):
-        std["usps_box_id"] = v.upper().strip()
+    v = _get(components, "usps_box_type")
+    if v:
+        std["usps_box_type"] = v.upper()
+    v = _get(components, "usps_box_id")
+    if v:
+        std["usps_box_id"] = v.upper()
 
     # --- assemble lines ---
     line1_parts: list[str] = []
@@ -118,7 +151,8 @@ def standardize(components: dict[str, str]) -> dict:
         "street_name_post_directional",
         "street_name_post_modifier",
     ):
-        if val := std.get(k):
+        val = std.get(k, "")
+        if val:
             line1_parts.append(val)
 
     # PO Box alternative

@@ -185,7 +185,7 @@ SUFFIX_MAP: dict[str, str] = {
     "SQUARES": "SQS", "SQRS": "SQS", "SQS": "SQS",
     "STATION": "STA", "STATN": "STA", "STN": "STA", "STA": "STA",
     "STRAVENUE": "STRA", "STRAV": "STRA", "STRAVEN": "STRA",
-    "STRAVENUE": "STRA", "STRAVN": "STRA", "STRVN": "STRA",
+    "STRAVN": "STRA", "STRVN": "STRA",
     "STRVNUE": "STRA", "STRA": "STRA",
     "STREAM": "STRM", "STREME": "STRM", "STRM": "STRM",
     "STREET": "ST", "STRT": "ST", "STR": "ST", "ST": "ST",
