@@ -16,37 +16,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-# ---------------------------------------------------------------------------
-# Shared / utility
-# ---------------------------------------------------------------------------
-
-# ISO 3166-1 alpha-2 codes currently supported by this service.
-# Extend as non-US parsing is added in future versions.
-_SUPPORTED_COUNTRIES: frozenset[str] = frozenset({"US"})
-
-# Full set of valid ISO 3166-1 alpha-2 codes (static list to avoid a
-# heavy dependency).  Source: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
-_VALID_ISO2: frozenset[str] = frozenset({
-    "AD","AE","AF","AG","AI","AL","AM","AO","AQ","AR","AS","AT","AU","AW",
-    "AX","AZ","BA","BB","BD","BE","BF","BG","BH","BI","BJ","BL","BM","BN",
-    "BO","BQ","BR","BS","BT","BV","BW","BY","BZ","CA","CC","CD","CF","CG",
-    "CH","CI","CK","CL","CM","CN","CO","CR","CU","CV","CW","CX","CY","CZ",
-    "DE","DJ","DK","DM","DO","DZ","EC","EE","EG","EH","ER","ES","ET","FI",
-    "FJ","FK","FM","FO","FR","GA","GB","GD","GE","GF","GG","GH","GI","GL",
-    "GM","GN","GP","GQ","GR","GS","GT","GU","GW","GY","HK","HM","HN","HR",
-    "HT","HU","ID","IE","IL","IM","IN","IO","IQ","IR","IS","IT","JE","JM",
-    "JO","JP","KE","KG","KH","KI","KM","KN","KP","KR","KW","KY","KZ","LA",
-    "LB","LC","LI","LK","LR","LS","LT","LU","LV","LY","MA","MC","MD","ME",
-    "MF","MG","MH","MK","ML","MM","MN","MO","MP","MQ","MR","MS","MT","MU",
-    "MV","MW","MX","MY","MZ","NA","NC","NE","NF","NG","NI","NL","NO","NP",
-    "NR","NU","NZ","OM","PA","PE","PF","PG","PH","PK","PL","PM","PN","PR",
-    "PS","PT","PW","PY","QA","RE","RO","RS","RU","RW","SA","SB","SC","SD",
-    "SE","SG","SH","SI","SJ","SK","SL","SM","SN","SO","SR","SS","ST","SV",
-    "SX","SY","SZ","TC","TD","TF","TG","TH","TJ","TK","TL","TM","TN","TO",
-    "TR","TT","TV","TW","TZ","UA","UG","UM","US","UY","UZ","VA","VC","VE",
-    "VG","VI","VN","VU","WF","WS","YE","YT","ZA","ZM","ZW",
-})
-
 
 class ComponentSet(BaseModel):
     """A labelled set of address components tagged with their source specification.
@@ -81,13 +50,6 @@ class ComponentSet(BaseModel):
     )
 
 
-# Convenience constant used by services.
-USPS_PUB28_SPEC = ComponentSet(
-    spec="usps-pub28",
-    spec_version="unknown",
-    values={},
-)
-
 
 class ErrorResponse(BaseModel):
     """Structured error payload returned by all /api/v1/* error responses."""
@@ -101,23 +63,36 @@ class ErrorResponse(BaseModel):
         ...,
         description="Human-readable error description.",
     )
-    api_version: str = Field(default="1", description="API version that produced this error.")
+    api_version: Literal["1"] = Field(default="1", description="API version that produced this error.")
 
 
 # ---------------------------------------------------------------------------
 # Request models (shared across v1 routes)
 # ---------------------------------------------------------------------------
 
-_COUNTRY_FIELD = Field(
-    default="US",
-    min_length=2,
-    max_length=2,
-    description="ISO 3166-1 alpha-2 country code. Only 'US' is supported in v1.",
-    examples=["US"],
-)
+def _country_field() -> Field:  # type: ignore[valid-type]
+    """Return a fresh ``FieldInfo`` for an ISO 3166-1 alpha-2 country field.
+
+    Called as a default factory at class-definition time so each model
+    that uses it gets an independent ``FieldInfo`` instance.
+    """
+    return Field(
+        default="US",
+        min_length=2,
+        max_length=2,
+        description="ISO 3166-1 alpha-2 country code. Only 'US' is supported in v1.",
+        examples=["US"],
+    )
 
 
 def _normalise_country(v: object) -> str:
+    """Uppercase and strip a country code string before Pydantic validation.
+
+    Used as a ``mode='before'`` field validator so callers may pass
+    lower- or mixed-case codes (e.g. ``"us"`` → ``"US"``).
+    Non-string values are returned unchanged and will fail Pydantic's
+    type check in the normal validation pass.
+    """
     if isinstance(v, str):
         return v.strip().upper()
     return v  # type: ignore[return-value]
@@ -125,7 +100,7 @@ def _normalise_country(v: object) -> str:
 
 class ParseRequestV1(BaseModel):
     address: str = Field(..., max_length=1000)
-    country: str = _COUNTRY_FIELD
+    country: str = _country_field()
 
     @field_validator("country", mode="before")
     @classmethod
@@ -142,7 +117,7 @@ class StandardizeRequestV1(BaseModel):
 
     address: Optional[str] = Field(None, max_length=1000)
     components: Optional[dict[str, str]] = None
-    country: str = _COUNTRY_FIELD
+    country: str = _country_field()
 
     @field_validator("country", mode="before")
     @classmethod
@@ -156,7 +131,7 @@ class StandardizeRequestV1(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
-    api_version: str = "1"
+    api_version: Literal["1"] = "1"
 
 
 class ParseResponseV1(BaseModel):
@@ -165,7 +140,7 @@ class ParseResponseV1(BaseModel):
     components: ComponentSet
     type: str
     warning: Optional[str] = None
-    api_version: str = "1"
+    api_version: Literal["1"] = "1"
 
 
 class StandardizeResponseV1(BaseModel):
@@ -177,7 +152,7 @@ class StandardizeResponseV1(BaseModel):
     country: str
     standardized: str
     components: ComponentSet
-    api_version: str = "1"
+    api_version: Literal["1"] = "1"
 
 
 # ---------------------------------------------------------------------------

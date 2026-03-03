@@ -4,7 +4,8 @@ import re
 
 import usaddress
 
-from models import ComponentSet, ParseResponse, ParseResponseV1, USPS_PUB28_SPEC
+from models import ComponentSet, ParseResponse, ParseResponseV1
+from routers.v1.core import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -290,8 +291,8 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             input=raw,
             country=country,
             components=ComponentSet(
-                spec=USPS_PUB28_SPEC.spec,
-                spec_version=USPS_PUB28_SPEC.spec_version,
+                spec=USPS_PUB28_SPEC,
+                spec_version=USPS_PUB28_SPEC_VERSION,
                 values=component_values,
             ),
             type="Ambiguous",
@@ -310,8 +311,8 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         input=raw,
         country=country,
         components=ComponentSet(
-            spec=USPS_PUB28_SPEC.spec,
-            spec_version=USPS_PUB28_SPEC.spec_version,
+            spec=USPS_PUB28_SPEC,
+            spec_version=USPS_PUB28_SPEC_VERSION,
             values=component_values,
         ),
         type=addr_type,

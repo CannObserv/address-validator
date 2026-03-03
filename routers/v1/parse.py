@@ -1,16 +1,12 @@
 """v1 parse endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends
 
 from auth import require_api_key
-from models import (
-    ErrorResponse,
-    ParseRequestV1,
-    ParseResponseV1,
-    _SUPPORTED_COUNTRIES,
-    _VALID_ISO2,
-)
+from models import ParseRequestV1, ParseResponseV1
+from routers.v1.core import APIError, check_country
 from services.parser import parse_address
+from models import ErrorResponse
 
 router = APIRouter(
     prefix="/api/v1",
@@ -29,35 +25,15 @@ router = APIRouter(
         422: {"model": ErrorResponse},
     },
 )
-def parse_address_v1(req: ParseRequestV1, response: Response) -> ParseResponseV1:
-    response.headers["API-Version"] = "1"
-
-    country = req.country  # already uppercased by validator
-    if country not in _VALID_ISO2:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=ErrorResponse(
-                error="invalid_country_code",
-                message=f"'{country}' is not a valid ISO 3166-1 alpha-2 country code.",
-            ).model_dump(),
-        )
-    if country not in _SUPPORTED_COUNTRIES:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=ErrorResponse(
-                error="country_not_supported",
-                message=f"Country '{country}' is not yet supported. Currently supported: US.",
-            ).model_dump(),
-        )
+def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
+    check_country(req.country)
 
     raw = req.address.strip()
     if not raw:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=ErrorResponse(
-                error="address_required",
-                message="address is required and must not be blank.",
-            ).model_dump(),
+        raise APIError(
+            status_code=400,
+            error="address_required",
+            message="address is required and must not be blank.",
         )
 
-    return parse_address(raw, country=country)
+    return parse_address(raw, country=req.country)

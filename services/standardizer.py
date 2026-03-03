@@ -2,7 +2,8 @@
 
 import re
 
-from models import ComponentSet, StandardizeResponse, StandardizeResponseV1, USPS_PUB28_SPEC
+from models import ComponentSet, StandardizeResponse, StandardizeResponseV1
+from routers.v1.core import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -318,8 +319,8 @@ def _standardize(components: dict[str, str], country: str) -> StandardizeRespons
         country=country,
         standardized=standardized,
         components=ComponentSet(
-            spec=USPS_PUB28_SPEC.spec,
-            spec_version=USPS_PUB28_SPEC.spec_version,
+            spec=USPS_PUB28_SPEC,
+            spec_version=USPS_PUB28_SPEC_VERSION,
             values=std,
         ),
     )
