@@ -32,20 +32,21 @@ async def require_api_key(
     Returns the validated key on success.  Raises 401 when the header
     is missing and 403 when the key is invalid.
     """
+    path = request.url.path
     if api_key is None:
-        logger.info("auth rejected: missing API key path=%s", request.url.path)
+        logger.info("auth rejected: missing API key path=%s", path)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing API key. Provide an X-API-Key header.",
         )
     if len(api_key) > _MAX_KEY_LENGTH:
-        logger.info("auth rejected: invalid API key path=%s", request.url.path)
+        logger.info("auth rejected: invalid API key path=%s", path)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API key.",
         )
     if not secrets.compare_digest(api_key, _API_KEY):
-        logger.info("auth rejected: invalid API key path=%s", request.url.path)
+        logger.info("auth rejected: invalid API key path=%s", path)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid API key.",

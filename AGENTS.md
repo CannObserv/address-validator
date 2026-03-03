@@ -37,6 +37,37 @@ running uvicorn on port 8000.
 - **`docs/usps-addresses-v3r2_3.yaml`** — Archived USPS Addresses API v3.2.2
   OpenAPI spec (retrieved 2026-03-03).
 
+## Logging
+
+All service and auth modules use Python's standard `logging` module via a
+module-level logger:
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
+
+This gives loggers the names `services.parser`, `services.standardizer`, and
+`auth`, making them filterable via the standard Python logging hierarchy.
+
+| Event | Level | Module | Notes |
+|---|---|---|---|
+| Successful parse | `DEBUG` | `services.parser` | `type=` and `country=` |
+| Ambiguous parse (RepeatedLabelError) | `WARNING` + `DEBUG` | `services.parser` | WARNING first, then DEBUG with `type=Ambiguous` |
+| Standardize call | `DEBUG` | `services.standardizer` | `count=` and `country=` |
+| Auth rejection — missing key (401) | `INFO` | `auth` | includes `path=` |
+| Auth rejection — invalid key (403) | `INFO` | `auth` | includes `path=` |
+
+**No PII rule:** address content must never appear in log messages at `INFO`
+or above. Component counts and type labels are safe; raw address strings are not.
+
+Log level is controlled at runtime by uvicorn's `--log-level` flag (set in the
+systemd unit). `DEBUG` is off by default in production. JSON structured logging
+can be added later via `python-json-logger` if log aggregation is introduced.
+
+New routers and services should follow the same pattern: one `getLogger(__name__)`
+per module, and `caplog` assertions in the corresponding unit tests.
+
 ## Key conventions
 
 - Routers return Pydantic response models.  Services also return these

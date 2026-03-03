@@ -1,5 +1,6 @@
 """Unit tests for services/parser.py."""
 
+import logging
 from unittest import mock
 
 import pytest
@@ -244,3 +245,44 @@ class TestZipNormalization:
     def test_zip_parsed(self, raw: str, expected_zip: str) -> None:
         result = parse_address(raw)
         assert result.components.values.get("zip_code", "").startswith(expected_zip[:5])
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+
+class TestParserLogging:
+    def test_debug_emitted_on_successful_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.DEBUG, logger="services.parser"):
+            parse_address("123 Main St, Springfield, IL 62701")
+        assert "parsed address" in caplog.text
+        assert "Street Address" in caplog.text
+
+    def test_debug_emitted_on_ambiguous_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+        # Force a RepeatedLabelError by mocking usaddress.tag.
+        exc = usaddress.RepeatedLabelError(
+            "1804 & 1810 Main St",
+            [("1804", "AddressNumber"), ("Main", "StreetName"), ("1810", "AddressNumber")],
+            "AddressNumber",
+        )
+        with (
+            mock.patch("usaddress.tag", side_effect=exc),
+            caplog.at_level(logging.DEBUG, logger="services.parser"),
+        ):
+            result = parse_address("1804 & 1810 Main St")
+        assert result.type == "Ambiguous"
+        assert "parsed address type=Ambiguous" in caplog.text
+
+    def test_warning_emitted_on_ambiguous_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+        exc = usaddress.RepeatedLabelError(
+            "1804 & 1810 Main St",
+            [("1804", "AddressNumber"), ("Main", "StreetName"), ("1810", "AddressNumber")],
+            "AddressNumber",
+        )
+        with (
+            mock.patch("usaddress.tag", side_effect=exc),
+            caplog.at_level(logging.WARNING, logger="services.parser"),
+        ):
+            parse_address("1804 & 1810 Main St")
+        assert "ambiguous parse" in caplog.text

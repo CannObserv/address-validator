@@ -1,5 +1,7 @@
 """Unit tests for services/standardizer.py."""
 
+import logging
+
 import pytest
 
 from services.standardizer import _get, _lookup, _std_zip, standardize, standardize_legacy
@@ -241,3 +243,17 @@ class TestStandardizeLegacy:
     def test_state_normalisation(self, raw_state: str, expected: str) -> None:
         result = standardize_legacy({"state": raw_state})
         assert result.state == expected
+
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+
+class TestStandardizerLogging:
+    def test_debug_emitted_on_standardize(self, caplog: pytest.LogCaptureFixture) -> None:
+        components = {"address_number": "123", "street_name": "MAIN", "city": "SPRINGFIELD"}
+        with caplog.at_level(logging.DEBUG, logger="services.standardizer"):
+            standardize(components)
+        assert "standardizing components" in caplog.text
+        assert "count=3" in caplog.text
