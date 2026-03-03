@@ -1,0 +1,14 @@
+[project]
+name = "address-validator"
+version = "0.1.0"
+description = "USPS address parsing and standardization service"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.129.0",
+    "uvicorn==0.41.0",
+    "usaddress==0.5.16",
+    "pydantic==2.12.5",
+]
+
+[dependency-groups]
+dev = []
