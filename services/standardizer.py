@@ -1,5 +1,6 @@
 """Address standardization per USPS Publication 28."""
 
+import logging
 import re
 
 from models import ComponentSet, StandardizeResponse, StandardizeResponseV1
@@ -8,6 +9,8 @@ from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
+
+logger = logging.getLogger(__name__)
 
 _ZIP5: int = 5  # digits in a USPS ZIP code
 _ZIP9: int = 9  # digits in a ZIP+4 code
@@ -276,6 +279,7 @@ def _assemble_lines(
 
 def _standardize(components: dict[str, str], country: str) -> StandardizeResponseV1:
     """Internal implementation returning v1 response."""
+    logger.debug("standardizing components count=%d country=%s", len(components), country)
     std: dict[str, str] = {}
 
     # --- primary number ---

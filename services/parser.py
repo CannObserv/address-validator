@@ -1,5 +1,6 @@
 """Address parsing service using the usaddress library."""
 
+import logging
 import re
 
 import usaddress
@@ -10,6 +11,8 @@ from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
+
+logger = logging.getLogger(__name__)
 
 # Combined lookup for tokens that are valid address vocabulary.
 _ADDRESS_VOCABULARY: set[str] = (
@@ -273,6 +276,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
     try:
         tagged, addr_type = usaddress.tag(cleaned)
     except usaddress.RepeatedLabelError as exc:
+        logger.warning("ambiguous parse: repeated labels in input")
         # Fallback: return the raw token pairs when tagging is ambiguous.
         component_values: dict[str, str] = {}
         prev_key: str | None = None
@@ -313,6 +317,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             warning="Repeated labels detected; parse may be inaccurate.",
         )
 
+    logger.debug("parsed address type=%s country=%s", addr_type, country)
     component_values = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
 
     _recover_unit_from_city(component_values)
