@@ -3,13 +3,7 @@
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-# ---------------------------------------------------------------------------
-# USPS Publication 28 spec identifiers
-# Used by services to tag ComponentSet instances.
-# ---------------------------------------------------------------------------
-
-USPS_PUB28_SPEC = "usps-pub28"
-USPS_PUB28_SPEC_VERSION = "unknown"  # verified edition TBD (see Epic #2)
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION  # re-exported for convenience
 
 # ---------------------------------------------------------------------------
 # Country validation

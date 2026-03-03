@@ -108,7 +108,7 @@ Determine which GitHub issue(s) to close, in priority order:
 
 #### Step 1: Ensure Clean Working Tree
 - Check `git status` for uncommitted changes
-- If changes exist, commit them with the `#<number>: ` message prefix convention
+- If changes exist, commit them following the project convention: `#<number>: <type>: <description>` (see AGENTS.md **Commit message convention**)
 - If multiple issues are in scope, prefix with all (e.g., `#19, #20: ...`)
 
 #### Step 2: Ensure on `main`

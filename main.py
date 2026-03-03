@@ -66,8 +66,9 @@ async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
     """Serialise :class:`APIError` directly as the response body.
 
     Bypasses FastAPI's default ``HTTPException`` wrapping so the wire
-    format is ``{"error": "...", ...}`` rather than ``{"detail": {...}}``.
-    The ``API-Version`` header is appended by :func:`add_api_version_header`.
+    format is ``{"error": "...", "message": "...", "api_version": "1"}``
+    rather than ``{"detail": {...}}``.  The ``API-Version`` response
+    header is appended downstream by :func:`add_api_version_header`.
     """
     return api_error_response(exc)
 

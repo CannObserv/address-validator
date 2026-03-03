@@ -24,8 +24,14 @@ running uvicorn on port 8000.
 - **`usps_data/`** — Pure-data modules exporting `dict[str, str]` maps
   for suffixes, directionals, states, and unit designators.  Sourced
   from USPS Pub 28 appendices.
-- **`static/index.html`** — Self-contained single-page web UI.  Read
-  once at import time by `routers/web.py`; changes require a restart.
+- **`routers/v1/core.py`** — Shared v1 utilities: country validation sets
+  (`VALID_ISO2`, `SUPPORTED_COUNTRIES`), `APIError` exception,
+  `api_error_response` helper, and `check_country()`.  Re-exports
+  `USPS_PUB28_SPEC` / `USPS_PUB28_SPEC_VERSION` from `usps_data/spec.py`
+  for router convenience.
+- **`usps_data/spec.py`** — USPS Publication 28 spec identifier constants
+  (`USPS_PUB28_SPEC`, `USPS_PUB28_SPEC_VERSION`).  Imported by services
+  to tag `ComponentSet` instances; also re-exported by `routers/v1/core.py`.
 
 ## Key conventions
 
@@ -42,7 +48,12 @@ running uvicorn on port 8000.
 - Address input is limited to 1000 characters (enforced by Pydantic
   `Field(max_length=1000)` on both request models).
 - The `standardized` field uses two-space separators between logical
-  address lines (USPS single-line convention).
+  address lines (USPS single-line convention).  This applies to both
+  v1 (`StandardizeResponseV1`) and legacy (`StandardizeResponse`) routes.
+- v1 response models (`ParseResponseV1`, `StandardizeResponseV1`) use
+  geography-neutral field names: `region` (was `state`) and `postal_code`
+  (was `zip_code`).  Legacy models retain the original names for
+  backward compatibility during the deprecation window.
 
 ## Authentication
 
@@ -113,14 +124,40 @@ minimum:
   output.  Verify against USPS Pub 28 before editing.
 - **`_get()` normalization** — every component value flows through
   this; changes cascade everywhere.
-- **`models.py`** — changing field names or types is a breaking API
-  change.
+- **`models.py`** — the single source of truth for API contracts.
+  v1 models use `region` / `postal_code`; legacy models retain `state` /
+  `zip_code`.  Changing field names or types in v1 models is a breaking
+  API change.  Changing legacy models risks breaking existing callers
+  during the deprecation window.  The `_country_field()` factory and
+  `_normalise_country()` helper govern how country codes are accepted
+  and normalised on all v1 requests.
+- **`usps_data/spec.py`** — changing `USPS_PUB28_SPEC` or
+  `USPS_PUB28_SPEC_VERSION` affects the `ComponentSet.spec` /
+  `spec_version` fields on every parse and standardize response.
 - **`auth.py`** — the authentication gate for all `/api/*` endpoints.
   The API key is read once at import time; changes to the loading
   logic affect service startup.
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
+
+## Commit message convention
+
+Commits use **Conventional Commits** style for standalone work:
+```
+<type>: <description>
+```
+Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
+
+When a commit closes or advances a GitHub issue, use the issue number
+as the sole prefix — drop the type:
+```
+#<number>: <description>
+```
+For multiple issues: `#12, #14: <description>`
+
+The `ship` playbook in `PLAYBOOKS.md` follows this convention when
+auto-committing uncommitted work.
 
 ## Playbooks
 

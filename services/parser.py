@@ -5,7 +5,7 @@ import re
 import usaddress
 
 from models import ComponentSet, ParseResponse, ParseResponseV1
-from routers.v1.core import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
