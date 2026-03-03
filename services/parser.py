@@ -4,7 +4,7 @@ import re
 
 import usaddress
 
-from models import ParseResponse
+from models import ComponentSet, ParseResponse, ParseResponseV1, USPS_PUB28_SPEC
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -217,7 +217,28 @@ def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
             return
 
 
-def parse_address(raw: str) -> ParseResponse:
+def parse_address(raw: str, country: str = "US") -> ParseResponseV1:
+    """Parse *raw* address string into labelled components (v1).
+
+    Returns a :class:`ParseResponseV1`.  Pass ``legacy=True`` via the
+    thin wrapper :func:`parse_address_legacy` when the deprecated route
+    needs the old response shape.
+    """
+    return _parse(raw, country)
+
+
+def parse_address_legacy(raw: str) -> ParseResponse:
+    """Deprecated shim — returns the old flat :class:`ParseResponse`."""
+    v1 = _parse(raw, "US")
+    return ParseResponse(
+        input=v1.input,
+        components=v1.components.values,
+        type=v1.type,
+        warning=v1.warning,
+    )
+
+
+def _parse(raw: str, country: str) -> ParseResponseV1:
     """Parse *raw* address string into labelled components.
 
     Returns a :class:`ParseResponse` with:
@@ -238,7 +259,7 @@ def parse_address(raw: str) -> ParseResponse:
         tagged, addr_type = usaddress.tag(cleaned)
     except usaddress.RepeatedLabelError as exc:
         # Fallback: return the raw token pairs when tagging is ambiguous.
-        components: dict[str, str] = {}
+        component_values: dict[str, str] = {}
         prev_key: str | None = None
         separator_before: bool = False
         for token, label in exc.parsed_string:
@@ -254,34 +275,44 @@ def parse_address(raw: str) -> ParseResponse:
                     continue  # don't emit the separator yet
                 # True intersection separator — emit normally.
 
-            if key in components:
+            if key in component_values:
                 if key == "address_number" and separator_before:
                     # Dual address: join with hyphen (USPS Pub 28 §232).
-                    components[key] += f"-{token}"
+                    component_values[key] += f"-{token}"
                 else:
-                    components[key] += f" {token}"
+                    component_values[key] += f" {token}"
             else:
-                components[key] = token
+                component_values[key] = token
 
             separator_before = False
             prev_key = key
-        return ParseResponse(
+        return ParseResponseV1(
             input=raw,
-            components=components,
+            country=country,
+            components=ComponentSet(
+                spec=USPS_PUB28_SPEC.spec,
+                spec_version=USPS_PUB28_SPEC.spec_version,
+                values=component_values,
+            ),
             type="Ambiguous",
             warning="Repeated labels detected; parse may be inaccurate.",
         )
 
-    components = {
+    component_values = {
         TAG_NAMES.get(label, label): value
         for label, value in tagged.items()
     }
 
-    _recover_unit_from_city(components)
-    _recover_identifier_fragment_from_city(components)
+    _recover_unit_from_city(component_values)
+    _recover_identifier_fragment_from_city(component_values)
 
-    return ParseResponse(
+    return ParseResponseV1(
         input=raw,
-        components=components,
+        country=country,
+        components=ComponentSet(
+            spec=USPS_PUB28_SPEC.spec,
+            spec_version=USPS_PUB28_SPEC.spec_version,
+            values=component_values,
+        ),
         type=addr_type,
     )

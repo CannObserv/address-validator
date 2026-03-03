@@ -2,7 +2,7 @@
 
 import re
 
-from models import StandardizeResponse
+from models import ComponentSet, StandardizeResponse, StandardizeResponseV1, USPS_PUB28_SPEC
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -124,8 +124,27 @@ def _standardize_street_fields(
         std[f"{prefix}street_name_post_modifier"] = v
 
 
-def standardize(components: dict[str, str]) -> StandardizeResponse:
-    """Return a standardized address from parsed *components*."""
+def standardize(components: dict[str, str], country: str = "US") -> StandardizeResponseV1:
+    """Return a standardized address from parsed *components* (v1)."""
+    return _standardize(components, country)
+
+
+def standardize_legacy(components: dict[str, str]) -> StandardizeResponse:
+    """Deprecated shim — returns the old :class:`StandardizeResponse`."""
+    v1 = _standardize(components, "US")
+    return StandardizeResponse(
+        address_line_1=v1.address_line_1,
+        address_line_2=v1.address_line_2,
+        city=v1.city,
+        state=v1.region,
+        zip_code=v1.postal_code,
+        standardized=v1.standardized,
+        components=v1.components.values,
+    )
+
+
+def _standardize(components: dict[str, str], country: str) -> StandardizeResponseV1:
+    """Internal implementation returning v1 response."""
     std: dict[str, str] = {}
 
     # --- primary number ---
@@ -290,12 +309,17 @@ def standardize(components: dict[str, str]) -> StandardizeResponse:
     full_parts = [p for p in (line1, line2, last_line) if p]
     standardized = "  ".join(full_parts) if full_parts else ""
 
-    return StandardizeResponse(
+    return StandardizeResponseV1(
         address_line_1=line1,
         address_line_2=line2,
         city=city,
-        state=state,
-        zip_code=zip_code,
+        region=state,
+        postal_code=zip_code,
+        country=country,
         standardized=standardized,
-        components=std,
+        components=ComponentSet(
+            spec=USPS_PUB28_SPEC.spec,
+            spec_version=USPS_PUB28_SPEC.spec_version,
+            values=std,
+        ),
     )
