@@ -15,14 +15,11 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = "==0.129.0" },
-    { name = "pydantic", specifier = "==2.12.5" },
-    { name = "usaddress", specifier = "==0.5.16" },
-    { name = "uvicorn", specifier = "==0.41.0" },
+    { name = "fastapi", specifier = ">=0.129,<1" },
+    { name = "pydantic", specifier = ">=2.12,<3" },
+    { name = "usaddress", specifier = ">=0.5.16" },
+    { name = "uvicorn", specifier = ">=0.41,<1" },
 ]
-
-[package.metadata.requires-dev]
-dev = []
 
 [[package]]
 name = "annotated-doc"

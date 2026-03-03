@@ -67,11 +67,19 @@ running uvicorn on port 8000.
 
 ## Deployment
 
-- Python venv at `./venv/`.
+- Python venv at `./.venv/` (managed by `uv`).
 - systemd unit: `/etc/systemd/system/address-validator.service`.
 - Environment file: `/etc/address-validator/env` (contains `API_KEY=...`).
 - Restart after changes: `sudo systemctl restart address-validator`.
 - Logs: `journalctl -u address-validator -f`.
+
+## Common tasks
+
+- **Install / refresh dependencies:** `uv sync`
+- **Add a dependency:** `uv add <package>` (updates `pyproject.toml` and `uv.lock`)
+- **Upgrade all deps to latest allowed:** `uv lock --upgrade && uv sync`
+- **Run a command in the venv:** `uv run <command>` (e.g. `uv run uvicorn main:app ...`)
+- **Commit lockfile after any dep change:** always commit `uv.lock` alongside `pyproject.toml`
 
 ## Testing notes
 
