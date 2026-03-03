@@ -25,13 +25,17 @@ running uvicorn on port 8000.
   for suffixes, directionals, states, and unit designators.  Sourced
   from USPS Pub 28 appendices.
 - **`routers/v1/core.py`** — Shared v1 utilities: country validation sets
-  (`VALID_ISO2`, `SUPPORTED_COUNTRIES`), `APIError` exception,
-  `api_error_response` helper, and `check_country()`.  Previously
-  re-exported `USPS_PUB28_SPEC` / `USPS_PUB28_SPEC_VERSION` but those
-  imports were removed when no router used them; restore if needed.
+  (`VALID_ISO2` built from `pycountry`, `SUPPORTED_COUNTRIES`), `APIError`
+  exception, `api_error_response` helper (uses `ErrorResponse` directly),
+  and `check_country()`.
 - **`usps_data/spec.py`** — USPS Publication 28 spec identifier constants
   (`USPS_PUB28_SPEC`, `USPS_PUB28_SPEC_VERSION`).  Imported by services
   to tag `ComponentSet` instances; also re-exported by `routers/v1/core.py`.
+- **`docs/usps-pub28.md`** — Research notes on the Pub 28 edition used,
+  verification procedure for pinning `USPS_PUB28_SPEC_VERSION`, and
+  notes on the USPS Addresses API v3 models.
+- **`docs/usps-addresses-v3r2_3.yaml`** — Archived USPS Addresses API v3.2.2
+  OpenAPI spec (retrieved 2026-03-03).
 
 ## Key conventions
 
@@ -129,6 +133,11 @@ import in `conftest.py` is intentional — do not move it above the
 - **Upgrade all deps to latest allowed:** `uv lock --upgrade && uv sync`
 - **Run a command in the venv:** `uv run <command>` (e.g. `uv run uvicorn main:app ...`)
 - **Commit lockfile after any dep change:** always commit `uv.lock` alongside `pyproject.toml`
+- **Dependency version pinning:** pin dependencies within a major version boundary
+  (`>=X.Y,<X+1`).  After each intentional upgrade cycle, update the lower bound
+  to the newly installed version.  Example: after upgrading FastAPI to 0.130.x,
+  update `pyproject.toml` to `fastapi>=0.130,<1`.  This prevents silent breakage
+  from future minor releases while still allowing patch-level updates.
 
 ## Sensitive areas
 
@@ -149,9 +158,10 @@ import in `conftest.py` is intentional — do not move it above the
   v1 models use `region` / `postal_code`; legacy models retain `state` /
   `zip_code`.  Changing field names or types in v1 models is a breaking
   API change.  Changing legacy models risks breaking existing callers
-  during the deprecation window.  The `_country_field()` factory and
-  `_normalise_country()` helper govern how country codes are accepted
-  and normalised on all v1 requests.
+  during the deprecation window.  `CountryRequestMixin` provides the
+  `country` field and normalisation validator; all v1 request models that
+  accept a country code must inherit from it.  The `_country_field()`
+  factory returns a fresh `FieldInfo` per model.
 - **`usps_data/spec.py`** — changing `USPS_PUB28_SPEC` or
   `USPS_PUB28_SPEC_VERSION` affects the `ComponentSet.spec` /
   `spec_version` fields on every parse and standardize response.
@@ -161,6 +171,10 @@ import in `conftest.py` is intentional — do not move it above the
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
+- **Deprecated route `Sunset` header** — both `routers/parse.py` and
+  `routers/standardize.py` emit `Sunset: Sun, 15 Mar 2026 00:00:00 GMT`.
+  When the date arrives, remove the deprecated routers (tracked by #12)
+  and update this section.
 
 ## Commit message convention
 

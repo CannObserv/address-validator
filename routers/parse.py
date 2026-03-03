@@ -11,6 +11,7 @@ from models import ParseRequest, ParseResponse
 from services.parser import parse_address_legacy
 
 _DEPRECATION_LINK = '</api/v1/parse>; rel="successor-version"'
+_SUNSET_DATE = "Sun, 15 Mar 2026 00:00:00 GMT"
 
 router = APIRouter(
     prefix="/api",
@@ -28,6 +29,7 @@ router = APIRouter(
 def parse_address(req: ParseRequest, response: Response) -> ParseResponse:
     response.headers["Deprecation"] = "true"
     response.headers["Link"] = _DEPRECATION_LINK
+    response.headers["Sunset"] = _SUNSET_DATE
 
     raw = req.address.strip()
     if not raw:

@@ -19,14 +19,7 @@ def _lookup(value: str, table: dict[str, str]) -> str:
     Performs its own defensive uppercasing / period-stripping so it is
     safe to call with raw input as well as pre-cleaned values.
     """
-    cleaned = (
-        value.upper()
-        .replace(".", "")
-        .replace("(", "")
-        .replace(")", "")
-        .strip()
-        .strip(",;")
-    )
+    cleaned = value.upper().replace(".", "").replace("(", "").replace(")", "").strip().strip(",;")
     return table.get(cleaned, cleaned)
 
 
@@ -71,6 +64,7 @@ def _get(components: dict[str, str], key: str) -> str:
 
 
 # -- small helpers for assembling street fragments --------------------------
+
 
 def _street_parts(
     std: dict[str, str],
@@ -147,32 +141,29 @@ def standardize_legacy(components: dict[str, str]) -> StandardizeResponse:
     )
 
 
-def _standardize(  # noqa: PLR0912, PLR0915
-    components: dict[str, str], country: str
-) -> StandardizeResponseV1:
-    """Internal implementation returning v1 response."""
-    std: dict[str, str] = {}
+# ---------------------------------------------------------------------------
+# Private helpers for _standardize
+# ---------------------------------------------------------------------------
 
-    # --- primary number ---
-    v = _get(components, "address_number")
-    if v:
-        std["address_number"] = v
-    v = _get(components, "address_number_prefix")
-    if v:
-        std["address_number_prefix"] = v
-    v = _get(components, "address_number_suffix")
-    if v:
-        std["address_number_suffix"] = v
+_UnitSlots = tuple[str, str, str, str]  # unit_type, unit_id, sub_type, sub_id
 
-    # --- primary street ---
-    _standardize_street_fields(components, std)
 
-    # --- second street (intersections) ---
-    _standardize_street_fields(components, std, prefix="second_")
+def _resolve_unit_slots(components: dict[str, str]) -> _UnitSlots:
+    """Extract and normalise secondary-unit fields from *components*.
 
-    # --- secondary / occupancy ---
-    # An address may have both an occupancy (STE 300) and a subaddress
-    # (SMP - 2).  Collect each pair independently, then combine.
+    Returns a ``(unit_type, unit_id, sub_type, sub_id)`` tuple where each
+    element is a clean string (may be empty).  The caller stores non-empty
+    values into the *std* dict and uses them for line-2 assembly.
+
+    Resolution order
+    ----------------
+    1. ``occupancy_type`` / ``occupancy_identifier`` (primary slot).
+    2. ``subaddress_type`` / ``subaddress_identifier`` (secondary slot).
+    3. If both slots are empty, try ``building_name`` then ``landmark_name``
+       — usaddress sometimes mis-tags designators into these fields.
+    4. Promote subaddress → occupancy when the occupancy slot is empty.
+    5. Default missing designator to ``"#"`` per USPS Pub 28.
+    """
     unit_type = _get(components, "occupancy_type")
     if unit_type:
         unit_type = _lookup(unit_type, UNIT_MAP)
@@ -186,8 +177,7 @@ def _standardize(  # noqa: PLR0912, PLR0915
     # When neither occupancy nor subaddress was parsed, usaddress may
     # have tagged the unit info as LandmarkName or BuildingName (e.g.
     # "BLD C", "STE C&F 1").  Recover it if the leading word is a
-    # known unit designator.
-    # If the leading word of a fallback field isn't a recognised
+    # known unit designator.  If the leading word isn't a recognised
     # designator the field is left unhandled — we don't guess.
     if not unit_type and not unit_id and not sub_type and not sub_id:
         for fallback_key in ("building_name", "landmark_name"):
@@ -223,6 +213,90 @@ def _standardize(  # noqa: PLR0912, PLR0915
             unit_id = parts[1] if len(parts) > 1 else ""
         else:
             unit_type = "#"
+
+    return unit_type, unit_id, sub_type, sub_id
+
+
+def _assemble_lines(
+    std: dict[str, str],
+    unit_type: str,
+    unit_id: str,
+    sub_type: str,
+    sub_id: str,
+) -> tuple[str, str, str]:
+    """Build the three USPS address lines from the standardised component dict.
+
+    Returns ``(line1, line2, last_line)``:
+
+    - **line1** — street number + street name, or PO box.
+    - **line2** — secondary-unit designators (USPS Pub 28: larger container
+      before more specific unit, e.g. ``"BLDG C STE 120"``).
+    - **last_line** — city, state, and ZIP in USPS single-line format
+      (``"CITY, ST ZIP"``).
+    """
+    # --- address line 1 ---
+    number_parts: list[str] = [
+        std[k]
+        for k in ("address_number_prefix", "address_number", "address_number_suffix")
+        if std.get(k)
+    ]
+    first_street = _street_parts(std)
+    second_street = _street_parts(std, prefix="second_")
+
+    if first_street and second_street:
+        line1 = " ".join([*number_parts, *first_street, "&", *second_street])
+    elif first_street or number_parts:
+        line1 = " ".join([*number_parts, *first_street])
+    elif std.get("usps_box_type") or std.get("usps_box_id"):
+        line1 = " ".join(p for p in (std.get("usps_box_type", ""), std.get("usps_box_id", "")) if p)
+    else:
+        line1 = ""
+
+    # --- address line 2 ---
+    # Larger container (sub) before more specific unit (occupancy).
+    line2 = " ".join(p for p in (sub_type, sub_id, unit_type, unit_id) if p)
+
+    # --- last line ---
+    city = std.get("city", "")
+    state = std.get("state", "")
+    zip_code = std.get("zip_code", "")
+
+    if city and state:
+        city_state = f"{city}, {state}"
+    elif city:
+        city_state = city
+    elif state:
+        city_state = state
+    else:
+        city_state = ""
+    last_line = " ".join(p for p in (city_state, zip_code) if p)
+
+    return line1, line2, last_line
+
+
+def _standardize(components: dict[str, str], country: str) -> StandardizeResponseV1:
+    """Internal implementation returning v1 response."""
+    std: dict[str, str] = {}
+
+    # --- primary number ---
+    v = _get(components, "address_number")
+    if v:
+        std["address_number"] = v
+    v = _get(components, "address_number_prefix")
+    if v:
+        std["address_number_prefix"] = v
+    v = _get(components, "address_number_suffix")
+    if v:
+        std["address_number_suffix"] = v
+
+    # --- primary street ---
+    _standardize_street_fields(components, std)
+
+    # --- second street (intersections) ---
+    _standardize_street_fields(components, std, prefix="second_")
+
+    # --- secondary / occupancy ---
+    unit_type, unit_id, sub_type, sub_id = _resolve_unit_slots(components)
     if unit_type:
         std["occupancy_type"] = unit_type
     if unit_id:
@@ -255,62 +329,12 @@ def _standardize(  # noqa: PLR0912, PLR0915
     if v:
         std["usps_box_id"] = v
 
-    # --- assemble address line 1 ---
-    number_parts: list[str] = []
-    for k in ("address_number_prefix", "address_number", "address_number_suffix"):
-        val = std.get(k, "")
-        if val:
-            number_parts.append(val)
+    # --- assemble output lines ---
+    line1, line2, last_line = _assemble_lines(std, unit_type, unit_id, sub_type, sub_id)
 
-    first_street = _street_parts(std)
-    second_street = _street_parts(std, prefix="second_")
-
-    if first_street and second_street:
-        # Intersection: FIRST ST & SECOND ST
-        line1 = " ".join(
-            [*number_parts, *first_street, "&", *second_street]
-        )
-    elif first_street or number_parts:
-        line1 = " ".join([*number_parts, *first_street])
-    elif std.get("usps_box_type") or std.get("usps_box_id"):
-        po_parts = []
-        if std.get("usps_box_type"):
-            po_parts.append(std["usps_box_type"])
-        if std.get("usps_box_id"):
-            po_parts.append(std["usps_box_id"])
-        line1 = " ".join(po_parts)
-    else:
-        line1 = ""
-
-    # --- address line 2 ---
-    # USPS Pub 28: larger container (building/subaddress) before more
-    # specific unit (suite/occupancy), e.g. "BLDG C STE 120".
-    line2_parts: list[str] = []
-    if sub_type:
-        line2_parts.append(sub_type)
-    if sub_id:
-        line2_parts.append(sub_id)
-    if unit_type:
-        line2_parts.append(unit_type)
-    if unit_id:
-        line2_parts.append(unit_id)
-    line2 = " ".join(line2_parts)
-
-    # --- last line ---
     city = std.get("city", "")
     state = std.get("state", "")
     zip_code = std.get("zip_code", "")
-
-    last_line_parts: list[str] = []
-    if city and state:
-        last_line_parts.append(f"{city}, {state}")
-    elif city:
-        last_line_parts.append(city)
-    elif state:
-        last_line_parts.append(state)
-    if zip_code:
-        last_line_parts.append(zip_code)
-    last_line = " ".join(last_line_parts)
 
     full_parts = [p for p in (line1, line2, last_line) if p]
     standardized = "  ".join(full_parts) if full_parts else ""

@@ -25,9 +25,20 @@ _MIN_CITY_LEN: int = 3
 # STE …) are excluded to avoid false positives on city names like
 # KEY WEST or FRONT ROYAL.
 _NO_ID_DESIGNATORS: set[str] = {
-    "BASEMENT", "BSMT", "FRONT", "FRNT", "LOBBY", "LBBY",
-    "LOWER", "LOWR", "PENTHOUSE", "PH", "REAR", "SIDE",
-    "UPPER", "UPPR",
+    "BASEMENT",
+    "BSMT",
+    "FRONT",
+    "FRNT",
+    "LOBBY",
+    "LBBY",
+    "LOWER",
+    "LOWR",
+    "PENTHOUSE",
+    "PH",
+    "REAR",
+    "SIDE",
+    "UPPER",
+    "UPPR",
 }
 
 
@@ -302,10 +313,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             warning="Repeated labels detected; parse may be inaccurate.",
         )
 
-    component_values = {
-        TAG_NAMES.get(label, label): value
-        for label, value in tagged.items()
-    }
+    component_values = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
 
     _recover_unit_from_city(component_values)
     _recover_identifier_fragment_from_city(component_values)

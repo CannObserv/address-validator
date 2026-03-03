@@ -43,8 +43,7 @@ _TAGS = [
     {
         "name": "deprecated",
         "description": (
-            "Unversioned routes retained for backward compatibility."
-            " **Migrate to `/api/v1/`.**"
+            "Unversioned routes retained for backward compatibility. **Migrate to `/api/v1/`.**"
         ),
     },
 ]
@@ -87,6 +86,7 @@ async def add_api_version_header(
     if request.url.path.startswith("/api/v1/"):
         response.headers["API-Version"] = "1"
     return response
+
 
 # v1 routes (current)
 app.include_router(v1_health.router)

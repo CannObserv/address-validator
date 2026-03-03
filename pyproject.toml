@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn>=0.41,<1",
     "usaddress>=0.5.16",
     "pydantic>=2.12,<3",
+    "pycountry>=26.2.16",
 ]
 
 [dependency-groups]

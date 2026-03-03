@@ -12,6 +12,7 @@ from services.parser import parse_address_legacy
 from services.standardizer import standardize_legacy
 
 _DEPRECATION_LINK = '</api/v1/standardize>; rel="successor-version"'
+_SUNSET_DATE = "Sun, 15 Mar 2026 00:00:00 GMT"
 
 router = APIRouter(
     prefix="/api",
@@ -29,6 +30,7 @@ router = APIRouter(
 def standardize_address(req: StandardizeRequest, response: Response) -> StandardizeResponse:
     response.headers["Deprecation"] = "true"
     response.headers["Link"] = _DEPRECATION_LINK
+    response.headers["Sunset"] = _SUNSET_DATE
 
     if req.components is not None and len(req.components) > 0:
         comps = req.components

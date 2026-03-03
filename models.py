@@ -50,7 +50,6 @@ class ComponentSet(BaseModel):
     )
 
 
-
 class ErrorResponse(BaseModel):
     """Structured error payload returned by all /api/v1/* error responses."""
 
@@ -72,11 +71,15 @@ class ErrorResponse(BaseModel):
 # Request models (shared across v1 routes)
 # ---------------------------------------------------------------------------
 
+
 def _country_field() -> Field:  # type: ignore[valid-type]
     """Return a fresh ``FieldInfo`` for an ISO 3166-1 alpha-2 country field.
 
     Called as a default factory at class-definition time so each model
-    that uses it gets an independent ``FieldInfo`` instance.
+    that uses it gets an independent ``FieldInfo`` instance.  Every v1
+    request model that carries a ``country`` field must use both this
+    factory *and* inherit from :class:`CountryRequestMixin` to pick up
+    the normalisation validator.
     """
     return Field(
         default="US",
@@ -87,30 +90,37 @@ def _country_field() -> Field:  # type: ignore[valid-type]
     )
 
 
-def _normalise_country(v: object) -> str:
-    """Uppercase and strip a country code string before Pydantic validation.
+class CountryRequestMixin(BaseModel):
+    """Mixin that adds a normalised ``country`` field to v1 request models.
 
-    Used as a ``mode='before'`` field validator so callers may pass
-    lower- or mixed-case codes (e.g. ``"us"`` → ``"US"``).
-    Non-string values are returned unchanged and will fail Pydantic's
-    type check in the normal validation pass.
+    Provides the ``country`` field (ISO 3166-1 alpha-2, default ``"US"``)
+    and a ``mode='before'`` validator that uppercases and strips it so
+    callers may pass ``"us"`` or ``" US "`` without error.
+
+    All v1 request models that accept a country code should inherit from
+    this mixin rather than duplicating the field declaration and validator.
     """
-    if isinstance(v, str):
-        return v.strip().upper()
-    return v  # type: ignore[return-value]
 
-
-class ParseRequestV1(BaseModel):
-    address: str = Field(..., max_length=1000)
     country: str = _country_field()
 
     @field_validator("country", mode="before")
     @classmethod
     def normalise_country(cls, v: object) -> str:
-        return _normalise_country(v)
+        """Uppercase and strip a country code string before Pydantic validation.
+
+        Non-string values are returned unchanged and will fail Pydantic's
+        type check in the normal validation pass.
+        """
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v  # type: ignore[return-value]
 
 
-class StandardizeRequestV1(BaseModel):
+class ParseRequestV1(CountryRequestMixin):
+    address: str = Field(..., max_length=1000)
+
+
+class StandardizeRequestV1(CountryRequestMixin):
     """Accept either a raw address string *or* pre-parsed components.
 
     When both ``address`` and ``components`` are provided, ``components``
@@ -119,17 +129,12 @@ class StandardizeRequestV1(BaseModel):
 
     address: str | None = Field(None, max_length=1000)
     components: dict[str, str] | None = None
-    country: str = _country_field()
-
-    @field_validator("country", mode="before")
-    @classmethod
-    def normalise_country(cls, v: object) -> str:
-        return _normalise_country(v)
 
 
 # ---------------------------------------------------------------------------
 # Response models — v1
 # ---------------------------------------------------------------------------
+
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
@@ -161,6 +166,7 @@ class StandardizeResponseV1(BaseModel):
 # Response models — legacy (deprecated unversioned routes)
 # ---------------------------------------------------------------------------
 
+
 class ParseRequest(BaseModel):
     address: str = Field(..., max_length=1000)
 
@@ -178,6 +184,7 @@ class StandardizeRequest(BaseModel):
     When both ``address`` and ``components`` are provided, ``components``
     takes precedence and ``address`` is ignored.
     """
+
     address: str | None = Field(None, max_length=1000)
     components: dict[str, str] | None = None
 
