@@ -16,6 +16,9 @@ _ADDRESS_VOCABULARY: set[str] = (
     set(UNIT_MAP) | set(SUFFIX_MAP) | set(DIRECTIONAL_MAP) | set(STATE_MAP)
 )
 
+# Minimum city string length for identifier-fragment recovery to run.
+_MIN_CITY_LEN: int = 3
+
 # Designators that never require an identifier (USPS Pub 28 Appendix H).
 # Only these are recognised as bare leading words in phase 2 of city
 # recovery.  Designators that require an identifier (KEY, LOT, UNIT,
@@ -190,7 +193,6 @@ def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
     subaddress identifier already exists, move that letter back onto the
     identifier.
     """
-    _MIN_CITY_LEN = 3
     city = components.get("city", "")
     if not city or len(city) < _MIN_CITY_LEN:
         return

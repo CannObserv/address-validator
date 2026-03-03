@@ -9,6 +9,9 @@ from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
 
+_ZIP5: int = 5  # digits in a USPS ZIP code
+_ZIP9: int = 9  # digits in a ZIP+4 code
+
 
 def _lookup(value: str, table: dict[str, str]) -> str:
     """Return the USPS abbreviation for *value*, or *value* unchanged.
@@ -34,8 +37,6 @@ def _std_zip(raw: str) -> str:
     least 5 digits a warning suffix is *not* added here — the caller is
     responsible for any validation messaging.
     """
-    _ZIP5 = 5
-    _ZIP9 = 9
     digits = re.sub(r"[^\d]", "", raw)
     if len(digits) >= _ZIP9:
         return f"{digits[:_ZIP5]}-{digits[_ZIP5:_ZIP9]}"

@@ -26,9 +26,9 @@ running uvicorn on port 8000.
   from USPS Pub 28 appendices.
 - **`routers/v1/core.py`** — Shared v1 utilities: country validation sets
   (`VALID_ISO2`, `SUPPORTED_COUNTRIES`), `APIError` exception,
-  `api_error_response` helper, and `check_country()`.  Re-exports
-  `USPS_PUB28_SPEC` / `USPS_PUB28_SPEC_VERSION` from `usps_data/spec.py`
-  for router convenience.
+  `api_error_response` helper, and `check_country()`.  Previously
+  re-exported `USPS_PUB28_SPEC` / `USPS_PUB28_SPEC_VERSION` but those
+  imports were removed when no router used them; restore if needed.
 - **`usps_data/spec.py`** — USPS Publication 28 spec identifier constants
   (`USPS_PUB28_SPEC`, `USPS_PUB28_SPEC_VERSION`).  Imported by services
   to tag `ComponentSet` instances; also re-exported by `routers/v1/core.py`.
@@ -98,9 +98,9 @@ Do **not** pass the token via `--auth-token`; use `GH_TOKEN` env var
 - **Run tests:** `uv run pytest`
 - **Run tests (no coverage, faster):** `uv run pytest --no-cov`
 - **Run a single file:** `uv run pytest tests/unit/test_parser.py`
-- **Lint:** `uv run ruff check . --exclude .venv,venv`
-- **Lint + autofix:** `uv run ruff check . --exclude .venv,venv --fix`
-- **Format:** `uv run ruff format . --exclude .venv,venv`
+- **Lint:** `uv run ruff check .`
+- **Lint + autofix:** `uv run ruff check . --fix`
+- **Format:** `uv run ruff format .`
 
 ### TDD workflow (red → green)
 1. Write a failing test and confirm it fails: `uv run pytest --no-cov -x`
@@ -129,43 +129,6 @@ import in `conftest.py` is intentional — do not move it above the
 - **Upgrade all deps to latest allowed:** `uv lock --upgrade && uv sync`
 - **Run a command in the venv:** `uv run <command>` (e.g. `uv run uvicorn main:app ...`)
 - **Commit lockfile after any dep change:** always commit `uv.lock` alongside `pyproject.toml`
-
-## Testing notes
-
-The initial backfill suite lives in `tests/` with unit and integration
-subdirectories.  New work follows red/green TDD (see **Testing and linting**
-above).  Minimum coverage per module to target:
-
-- Street suffix, directional, and state abbreviation lookup.
-- Intersection parsing and assembly (`FIRST & SECOND`).
-- Unit identifier without designator (should default to `#`).
-- `RepeatedLabelError` fallback path in the parser.
-- ZIP normalization edge cases (short, 5-digit, 9-digit, hyphenated).
-- Input length rejection (>1000 chars).
-- Whitespace-only and empty-body request rejection.
-- API key authentication: missing key → 401, wrong key → 403, valid
-  key → 200.
-- Service refuses to start when `API_KEY` env var is unset or empty.
-- Parenthesized wayfinding text stripped before parsing
-  (`"(UPPER LEVEL)"` removed, unmatched parens also stripped).
-- Dual address numbers joined with hyphen
-  (`"1804 & 1810"` → `"1804-1810"`).
-- Unit designator recovery from `BuildingName` / `LandmarkName`
-  fields (`"BLD C"` → `BLDG C`).
-- Designator word extracted from identifier
-  (`"NO. 16"` → `# 16`; bare designator word with no identifier).
-- Both occupancy and subaddress preserved on line 2
-  (`"STE 300, SMP - 2"` → `"STE 300 SMP 2"`).
-- Trailing comma / semicolon stripping from component values.
-- Unit designator recovered from city
-  (`"BASEMENT, FREELAND"` → `occupancy_type=BSMT`, `city=FREELAND`).
-- Multiple designators in city
-  (`"LOWR LEVEL, UNIT SEATTLE"` → extracted, `city=SEATTLE`).
-- Stray identifier fragment moved from city to identifier
-  (`"K WALLA WALLA"` → appended to identifier, `city=WALLA WALLA`).
-- Single-word wayfinding text dropped from city
-  (`"YARD, SPOKANE"` → `city=SPOKANE`).
-- Line 2 ordering: larger container (BLDG) before specific unit (STE).
 
 ## Sensitive areas
 

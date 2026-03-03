@@ -1,11 +1,16 @@
 """Unit tests for auth.py dependency behaviour."""
 
-import inspect
+import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
 import auth
+
+_PROJECT_ROOT = str(Path(__file__).parent.parent.parent)
 
 
 class TestRequireApiKey:
@@ -38,10 +43,31 @@ class TestRequireApiKey:
 class TestApiKeyImportGuard:
     """The module raises RuntimeError at import time if API_KEY is unset.
 
-    Testing this directly would require unloading the module.  We document
-    the contract here and verify the guard string is present in auth.py.
+    We verify the guard fires by running a fresh Python subprocess with
+    API_KEY deliberately absent from its environment.
     """
 
-    def test_guard_message_documented(self) -> None:
-        src = inspect.getsource(auth)
-        assert "API_KEY environment variable is not set" in src
+    def test_missing_key_raises_on_import(self) -> None:
+        env = {k: v for k, v in os.environ.items() if k != "API_KEY"}
+        env["PYTHONPATH"] = _PROJECT_ROOT
+        result = subprocess.run(
+            [sys.executable, "-c", "import auth"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "API_KEY" in result.stderr
+
+    def test_empty_key_raises_on_import(self) -> None:
+        env = {**os.environ, "API_KEY": "", "PYTHONPATH": _PROJECT_ROOT}
+        result = subprocess.run(
+            [sys.executable, "-c", "import auth"],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "API_KEY" in result.stderr
