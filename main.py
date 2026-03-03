@@ -1,5 +1,7 @@
 """Address Validator — FastAPI application entry point."""
 
+from typing import Any
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -40,7 +42,10 @@ _TAGS = [
     },
     {
         "name": "deprecated",
-        "description": "Unversioned routes retained for backward compatibility. **Migrate to `/api/v1/`.**",
+        "description": (
+            "Unversioned routes retained for backward compatibility."
+            " **Migrate to `/api/v1/`.**"
+        ),
     },
 ]
 
@@ -74,7 +79,7 @@ async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
 
 
 @app.middleware("http")
-async def add_api_version_header(request: Request, call_next):
+async def add_api_version_header(request: Request, call_next: Any) -> Any:
     """Append ``API-Version: 1`` to all responses on ``/api/v1/`` routes."""
     response = await call_next(request)
     if request.url.path.startswith("/api/v1/"):

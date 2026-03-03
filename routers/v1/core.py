@@ -3,8 +3,6 @@
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION  # re-exported for convenience
-
 # ---------------------------------------------------------------------------
 # Country validation
 # ---------------------------------------------------------------------------

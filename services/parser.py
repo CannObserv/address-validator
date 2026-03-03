@@ -5,8 +5,8 @@ import re
 import usaddress
 
 from models import ComponentSet, ParseResponse, ParseResponseV1
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.directionals import DIRECTIONAL_MAP
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
@@ -190,8 +190,9 @@ def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
     subaddress identifier already exists, move that letter back onto the
     identifier.
     """
+    _MIN_CITY_LEN = 3
     city = components.get("city", "")
-    if not city or len(city) < 3:
+    if not city or len(city) < _MIN_CITY_LEN:
         return
 
     # Must start with exactly one letter then a space.  This is
@@ -269,7 +270,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             # Track whether an IntersectionSeparator appeared right
             # before a repeated AddressNumber — that signals a dual/
             # range address ("1804 & 1810"), not a true intersection.
-            if key == "intersection_separator":
+            if key == "intersection_separator":  # noqa: SIM102
                 if prev_key == "address_number":
                     separator_before = True
                     prev_key = key

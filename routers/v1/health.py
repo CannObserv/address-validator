@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1", tags=["health"])
     "/health",
     response_model=HealthResponse,
     summary="Service health check",
-    description="Returns `{\"status\": \"ok\"}` when the service is running. No authentication required.",
+    description='Returns `{"status": "ok"}` when the service is running. No auth required.',
 )
 def health() -> HealthResponse:
     return HealthResponse()

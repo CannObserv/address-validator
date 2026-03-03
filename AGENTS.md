@@ -65,6 +65,26 @@ running uvicorn on port 8000.
 - `GET /`, `/docs`, `/redoc`, and `/openapi.json` remain open.
 - The web UI persists the entered key in `localStorage`.
 
+## GitHub CLI / PAT
+
+A GitHub Personal Access Token is stored in `env` (project root) as
+`GITHUB_TOKEN`.  This file is **not** committed (gitignored via the
+system `.gitignore`; add it if needed).  Load it for `gh` commands:
+
+```bash
+export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
+gh issue list          # example
+```
+
+Or prefix individual commands:
+
+```bash
+GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2) gh issue create ...
+```
+
+Do **not** pass the token via `--auth-token`; use `GH_TOKEN` env var
+(the `gh` CLI reads it automatically).
+
 ## Deployment
 
 - Python venv at `./.venv/` (managed by `uv`).
@@ -72,6 +92,35 @@ running uvicorn on port 8000.
 - Environment file: `/etc/address-validator/env` (contains `API_KEY=...`).
 - Restart after changes: `sudo systemctl restart address-validator`.
 - Logs: `journalctl -u address-validator -f`.
+
+## Testing and linting
+
+- **Run tests:** `uv run pytest`
+- **Run tests (no coverage, faster):** `uv run pytest --no-cov`
+- **Run a single file:** `uv run pytest tests/unit/test_parser.py`
+- **Lint:** `uv run ruff check . --exclude .venv,venv`
+- **Lint + autofix:** `uv run ruff check . --exclude .venv,venv --fix`
+- **Format:** `uv run ruff format . --exclude .venv,venv`
+
+### TDD workflow (red → green)
+1. Write a failing test and confirm it fails: `uv run pytest --no-cov -x`
+2. Commit with `test: <description>` (the red commit).
+3. Write minimal production code to make it pass.
+4. Commit with `feat:` / `fix:` / `refactor:` as appropriate.
+5. Ruff must be clean before any commit.
+
+### Coverage
+- Floor: **80% line + branch** (enforced by `--cov-fail-under=80`).
+- Current baseline: ~88%.
+- `routers/standardize.py` (deprecated route) is the main gap — backfill
+  integration tests when the deprecation window closes.
+
+### Auth in tests
+`auth.py` reads `API_KEY` at import time.  `tests/conftest.py` sets
+`os.environ["API_KEY"]` before importing the app, so tests can run
+without the systemd environment file.  The deferred `from main import app`
+import in `conftest.py` is intentional — do not move it above the
+`os.environ.setdefault` call.
 
 ## Common tasks
 
@@ -83,8 +132,9 @@ running uvicorn on port 8000.
 
 ## Testing notes
 
-There is no automated test suite yet.  When adding tests, cover at
-minimum:
+The initial backfill suite lives in `tests/` with unit and integration
+subdirectories.  New work follows red/green TDD (see **Testing and linting**
+above).  Minimum coverage per module to target:
 
 - Street suffix, directional, and state abbreviation lookup.
 - Intersection parsing and assembly (`FIRST & SECOND`).

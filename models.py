@@ -12,7 +12,7 @@ Models with a ``V1`` suffix are the canonical v1 API contract served at
 (``region``, ``postal_code``) and responses carry ``api_version``.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -63,7 +63,9 @@ class ErrorResponse(BaseModel):
         ...,
         description="Human-readable error description.",
     )
-    api_version: Literal["1"] = Field(default="1", description="API version that produced this error.")
+    api_version: Literal["1"] = Field(
+        default="1", description="API version that produced this error."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -115,8 +117,8 @@ class StandardizeRequestV1(BaseModel):
     takes precedence and ``address`` is ignored.
     """
 
-    address: Optional[str] = Field(None, max_length=1000)
-    components: Optional[dict[str, str]] = None
+    address: str | None = Field(None, max_length=1000)
+    components: dict[str, str] | None = None
     country: str = _country_field()
 
     @field_validator("country", mode="before")
@@ -139,7 +141,7 @@ class ParseResponseV1(BaseModel):
     country: str
     components: ComponentSet
     type: str
-    warning: Optional[str] = None
+    warning: str | None = None
     api_version: Literal["1"] = "1"
 
 
@@ -167,7 +169,7 @@ class ParseResponse(BaseModel):
     input: str
     components: dict[str, str]
     type: str
-    warning: Optional[str] = None
+    warning: str | None = None
 
 
 class StandardizeRequest(BaseModel):
@@ -176,8 +178,8 @@ class StandardizeRequest(BaseModel):
     When both ``address`` and ``components`` are provided, ``components``
     takes precedence and ``address`` is ignored.
     """
-    address: Optional[str] = Field(None, max_length=1000)
-    components: Optional[dict[str, str]] = None
+    address: str | None = Field(None, max_length=1000)
+    components: dict[str, str] | None = None
 
 
 class StandardizeResponse(BaseModel):

@@ -3,8 +3,8 @@
 import re
 
 from models import ComponentSet, StandardizeResponse, StandardizeResponseV1
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.directionals import DIRECTIONAL_MAP
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
 from usps_data.units import UNIT_MAP
@@ -34,11 +34,13 @@ def _std_zip(raw: str) -> str:
     least 5 digits a warning suffix is *not* added here — the caller is
     responsible for any validation messaging.
     """
+    _ZIP5 = 5
+    _ZIP9 = 9
     digits = re.sub(r"[^\d]", "", raw)
-    if len(digits) >= 9:
-        return f"{digits[:5]}-{digits[5:9]}"
-    if len(digits) >= 5:
-        return digits[:5]
+    if len(digits) >= _ZIP9:
+        return f"{digits[:_ZIP5]}-{digits[_ZIP5:_ZIP9]}"
+    if len(digits) >= _ZIP5:
+        return digits[:_ZIP5]
     # Fewer than 5 digits — return what we have (may be empty).
     return digits
 
@@ -76,7 +78,7 @@ def _street_parts(
     """Collect ordered street-line tokens from *std* using an optional key *prefix*.
 
     When *prefix* is ``""`` the primary street keys are used; when it is
-    ``"second_"`` the intersection’s second-street keys are used.
+    ``"second_"`` the intersection's second-street keys are used.
     """
     keys = (
         f"{prefix}street_name_pre_directional",
@@ -144,7 +146,9 @@ def standardize_legacy(components: dict[str, str]) -> StandardizeResponse:
     )
 
 
-def _standardize(components: dict[str, str], country: str) -> StandardizeResponseV1:
+def _standardize(  # noqa: PLR0912, PLR0915
+    components: dict[str, str], country: str
+) -> StandardizeResponseV1:
     """Internal implementation returning v1 response."""
     std: dict[str, str] = {}
 
