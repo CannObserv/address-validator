@@ -122,15 +122,12 @@ minimum:
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
 
-## Code review practice
+## Playbooks
 
-Number all comments, questions, and suggestions for easy reference.
-Use an ever-incrementing scheme starting at 1.
+When the user references a playbook by name or trigger phrase (e.g., `CR`, `ship it`), read `PLAYBOOKS.md` and execute the matching procedure. Playbooks define the expected steps, output format, and interaction protocol.
 
-Format:
+**Resolution order** (most specific wins):
+1. **Project-level** — `PLAYBOOKS.md` in the project root
+2. **Global** — `~/.config/shelley/PLAYBOOKS.md` (cross-project defaults)
 
-- Top-level items: 1., 2., 3.
-- Sub-items: 2a., 2b.
-
-This lets the user respond concisely and unambiguously:
-`"3: please fix"` or `"2b: stet"`.
+If a playbook name exists in both files, the project-level definition takes precedence. If a playbook exists only in the global file, use it.
