@@ -50,22 +50,36 @@ Evaluate against these dimensions:
 
 ### Phase 3 — Present findings
 
-See [references/findings-format.md](references/findings-format.md) for the exact report structure.
+Title: `## Code & Documentation Review — [scope]`
 
-Key rules:
-- Title: `## Code & Documentation Review — [scope]`
-- **What's solid** — genuine positives, not filler
-- **Numbered findings** — sequential across ALL severity groups, never reset
-- Group by severity: 🔴 Bugs → 🟡 Issues to fix → 💭 Minor/observations
-- **Summary** — 1–2 sentences on overall assessment and top priorities
+1. **What's solid** — genuine positives, not filler
+2. **Numbered findings** — sequential across ALL severity groups, never reset between them
+   - Top-level: `1.`, `2.`, `3.` — Sub-items: `2a.`, `2b.`
+   - Each finding: **What** (file:line) · **Why it matters** · **Suggested fix** (code snippet when useful)
+   - Groups: 🔴 Bugs → 🟡 Issues to fix → 💭 Minor/observations
+3. **Summary** — 1–2 sentences on overall assessment and top priorities
 
 ### Phase 4 — Wait for feedback
 
 **Stop. Do not make changes until the user responds.**
 
-Accept terse directives referencing item numbers. See [references/directives.md](references/directives.md).
+Accepted directives (reference by item number):
 
-After directives, implement all requested changes, commit, and present a summary table.
+| Directive | Meaning |
+|---|---|
+| `1: fix` | Implement the suggested fix |
+| `3: stet` | Leave as-is |
+| `5: fix, but use X approach` | Fix with user's preferred approach |
+| `2: document as TODO` | Add a code comment or AGENTS.md note |
+| `7: investigate further` | Gather more information first |
+| `10: GH` | Create or update a GitHub issue |
+
+After directives, implement all requested changes, commit, and present a summary table:
+
+| Item | Action | Result |
+|---|---|---|
+| 1 | Fixed | `services/parser.py:42 — added bounds check` |
+| 3 | Stet | — |
 
 ## Second review rounds
 

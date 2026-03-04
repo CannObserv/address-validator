@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 # gather-context.sh
-# Prints a structured summary of repo state and runs lint for use during code review.
-# Run from the project root.
+# Prints repo state and runs ruff lint for use during code review.
+# Detects the git project root automatically; safe to invoke from any directory.
+#
+# Usage: bash skills/reviewing-code-claude/scripts/gather-context.sh [--help]
 set -euo pipefail
 
+if [[ "${1:-}" == "--help" ]]; then
+  echo "Usage: bash skills/reviewing-code-claude/scripts/gather-context.sh"
+  echo ""
+  echo "Prints git status, diffs, recent commits, changed files, and ruff lint output."
+  echo "Automatically resolves the git project root regardless of invocation directory."
+  exit 0
+fi
+
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$PROJECT_ROOT"
+
+echo "=== Project root ==="
+echo "$PROJECT_ROOT"
+
+echo ""
 echo "=== Git status ==="
 git status --short
 
