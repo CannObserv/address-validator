@@ -13,7 +13,9 @@ running uvicorn on port 8000.
   both routers and services.  This is the single source of truth for
   API contracts.
 - **`routers/`** — Thin HTTP handlers.  Validation and error handling
-  live here; business logic is delegated to services.
+  live here; business logic is delegated to services.  All active
+  routes live under `routers/v1/`; the flat `routers/*.py` shim layer
+  was removed in v2.0.0 (issue #12).
 - **`services/`** — Core logic.
   - `parser.py` wraps the `usaddress` library and maps its tag names
     to snake_case keys.  Post-parse recovery steps fix common
@@ -83,12 +85,9 @@ per module, and `caplog` assertions in the corresponding unit tests.
 - Address input is limited to 1000 characters (enforced by Pydantic
   `Field(max_length=1000)` on both request models).
 - The `standardized` field uses two-space separators between logical
-  address lines (USPS single-line convention).  This applies to both
-  v1 (`StandardizeResponseV1`) and legacy (`StandardizeResponse`) routes.
-- v1 response models (`ParseResponseV1`, `StandardizeResponseV1`) use
-  geography-neutral field names: `region` (was `state`) and `postal_code`
-  (was `zip_code`).  Legacy models retain the original names for
-  backward compatibility during the deprecation window.
+  address lines (USPS single-line convention).
+- Response models (`ParseResponseV1`, `StandardizeResponseV1`) use
+  geography-neutral field names: `region` and `postal_code`.
 
 ## Authentication
 
@@ -146,9 +145,7 @@ Do **not** pass the token via `--auth-token`; use `GH_TOKEN` env var
 
 ### Coverage
 - Floor: **80% line + branch** (enforced by `--cov-fail-under=80`).
-- Current baseline: ~88%.
-- `routers/standardize.py` (deprecated route) is the main gap — backfill
-  integration tests when the deprecation window closes.
+- Current baseline: ~93%.
 
 ### Auth in tests
 `auth.py` reads `API_KEY` at import time.  `tests/conftest.py` sets
@@ -186,13 +183,12 @@ import in `conftest.py` is intentional — do not move it above the
 - **`_get()` normalization** — every component value flows through
   this; changes cascade everywhere.
 - **`models.py`** — the single source of truth for API contracts.
-  v1 models use `region` / `postal_code`; legacy models retain `state` /
-  `zip_code`.  Changing field names or types in v1 models is a breaking
-  API change.  Changing legacy models risks breaking existing callers
-  during the deprecation window.  `CountryRequestMixin` provides the
-  `country` field and normalisation validator; all v1 request models that
-  accept a country code must inherit from it.  The `_country_field()`
-  factory returns a fresh `FieldInfo` per model.
+  Models use geography-neutral field names (`region`, `postal_code`).
+  Changing field names or types is a breaking API change.
+  `CountryRequestMixin` provides the `country` field and normalisation
+  validator; all v1 request models that accept a country code must
+  inherit from it.  The `_country_field()` factory returns a fresh
+  `FieldInfo` per model.
 - **`usps_data/spec.py`** — changing `USPS_PUB28_SPEC` or
   `USPS_PUB28_SPEC_VERSION` affects the `ComponentSet.spec` /
   `spec_version` fields on every parse and standardize response.
@@ -202,7 +198,6 @@ import in `conftest.py` is intentional — do not move it above the
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
-
 
 ## Commit message convention
 

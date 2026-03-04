@@ -104,7 +104,7 @@ class TestV1StandardizeResponseShape:
         assert response.json()["api_version"] == "1"
 
 
-class TestRemovedDeprecatedRoute:
+class TestLegacyStandardizeRouteRemoved:
     def test_legacy_standardize_returns_404(self, client) -> None:
         response = client.post("/api/standardize", json={"address": "123 Main St"})
         assert response.status_code == 404

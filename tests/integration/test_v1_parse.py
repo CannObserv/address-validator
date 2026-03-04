@@ -73,7 +73,7 @@ class TestV1ParseValidation:
         assert response.json()["error"] == "country_not_supported"
 
 
-class TestRemovedDeprecatedRoute:
+class TestLegacyParseRouteRemoved:
     def test_legacy_parse_returns_404(self, client) -> None:
         response = client.post("/api/parse", json={"address": "123 Main St"})
         assert response.status_code == 404

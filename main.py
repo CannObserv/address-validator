@@ -39,6 +39,10 @@ _TAGS = [
 app = FastAPI(
     title="Address Validator API",
     description=_DESCRIPTION,
+    # Service version (semver). Bumped to 2.0.0 when unversioned /api/* routes
+    # were removed (issue #12). Note: this is distinct from the api_version
+    # field in response bodies, which tracks the /api/v1/ route namespace and
+    # will not change when the service version increments.
     version="2.0.0",
     openapi_tags=_TAGS,
     contact={"name": "Cannabis Observer", "email": "greg@cannabis.observer"},

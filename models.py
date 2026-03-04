@@ -1,8 +1,12 @@
-"""Shared Pydantic models for request and response payloads.
+"""Shared Pydantic request and response models for the Address Validator API.
 
-Models with a ``V1`` suffix are the canonical v1 API contract served at
-``/api/v1/``.  Field names use geography-neutral terminology
-(``region``, ``postal_code``) and responses carry ``api_version``.
+All active models are served at ``/api/v1/`` and use geography-neutral
+field names (``region``, ``postal_code``).  Response models carry an
+``api_version`` field set to ``"1"``.
+
+Note: ``api_version`` in response bodies refers to the route namespace
+(``/api/v1/``), not the overall service version declared in ``main.py``.
+The two signals are intentionally decoupled.
 """
 
 from typing import Literal
