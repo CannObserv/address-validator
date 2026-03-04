@@ -6,9 +6,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.129,<1",
     "uvicorn>=0.41,<1",
-    "usaddress>=0.5.16",
+    "usaddress>=0.5.16,<1",
     "pydantic>=2.12,<3",
-    "pycountry>=26.2.16",
+    "pycountry>=26.2.16,<27",
 ]
 
 [dependency-groups]
@@ -48,7 +48,7 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = [".venv", "venv"]
+exclude = [".venv"]
 
 [tool.ruff.lint]
 select = [

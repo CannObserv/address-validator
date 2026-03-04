@@ -126,6 +126,7 @@ Do **not** pass the token via `--auth-token`; use `GH_TOKEN` env var
 - Environment file: `/etc/address-validator/env` (contains `API_KEY=...`).
 - Restart after changes: `sudo systemctl restart address-validator`.
 - Logs: `journalctl -u address-validator -f`.
+- Re-install unit after editing: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`. The repo copy is canonical.
 
 ## Testing and linting
 
@@ -158,11 +159,12 @@ import in `conftest.py` is intentional — do not move it above the
 
 - **Install / refresh dependencies:** `uv sync`
 - **Add a dependency:** `uv add <package>` (updates `pyproject.toml` and `uv.lock`)
-- **Upgrade all deps to latest allowed:** `uv lock --upgrade && uv sync`
+- **Upgrade all deps to latest allowed:** `uv lock --upgrade && uv sync` (then update lower bounds — see Dependency version pinning below)
 - **Run a command in the venv:** `uv run <command>` (e.g. `uv run uvicorn main:app ...`)
 - **Commit lockfile after any dep change:** always commit `uv.lock` alongside `pyproject.toml`
-- **Dependency version pinning:** pin dependencies within a major version boundary
-  (`>=X.Y,<X+1`).  After each intentional upgrade cycle, update the lower bound
+- **Dependency version pinning:** pin every dependency within a major version boundary
+  (`>=X.Y,<X+1`).  This applies to all new libraries added to the project — no
+  unbounded upper pins.  After each intentional upgrade cycle, update the lower bound
   to the newly installed version.  Example: after upgrading FastAPI to 0.130.x,
   update `pyproject.toml` to `fastapi>=0.130,<1`.  This prevents silent breakage
   from future minor releases while still allowing patch-level updates.

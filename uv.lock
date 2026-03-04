@@ -26,9 +26,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.129,<1" },
-    { name = "pycountry", specifier = ">=26.2.16" },
+    { name = "pycountry", specifier = ">=26.2.16,<27" },
     { name = "pydantic", specifier = ">=2.12,<3" },
-    { name = "usaddress", specifier = ">=0.5.16" },
+    { name = "usaddress", specifier = ">=0.5.16,<1" },
     { name = "uvicorn", specifier = ">=0.41,<1" },
 ]
 
