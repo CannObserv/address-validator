@@ -5,7 +5,7 @@ import re
 
 import usaddress
 
-from models import ComponentSet, ParseResponse, ParseResponseV1
+from models import ComponentSet, ParseResponseV1
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
@@ -243,17 +243,6 @@ def parse_address(raw: str, country: str = "US") -> ParseResponseV1:
     needs the old response shape.
     """
     return _parse(raw, country)
-
-
-def parse_address_legacy(raw: str) -> ParseResponse:
-    """Deprecated shim — returns the old flat :class:`ParseResponse`."""
-    v1 = _parse(raw, "US")
-    return ParseResponse(
-        input=v1.input,
-        components=v1.components.values,
-        type=v1.type,
-        warning=v1.warning,
-    )
 
 
 def _parse(raw: str, country: str) -> ParseResponseV1:

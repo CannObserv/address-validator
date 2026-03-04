@@ -10,7 +10,6 @@ from services.parser import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
     parse_address,
-    parse_address_legacy,
 )
 
 # ---------------------------------------------------------------------------
@@ -193,17 +192,6 @@ class TestParseAddress:
         # parse_address should not raise; it's the model that enforces length.
         result = parse_address(long_input)
         assert result is not None
-
-
-class TestParseAddressLegacy:
-    def test_returns_flat_components(self) -> None:
-        result = parse_address_legacy("123 Main St, Springfield, IL 62701")
-        assert isinstance(result.components, dict)
-        assert result.components["address_number"] == "123"
-
-    def test_no_api_version_field(self) -> None:
-        result = parse_address_legacy("123 Main St")
-        assert not hasattr(result, "api_version") or result.api_version is None  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

@@ -1,14 +1,7 @@
 """Shared Pydantic models for request and response payloads.
 
-Versioning
-----------
-Models without a version suffix (e.g. ``ParseResponse``) are the **legacy**
-shapes served by the deprecated unversioned routes (``/api/parse``,
-``/api/standardize``).  They are preserved unchanged so existing callers
-continue to work during the deprecation window.
-
 Models with a ``V1`` suffix are the canonical v1 API contract served at
-``/api/v1/``.  Field names here use geography-neutral terminology
+``/api/v1/``.  Field names use geography-neutral terminology
 (``region``, ``postal_code``) and responses carry ``api_version``.
 """
 
@@ -160,40 +153,3 @@ class StandardizeResponseV1(BaseModel):
     standardized: str
     components: ComponentSet
     api_version: Literal["1"] = "1"
-
-
-# ---------------------------------------------------------------------------
-# Response models — legacy (deprecated unversioned routes)
-# ---------------------------------------------------------------------------
-
-
-class ParseRequest(BaseModel):
-    address: str = Field(..., max_length=1000)
-
-
-class ParseResponse(BaseModel):
-    input: str
-    components: dict[str, str]
-    type: str
-    warning: str | None = None
-
-
-class StandardizeRequest(BaseModel):
-    """Accept either a raw address string *or* pre-parsed components.
-
-    When both ``address`` and ``components`` are provided, ``components``
-    takes precedence and ``address`` is ignored.
-    """
-
-    address: str | None = Field(None, max_length=1000)
-    components: dict[str, str] | None = None
-
-
-class StandardizeResponse(BaseModel):
-    address_line_1: str
-    address_line_2: str
-    city: str
-    state: str
-    zip_code: str
-    standardized: str
-    components: dict[str, str]

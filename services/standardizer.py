@@ -3,7 +3,7 @@
 import logging
 import re
 
-from models import ComponentSet, StandardizeResponse, StandardizeResponseV1
+from models import ComponentSet, StandardizeResponseV1
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from usps_data.states import STATE_MAP
@@ -128,20 +128,6 @@ def _standardize_street_fields(
 def standardize(components: dict[str, str], country: str = "US") -> StandardizeResponseV1:
     """Return a standardized address from parsed *components* (v1)."""
     return _standardize(components, country)
-
-
-def standardize_legacy(components: dict[str, str]) -> StandardizeResponse:
-    """Deprecated shim — returns the old :class:`StandardizeResponse`."""
-    v1 = _standardize(components, "US")
-    return StandardizeResponse(
-        address_line_1=v1.address_line_1,
-        address_line_2=v1.address_line_2,
-        city=v1.city,
-        state=v1.region,
-        zip_code=v1.postal_code,
-        standardized=v1.standardized,
-        components=v1.components.values,
-    )
 
 
 # ---------------------------------------------------------------------------

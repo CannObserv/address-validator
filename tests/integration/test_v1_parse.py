@@ -73,14 +73,10 @@ class TestV1ParseValidation:
         assert response.json()["error"] == "country_not_supported"
 
 
-class TestV1ParseDeprecationHeaders:
-    def test_deprecated_route_has_deprecation_header(self, client) -> None:
+class TestRemovedDeprecatedRoute:
+    def test_legacy_parse_returns_404(self, client) -> None:
         response = client.post("/api/parse", json={"address": "123 Main St"})
-        assert response.headers.get("deprecation") == "true"
-
-    def test_deprecated_route_has_link_header(self, client) -> None:
-        response = client.post("/api/parse", json={"address": "123 Main St"})
-        assert "successor-version" in response.headers.get("link", "")
+        assert response.status_code == 404
 
 
 @pytest.mark.parametrize(

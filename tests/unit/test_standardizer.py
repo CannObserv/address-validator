@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from services.standardizer import _get, _lookup, _std_zip, standardize, standardize_legacy
+from services.standardizer import _get, _lookup, _std_zip, standardize
 from usps_data.directionals import DIRECTIONAL_MAP
 from usps_data.states import STATE_MAP
 from usps_data.suffixes import SUFFIX_MAP
@@ -222,27 +222,6 @@ class TestStandardize:
     def test_components_have_spec(self) -> None:
         result = standardize({"address_number": "1", "street_name": "A"})
         assert result.components.spec == "usps-pub28"
-
-
-class TestStandardizeLegacy:
-    def test_returns_legacy_shape(self) -> None:
-        comps = {"state": "WASHINGTON", "zip_code": "98101"}
-        result = standardize_legacy(comps)
-        assert hasattr(result, "state")
-        assert hasattr(result, "zip_code")
-        assert result.state == "WA"
-
-    @pytest.mark.parametrize(
-        ("raw_state", "expected"),
-        [
-            ("WASHINGTON", "WA"),
-            ("WA", "WA"),
-            ("california", "CA"),
-        ],
-    )
-    def test_state_normalisation(self, raw_state: str, expected: str) -> None:
-        result = standardize_legacy({"state": raw_state})
-        assert result.state == expected
 
 
 # ---------------------------------------------------------------------------

@@ -202,10 +202,7 @@ import in `conftest.py` is intentional — do not move it above the
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
-- **Deprecated route `Sunset` header** — both `routers/parse.py` and
-  `routers/standardize.py` emit `Sunset: Sun, 15 Mar 2026 00:00:00 GMT`.
-  When the date arrives, remove the deprecated routers (tracked by #12)
-  and update this section.
+
 
 ## Commit message convention
 
