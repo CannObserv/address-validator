@@ -228,3 +228,28 @@ When the user references a playbook by name or trigger phrase (e.g., `CR`, `ship
 2. **Global** — `~/.config/shelley/PLAYBOOKS.md` (cross-project defaults)
 
 If a playbook name exists in both files, the project-level definition takes precedence. If a playbook exists only in the global file, use it.
+
+## Agent Skills
+
+This project uses skills from the shared [`gregoryfoster/skills`](https://github.com/gregoryfoster/skills) library (cloned at `/home/exedev/skills/`), following the [agentskills.io](https://agentskills.io) spec.
+
+### Available global skills
+
+| Skill | Triggers | Location |
+|---|---|---|
+| `reviewing-code-claude` | CR, code review, perform a review | `/home/exedev/skills/skills/reviewing-code-claude/` |
+| `reviewing-architecture-claude` | AR, architecture review, architectural review | `/home/exedev/skills/skills/reviewing-architecture-claude/` |
+| `shipping-work-claude` | ship it, push GH, close GH, wrap up | `/home/exedev/skills/skills/shipping-work-claude/` |
+
+### Project-level skill overrides
+
+If a `/skills/` directory exists at the project root, any skill there with the same name as a global skill **completely supersedes** the global version (no inheritance). The local version is self-contained.
+
+This project does not currently have project-level skill overrides. Create `skills/<skill-name>/SKILL.md` here if project-specific behaviour is needed (e.g., project commit convention, `systemctl restart address-validator`, `uv run pytest`).
+
+### Updating the global skills
+
+The skills repo is cloned at `/home/exedev/skills/` with a deploy key (`~/.ssh/shelley_skills`). To pull updates:
+```bash
+cd /home/exedev/skills && git pull origin main
+```
