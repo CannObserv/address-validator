@@ -216,18 +216,7 @@ Multiple issues: `#12, #14 [type]: <description>`
 
 Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
 
-The `ship` playbook in `PLAYBOOKS.md` follows this convention when
-auto-committing uncommitted work.
-
-## Playbooks
-
-When the user references a playbook by name or trigger phrase (e.g., `CR`, `ship it`), read `PLAYBOOKS.md` and execute the matching procedure. Playbooks define the expected steps, output format, and interaction protocol.
-
-**Resolution order** (most specific wins):
-1. **Project-level** — `PLAYBOOKS.md` in the project root
-2. **Global** — `~/.config/shelley/PLAYBOOKS.md` (cross-project defaults)
-
-If a playbook name exists in both files, the project-level definition takes precedence. If a playbook exists only in the global file, use it.
+The `shipping-work-claude` skill follows this convention when auto-committing uncommitted work.
 
 ## Agent Skills
 

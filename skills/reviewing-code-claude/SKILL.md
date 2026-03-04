@@ -87,4 +87,12 @@ Continue numbering from where the previous round ended. Never reset.
 
 ## Documentation sweep
 
-If changes affect schema, new APIs, user-facing behaviour, or deployment — flag missing documentation updates as numbered findings.
+Flag missing documentation updates as numbered findings when changes affect:
+
+- **New files or public APIs** → AGENTS.md Key Files table and relevant sections
+- **User-facing behaviour** → README.md
+- **Deployment or CLI** → AGENTS.md Common Tasks
+
+## Parameterized invocation
+
+Triggers may include scope inline — e.g., `CR #14`, `code review services/parser.py`. Apply the appended context as the explicit scope (step 1 of scope detection).
