@@ -203,18 +203,18 @@ import in `conftest.py` is intentional — do not move it above the
 
 ## Commit message convention
 
-Commits use **Conventional Commits** style for standalone work:
+When **not** associated with a GitHub issue:
 ```
-<type>: <description>
+[type]: <description>
 ```
-Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
 
-When a commit closes or advances a GitHub issue, use the issue number
-as the sole prefix — drop the type:
+When associated with one or more GitHub issues:
 ```
-#<number>: <description>
+#<number> [type]: <description>
 ```
-For multiple issues: `#12, #14: <description>`
+Multiple issues: `#12, #14 [type]: <description>`
+
+Common types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`.
 
 The `ship` playbook in `PLAYBOOKS.md` follows this convention when
 auto-committing uncommitted work.
@@ -249,7 +249,7 @@ If a `/skills/` directory exists at the project root, any skill there with the s
 |---|---|---|
 | `reviewing-code-claude` | ✅ `skills/reviewing-code-claude/` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag |
 | `reviewing-architecture-claude` | — (uses global) | Global dimensions are universal; no project-specific steps needed |
-| `shipping-work-claude` | ✅ `skills/shipping-work-claude/` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n>: <type>: <desc>` commit convention |
+| `shipping-work-claude` | ✅ `skills/shipping-work-claude/` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n> [type]: <desc>` commit convention |
 
 ### Updating the global skills
 

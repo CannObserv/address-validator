@@ -7,7 +7,7 @@ metadata:
   version: "1.0"
   triggers: ship it, push GH, close GH, wrap up
   overrides: shipping-work-claude
-  override-reason: "Concrete test/lint commands (uv run pytest, uv run ruff check); project commit convention (#n type desc)"
+  override-reason: "Concrete test/lint commands (uv run pytest, uv run ruff check); project commit convention (#n [type]: desc)"
 ---
 
 # Shipping Work — address-validator
@@ -39,9 +39,10 @@ bash skills/shipping-work-claude/scripts/check-status.sh
 
 If uncommitted changes exist, commit them using this project's convention:
 ```
-#<issue>: <type>: <description>
+#<number> [type]: <description>       # with GH issue
+[type]: <description>                 # without GH issue
 ```
-Multiple issues: `#19, #20: feat: description`  
+Multiple issues: `#19, #20 [type]: <description>`  
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
 ### Step 3 — Ensure on main
