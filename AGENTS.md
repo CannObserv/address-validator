@@ -245,7 +245,11 @@ This project uses skills from the shared [`gregoryfoster/skills`](https://github
 
 If a `/skills/` directory exists at the project root, any skill there with the same name as a global skill **completely supersedes** the global version (no inheritance). The local version is self-contained.
 
-This project does not currently have project-level skill overrides. Create `skills/<skill-name>/SKILL.md` here if project-specific behaviour is needed (e.g., project commit convention, `systemctl restart address-validator`, `uv run pytest`).
+| Skill | Override? | Reason |
+|---|---|---|
+| `reviewing-code-claude` | ✅ `skills/reviewing-code-claude/` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag |
+| `reviewing-architecture-claude` | — (uses global) | Global dimensions are universal; no project-specific steps needed |
+| `shipping-work-claude` | ✅ `skills/shipping-work-claude/` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n>: <type>: <desc>` commit convention |
 
 ### Updating the global skills
 
