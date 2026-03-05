@@ -220,29 +220,47 @@ The `shipping-work-claude` skill follows this convention when auto-committing un
 
 ## Agent Skills
 
-This project uses skills from the shared [`gregoryfoster/skills`](https://github.com/gregoryfoster/skills) library (cloned at `/home/exedev/skills/`), following the [agentskills.io](https://agentskills.io) spec.
+This project follows the [agentskills.io](https://agentskills.io) spec.
+Skills live in the `skills/` directory and are auto-discovered by the agent
+framework.  A skill is either a **local override** (committed directory) or a
+**symlink** to an external skills repo vendored as a git submodule.
 
-### Available global skills
+### External skill repos (git submodules)
 
-| Skill | Triggers | Location |
-|---|---|---|
-| `reviewing-code-claude` | CR, code review, perform a review | `/home/exedev/skills/skills/reviewing-code-claude/` |
-| `reviewing-architecture-claude` | AR, architecture review, architectural review | `/home/exedev/skills/skills/reviewing-architecture-claude/` |
-| `shipping-work-claude` | ship it, push GH, close GH, wrap up | `/home/exedev/skills/skills/shipping-work-claude/` |
+| Repo | Submodule path |
+|---|---|
+| [`gregoryfoster/skills`](https://github.com/gregoryfoster/skills) | `vendor/gregoryfoster-skills/` |
 
-### Project-level skill overrides
-
-If a `/skills/` directory exists at the project root, any skill there with the same name as a global skill **completely supersedes** the global version (no inheritance). The local version is self-contained.
-
-| Skill | Override? | Reason |
-|---|---|---|
-| `reviewing-code-claude` | ✅ `skills/reviewing-code-claude/` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag |
-| `reviewing-architecture-claude` | — (uses global) | Global dimensions are universal; no project-specific steps needed |
-| `shipping-work-claude` | ✅ `skills/shipping-work-claude/` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n> [type]: <desc>` commit convention |
-
-### Updating the global skills
-
-The skills repo is cloned at `/home/exedev/skills/` with a deploy key (`~/.ssh/shelley_skills`). To pull updates:
+After cloning this project, initialize submodules:
 ```bash
-cd /home/exedev/skills && git pull origin main
+git submodule update --init --recursive
 ```
+
+To pull the latest upstream skills:
+```bash
+cd vendor/gregoryfoster-skills && git pull origin main && cd ../..
+git add vendor/gregoryfoster-skills
+git commit -m "chore: update gregoryfoster-skills submodule"
+```
+
+To add a new external skill repo, follow the `managing-skills-claude` skill
+(available in `vendor/gregoryfoster-skills/skills/managing-skills-claude/`).
+
+### Available skills
+
+| Skill | Source | Triggers |
+|---|---|---|
+| `reviewing-code-claude` | Local override | CR, code review, perform a review |
+| `reviewing-architecture-claude` | Symlink → `vendor/gregoryfoster-skills/` | AR, architecture review, architectural review |
+| `shipping-work-claude` | Local override | ship it, push GH, close GH, wrap up |
+
+### Local overrides
+
+A committed directory in `skills/` with the same name as a symlinked global
+skill **completely supersedes** the global version (no inheritance).  The local
+version must be fully self-contained.
+
+| Skill | Override reason |
+|---|---|
+| `reviewing-code-claude` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag |
+| `shipping-work-claude` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n> [type]: <desc>` commit convention |
