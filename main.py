@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from routers.v1 import health as v1_health
 from routers.v1 import parse as v1_parse
 from routers.v1 import standardize as v1_standardize
+from routers.v1 import validate as v1_validate
 from routers.v1.core import APIError, api_error_response
 
 _DESCRIPTION = """
@@ -84,3 +85,4 @@ async def add_api_version_header(
 app.include_router(v1_health.router)
 app.include_router(v1_parse.router)
 app.include_router(v1_standardize.router)
+app.include_router(v1_validate.router)

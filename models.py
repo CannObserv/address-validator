@@ -129,12 +129,84 @@ class StandardizeRequestV1(CountryRequestMixin):
 
 
 # ---------------------------------------------------------------------------
+# Request models — v1 validate
+# ---------------------------------------------------------------------------
+
+
+class ValidateRequestV1(CountryRequestMixin):
+    """Request body for POST /api/v1/validate.
+
+    Accepts individual address components rather than a raw string so
+    callers who have already parsed/standardized can skip that step.
+    ``address`` is the street line (number + name + suffix + unit).
+    ``region`` follows the geography-neutral convention used throughout
+    v1 (equivalent to state for US addresses).
+    """
+
+    address: str = Field(..., max_length=1000)
+    city: str | None = Field(default=None, max_length=200)
+    region: str | None = Field(default=None, max_length=100)
+    postal_code: str | None = Field(default=None, max_length=20)
+
+
+# ---------------------------------------------------------------------------
 # Response models — v1
 # ---------------------------------------------------------------------------
 
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
+    api_version: Literal["1"] = "1"
+
+
+class ValidateResponseV1(BaseModel):
+    """Response body for POST /api/v1/validate.
+
+    ``validation_status`` is the primary machine-readable result:
+
+    * ``confirmed``                  — DPV code Y: fully confirmed delivery point.
+    * ``confirmed_missing_secondary``— DPV code S: building confirmed, unit missing.
+    * ``confirmed_bad_secondary``    — DPV code D: building confirmed, unit unrecognised.
+    * ``not_confirmed``              — DPV code N: address not found in USPS database.
+    * ``unavailable``                — provider not configured or unreachable.
+
+    ``corrected_components`` contains the authoritative address components
+    returned by the provider (street line, city, region, postal code).
+    Present only when ``validation_status`` is one of the ``confirmed*``
+    values.
+    """
+
+    input_address: str = Field(..., description="Raw address string as submitted.")
+    country: str
+    validation_status: Literal[
+        "confirmed",
+        "confirmed_missing_secondary",
+        "confirmed_bad_secondary",
+        "not_confirmed",
+        "unavailable",
+    ]
+    provider: str | None = Field(
+        default=None,
+        description="Provider that performed validation ('usps', etc.). None when unavailable.",
+    )
+    dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
+        default=None,
+        description="USPS DPV match code. Y=confirmed, S=missing secondary, "
+        "D=bad secondary, N=not found. None when unavailable.",
+    )
+    zip_plus4: str | None = Field(
+        default=None,
+        description="USPS ZIP+4 code assigned by the provider, if available.",
+    )
+    vacant: str | None = Field(
+        default=None,
+        description="USPS vacancy indicator ('Y'/'N'). None when unavailable.",
+    )
+    corrected_components: dict[str, str] | None = Field(
+        default=None,
+        description="Authoritative address components from the provider. "
+        "Keys: address_line, secondary_address, city, region, postal_code.",
+    )
     api_version: Literal["1"] = "1"
 
 
