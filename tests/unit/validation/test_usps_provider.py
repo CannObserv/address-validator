@@ -2,11 +2,11 @@
 
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from models import ValidateRequestV1
 from services.validation.usps_provider import USPSProvider
-
 
 CLIENT_RESULT_Y = {
     "dpv_match_code": "Y",
@@ -109,7 +109,6 @@ class TestUSPSProvider:
     async def test_http_error_raises(
         self, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
-        import httpx
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         with pytest.raises(httpx.TimeoutException):

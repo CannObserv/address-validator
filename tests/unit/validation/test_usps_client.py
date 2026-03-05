@@ -1,13 +1,12 @@
 """Unit tests for the USPS v3 client (token caching, request shape, response mapping)."""
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 
 from services.validation.usps_client import USPSClient, USPSToken
-
 
 TOKEN_RESPONSE = {
     "access_token": "tok-abc",
@@ -38,14 +37,14 @@ class TestUSPSToken:
     def test_not_expired_when_fresh(self) -> None:
         token = USPSToken(
             access_token="x",
-            expires_at=datetime(2099, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2099, 1, 1, tzinfo=UTC),
         )
         assert not token.is_expired()
 
     def test_expired_when_in_past(self) -> None:
         token = USPSToken(
             access_token="x",
-            expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2000, 1, 1, tzinfo=UTC),
         )
         assert token.is_expired()
 
@@ -104,7 +103,7 @@ class TestUSPSClient:
     ) -> None:
         expired = USPSToken(
             access_token="old",
-            expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2000, 1, 1, tzinfo=UTC),
         )
         client._token = expired
 

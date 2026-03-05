@@ -2,11 +2,9 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from models import ValidateResponseV1
-
 
 NULL_RESPONSE = ValidateResponseV1(
     input_address="123 Main St",
