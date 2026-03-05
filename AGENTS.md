@@ -236,9 +236,12 @@ After cloning this project, initialize submodules:
 git submodule update --init --recursive
 ```
 
-To pull the latest upstream skills:
+**At the start of every conversation**, pull the latest upstream skills:
 ```bash
-cd vendor/gregoryfoster-skills && git pull origin main && cd ../..
+git submodule update --remote --merge vendor/gregoryfoster-skills
+```
+If the submodule ref changed, commit it:
+```bash
 git add vendor/gregoryfoster-skills
 git commit -m "chore: update gregoryfoster-skills submodule"
 ```
