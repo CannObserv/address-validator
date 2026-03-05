@@ -11,7 +11,7 @@ Callers should not instantiate this class directly; use
 
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
@@ -32,6 +32,8 @@ _RATE_LIMIT_RPS = 5.0
 
 @dataclass
 class USPSToken:
+    """Cached OAuth2 access token with expiry tracking."""
+
     access_token: str
     expires_at: datetime
 
@@ -39,19 +41,19 @@ class USPSToken:
         return datetime.now(tz=UTC) >= self.expires_at
 
 
-@dataclass
 class _TokenBucket:
-    """Minimal token-bucket rate limiter."""
+    """Minimal async token-bucket rate limiter.
 
-    rate: float  # tokens per second
-    capacity: float
-    _tokens: float = field(init=False)
-    _last_refill: float = field(init=False)
-    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
+    The :class:`asyncio.Lock` is created at instantiation time inside
+    the instance so it is always bound to the correct running event loop.
+    """
 
-    def __post_init__(self) -> None:
-        self._tokens = self.capacity
+    def __init__(self, rate: float, capacity: float) -> None:
+        self.rate = rate
+        self.capacity = capacity
+        self._tokens = capacity
         self._last_refill = monotonic()
+        self._lock = asyncio.Lock()
 
     async def acquire(self) -> None:
         async with self._lock:
@@ -90,32 +92,39 @@ class USPSClient:
         self._consumer_secret = consumer_secret
         self._http = http_client
         self._token: USPSToken | None = None
+        self._token_lock = asyncio.Lock()
         self._rate_limiter = _TokenBucket(rate=_RATE_LIMIT_RPS, capacity=_RATE_LIMIT_RPS)
 
     async def _get_token(self) -> str:
-        """Return a valid access token, fetching a new one if needed."""
-        if self._token and not self._token.is_expired():
+        """Return a valid access token, fetching a new one if needed.
+
+        The :attr:`_token_lock` ensures that concurrent requests on an
+        expired token issue exactly one refresh rather than racing to
+        fetch multiple tokens simultaneously.
+        """
+        async with self._token_lock:
+            if self._token and not self._token.is_expired():
+                return self._token.access_token
+
+            logger.debug("USPSClient: fetching new OAuth2 token")
+            resp = await self._http.post(
+                _TOKEN_URL,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self._consumer_key,
+                    "client_secret": self._consumer_secret,
+                },
+            )
+            resp.raise_for_status()
+            data: dict[str, Any] = resp.json()
+
+            expires_in: int = int(data.get("expires_in", 3600))
+            self._token = USPSToken(
+                access_token=data["access_token"],
+                expires_at=datetime.now(tz=UTC)
+                + timedelta(seconds=expires_in - _TOKEN_REFRESH_BUFFER_S),
+            )
             return self._token.access_token
-
-        logger.debug("USPSClient: fetching new OAuth2 token")
-        resp = await self._http.post(
-            _TOKEN_URL,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self._consumer_key,
-                "client_secret": self._consumer_secret,
-            },
-        )
-        resp.raise_for_status()
-        data: dict[str, Any] = resp.json()
-
-        expires_in: int = int(data.get("expires_in", 3600))
-        self._token = USPSToken(
-            access_token=data["access_token"],
-            expires_at=datetime.now(tz=UTC)
-            + timedelta(seconds=expires_in - _TOKEN_REFRESH_BUFFER_S),
-        )
-        return self._token.access_token
 
     async def validate_address(
         self,

@@ -1,5 +1,6 @@
 """Unit tests for the USPS v3 client (token caching, request shape, response mapping)."""
 
+import asyncio
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -146,6 +147,27 @@ class TestUSPSClient:
         assert comps["city"] == "SPRINGFIELD"
         assert comps["region"] == "IL"
         assert comps["postal_code"] == "62701"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_requests_fetch_token_once(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """Concurrent calls on a cold client must issue exactly one token fetch.
+
+        Verifies the _token_lock prevents the check-then-act race where
+        multiple coroutines see an empty/expired token and all race to
+        refresh it.
+        """
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        results = await asyncio.gather(
+            client.validate_address("123 Main St", "Springfield", "IL"),
+            client.validate_address("456 Oak Ave", "Chicago", "IL"),
+            client.validate_address("789 Pine Rd", "Peoria", "IL"),
+        )
+        assert len(results) == 3
+        assert mock_http.post.call_count == 1  # single token fetch despite 3 concurrent calls
 
     @pytest.mark.asyncio
     async def test_http_error_propagates(

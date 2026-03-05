@@ -172,12 +172,13 @@ class ValidateResponseV1(BaseModel):
 
     ``corrected_components`` contains the authoritative address components
     returned by the provider (street line, city, region, postal code).
-    Present only when ``validation_status`` is one of the ``confirmed*``
-    values.
+    Present when the provider returns corrected components, typically for
+    Y, S, and D DPV codes.  ``None`` for ``not_confirmed`` and
+    ``unavailable``.
     """
 
-    input_address: str = Field(..., description="Raw address string as submitted.")
     country: str
+    input_address: str = Field(..., description="Raw address string as submitted.")
     validation_status: Literal[
         "confirmed",
         "confirmed_missing_secondary",

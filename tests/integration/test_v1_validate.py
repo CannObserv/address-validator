@@ -34,15 +34,15 @@ class TestValidateNullProvider:
         assert body["provider"] is None
         assert body["api_version"] == "1"
 
-    def test_country_defaults_to_us(self, client: TestClient) -> None:
-        monkeypatch = pytest.MonkeyPatch()
+    def test_country_defaults_to_us(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
         resp = client.post(
             "/api/v1/validate",
             json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
         )
         assert resp.json()["country"] == "US"
-        monkeypatch.undo()
 
 
 @pytest.mark.skipif(

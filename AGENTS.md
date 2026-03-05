@@ -23,6 +23,21 @@ running uvicorn on port 8000.
     stray identifier fragments, and single-word wayfinding text.
   - `standardizer.py` applies USPS Pub 28 abbreviation rules using
     lookup tables from `usps_data/`.
+- **`services/validation/`** — Phase 3 pipeline: validates that an address
+  represents a real USPS delivery point.
+  - `protocol.py` — `ValidationProvider` Protocol (runtime-checkable); the
+    interface all backends must satisfy.
+  - `null_provider.py` — `NullProvider`: no-op default, returns
+    `validation_status='unavailable'` without network calls.
+  - `usps_client.py` — `USPSClient`: async USPS Addresses API v3 client.
+    Manages OAuth2 client-credentials tokens (55-min in-process cache with
+    `asyncio.Lock` to prevent concurrent refresh races) and a token-bucket
+    rate limiter (5 req/s, matching the free-tier limit).
+  - `usps_provider.py` — `USPSProvider`: maps DPV codes Y/S/D/N to
+    `validation_status` strings and surfaces corrected components.
+  - `factory.py` — `get_provider()`: reads `VALIDATION_PROVIDER` env var
+    and returns the configured backend.  `USPSProvider` is a module-level
+    singleton so token cache and rate-limiter state survive across requests.
 - **`usps_data/`** — Pure-data modules exporting `dict[str, str]` maps
   for suffixes, directionals, states, and unit designators.  Sourced
   from USPS Pub 28 appendices.
@@ -86,8 +101,13 @@ per module, and `caplog` assertions in the corresponding unit tests.
   `Field(max_length=1000)` on both request models).
 - The `standardized` field uses two-space separators between logical
   address lines (USPS single-line convention).
-- Response models (`ParseResponseV1`, `StandardizeResponseV1`) use
-  geography-neutral field names: `region` and `postal_code`.
+- Response models (`ParseResponseV1`, `StandardizeResponseV1`,
+  `ValidateResponseV1`) use geography-neutral field names: `region`
+  and `postal_code`.
+- `ValidateRequestV1` accepts individual components (`address`, `city`,
+  `region`, `postal_code`) so callers who have already parsed/standardized
+  can skip those steps.  `ValidateResponseV1` carries `validation_status`,
+  `dpv_match_code`, `zip_plus4`, `vacant`, and `corrected_components`.
 
 ## Authentication
 
@@ -123,7 +143,8 @@ Do **not** pass the token via `--auth-token`; use `GH_TOKEN` env var
 
 - Python venv at `./.venv/` (managed by `uv`).
 - systemd unit: `/etc/systemd/system/address-validator.service`.
-- Environment file: `/etc/address-validator/env` (contains `API_KEY=...`).
+- Environment file: `/etc/address-validator/env` (contains `API_KEY=...` and
+  optional validation provider config — see Validation provider below).
 - Restart after changes: `sudo systemctl restart address-validator`.
 - Logs: `journalctl -u address-validator -f`.
 - Re-install unit after editing: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`. The repo copy is canonical.
@@ -200,6 +221,34 @@ import in `conftest.py` is intentional — do not move it above the
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
+- **`services/validation/factory.py` singletons** — `_usps_provider` and
+  `_http_client` are module-level singletons.  Tests that exercise the USPS
+  provider must reset `factory._usps_provider = None` in a fixture to avoid
+  cross-test contamination (see `tests/unit/validation/test_provider_factory.py`).
+
+## Validation provider
+
+The validation phase is controlled by env vars in `/etc/address-validator/env`:
+
+| Variable | Values | Default | Notes |
+|---|---|---|---|
+| `VALIDATION_PROVIDER` | `none`, `usps` | `none` | Controls which backend `get_provider()` returns |
+| `USPS_CONSUMER_KEY` | string | — | Required when `VALIDATION_PROVIDER=usps` |
+| `USPS_CONSUMER_SECRET` | string | — | Required when `VALIDATION_PROVIDER=usps` |
+
+Register for USPS credentials at https://developer.usps.com (see USPS
+Addresses API v3 app registration).  The free tier allows 10,000
+validations/day at 5 requests/second.
+
+### DPV status mapping
+
+| DPV code | `validation_status` | Meaning |
+|---|---|---|
+| `Y` | `confirmed` | Fully confirmed delivery point |
+| `S` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
+| `D` | `confirmed_bad_secondary` | Building confirmed; unit not recognised |
+| `N` | `not_confirmed` | Address not found in USPS database |
+| (none) | `unavailable` | Provider not configured or unreachable |
 
 ## Commit message convention
 

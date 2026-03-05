@@ -1,4 +1,4 @@
-"""Provider factory — reads env vars and returns the configured backend.
+"""Provider factory -- reads env vars and returns the configured backend.
 
 Environment variables
 ---------------------
@@ -6,12 +6,12 @@ VALIDATION_PROVIDER
     Which backend to use.  Accepted values (case-insensitive):
 
     ``none`` (default)
-        :class:`~services.validation.null_provider.NullProvider` — returns
+        :class:`~services.validation.null_provider.NullProvider` -- returns
         ``validation_status='unavailable'`` without any network calls.  Safe
         default for development and environments without API credentials.
 
     ``usps``
-        :class:`~services.validation.usps_provider.USPSProvider` — calls
+        :class:`~services.validation.usps_provider.USPSProvider` -- calls
         the USPS Addresses API v3.  Requires ``USPS_CONSUMER_KEY`` and
         ``USPS_CONSUMER_SECRET``.
 
@@ -35,8 +35,11 @@ from services.validation.usps_provider import USPSProvider
 
 logger = logging.getLogger(__name__)
 
-# Shared HTTP client created lazily; lives for the process lifetime.
+# Module-level singletons -- created once, shared across all requests.
+# The USPSClient holds the token cache and rate-limiter state; discarding
+# it on every request would defeat both.
 _http_client: httpx.AsyncClient | None = None
+_usps_provider: USPSProvider | None = None
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -51,11 +54,27 @@ def _get_http_client() -> httpx.AsyncClient:
     return _http_client
 
 
+def _get_usps_provider(key: str, secret: str) -> USPSProvider:
+    """Return the shared :class:`USPSProvider` singleton, creating it if needed."""
+    global _usps_provider  # noqa: PLW0603
+    if _usps_provider is None:
+        _usps_provider = USPSProvider(
+            client=USPSClient(
+                consumer_key=key,
+                consumer_secret=secret,
+                http_client=_get_http_client(),
+            )
+        )
+    return _usps_provider
+
+
 def get_provider() -> ValidationProvider:
     """Return the configured :class:`ValidationProvider`.
 
-    Called once per request (cheap — provider instances are stateless except
-    for the USPS client's token cache, which is intentionally shared).
+    The USPS provider and its underlying HTTP client are module-level
+    singletons so the token cache and rate-limiter state are shared
+    across all requests.  NullProvider is stateless and is constructed
+    cheaply on each call.
     """
     provider_name = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()
 
@@ -72,13 +91,7 @@ def get_provider() -> ValidationProvider:
                 "when VALIDATION_PROVIDER=usps"
             )
         logger.debug("get_provider: using USPSProvider")
-        return USPSProvider(
-            client=USPSClient(
-                consumer_key=key,
-                consumer_secret=secret,
-                http_client=_get_http_client(),
-            )
-        )
+        return _get_usps_provider(key, secret)
 
     raise ValueError(
         f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. "

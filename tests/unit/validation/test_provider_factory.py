@@ -2,9 +2,23 @@
 
 import pytest
 
+import services.validation.factory as factory_module
 from services.validation.factory import get_provider
 from services.validation.null_provider import NullProvider
 from services.validation.usps_provider import USPSProvider
+
+
+@pytest.fixture(autouse=True)
+def reset_usps_singleton() -> None:
+    """Reset the module-level USPSProvider singleton between tests.
+
+    ``_get_usps_provider`` caches the instance after first creation;
+    without this fixture, tests that create a USPS provider would
+    affect subsequent tests that expect a fresh instance.
+    """
+    factory_module._usps_provider = None
+    yield
+    factory_module._usps_provider = None
 
 
 class TestGetProvider:
@@ -35,6 +49,15 @@ class TestGetProvider:
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         assert isinstance(get_provider(), USPSProvider)
+
+    def test_usps_provider_is_singleton(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """get_provider() must return the same USPSProvider instance each call."""
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        assert get_provider() is get_provider()
 
     def test_usps_missing_key_raises(
         self, monkeypatch: pytest.MonkeyPatch

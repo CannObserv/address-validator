@@ -126,7 +126,7 @@ class TestValidateEndpoint:
         assert resp.status_code == 422
 
 
-def _make_null_provider(response: ValidateResponseV1) -> object:
+def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:
     """Return a mock provider whose validate() coroutine returns *response*."""
     provider = AsyncMock()
     provider.validate = AsyncMock(return_value=response)
