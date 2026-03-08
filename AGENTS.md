@@ -104,6 +104,12 @@ per module, and `caplog` assertions in the corresponding unit tests.
 - Response models (`ParseResponseV1`, `StandardizeResponseV1`,
   `ValidateResponseV1`) use geography-neutral field names: `region`
   and `postal_code`.
+- `ParseResponseV1` and `StandardizeResponseV1` carry a
+  `warnings: list[str]` field populated by the parser whenever input
+  is silently modified (parenthesized text stripped, unit designator
+  recovered from a mis-tagged field, repeated address numbers joined
+  as a range, etc.).  Empty list on clean input.  See
+  `services/parser.py` for the full set of triggers.
 - `ValidateRequestV1` accepts individual components (`address`, `city`,
   `region`, `postal_code`) so callers who have already parsed/standardized
   can skip those steps.  `ValidateResponseV1` carries `validation_status`,

@@ -118,10 +118,14 @@ def _try_extract_designator(segment: str) -> tuple[str, str] | None:
     return parts[0], identifier
 
 
-def _emit_unit_recovered(warnings: list[str] | None) -> None:
-    """Append the unit-recovered warning message if a warnings list is present."""
+def _warn_unit_recovered(warnings: list[str] | None, designator: str) -> None:
+    """Append a unit-recovered warning, including the designator token.
+
+    Shared by phase1/phase2 recovery helpers so the message format is
+    defined in one place.  No-op when *warnings* is ``None``.
+    """
     if warnings is not None:
-        warnings.append("Unit designator recovered from mis-tagged field")
+        warnings.append(f"Unit designator recovered from mis-tagged field: '{designator}'")
 
 
 def _recover_unit_phase1(
@@ -149,7 +153,7 @@ def _recover_unit_phase1(
                 if desig_id:
                     components[slot[1]] = desig_id
             components["city"] = after
-            _emit_unit_recovered(warnings)
+            _warn_unit_recovered(warnings, desig_type)
             continue
 
         # A single word before the comma that isn't in any address
@@ -191,11 +195,11 @@ def _recover_unit_phase2(
         if slot:
             components[slot[0]] = first
         components["city"] = rest
-        _emit_unit_recovered(warnings)
+        _warn_unit_recovered(warnings, first)
     elif word in UNIT_MAP and slot is None:
         # All slots full — just strip the orphaned designator word.
         components["city"] = rest
-        _emit_unit_recovered(warnings)
+        _warn_unit_recovered(warnings, first)
 
 
 def _recover_unit_from_city(components: dict[str, str], warnings: list[str] | None = None) -> None:

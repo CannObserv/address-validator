@@ -269,7 +269,9 @@ class TestParseWarnings:
         assert any("1804-1810" in w for w in result.warnings)
 
     def test_ambiguous_parse_warning_general(self) -> None:
-        """Non-dual RLE produces a generic ambiguous-parse warning."""
+        """Repeated labels without an IntersectionSeparator produce the
+        generic ambiguous-parse warning, not the range-join warning.
+        """
         exc = usaddress.RepeatedLabelError(
             "fake",
             [("123", "AddressNumber"), ("Main", "StreetName"), ("456", "AddressNumber")],
@@ -278,6 +280,7 @@ class TestParseWarnings:
         with mock.patch("services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("123 Main 456")
         assert any("Ambiguous parse" in w for w in result.warnings)
+        assert not any("joined as range" in w for w in result.warnings)
 
     def test_unit_recovered_from_city_warning(self) -> None:
         """When _recover_unit_from_city fires, a warning is appended."""
@@ -298,19 +301,12 @@ class TestParseWarnings:
 
     def test_identifier_fragment_recovered_from_city_warning(self) -> None:
         """When _recover_identifier_fragment_from_city fires, a warning is appended."""
-        fake_tokens = [
-            ("120", "AddressNumber"),
-            ("Main", "StreetName"),
-            ("St", "StreetNamePostType"),
-            ("K", "OccupancyIdentifier"),
-            ("K", "PlaceName"),
-            ("Walla", "PlaceName"),
-            ("Walla", "PlaceName"),
-        ]
-        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
-        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("120 Main St K K Walla Walla")
-        assert any("identifier fragment" in w.lower() for w in result.warnings)
+        comps: dict[str, str] = {"city": "K WALLA WALLA", "occupancy_identifier": "120"}
+        warnings: list[str] = []
+        _recover_identifier_fragment_from_city(comps, warnings)
+        assert comps["occupancy_identifier"] == "120 K"
+        assert comps["city"] == "WALLA WALLA"
+        assert any("identifier fragment" in w.lower() for w in warnings)
 
 
 class TestParserLogging:

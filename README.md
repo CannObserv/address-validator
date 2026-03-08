@@ -71,14 +71,17 @@ The `country` field is optional (defaults to `"US"`).
     }
   },
   "type": "Street Address",
-  "warning": null,
+  "warnings": [],
   "api_version": "1"
 }
 ```
 
 The `type` field is one of `"Street Address"`, `"Intersection"`, or
-`"Ambiguous"`.  When the parser encounters repeated labels, `type` is
-`"Ambiguous"` and `warning` contains a human-readable message.
+`"Ambiguous"`.  The `warnings` list is populated whenever input is
+silently modified during parsing — for example when parenthesized text
+is stripped, when repeated address numbers are joined into a range, or
+when a unit designator is recovered from a mis-tagged field.  It is
+empty on clean input.
 
 The `components` field is a `ComponentSet` containing:
 
@@ -145,6 +148,7 @@ ignored.
       "zip_code": "10118"
     }
   },
+  "warnings": [],
   "api_version": "1"
 }
 ```

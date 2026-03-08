@@ -270,7 +270,7 @@ def _assemble_lines(
 def _standardize(
     components: dict[str, str],
     country: str,
-    warnings: list[str] | None = None,
+    warnings: list[str],
 ) -> StandardizeResponseV1:
     """Internal implementation returning v1 response."""
     logger.debug("standardizing components count=%d country=%s", len(components), country)
@@ -350,5 +350,5 @@ def _standardize(
             spec_version=USPS_PUB28_SPEC_VERSION,
             values=std,
         ),
-        warnings=warnings or [],
+        warnings=warnings,
     )
