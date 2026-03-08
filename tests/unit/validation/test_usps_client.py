@@ -83,12 +83,10 @@ class TestUSPSClient:
             state="IL",
         )
         assert mock_http.post.call_count == 1  # token fetch
-        assert mock_http.get.call_count == 1   # address call
+        assert mock_http.get.call_count == 1  # address call
 
     @pytest.mark.asyncio
-    async def test_reuses_cached_token(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_reuses_cached_token(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
 
@@ -99,9 +97,7 @@ class TestUSPSClient:
         assert mock_http.get.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_refreshes_expired_token(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_refreshes_expired_token(self, client: USPSClient, mock_http: AsyncMock) -> None:
         expired = USPSToken(
             access_token="old",
             expires_at=datetime(2000, 1, 1, tzinfo=UTC),
@@ -115,9 +111,7 @@ class TestUSPSClient:
         assert mock_http.post.call_count == 1  # refreshed
 
     @pytest.mark.asyncio
-    async def test_maps_dpv_confirmation(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_maps_dpv_confirmation(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
 
@@ -125,9 +119,7 @@ class TestUSPSClient:
         assert result["dpv_match_code"] == "Y"
 
     @pytest.mark.asyncio
-    async def test_maps_zip_plus4(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_maps_zip_plus4(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
 
@@ -170,9 +162,7 @@ class TestUSPSClient:
         assert mock_http.post.call_count == 1  # single token fetch despite 3 concurrent calls
 
     @pytest.mark.asyncio
-    async def test_http_error_propagates(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_http_error_propagates(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         bad_resp = MagicMock(spec=httpx.Response)
         bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(

@@ -35,9 +35,7 @@ class USPSProvider:
         self._client = client
 
     async def validate(self, request: ValidateRequestV1) -> ValidateResponseV1:
-        logger.debug(
-            "USPSProvider.validate: calling USPS API, country=%s", request.country
-        )
+        logger.debug("USPSProvider.validate: calling USPS API, country=%s", request.country)
         raw = await self._client.validate_address(
             street_address=request.address,
             city=request.city,

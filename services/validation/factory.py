@@ -47,9 +47,7 @@ def _get_http_client() -> httpx.AsyncClient:
     if _http_client is None:
         _http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0),
-            limits=httpx.Limits(
-                max_connections=20, max_keepalive_connections=10
-            ),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
     return _http_client
 
@@ -94,6 +92,5 @@ def get_provider() -> ValidationProvider:
         return _get_usps_provider(key, secret)
 
     raise ValueError(
-        f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. "
-        "Supported values: 'none', 'usps'."
+        f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. Supported values: 'none', 'usps'."
     )

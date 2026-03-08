@@ -36,9 +36,7 @@ CONFIRMED_RESPONSE = ValidateResponseV1(
 
 
 class TestValidateEndpoint:
-    def test_null_provider_returns_200(
-        self, client: TestClient
-    ) -> None:
+    def test_null_provider_returns_200(self, client: TestClient) -> None:
         with patch(
             "routers.v1.validate.get_provider",
             return_value=_make_null_provider(NULL_RESPONSE),
@@ -52,9 +50,7 @@ class TestValidateEndpoint:
         assert body["validation_status"] == "unavailable"
         assert body["api_version"] == "1"
 
-    def test_confirmed_response_shape(
-        self, client: TestClient
-    ) -> None:
+    def test_confirmed_response_shape(self, client: TestClient) -> None:
         with patch(
             "routers.v1.validate.get_provider",
             return_value=_make_null_provider(CONFIRMED_RESPONSE),
@@ -69,9 +65,7 @@ class TestValidateEndpoint:
         assert body["zip_plus4"] == "1234"
         assert body["corrected_components"]["city"] == "SPRINGFIELD"
 
-    def test_blank_address_returns_400(
-        self, client: TestClient
-    ) -> None:
+    def test_blank_address_returns_400(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"address": "   ", "city": "Springfield", "region": "IL"},
@@ -79,18 +73,14 @@ class TestValidateEndpoint:
         assert resp.status_code == 400
         assert resp.json()["error"] == "address_required"
 
-    def test_missing_address_field_returns_422(
-        self, client: TestClient
-    ) -> None:
+    def test_missing_address_field_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"city": "Springfield", "region": "IL"},
         )
         assert resp.status_code == 422
 
-    def test_unsupported_country_returns_422(
-        self, client: TestClient
-    ) -> None:
+    def test_unsupported_country_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"address": "123 Main St", "city": "London", "region": "ENG", "country": "GB"},
@@ -98,27 +88,21 @@ class TestValidateEndpoint:
         assert resp.status_code == 422
         assert resp.json()["error"] == "country_not_supported"
 
-    def test_no_auth_returns_401(
-        self, client_no_auth: TestClient
-    ) -> None:
+    def test_no_auth_returns_401(self, client_no_auth: TestClient) -> None:
         resp = client_no_auth.post(
             "/api/v1/validate",
             json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
         )
         assert resp.status_code == 401
 
-    def test_bad_auth_returns_403(
-        self, client_bad_auth: TestClient
-    ) -> None:
+    def test_bad_auth_returns_403(self, client_bad_auth: TestClient) -> None:
         resp = client_bad_auth.post(
             "/api/v1/validate",
             json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
         )
         assert resp.status_code == 403
 
-    def test_address_too_long_returns_422(
-        self, client: TestClient
-    ) -> None:
+    def test_address_too_long_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"address": "A" * 1001, "city": "Springfield", "region": "IL"},

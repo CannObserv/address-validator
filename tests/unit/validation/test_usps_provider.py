@@ -87,9 +87,7 @@ class TestUSPSProvider:
         assert result.provider == "usps"
 
     @pytest.mark.asyncio
-    async def test_zip_plus4_surfaced(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_zip_plus4_surfaced(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
@@ -106,9 +104,7 @@ class TestUSPSProvider:
         assert result.corrected_components["city"] == "SPRINGFIELD"
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         with pytest.raises(httpx.TimeoutException):
