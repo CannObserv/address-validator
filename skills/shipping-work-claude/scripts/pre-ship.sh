@@ -22,7 +22,7 @@ PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$PROJECT_ROOT"
 
 echo "=== Lint (ruff) ==="
-uv run ruff check .
+uv run ruff check . --exclude vendor/
 
 echo ""
 echo "=== Tests ==="
