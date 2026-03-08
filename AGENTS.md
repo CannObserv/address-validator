@@ -279,6 +279,7 @@ framework.  A skill is either a **local override** (committed directory) or a
 | Repo | Submodule path |
 |---|---|
 | [`gregoryfoster/skills`](https://github.com/gregoryfoster/skills) | `vendor/gregoryfoster-skills/` |
+| [`obra/superpowers`](https://github.com/obra/superpowers) | `vendor/obra-superpowers/` |
 
 After cloning this project, initialize submodules:
 ```bash
@@ -298,21 +299,48 @@ git commit -m "chore: update gregoryfoster-skills submodule"
 To add a new external skill repo, follow the `managing-skills-claude` skill
 (available in `vendor/gregoryfoster-skills/skills/managing-skills-claude/`).
 
+### Skill resolution hierarchy
+
+```
+Local override (skills/<name>/ dir)        ← highest priority
+ └─ gregoryfoster-skills symlink           ← project-owner curated
+     └─ obra-superpowers symlink           ← upstream gap-fillers
+```
+
+A committed directory in `skills/` with the same name as any vendor skill
+**completely supersedes** the vendor version (no inheritance).
+
 ### Available skills
 
 | Skill | Source | Triggers |
 |---|---|---|
+| `brainstorming` | Local override | brainstorm, design this, let's design |
 | `reviewing-code-claude` | Local override | CR, code review, perform a review |
 | `reviewing-architecture-claude` | Symlink → `vendor/gregoryfoster-skills/` | AR, architecture review, architectural review |
 | `shipping-work-claude` | Local override | ship it, push GH, close GH, wrap up |
+| `systematic-debugging` | Symlink → `vendor/obra-superpowers/` | debug, systematic debug |
+| `verification-before-completion` | Symlink → `vendor/obra-superpowers/` | verify, check completion |
+| `test-driven-development` | Symlink → `vendor/obra-superpowers/` | TDD, write tests first |
+| `writing-plans` | Symlink → `vendor/obra-superpowers/` | write plan, implementation plan |
+| `writing-skills` | Symlink → `vendor/obra-superpowers/` | write skill, new skill, author skill |
+| `subagent-driven-development` | Symlink → `vendor/obra-superpowers/` | subagent dev, dispatch agents |
+| `dispatching-parallel-agents` | Symlink → `vendor/obra-superpowers/` | parallel agents |
+
+### Skill authoring standard
+
+When authoring new skills, follow the `writing-skills` TDD cycle:
+- **RED**: Run pressure scenarios (subagent or mental model) — document where the agent fails without the skill
+- **GREEN**: Write minimal SKILL.md addressing those specific failures
+- **REFACTOR**: Find new rationalizations, close loopholes, re-test
 
 ### Local overrides
 
-A committed directory in `skills/` with the same name as a symlinked global
-skill **completely supersedes** the global version (no inheritance).  The local
+A committed directory in `skills/` with the same name as a symlinked skill
+**completely supersedes** the vendor version (no inheritance).  The local
 version must be fully self-contained.
 
 | Skill | Override reason |
 |---|---|
-| `reviewing-code-claude` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag |
-| `shipping-work-claude` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n> [type]: <desc>` commit convention |
+| `brainstorming` | Hard-block variant (no code until design explicitly approved); uses `docs/plans/` path; `writing-plans` is optional not mandatory |
+| `reviewing-code-claude` | Adds `ruff` to gather-context; FastAPI/Pydantic-specific review dimensions; auth blast-radius flag; Iron Law + rationalization table + Phase 3.5 |
+| `shipping-work-claude` | Concrete `uv run pytest --no-cov` + `uv run ruff check` in `pre-ship.sh`; encodes `#<n> [type]: <desc>` commit convention; Iron Law + rationalization table + HARD-GATE |
