@@ -216,7 +216,7 @@ class ParseResponseV1(BaseModel):
     country: str
     components: ComponentSet
     type: str
-    warning: str | None = None
+    warnings: list[str] = Field(default_factory=list)
     api_version: Literal["1"] = "1"
 
 
@@ -229,4 +229,5 @@ class StandardizeResponseV1(BaseModel):
     country: str
     standardized: str
     components: ComponentSet
+    warnings: list[str] = Field(default_factory=list)
     api_version: Literal["1"] = "1"

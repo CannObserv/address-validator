@@ -118,23 +118,17 @@ def _try_extract_designator(segment: str) -> tuple[str, str] | None:
     return parts[0], identifier
 
 
-def _recover_unit_from_city(components: dict[str, str]) -> None:
-    """Move unit designators mis-tagged as part of city back to occupancy.
+def _emit_unit_recovered(warnings: list[str] | None) -> None:
+    """Append the unit-recovered warning message if a warnings list is present."""
+    if warnings is not None:
+        warnings.append("Unit designator recovered from mis-tagged field")
 
-    usaddress sometimes tags secondary designators that follow the street
-    line as ``PlaceName``, concatenating them with the real city.  An
-    address like ``"BLDG 1, LOWR LEVEL, UNIT  SEATTLE"`` can produce
-    ``city = "LOWR LEVEL, UNIT SEATTLE"`` (after usaddress already
-    extracted BLDG).
 
-    This function peels off comma-separated leading segments whose first
-    word is a known unit designator, storing each in the next free
-    occupancy/subaddress slot.  After commas are exhausted it also
-    checks for a bare designator word (no comma) at the start of city.
-    Designators that cannot fit in any slot are still removed from city
-    since they are not city data.
-    """
-    # --- Phase 1: comma-separated leading designators ---
+def _recover_unit_phase1(
+    components: dict[str, str],
+    warnings: list[str] | None,
+) -> None:
+    """Phase 1: peel comma-separated leading unit designators from city."""
     while True:
         city = components.get("city", "")
         if not city or "," not in city:
@@ -154,8 +148,8 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
                 components[slot[0]] = desig_type
                 if desig_id:
                     components[slot[1]] = desig_id
-            # Either way, strip this segment from city.
             components["city"] = after
+            _emit_unit_recovered(warnings)
             continue
 
         # A single word before the comma that isn't in any address
@@ -169,13 +163,18 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
 
         break
 
-    # --- Phase 2: bare leading designator (no comma) ---
-    # Only no-identifier designators (BSMT, FRNT, LOWR …) are stored
-    # into a slot here.  Designators like KEY, LOT, UNIT always expect
-    # an identifier, so a bare "KEY WEST" is almost certainly a city.
-    # However, when all unit slots are already full, any UNIT_MAP word
-    # at the start of city is stripped — it's leftover designator data,
-    # not a city name, and there's nowhere to store it.
+
+def _recover_unit_phase2(
+    components: dict[str, str],
+    warnings: list[str] | None,
+) -> None:
+    """Phase 2: strip bare leading unit designator (no comma) from city.
+
+    Only no-identifier designators (BSMT, FRNT, LOWR …) are stored
+    into a slot here.  Designators like KEY, LOT, UNIT always expect
+    an identifier, so a bare "KEY WEST" is almost certainly a city.
+    When all unit slots are full, orphaned designator words are dropped.
+    """
     city = components.get("city", "")
     if not city or " " not in city:
         return
@@ -192,12 +191,33 @@ def _recover_unit_from_city(components: dict[str, str]) -> None:
         if slot:
             components[slot[0]] = first
         components["city"] = rest
+        _emit_unit_recovered(warnings)
     elif word in UNIT_MAP and slot is None:
         # All slots full — just strip the orphaned designator word.
         components["city"] = rest
+        _emit_unit_recovered(warnings)
 
 
-def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
+def _recover_unit_from_city(components: dict[str, str], warnings: list[str] | None = None) -> None:
+    """Move unit designators mis-tagged as part of city back to occupancy.
+
+    usaddress sometimes tags secondary designators that follow the street
+    line as ``PlaceName``, concatenating them with the real city.  An
+    address like ``"BLDG 1, LOWR LEVEL, UNIT  SEATTLE"`` can produce
+    ``city = "LOWR LEVEL, UNIT SEATTLE"`` (after usaddress already
+    extracted BLDG).
+
+    This function peels off comma-separated leading segments (Phase 1)
+    then checks for a bare leading designator word (Phase 2).
+    """
+    _recover_unit_phase1(components, warnings)
+    _recover_unit_phase2(components, warnings)
+
+
+def _recover_identifier_fragment_from_city(
+    components: dict[str, str],
+    warnings: list[str] | None = None,
+) -> None:
     """Move a stray single-letter unit qualifier from the start of city.
 
     usaddress sometimes splits a compound identifier like ``120 K`` and
@@ -232,6 +252,8 @@ def _recover_identifier_fragment_from_city(components: dict[str, str]) -> None:
         if components.get(key):
             components[key] += f" {fragment}"
             components["city"] = rest
+            if warnings is not None:
+                warnings.append("Unit identifier fragment recovered from city field")
             return
 
 
@@ -253,14 +275,21 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
       - ``components``: dict of component_name -> value
       - ``type``: ``"Street Address"``, ``"Intersection"``, or ``"Ambiguous"``
     """
+    warnings: list[str] = []
+
     # USPS Pub 28 §354: parentheses are not valid in standardised
     # addresses.  Parenthesized text is typically wayfinding notes
     # (e.g. "(EAST)", "(UPPER LEVEL)") that confuse usaddress.  Strip
     # it before parsing and collapse any resulting extra whitespace.
+    paren_matches = re.findall(r"\([^)]*\)", raw)
     cleaned = re.sub(r"\([^)]*\)", "", raw)
     # Strip any remaining unmatched parentheses (e.g. "123 Main) St").
     cleaned = cleaned.replace("(", "").replace(")", "")
     cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    for match in paren_matches:
+        inner = match[1:-1].strip()
+        if inner:
+            warnings.append(f"Parenthesized text removed: '{inner}'")
 
     try:
         tagged, addr_type = usaddress.tag(cleaned)
@@ -270,6 +299,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         component_values: dict[str, str] = {}
         prev_key: str | None = None
         separator_before: bool = False
+        dual_range: str | None = None
         for token, label in exc.parsed_string:
             key = TAG_NAMES.get(label, label)
 
@@ -286,7 +316,9 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             if key in component_values:
                 if key == "address_number" and separator_before:
                     # Dual address: join with hyphen (USPS Pub 28 §232).
-                    component_values[key] += f"-{token}"
+                    merged = f"{component_values[key]}-{token}"
+                    component_values[key] = merged
+                    dual_range = merged
                 else:
                     component_values[key] += f" {token}"
             else:
@@ -294,6 +326,17 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
 
             separator_before = False
             prev_key = key
+
+        if dual_range is not None:
+            warnings.append(
+                f"Ambiguous parse: repeated address numbers joined as range '{dual_range}'"
+            )
+        else:
+            warnings.append("Ambiguous parse: repeated labels detected; parse may be inaccurate.")
+
+        _recover_unit_from_city(component_values, warnings)
+        _recover_identifier_fragment_from_city(component_values, warnings)
+
         logger.debug("parsed address type=Ambiguous country=%s", country)
         return ParseResponseV1(
             input=raw,
@@ -304,14 +347,14 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
                 values=component_values,
             ),
             type="Ambiguous",
-            warning="Repeated labels detected; parse may be inaccurate.",
+            warnings=warnings,
         )
 
     logger.debug("parsed address type=%s country=%s", addr_type, country)
     component_values = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
 
-    _recover_unit_from_city(component_values)
-    _recover_identifier_fragment_from_city(component_values)
+    _recover_unit_from_city(component_values, warnings)
+    _recover_identifier_fragment_from_city(component_values, warnings)
 
     return ParseResponseV1(
         input=raw,
@@ -322,4 +365,5 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             values=component_values,
         ),
         type=addr_type,
+        warnings=warnings,
     )

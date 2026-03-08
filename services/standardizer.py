@@ -125,9 +125,13 @@ def _standardize_street_fields(
         std[f"{prefix}street_name_post_modifier"] = v
 
 
-def standardize(components: dict[str, str], country: str = "US") -> StandardizeResponseV1:
+def standardize(
+    components: dict[str, str],
+    country: str = "US",
+    upstream_warnings: list[str] | None = None,
+) -> StandardizeResponseV1:
     """Return a standardized address from parsed *components* (v1)."""
-    return _standardize(components, country)
+    return _standardize(components, country, list(upstream_warnings) if upstream_warnings else [])
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +267,11 @@ def _assemble_lines(
     return line1, line2, last_line
 
 
-def _standardize(components: dict[str, str], country: str) -> StandardizeResponseV1:
+def _standardize(
+    components: dict[str, str],
+    country: str,
+    warnings: list[str] | None = None,
+) -> StandardizeResponseV1:
     """Internal implementation returning v1 response."""
     logger.debug("standardizing components count=%d country=%s", len(components), country)
     std: dict[str, str] = {}
@@ -342,4 +350,5 @@ def _standardize(components: dict[str, str], country: str) -> StandardizeRespons
             spec_version=USPS_PUB28_SPEC_VERSION,
             values=std,
         ),
+        warnings=warnings or [],
     )

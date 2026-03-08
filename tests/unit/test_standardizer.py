@@ -223,6 +223,28 @@ class TestStandardize:
         result = standardize({"address_number": "1", "street_name": "A"})
         assert result.components.spec == "usps-pub28"
 
+    def test_no_warnings_on_clean_input(self) -> None:
+        comps = {
+            "address_number": "123",
+            "street_name": "MAIN",
+            "street_name_post_type": "STREET",
+            "city": "SPRINGFIELD",
+            "state": "IL",
+            "zip_code": "62701",
+        }
+        result = standardize(comps)
+        assert result.warnings == []
+
+    def test_upstream_warnings_propagated(self) -> None:
+        comps = {"address_number": "1", "street_name": "ELM"}
+        result = standardize(comps, upstream_warnings=["Parenthesized text removed: '(FOO)'"])
+        assert "Parenthesized text removed: '(FOO)'" in result.warnings
+
+    def test_warnings_empty_list_by_default(self) -> None:
+        result = standardize({})
+        assert isinstance(result.warnings, list)
+        assert result.warnings == []
+
 
 # ---------------------------------------------------------------------------
 # Logging

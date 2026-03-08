@@ -173,9 +173,9 @@ class TestParseAddress:
         assert result.components.values["address_number"] == "1804-1810"
         assert result.type == "Ambiguous"
 
-    def test_no_warning_on_clean_address(self) -> None:
+    def test_no_warnings_on_clean_address(self) -> None:
         result = parse_address("456 Oak Ave, Portland, OR 97201")
-        assert result.warning is None
+        assert result.warnings == []
 
     def test_components_have_spec(self) -> None:
         result = parse_address("123 Main St")
@@ -210,10 +210,10 @@ class TestRepeatedLabelFallback:
         # the important thing is no exception is raised.
         assert result.type in {"Street Address", "Intersection", "Ambiguous"}
 
-    def test_warning_set_on_fallback(self) -> None:
+    def test_warnings_set_on_fallback(self) -> None:
         result = parse_address("123 Main St Rear 456 Oak Ave")
         if result.type == "Ambiguous":
-            assert result.warning is not None
+            assert len(result.warnings) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +238,79 @@ class TestZipNormalization:
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Warnings
+# ---------------------------------------------------------------------------
+
+
+class TestParseWarnings:
+    def test_parenthesized_text_warning(self) -> None:
+        result = parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
+        assert any("Parenthesized text removed" in w for w in result.warnings)
+        assert any("UPPER LEVEL" in w for w in result.warnings)
+
+    def test_no_paren_warning_on_clean_address(self) -> None:
+        result = parse_address("123 Main St, Springfield, IL 62701")
+        assert not any("Parenthesized" in w for w in result.warnings)
+
+    def test_dual_address_merge_warning(self) -> None:
+        fake_tokens = [
+            ("1804", "AddressNumber"),
+            ("&", "IntersectionSeparator"),
+            ("1810", "AddressNumber"),
+            ("Main", "StreetName"),
+            ("St", "StreetNamePostType"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("1804 & 1810 Main St")
+        assert any("1804-1810" in w for w in result.warnings)
+
+    def test_ambiguous_parse_warning_general(self) -> None:
+        """Non-dual RLE produces a generic ambiguous-parse warning."""
+        exc = usaddress.RepeatedLabelError(
+            "fake",
+            [("123", "AddressNumber"), ("Main", "StreetName"), ("456", "AddressNumber")],
+            "AddressNumber",
+        )
+        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("123 Main 456")
+        assert any("Ambiguous parse" in w for w in result.warnings)
+
+    def test_unit_recovered_from_city_warning(self) -> None:
+        """When _recover_unit_from_city fires, a warning is appended."""
+        # usaddress tags 'BSMT' into city for some inputs; simulate via
+        # a mock so we can control the component dict precisely.
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("Main", "StreetName"),
+            ("St", "StreetNamePostType"),
+            ("BSMT,", "PlaceName"),
+            ("Springfield", "PlaceName"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("123 Main St BSMT, Springfield")
+        # BSMT should have been recovered and a warning emitted.
+        assert any("Unit designator recovered" in w for w in result.warnings)
+
+    def test_identifier_fragment_recovered_from_city_warning(self) -> None:
+        """When _recover_identifier_fragment_from_city fires, a warning is appended."""
+        fake_tokens = [
+            ("120", "AddressNumber"),
+            ("Main", "StreetName"),
+            ("St", "StreetNamePostType"),
+            ("K", "OccupancyIdentifier"),
+            ("K", "PlaceName"),
+            ("Walla", "PlaceName"),
+            ("Walla", "PlaceName"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("120 Main St K K Walla Walla")
+        assert any("identifier fragment" in w.lower() for w in result.warnings)
 
 
 class TestParserLogging:

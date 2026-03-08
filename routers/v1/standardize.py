@@ -28,6 +28,8 @@ router = APIRouter(
 def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
     check_country(req.country)
 
+    upstream_warnings: list[str] = []
+
     if req.components is not None and len(req.components) > 0:
         comps = req.components
     elif req.address is not None:
@@ -38,7 +40,9 @@ def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
                 error="address_required",
                 message="Provide 'address' (non-empty string) or 'components' (non-empty object).",
             )
-        comps = parse_address(raw, country=req.country).components.values
+        parse_result = parse_address(raw, country=req.country)
+        comps = parse_result.components.values
+        upstream_warnings = parse_result.warnings
     else:
         raise APIError(
             status_code=400,
@@ -46,4 +50,4 @@ def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
             message="Provide 'address' (non-empty string) or 'components' (non-empty object).",
         )
 
-    return standardize(comps, country=req.country)
+    return standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
