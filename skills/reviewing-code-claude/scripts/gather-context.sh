@@ -43,4 +43,4 @@ git diff --name-only --staged HEAD 2>/dev/null || true
 
 echo ""
 echo "=== Lint (ruff) ==="
-uv run ruff check . 2>&1 || true
+uv run ruff check . --exclude vendor/ 2>&1 || true

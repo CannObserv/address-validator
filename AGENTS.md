@@ -289,11 +289,12 @@ git submodule update --init --recursive
 **At the start of every conversation**, pull the latest upstream skills:
 ```bash
 git submodule update --remote --merge vendor/gregoryfoster-skills
+git submodule update --remote --merge vendor/obra-superpowers
 ```
-If the submodule ref changed, commit it:
+If either submodule ref changed, commit it:
 ```bash
-git add vendor/gregoryfoster-skills
-git commit -m "chore: update gregoryfoster-skills submodule"
+git add vendor/gregoryfoster-skills vendor/obra-superpowers
+git commit -m "chore: update skill submodules"
 ```
 
 To add a new external skill repo, follow the `managing-skills-claude` skill
@@ -308,7 +309,8 @@ Local override (skills/<name>/ dir)        ← highest priority
 ```
 
 A committed directory in `skills/` with the same name as any vendor skill
-**completely supersedes** the vendor version (no inheritance).
+**completely supersedes** the vendor version (no inheritance) — this applies to
+both `gregoryfoster-skills` and `obra-superpowers`.
 
 ### Available skills
 
