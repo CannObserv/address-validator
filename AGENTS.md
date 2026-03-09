@@ -292,7 +292,12 @@ After cloning this project, initialize submodules:
 git submodule update --init --recursive
 ```
 
-**At the start of every conversation**, pull the latest upstream skills:
+**Submodule freshness is automated**: a `UserPromptSubmit` hook in
+`.claude/settings.json` runs `git submodule update --remote --merge` once per
+calendar day (lock file `/tmp/av-submodule-update-YYYYMMDD`) and auto-commits
+any updated refs. No manual pull is required in Claude Code sessions.
+
+For other agents or manual workflows, pull explicitly:
 ```bash
 git submodule update --remote --merge vendor/gregoryfoster-skills
 git submodule update --remote --merge vendor/obra-superpowers
@@ -304,7 +309,8 @@ git commit -m "chore: update skill submodules"
 ```
 
 To add a new external skill repo, follow the `managing-skills-claude` skill
-(available in `vendor/gregoryfoster-skills/skills/managing-skills-claude/`).
+(available at `skills/managing-skills-claude/` or directly in
+`vendor/gregoryfoster-skills/skills/managing-skills-claude/`).
 
 ### Skill resolution hierarchy
 
@@ -317,6 +323,24 @@ Local override (skills/<name>/ dir)        ← highest priority
 A committed directory in `skills/` with the same name as any vendor skill
 **completely supersedes** the vendor version (no inheritance) — this applies to
 both `gregoryfoster-skills` and `obra-superpowers`.
+
+### Claude Code skill wiring
+
+Claude Code discovers project skills from `.claude/skills/<name>/SKILL.md`.
+This project uses a two-level chain so `.claude/skills/` always routes through
+`skills/`:
+
+```
+.claude/skills/<name>  →  ../../skills/<name>  →  (local dir or vendor symlink)
+```
+
+This means local overrides in `skills/` automatically shadow vendor skills in
+Claude Code too — no duplication of symlink targets.
+
+When adding a new skill to `skills/`, also add the corresponding `.claude/skills/` symlink:
+```bash
+ln -s ../../skills/<name> .claude/skills/<name>
+```
 
 ### Available skills
 
@@ -333,6 +357,7 @@ both `gregoryfoster-skills` and `obra-superpowers`.
 | `writing-skills` | Symlink → `vendor/obra-superpowers/` | write skill, new skill, author skill |
 | `subagent-driven-development` | Symlink → `vendor/obra-superpowers/` | subagent dev, dispatch agents |
 | `dispatching-parallel-agents` | Symlink → `vendor/obra-superpowers/` | parallel agents |
+| `managing-skills-claude` | Symlink → `vendor/gregoryfoster-skills/` | manage skills, add skill repo, new skill repo |
 
 ### Skill authoring standard
 
