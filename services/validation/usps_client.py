@@ -136,7 +136,8 @@ class USPSClient:
         """Validate a single US address via the USPS Addresses API v3.
 
         Returns a normalised dict with keys:
-        ``dpv_match_code``, ``zip_plus4``, ``vacant``, ``corrected_components``.
+        ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
+        ``city``, ``region``, ``postal_code``, ``vacant``.
 
         Raises :class:`httpx.HTTPStatusError` on non-2xx responses.
         """
@@ -163,27 +164,25 @@ class USPSClient:
 
     @staticmethod
     def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise the USPS v3 JSON response to a provider-neutral dict."""
+        """Normalise the USPS v3 JSON response to a provider-neutral dict.
+
+        Returns a flat dict with keys:
+        ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
+        ``city``, ``region``, ``postal_code``, ``vacant``.
+        """
         addr = raw.get("address", {})
         extra = raw.get("addressAdditionalInfo", {})
 
-        postal_code = addr.get("ZIPCode", "")
-        zip_plus4_raw = addr.get("ZIPPlus4", None)
-
-        # Build corrected components only when we have at least a street.
-        corrected: dict[str, str] | None = None
-        if addr.get("streetAddress"):
-            corrected = {
-                "address_line": addr.get("streetAddress", ""),
-                "secondary_address": addr.get("secondaryAddress", ""),
-                "city": addr.get("city", ""),
-                "region": addr.get("state", ""),
-                "postal_code": postal_code,
-            }
+        zip_code = addr.get("ZIPCode", "")
+        zip_ext = addr.get("ZIPPlus4", "") or ""
+        postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
 
         return {
             "dpv_match_code": extra.get("DPVConfirmation") or None,
-            "zip_plus4": zip_plus4_raw or None,
+            "address_line_1": addr.get("streetAddress", ""),
+            "address_line_2": addr.get("secondaryAddress", ""),
+            "city": addr.get("city", ""),
+            "region": addr.get("state", ""),
+            "postal_code": postal_code,
             "vacant": extra.get("vacant") or None,
-            "corrected_components": corrected,
         }

@@ -119,26 +119,19 @@ class TestUSPSClient:
         assert result["dpv_match_code"] == "Y"
 
     @pytest.mark.asyncio
-    async def test_maps_zip_plus4(self, client: USPSClient, mock_http: AsyncMock) -> None:
+    async def test_maps_flat_address_fields(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
 
         result = await client.validate_address("123 Main St", "Springfield", "IL")
-        assert result["zip_plus4"] == "1234"
-
-    @pytest.mark.asyncio
-    async def test_maps_corrected_address_components(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
-        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
-
-        result = await client.validate_address("123 Main St", "Springfield", "IL")
-        comps = result["corrected_components"]
-        assert comps["address_line"] == "123 MAIN ST"
-        assert comps["city"] == "SPRINGFIELD"
-        assert comps["region"] == "IL"
-        assert comps["postal_code"] == "62701"
+        assert result["address_line_1"] == "123 MAIN ST"
+        assert result["city"] == "SPRINGFIELD"
+        assert result["region"] == "IL"
+        assert result["postal_code"] == "62701-1234"
+        assert result["vacant"] == "N"
+        assert result["dpv_match_code"] == "Y"
+        assert "corrected_components" not in result
+        assert "zip_plus4" not in result
 
     @pytest.mark.asyncio
     async def test_concurrent_requests_fetch_token_once(
@@ -172,3 +165,64 @@ class TestUSPSClient:
 
         with pytest.raises(httpx.HTTPStatusError):
             await client.validate_address("999 Fake St", "Nowhere", "IL")
+
+
+class TestMapResponse:
+    def test_map_response_merges_zip_plus4(self) -> None:
+        raw = {
+            "address": {
+                "streetAddress": "123 MAIN ST",
+                "city": "SPRINGFIELD",
+                "state": "IL",
+                "ZIPCode": "62701",
+                "ZIPPlus4": "1234",
+            },
+            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
+        }
+        result = USPSClient._map_response(raw)
+        assert result["postal_code"] == "62701-1234"
+
+    def test_map_response_without_zip_plus4(self) -> None:
+        raw = {
+            "address": {
+                "streetAddress": "123 MAIN ST",
+                "city": "SPRINGFIELD",
+                "state": "IL",
+                "ZIPCode": "62701",
+            },
+            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
+        }
+        result = USPSClient._map_response(raw)
+        assert result["postal_code"] == "62701"
+
+    def test_map_response_secondary_address(self) -> None:
+        raw = {
+            "address": {
+                "streetAddress": "123 MAIN ST",
+                "secondaryAddress": "APT 4",
+                "city": "SPRINGFIELD",
+                "state": "IL",
+                "ZIPCode": "62701",
+            },
+            "addressAdditionalInfo": {"DPVConfirmation": "S"},
+        }
+        result = USPSClient._map_response(raw)
+        assert result["address_line_2"] == "APT 4"
+
+    def test_map_response_vacant_surfaced(self) -> None:
+        raw = {
+            "address": {
+                "streetAddress": "123 MAIN ST",
+                "city": "X",
+                "state": "IL",
+                "ZIPCode": "62701",
+            },
+            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "Y"},
+        }
+        result = USPSClient._map_response(raw)
+        assert result["vacant"] == "Y"
+
+    def test_map_response_no_street_returns_empty_address_line_1(self) -> None:
+        raw = {"address": {}, "addressAdditionalInfo": {"DPVConfirmation": "N"}}
+        result = USPSClient._map_response(raw)
+        assert result["address_line_1"] == ""
