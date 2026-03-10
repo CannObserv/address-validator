@@ -15,12 +15,20 @@ VALIDATION_PROVIDER
         the USPS Addresses API v3.  Requires ``USPS_CONSUMER_KEY`` and
         ``USPS_CONSUMER_SECRET``.
 
+    ``google``
+        :class:`~services.validation.google_provider.GoogleProvider` -- calls
+        the Google Address Validation API.  Requires ``GOOGLE_API_KEY``.
+
 USPS_CONSUMER_KEY
     OAuth2 client ID from the USPS Developer Portal.  Required when
     ``VALIDATION_PROVIDER=usps``.
 
 USPS_CONSUMER_SECRET
     OAuth2 client secret.  Required when ``VALIDATION_PROVIDER=usps``.
+
+GOOGLE_API_KEY
+    API key from the Google Cloud Console.  Required when
+    ``VALIDATION_PROVIDER=google``.
 """
 
 import logging
@@ -28,6 +36,8 @@ import os
 
 import httpx
 
+from services.validation.google_client import GoogleClient
+from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
 from services.validation.protocol import ValidationProvider
 from services.validation.usps_client import USPSClient
@@ -40,6 +50,7 @@ logger = logging.getLogger(__name__)
 # it on every request would defeat both.
 _http_client: httpx.AsyncClient | None = None
 _usps_provider: USPSProvider | None = None
+_google_provider: GoogleProvider | None = None
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -66,12 +77,25 @@ def _get_usps_provider(key: str, secret: str) -> USPSProvider:
     return _usps_provider
 
 
+def _get_google_provider(api_key: str) -> GoogleProvider:
+    """Return the shared :class:`GoogleProvider` singleton, creating it if needed."""
+    global _google_provider  # noqa: PLW0603
+    if _google_provider is None:
+        _google_provider = GoogleProvider(
+            client=GoogleClient(
+                api_key=api_key,
+                http_client=_get_http_client(),
+            )
+        )
+    return _google_provider
+
+
 def get_provider() -> ValidationProvider:
     """Return the configured :class:`ValidationProvider`.
 
-    The USPS provider and its underlying HTTP client are module-level
-    singletons so the token cache and rate-limiter state are shared
-    across all requests.  NullProvider is stateless and is constructed
+    The USPS and Google providers and their underlying HTTP client are
+    module-level singletons so the token cache and rate-limiter state are
+    shared across all requests.  NullProvider is stateless and is constructed
     cheaply on each call.
     """
     provider_name = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()
@@ -91,6 +115,14 @@ def get_provider() -> ValidationProvider:
         logger.debug("get_provider: using USPSProvider")
         return _get_usps_provider(key, secret)
 
+    if provider_name == "google":
+        api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY must be set when VALIDATION_PROVIDER=google")
+        logger.debug("get_provider: using GoogleProvider")
+        return _get_google_provider(api_key)
+
     raise ValueError(
-        f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. Supported values: 'none', 'usps'."
+        f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. "
+        "Supported values: 'none', 'usps', 'google'."
     )

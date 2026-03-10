@@ -4,21 +4,19 @@ import pytest
 
 import services.validation.factory as factory_module
 from services.validation.factory import get_provider
+from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
 from services.validation.usps_provider import USPSProvider
 
 
 @pytest.fixture(autouse=True)
-def reset_usps_singleton() -> None:
-    """Reset the module-level USPSProvider singleton between tests.
-
-    ``_get_usps_provider`` caches the instance after first creation;
-    without this fixture, tests that create a USPS provider would
-    affect subsequent tests that expect a fresh instance.
-    """
+def reset_singletons() -> None:
+    """Reset module-level provider singletons between tests."""
     factory_module._usps_provider = None
+    factory_module._google_provider = None
     yield
     factory_module._usps_provider = None
+    factory_module._google_provider = None
 
 
 class TestGetProvider:
@@ -63,4 +61,30 @@ class TestGetProvider:
     def test_unknown_provider_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
         with pytest.raises(ValueError, match="smarty"):
+            get_provider()
+
+    def test_google_keyword_gives_google_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        assert isinstance(get_provider(), GoogleProvider)
+
+    def test_google_keyword_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "GOOGLE")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        assert isinstance(get_provider(), GoogleProvider)
+
+    def test_google_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        assert get_provider() is get_provider()
+
+    def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
+            get_provider()
+
+    def test_unknown_provider_error_mentions_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
+        with pytest.raises(ValueError, match="google"):
             get_provider()
