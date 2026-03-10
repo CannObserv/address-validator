@@ -30,7 +30,7 @@ def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
 
     upstream_warnings: list[str] = []
 
-    if req.components is not None and len(req.components) > 0:
+    if req.components:
         comps = req.components
     elif req.address is not None:
         raw = req.address.strip()

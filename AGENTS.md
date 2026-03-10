@@ -117,9 +117,12 @@ per module, and `caplog` assertions in the corresponding unit tests.
   recovered from a mis-tagged field, repeated address numbers joined
   as a range, etc.).  Empty list on clean input.  See
   `services/parser.py` for the full set of triggers.
-- `ValidateRequestV1` accepts individual components (`address`, `city`,
-  `region`, `postal_code`) so callers who have already parsed/standardized
-  can skip those steps.  `ValidateResponseV1` carries a `validation`
+- `ValidateRequestV1` accepts either a raw address string
+  (`address: str | None`) or a pre-parsed components dict
+  (`components: dict[str, str] | None`), mirroring `StandardizeRequestV1`.
+  Both modes run through the full parse → standardize pipeline in the router
+  before the configured provider is called.  When both fields are supplied,
+  `components` takes precedence.  `ValidateResponseV1` carries a `validation`
   sub-model (`ValidationResult` with `status`, `dpv_match_code`, and
   `provider`), top-level address fields (`address_line_1`, `address_line_2`,
   `city`, `region`, `postal_code`, `validated`), a

@@ -82,7 +82,7 @@ async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
 
     upstream_warnings: list[str] = []
 
-    if req.components is not None and len(req.components) > 0:
+    if req.components:
         comps = req.components
     elif req.address is not None:
         raw = req.address.strip()
