@@ -29,9 +29,9 @@ class TestValidateNullProvider:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["validation_status"] == "unavailable"
-        assert body["dpv_match_code"] is None
-        assert body["provider"] is None
+        assert body["validation"]["status"] == "unavailable"
+        assert body["validation"]["dpv_match_code"] is None
+        assert body["validation"]["provider"] is None
         assert body["api_version"] == "1"
 
     def test_country_defaults_to_us(
@@ -67,13 +67,13 @@ class TestValidateUSPSLive:
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["validation_status"] in (
+        assert body["validation"]["status"] in (
             "confirmed",
             "confirmed_missing_secondary",
             "confirmed_bad_secondary",
         )
-        assert body["provider"] == "usps"
-        assert body["dpv_match_code"] in ("Y", "S", "D")
+        assert body["validation"]["provider"] == "usps"
+        assert body["validation"]["dpv_match_code"] in ("Y", "S", "D")
 
     def test_fake_address_not_confirmed(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
