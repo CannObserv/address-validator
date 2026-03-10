@@ -14,9 +14,11 @@ def reset_singletons() -> None:
     """Reset module-level provider singletons between tests."""
     factory_module._usps_provider = None
     factory_module._google_provider = None
+    factory_module._http_client = None
     yield
     factory_module._usps_provider = None
     factory_module._google_provider = None
+    factory_module._http_client = None
 
 
 class TestGetProvider:

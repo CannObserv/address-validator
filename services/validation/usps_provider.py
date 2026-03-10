@@ -1,29 +1,13 @@
 """USPSProvider — validation backend backed by USPS Addresses API v3."""
 
 import logging
-from typing import Literal
 
 from models import ComponentSet, ValidateRequestV1, ValidateResponseV1, ValidationResult
-from services.validation._helpers import _build_validated_string
+from services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
 from services.validation.usps_client import USPSClient
 from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 logger = logging.getLogger(__name__)
-
-_DPV_TO_STATUS: dict[
-    str,
-    Literal[
-        "confirmed",
-        "confirmed_missing_secondary",
-        "confirmed_bad_secondary",
-        "not_confirmed",
-    ],
-] = {
-    "Y": "confirmed",
-    "S": "confirmed_missing_secondary",
-    "D": "confirmed_bad_secondary",
-    "N": "not_confirmed",
-}
 
 
 class USPSProvider:
@@ -46,7 +30,7 @@ class USPSProvider:
         )
 
         dpv = raw.get("dpv_match_code")
-        status = _DPV_TO_STATUS.get(dpv or "", "not_confirmed")
+        status = _DPV_TO_STATUS[dpv] if dpv is not None else "unavailable"
 
         address_line_1 = raw.get("address_line_1") or None
         address_line_2 = raw.get("address_line_2") or None
@@ -94,4 +78,5 @@ class USPSProvider:
                 dpv_match_code=dpv,  # type: ignore[arg-type]
                 provider="usps",
             ),
+            warnings=[],
         )

@@ -1,5 +1,22 @@
 """Shared helpers for validation providers."""
 
+from typing import Literal
+
+_DPV_TO_STATUS: dict[
+    str,
+    Literal[
+        "confirmed",
+        "confirmed_missing_secondary",
+        "confirmed_bad_secondary",
+        "not_confirmed",
+    ],
+] = {
+    "Y": "confirmed",
+    "S": "confirmed_missing_secondary",
+    "D": "confirmed_bad_secondary",
+    "N": "not_confirmed",
+}
+
 
 def _build_validated_string(
     address_line_1: str | None,

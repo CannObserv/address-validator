@@ -7,7 +7,7 @@ VALIDATION_PROVIDER
 
     ``none`` (default)
         :class:`~services.validation.null_provider.NullProvider` -- returns
-        ``validation_status='unavailable'`` without any network calls.  Safe
+        ``validation.status='unavailable'`` without any network calls.  Safe
         default for development and environments without API credentials.
 
     ``usps``
