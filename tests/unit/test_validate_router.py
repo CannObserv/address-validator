@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from models import ComponentSet, ValidateResponseV1, ValidationResult
+from models import ComponentSet, ValidateRequestV1, ValidateResponseV1, ValidationResult
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -164,3 +164,27 @@ class TestValidateResponseV1Shape:
         assert r.validation.dpv_match_code == "Y"
         assert r.postal_code == "62701-1234"
         assert r.latitude == 39.7817
+
+
+class TestValidateRequestV1Model:
+    def test_accepts_raw_address_string(self) -> None:
+        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701")
+        assert req.address == "123 Main St, Springfield, IL 62701"
+        assert req.components is None
+
+    def test_accepts_components_dict(self) -> None:
+        req = ValidateRequestV1(
+            components={"address_number": "123", "street_name": "MAIN"}
+        )
+        assert req.components == {"address_number": "123", "street_name": "MAIN"}
+        assert req.address is None
+
+    def test_both_fields_none_is_valid_at_model_level(self) -> None:
+        # Validation happens in the router, not the model
+        req = ValidateRequestV1()
+        assert req.address is None
+        assert req.components is None
+
+    def test_country_defaults_to_us(self) -> None:
+        req = ValidateRequestV1(address="123 Main St")
+        assert req.country == "US"

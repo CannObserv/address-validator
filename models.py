@@ -136,17 +136,19 @@ class StandardizeRequestV1(CountryRequestMixin):
 class ValidateRequestV1(CountryRequestMixin):
     """Request body for POST /api/v1/validate.
 
-    Accepts individual address components rather than a raw string so
-    callers who have already parsed/standardized can skip that step.
-    ``address`` is the street line (number + name + suffix + unit).
-    ``region`` follows the geography-neutral convention used throughout
-    v1 (equivalent to state for US addresses).
+    Accepts either a raw address string *or* pre-parsed components — mirroring
+    :class:`StandardizeRequestV1`.  In both cases the input is run through the
+    full parse → standardize pipeline before the validation provider is called,
+    so providers always receive clean, USPS-formatted components.
+
+    ``address`` is the full raw address string (not just the street line).
+    When both fields are supplied, ``components`` takes precedence and
+    ``address`` is ignored.  Validation of which fields are present happens
+    in the router, not here.
     """
 
-    address: str = Field(..., max_length=1000)
-    city: str | None = Field(default=None, max_length=200)
-    region: str | None = Field(default=None, max_length=100)
-    postal_code: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(None, max_length=1000)
+    components: dict[str, str] | None = None
 
 
 # ---------------------------------------------------------------------------
