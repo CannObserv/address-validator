@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from models import ComponentSet, ValidateRequestV1, ValidateResponseV1, ValidationResult
+from models import (
+    ComponentSet,
+    StandardizeResponseV1,
+    ValidateRequestV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -24,19 +30,77 @@ CONFIRMED_RESPONSE = ValidateResponseV1(
 
 
 class TestValidateEndpoint:
-    def test_null_provider_returns_200(self, client: TestClient) -> None:
+    def test_raw_string_returns_200(self, client: TestClient) -> None:
         with patch(
             "routers.v1.validate.get_provider",
             return_value=_make_null_provider(NULL_RESPONSE),
         ):
             resp = client.post(
                 "/api/v1/validate",
-                json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+                json={"address": "123 Main St, Springfield, IL 62701"},
             )
         assert resp.status_code == 200
         body = resp.json()
         assert body["validation"]["status"] == "unavailable"
         assert body["api_version"] == "1"
+
+    def test_raw_string_provider_receives_standardize_response(
+        self, client: TestClient
+    ) -> None:
+        provider = _make_null_provider(NULL_RESPONSE)
+        with patch("routers.v1.validate.get_provider", return_value=provider):
+            client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St, Springfield, IL 62701"},
+            )
+        provider.validate.assert_awaited_once()
+        call_arg = provider.validate.call_args[0][0]
+        # Provider receives a StandardizeResponseV1, not the raw request
+        assert isinstance(call_arg, StandardizeResponseV1)
+
+    def test_components_dict_returns_200(self, client: TestClient) -> None:
+        with patch(
+            "routers.v1.validate.get_provider",
+            return_value=_make_null_provider(NULL_RESPONSE),
+        ):
+            resp = client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {
+                        "address_number": "123",
+                        "street_name": "MAIN",
+                        "street_suffix": "ST",
+                        "city": "SPRINGFIELD",
+                        "region": "IL",
+                        "postal_code": "62701",
+                    }
+                },
+            )
+        assert resp.status_code == 200
+        assert resp.json()["validation"]["status"] == "unavailable"
+
+    def test_components_takes_precedence_over_address(self, client: TestClient) -> None:
+        provider = _make_null_provider(NULL_RESPONSE)
+        with patch("routers.v1.validate.get_provider", return_value=provider):
+            client.post(
+                "/api/v1/validate",
+                json={
+                    "address": "should be ignored",
+                    "components": {
+                        "address_number": "123",
+                        "street_name": "MAIN",
+                        "street_suffix": "ST",
+                        "city": "SPRINGFIELD",
+                        "region": "IL",
+                        "postal_code": "62701",
+                    },
+                },
+            )
+        provider.validate.assert_awaited_once()
+        call_arg = provider.validate.call_args[0][0]
+        assert isinstance(call_arg, StandardizeResponseV1)
+        # components path was used; city standardized from dict, not parsed from "should be ignored"
+        assert call_arg.city == "SPRINGFIELD"
 
     def test_confirmed_response_shape(self, client: TestClient) -> None:
         with patch(
@@ -45,7 +109,7 @@ class TestValidateEndpoint:
         ):
             resp = client.post(
                 "/api/v1/validate",
-                json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+                json={"address": "123 Main St, Springfield, IL 62701"},
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -53,25 +117,76 @@ class TestValidateEndpoint:
         assert body["validation"]["status"] == "confirmed"
         assert body["city"] == "SPRINGFIELD"
 
+    def test_parse_warnings_merged_into_response(self, client: TestClient) -> None:
+        provider_response = ValidateResponseV1(
+            country="US",
+            validation=ValidationResult(status="unavailable"),
+            warnings=[],
+        )
+        with patch(
+            "routers.v1.validate.get_provider",
+            return_value=_make_null_provider(provider_response),
+        ):
+            # Address with parenthesized text triggers a parse warning
+            resp = client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St (rear) Springfield IL 62701"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert any("parenthesized" in w.lower() or "paren" in w.lower() for w in body["warnings"])
+
+    def test_std_warnings_prepend_provider_warnings(self, client: TestClient) -> None:
+        provider_warning = "provider-level warning"
+        provider_response = ValidateResponseV1(
+            country="US",
+            validation=ValidationResult(status="unavailable"),
+            warnings=[provider_warning],
+        )
+        provider = _make_null_provider(provider_response)
+        with patch("routers.v1.validate.get_provider", return_value=provider):
+            # Address with parenthesized text triggers a parse/std warning
+            resp = client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St (rear) Springfield IL 62701"},
+            )
+        body = resp.json()
+        warnings = body["warnings"]
+        assert provider_warning in warnings
+        # standardize/parse warnings come before provider warnings
+        assert warnings.index(provider_warning) > 0
+
     def test_blank_address_returns_400(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
-            json={"address": "   ", "city": "Springfield", "region": "IL"},
+            json={"address": "   "},
         )
         assert resp.status_code == 400
         assert resp.json()["error"] == "address_required"
 
-    def test_missing_address_field_returns_422(self, client: TestClient) -> None:
+    def test_missing_both_fields_returns_400(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
-            json={"city": "Springfield", "region": "IL"},
+            json={},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "components_or_address_required"
+
+    def test_empty_components_dict_falls_through_to_address_error(
+        self, client: TestClient
+    ) -> None:
+        # Empty components dict + no address → 400
+        resp = client.post(
+            "/api/v1/validate",
+            json={"components": {}},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "components_or_address_required"
 
     def test_unsupported_country_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
-            json={"address": "123 Main St", "city": "London", "region": "ENG", "country": "GB"},
+            json={"address": "123 Main St", "country": "GB"},
         )
         assert resp.status_code == 422
         assert resp.json()["error"] == "country_not_supported"
@@ -79,21 +194,21 @@ class TestValidateEndpoint:
     def test_no_auth_returns_401(self, client_no_auth: TestClient) -> None:
         resp = client_no_auth.post(
             "/api/v1/validate",
-            json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+            json={"address": "123 Main St, Springfield, IL 62701"},
         )
         assert resp.status_code == 401
 
     def test_bad_auth_returns_403(self, client_bad_auth: TestClient) -> None:
         resp = client_bad_auth.post(
             "/api/v1/validate",
-            json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+            json={"address": "123 Main St, Springfield, IL 62701"},
         )
         assert resp.status_code == 403
 
     def test_address_too_long_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
-            json={"address": "A" * 1001, "city": "Springfield", "region": "IL"},
+            json={"address": "A" * 1001},
         )
         assert resp.status_code == 422
 
