@@ -5,8 +5,9 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from models import ValidateRequestV1
+from models import ComponentSet, StandardizeResponseV1
 from services.validation.google_provider import GoogleProvider
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 # Flat dicts matching GoogleClient._map_response output
 CLIENT_RESULT_Y = {
@@ -47,6 +48,30 @@ CLIENT_RESULT_WITH_WARNINGS = {
 }
 
 
+def _make_std(
+    address_line_1: str = "123 MAIN ST",
+    city: str = "SPRINGFIELD",
+    region: str = "IL",
+    postal_code: str = "62701",
+    country: str = "US",
+) -> StandardizeResponseV1:
+    return StandardizeResponseV1(
+        address_line_1=address_line_1,
+        address_line_2="",
+        city=city,
+        region=region,
+        postal_code=postal_code,
+        country=country,
+        standardized=f"{address_line_1}  {city}, {region} {postal_code}",
+        components=ComponentSet(
+            spec=USPS_PUB28_SPEC,
+            spec_version=USPS_PUB28_SPEC_VERSION,
+            values={"address_number": "123", "street_name": "MAIN"},
+        ),
+        warnings=[],
+    )
+
+
 class TestGoogleProvider:
     @pytest.fixture()
     def mock_client(self) -> AsyncMock:
@@ -63,8 +88,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed"
         assert result.validation.dpv_match_code == "Y"
 
@@ -73,8 +97,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "S"}
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed_missing_secondary"
 
     @pytest.mark.asyncio
@@ -82,8 +105,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "D"}
-        req = ValidateRequestV1(address="123 Main St Apt 999", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std(address_line_1="123 MAIN ST APT 999"))
         assert result.validation.status == "confirmed_bad_secondary"
 
     @pytest.mark.asyncio
@@ -91,8 +113,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_N
-        req = ValidateRequestV1(address="999 Fake St", city="Nowhere", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std(address_line_1="999 FAKE ST", city="NOWHERE"))
         assert result.validation.status == "not_confirmed"
 
     @pytest.mark.asyncio
@@ -100,8 +121,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.provider == "google"
 
     @pytest.mark.asyncio
@@ -109,8 +129,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.latitude == pytest.approx(39.7817)
         assert result.longitude == pytest.approx(-89.6501)
 
@@ -119,8 +138,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_N
-        req = ValidateRequestV1(address="999 Fake St", city="Nowhere", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std(address_line_1="999 FAKE ST"))
         assert result.latitude is None
         assert result.longitude is None
 
@@ -129,8 +147,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.postal_code == "62701-1234"
 
     @pytest.mark.asyncio
@@ -138,8 +155,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validated == "123 MAIN ST  SPRINGFIELD, IL 62701-1234"
 
     @pytest.mark.asyncio
@@ -147,8 +163,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.components is not None
         assert result.components.spec == "usps-pub28"
 
@@ -157,8 +172,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.components is not None
         assert result.components.values.get("vacant") == "N"
 
@@ -167,8 +181,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_N
-        req = ValidateRequestV1(address="999 Fake St")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std(address_line_1="999 FAKE ST"))
         assert result.components is None
         assert result.validated is None
 
@@ -177,8 +190,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_WITH_WARNINGS
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert any("inferred" in w.lower() for w in result.warnings)
 
     @pytest.mark.asyncio
@@ -186,8 +198,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_WITH_WARNINGS
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert any("replaced" in w.lower() for w in result.warnings)
 
     @pytest.mark.asyncio
@@ -195,8 +206,7 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_WITH_WARNINGS
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert any("unconfirmed" in w.lower() for w in result.warnings)
 
     @pytest.mark.asyncio
@@ -204,15 +214,30 @@ class TestGoogleProvider:
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_client_called_with_standardized_fields(
+        self, provider: GoogleProvider, mock_client: AsyncMock
+    ) -> None:
+        """Provider must forward std fields (not raw user input) to the Google client."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        std = _make_std(
+            address_line_1="123 MAIN ST", city="SPRINGFIELD", region="IL", postal_code="62701"
+        )
+        await provider.validate(std)
+        mock_client.validate_address.assert_called_once_with(
+            street_address="123 MAIN ST",
+            city="SPRINGFIELD",
+            state="IL",
+            zip_code="62701",
+        )
 
     @pytest.mark.asyncio
     async def test_http_error_raises(
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         with pytest.raises(httpx.TimeoutException):
-            await provider.validate(req)
+            await provider.validate(_make_std())

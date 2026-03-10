@@ -2,7 +2,7 @@
 
 import logging
 
-from models import ComponentSet, ValidateRequestV1, ValidateResponseV1, ValidationResult
+from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
 from services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
 from services.validation.google_client import GoogleClient
 from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -17,6 +17,11 @@ _WARNING_UNCONFIRMED = "One or more address components are unconfirmed"
 class GoogleProvider:
     """Validates US addresses against the Google Address Validation API.
 
+    Receives a fully normalised :class:`~models.StandardizeResponseV1` from the
+    router (the result of the parse → standardize pipeline).  The
+    ``address_line_1`` field carries the standardized street line sent to the
+    Google API.
+
     Uses ``enableUspsCass: true`` to obtain USPS CASS-certified DPV codes,
     making this a full drop-in replacement for :class:`USPSProvider` that
     additionally returns geocoordinates.
@@ -28,13 +33,13 @@ class GoogleProvider:
     def __init__(self, client: GoogleClient) -> None:
         self._client = client
 
-    async def validate(self, request: ValidateRequestV1) -> ValidateResponseV1:
-        logger.debug("GoogleProvider.validate: calling Google API, country=%s", request.country)
+    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+        logger.debug("GoogleProvider.validate: calling Google API, country=%s", std.country)
         raw = await self._client.validate_address(
-            street_address=request.address,
-            city=request.city,
-            state=request.region,
-            zip_code=request.postal_code,
+            street_address=std.address_line_1,
+            city=std.city,
+            state=std.region,
+            zip_code=std.postal_code,
         )
 
         dpv = raw.get("dpv_match_code")
@@ -88,7 +93,7 @@ class GoogleProvider:
             city=city,
             region=region,
             postal_code=postal_code,
-            country=request.country,
+            country=std.country,
             validated=validated,
             components=components,
             validation=ValidationResult(
