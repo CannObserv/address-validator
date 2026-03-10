@@ -2,8 +2,27 @@
 
 import pytest
 
-from models import ValidateRequestV1
+from models import ComponentSet, StandardizeResponseV1
 from services.validation.null_provider import NullProvider
+from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+
+
+def _make_std(country: str = "US") -> StandardizeResponseV1:
+    return StandardizeResponseV1(
+        address_line_1="123 MAIN ST",
+        address_line_2="",
+        city="SPRINGFIELD",
+        region="IL",
+        postal_code="62701",
+        country=country,
+        standardized="123 MAIN ST  SPRINGFIELD, IL 62701",
+        components=ComponentSet(
+            spec=USPS_PUB28_SPEC,
+            spec_version=USPS_PUB28_SPEC_VERSION,
+            values={"address_number": "123", "street_name": "MAIN"},
+        ),
+        warnings=[],
+    )
 
 
 class TestNullProvider:
@@ -13,45 +32,43 @@ class TestNullProvider:
 
     @pytest.mark.asyncio
     async def test_returns_unavailable_status(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.status == "unavailable"
 
     @pytest.mark.asyncio
     async def test_provider_name_is_none(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.provider is None
 
     @pytest.mark.asyncio
     async def test_dpv_match_code_is_none(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.validation.dpv_match_code is None
 
     @pytest.mark.asyncio
     async def test_address_fields_are_none(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.address_line_1 is None
         assert result.components is None
         assert result.validated is None
 
     @pytest.mark.asyncio
     async def test_lat_lng_are_none(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.latitude is None
         assert result.longitude is None
 
     @pytest.mark.asyncio
     async def test_warnings_is_empty(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.warnings == []
 
     @pytest.mark.asyncio
     async def test_api_version_is_1(self, provider: NullProvider) -> None:
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
+        result = await provider.validate(_make_std())
         assert result.api_version == "1"
+
+    @pytest.mark.asyncio
+    async def test_country_passed_through(self, provider: NullProvider) -> None:
+        result = await provider.validate(_make_std(country="US"))
+        assert result.country == "US"

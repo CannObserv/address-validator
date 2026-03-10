@@ -2,7 +2,7 @@
 
 import logging
 
-from models import ValidateRequestV1, ValidateResponseV1, ValidationResult
+from models import StandardizeResponseV1, ValidateResponseV1, ValidationResult
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +15,9 @@ class NullProvider:
     validation is not yet required.
     """
 
-    async def validate(self, request: ValidateRequestV1) -> ValidateResponseV1:
-        logger.debug("NullProvider: returning unavailable for country=%s", request.country)
+    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+        logger.debug("NullProvider: returning unavailable for country=%s", std.country)
         return ValidateResponseV1(
-            country=request.country,
+            country=std.country,
             validation=ValidationResult(status="unavailable"),
         )
