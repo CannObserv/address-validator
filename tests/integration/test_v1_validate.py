@@ -5,7 +5,7 @@ The USPS live-API tests require real credentials and are skipped when
 environment.  They are never expected to run in CI without secrets.
 
 The null-provider test always runs and exercises the full HTTP stack
-against the running FastAPI app.
+against the running FastAPI app, including the parse → standardize pipeline.
 """
 
 import os
@@ -25,7 +25,7 @@ class TestValidateNullProvider:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
         resp = client.post(
             "/api/v1/validate",
-            json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+            json={"address": "123 Main St, Springfield, IL 62701"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -40,9 +40,29 @@ class TestValidateNullProvider:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
         resp = client.post(
             "/api/v1/validate",
-            json={"address": "123 Main St", "city": "Springfield", "region": "IL"},
+            json={"address": "123 Main St, Springfield, IL 62701"},
         )
         assert resp.json()["country"] == "US"
+
+    def test_components_dict_input_accepted(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
+        resp = client.post(
+            "/api/v1/validate",
+            json={
+                "components": {
+                    "address_number": "123",
+                    "street_name": "MAIN",
+                    "street_name_post_type": "ST",
+                    "place_name": "SPRINGFIELD",
+                    "state_name": "IL",
+                    "zip_code": "62701",
+                }
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["validation"]["status"] == "unavailable"
 
 
 @pytest.mark.skipif(
@@ -58,12 +78,7 @@ class TestValidateUSPSLive:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         resp = client.post(
             "/api/v1/validate",
-            json={
-                "address": "1600 Pennsylvania Ave NW",
-                "city": "Washington",
-                "region": "DC",
-                "postal_code": "20500",
-            },
+            json={"address": "1600 Pennsylvania Ave NW, Washington, DC 20500"},
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -81,12 +96,7 @@ class TestValidateUSPSLive:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         resp = client.post(
             "/api/v1/validate",
-            json={
-                "address": "99999 Nonexistent Blvd",
-                "city": "Nowhere",
-                "region": "ZZ",
-                "postal_code": "00000",
-            },
+            json={"address": "99999 Nonexistent Blvd, Nowhere, ZZ 00000"},
         )
         # May return 200 not_confirmed or a 4xx from USPS — both are acceptable.
         assert resp.status_code in (200, 400, 404, 422)
