@@ -159,55 +159,67 @@ class HealthResponse(BaseModel):
     api_version: Literal["1"] = "1"
 
 
-class ValidateResponseV1(BaseModel):
-    """Response body for POST /api/v1/validate.
+class ValidationResult(BaseModel):
+    """Provider-returned validation outcome metadata.
 
-    ``validation_status`` is the primary machine-readable result:
+    ``status`` is the primary machine-readable result:
 
-    * ``confirmed``                  — DPV code Y: fully confirmed delivery point.
-    * ``confirmed_missing_secondary``— DPV code S: building confirmed, unit missing.
-    * ``confirmed_bad_secondary``    — DPV code D: building confirmed, unit unrecognised.
-    * ``not_confirmed``              — DPV code N: address not found in USPS database.
-    * ``unavailable``                — provider not configured or unreachable.
-
-    ``corrected_components`` contains the authoritative address components
-    returned by the provider (street line, city, region, postal code).
-    Present when the provider returns corrected components, typically for
-    Y, S, and D DPV codes.  ``None`` for ``not_confirmed`` and
-    ``unavailable``.
+    * ``confirmed``                   — DPV code Y: fully confirmed delivery point.
+    * ``confirmed_missing_secondary`` — DPV code S: building confirmed, unit missing.
+    * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
+    * ``not_confirmed``               — DPV code N: address not found in USPS database.
+    * ``unavailable``                 — provider not configured or unreachable.
     """
 
-    country: str
-    input_address: str = Field(..., description="Raw address string as submitted.")
-    validation_status: Literal[
+    status: Literal[
         "confirmed",
         "confirmed_missing_secondary",
         "confirmed_bad_secondary",
         "not_confirmed",
         "unavailable",
     ]
-    provider: str | None = Field(
-        default=None,
-        description="Provider that performed validation ('usps', etc.). None when unavailable.",
-    )
     dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
         default=None,
         description="USPS DPV match code. Y=confirmed, S=missing secondary, "
         "D=bad secondary, N=not found. None when unavailable.",
     )
-    zip_plus4: str | None = Field(
+    provider: str | None = Field(
         default=None,
-        description="USPS ZIP+4 code assigned by the provider, if available.",
+        description="Provider that performed validation ('usps', 'google', etc.). "
+        "None when unavailable.",
     )
-    vacant: str | None = Field(
+
+
+class ValidateResponseV1(BaseModel):
+    """Response body for POST /api/v1/validate.
+
+    Mirrors the structure of ``StandardizeResponseV1``.  Address fields are
+    ``str | None`` because corrected components are only present when the
+    provider returns a confirmed or corrected address.
+
+    ``postal_code`` is the jurisdiction-neutral postal identifier.  For US
+    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when the
+    provider returns it, or the 5-digit ZIP otherwise.
+
+    ``vacant`` and other USPS-specific indicators appear in
+    ``components.values`` when the provider returns them.
+    """
+
+    address_line_1: str | None = None
+    address_line_2: str | None = None
+    city: str | None = None
+    region: str | None = None
+    postal_code: str | None = None
+    country: str
+    validated: str | None = Field(
         default=None,
-        description="USPS vacancy indicator ('Y'/'N'). None when unavailable.",
+        description="Single-line canonical address using two-space separator convention.",
     )
-    corrected_components: dict[str, str] | None = Field(
-        default=None,
-        description="Authoritative address components from the provider. "
-        "Keys: address_line, secondary_address, city, region, postal_code.",
-    )
+    components: ComponentSet | None = None
+    validation: ValidationResult
+    latitude: float | None = None
+    longitude: float | None = None
+    warnings: list[str] = Field(default_factory=list)
     api_version: Literal["1"] = "1"
 
 
