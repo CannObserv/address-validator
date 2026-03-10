@@ -238,9 +238,10 @@ The validation phase is controlled by env vars in `/etc/address-validator/env`:
 
 | Variable | Values | Default | Notes |
 |---|---|---|---|
-| `VALIDATION_PROVIDER` | `none`, `usps` | `none` | Controls which backend `get_provider()` returns |
+| `VALIDATION_PROVIDER` | `none`, `usps`, `google` | `none` | Controls which backend `get_provider()` returns |
 | `USPS_CONSUMER_KEY` | string | — | Required when `VALIDATION_PROVIDER=usps` |
 | `USPS_CONSUMER_SECRET` | string | — | Required when `VALIDATION_PROVIDER=usps` |
+| `GOOGLE_API_KEY` | string | — | Required when `VALIDATION_PROVIDER=google` |
 
 Register for USPS credentials at https://developer.usps.com (see USPS
 Addresses API v3 app registration).  The free tier allows 10,000
