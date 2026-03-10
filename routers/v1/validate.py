@@ -6,7 +6,7 @@ deliverable location by delegating to the configured
 
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
 (see :mod:`services.validation.factory`).  When no provider is configured
-the endpoint still returns HTTP 200 with ``validation_status='unavailable'``
+the endpoint still returns HTTP 200 with ``validation.status='unavailable'``
 so upstream callers degrade gracefully.
 """
 
@@ -46,7 +46,7 @@ router = APIRouter(
         "- `S` — building confirmed, secondary address (apt/unit) missing\n"
         "- `D` — building confirmed, secondary address not recognised\n"
         "- `N` — address not found\n\n"
-        "When no validation provider is configured, `validation_status` is "
+        "When no validation provider is configured, `validation.status` is "
         "`unavailable` and all other result fields are `null`."
     ),
 )

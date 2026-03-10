@@ -28,16 +28,23 @@ running uvicorn on port 8000.
   - `protocol.py` — `ValidationProvider` Protocol (runtime-checkable); the
     interface all backends must satisfy.
   - `null_provider.py` — `NullProvider`: no-op default, returns
-    `validation_status='unavailable'` without network calls.
+    `validation.status='unavailable'` without network calls.
   - `usps_client.py` — `USPSClient`: async USPS Addresses API v3 client.
     Manages OAuth2 client-credentials tokens (55-min in-process cache with
     `asyncio.Lock` to prevent concurrent refresh races) and a token-bucket
     rate limiter (5 req/s, matching the free-tier limit).
   - `usps_provider.py` — `USPSProvider`: maps DPV codes Y/S/D/N to
-    `validation_status` strings and surfaces corrected components.
+    `validation.status` values and surfaces corrected components.
+  - `google_client.py` — `GoogleClient`: async Google Address Validation API
+    client.  API key auth, single POST call with `enableUspsCass: true`.
+    No OAuth2 or rate limiter.
+  - `google_provider.py` — `GoogleProvider`: maps DPV codes 1:1, populates
+    lat/lng, surfaces three Google verdict flags as warnings.  Module-level
+    singleton.
   - `factory.py` — `get_provider()`: reads `VALIDATION_PROVIDER` env var
-    and returns the configured backend.  `USPSProvider` is a module-level
-    singleton so token cache and rate-limiter state survive across requests.
+    and returns the configured backend.  `USPSProvider` and `GoogleProvider`
+    are module-level singletons so token cache and rate-limiter state survive
+    across requests.
 - **`usps_data/`** — Pure-data modules exporting `dict[str, str]` maps
   for suffixes, directionals, states, and unit designators.  Sourced
   from USPS Pub 28 appendices.
@@ -112,8 +119,12 @@ per module, and `caplog` assertions in the corresponding unit tests.
   `services/parser.py` for the full set of triggers.
 - `ValidateRequestV1` accepts individual components (`address`, `city`,
   `region`, `postal_code`) so callers who have already parsed/standardized
-  can skip those steps.  `ValidateResponseV1` carries `validation_status`,
-  `dpv_match_code`, `zip_plus4`, `vacant`, and `corrected_components`.
+  can skip those steps.  `ValidateResponseV1` carries a `validation`
+  sub-model (`ValidationResult` with `status`, `dpv_match_code`, and
+  `provider`), top-level address fields (`address_line_1`, `address_line_2`,
+  `city`, `region`, `postal_code`, `validated`), a
+  `components: ComponentSet | None`, `latitude: float | None`,
+  `longitude: float | None`, and `warnings: list[str]`.
 
 ## Authentication
 
@@ -227,10 +238,12 @@ import in `conftest.py` is intentional — do not move it above the
 - **`/etc/address-validator/env`** — contains the `API_KEY` secret.
   Owned by `root:exedev`, mode 640.  Editing requires root; the
   service must be restarted to pick up a new key.
-- **`services/validation/factory.py` singletons** — `_usps_provider` and
-  `_http_client` are module-level singletons.  Tests that exercise the USPS
-  provider must reset `factory._usps_provider = None` in a fixture to avoid
-  cross-test contamination (see `tests/unit/validation/test_provider_factory.py`).
+- **`services/validation/factory.py` singletons** — `_usps_provider`,
+  `_google_provider`, and `_http_client` are module-level singletons.  Tests
+  that exercise the USPS or Google provider must reset
+  `factory._usps_provider = None` / `factory._google_provider = None` in a
+  fixture to avoid cross-test contamination (see
+  `tests/unit/validation/test_provider_factory.py`).
 
 ## Validation provider
 
@@ -249,7 +262,7 @@ validations/day at 5 requests/second.
 
 ### DPV status mapping
 
-| DPV code | `validation_status` | Meaning |
+| DPV code | `validation.status` | Meaning |
 |---|---|---|
 | `Y` | `confirmed` | Fully confirmed delivery point |
 | `S` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
