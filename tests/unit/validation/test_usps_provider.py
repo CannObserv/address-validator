@@ -8,24 +8,25 @@ import pytest
 from models import ValidateRequestV1
 from services.validation.usps_provider import USPSProvider
 
+# Flat dicts matching the updated USPSClient._map_response output
 CLIENT_RESULT_Y = {
     "dpv_match_code": "Y",
-    "zip_plus4": "1234",
+    "address_line_1": "123 MAIN ST",
+    "address_line_2": "",
+    "city": "SPRINGFIELD",
+    "region": "IL",
+    "postal_code": "62701-1234",
     "vacant": "N",
-    "corrected_components": {
-        "address_line": "123 MAIN ST",
-        "secondary_address": "",
-        "city": "SPRINGFIELD",
-        "region": "IL",
-        "postal_code": "62701",
-    },
 }
 
 CLIENT_RESULT_N = {
     "dpv_match_code": "N",
-    "zip_plus4": None,
+    "address_line_1": "",
+    "address_line_2": "",
+    "city": "",
+    "region": "",
+    "postal_code": "",
     "vacant": None,
-    "corrected_components": None,
 }
 
 
@@ -47,8 +48,8 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
-        assert result.validation_status == "confirmed"
-        assert result.dpv_match_code == "Y"
+        assert result.validation.status == "confirmed"
+        assert result.validation.dpv_match_code == "Y"
 
     @pytest.mark.asyncio
     async def test_dpv_s_sets_confirmed_missing_secondary(
@@ -57,7 +58,7 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "S"}
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
-        assert result.validation_status == "confirmed_missing_secondary"
+        assert result.validation.status == "confirmed_missing_secondary"
 
     @pytest.mark.asyncio
     async def test_dpv_d_sets_confirmed_bad_secondary(
@@ -66,7 +67,7 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "D"}
         req = ValidateRequestV1(address="123 Main St Apt 999", city="Springfield", region="IL")
         result = await provider.validate(req)
-        assert result.validation_status == "confirmed_bad_secondary"
+        assert result.validation.status == "confirmed_bad_secondary"
 
     @pytest.mark.asyncio
     async def test_dpv_n_sets_not_confirmed(
@@ -75,7 +76,7 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_N
         req = ValidateRequestV1(address="999 Fake St", city="Nowhere", region="IL")
         result = await provider.validate(req)
-        assert result.validation_status == "not_confirmed"
+        assert result.validation.status == "not_confirmed"
 
     @pytest.mark.asyncio
     async def test_provider_field_is_usps(
@@ -84,24 +85,81 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
-        assert result.provider == "usps"
+        assert result.validation.provider == "usps"
 
     @pytest.mark.asyncio
-    async def test_zip_plus4_surfaced(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
-        mock_client.validate_address.return_value = CLIENT_RESULT_Y
-        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
-        result = await provider.validate(req)
-        assert result.zip_plus4 == "1234"
-
-    @pytest.mark.asyncio
-    async def test_corrected_components_surfaced(
+    async def test_postal_code_with_zip_plus4(
         self, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
-        assert result.corrected_components is not None
-        assert result.corrected_components["city"] == "SPRINGFIELD"
+        assert result.postal_code == "62701-1234"
+
+    @pytest.mark.asyncio
+    async def test_address_lines_populated(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.city == "SPRINGFIELD"
+        assert result.region == "IL"
+
+    @pytest.mark.asyncio
+    async def test_components_contains_vacant(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.components is not None
+        assert result.components.values.get("vacant") == "N"
+
+    @pytest.mark.asyncio
+    async def test_components_spec_is_usps_pub28(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.components is not None
+        assert result.components.spec == "usps-pub28"
+
+    @pytest.mark.asyncio
+    async def test_validated_string_built(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.validated == "123 MAIN ST  SPRINGFIELD, IL 62701-1234"
+
+    @pytest.mark.asyncio
+    async def test_lat_lng_are_none(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.latitude is None
+        assert result.longitude is None
+
+    @pytest.mark.asyncio
+    async def test_warnings_is_empty(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
+        result = await provider.validate(req)
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_not_confirmed_has_no_components(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        mock_client.validate_address.return_value = CLIENT_RESULT_N
+        req = ValidateRequestV1(address="999 Fake St", city="Nowhere", region="IL")
+        result = await provider.validate(req)
+        assert result.components is None
+        assert result.validated is None
 
     @pytest.mark.asyncio
     async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
