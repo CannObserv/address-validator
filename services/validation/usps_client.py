@@ -171,7 +171,7 @@ class USPSClient:
         ``city``, ``region``, ``postal_code``, ``vacant``.
         """
         addr = raw.get("address", {})
-        extra = raw.get("addressAdditionalInfo", {})
+        extra = raw.get("additionalInfo", {})
 
         zip_code = addr.get("ZIPCode", "")
         zip_ext = addr.get("ZIPPlus4", "") or ""

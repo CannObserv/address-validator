@@ -23,7 +23,7 @@ VALID_ADDRESS_RESPONSE = {
         "ZIPCode": "62701",
         "ZIPPlus4": "1234",
     },
-    "addressAdditionalInfo": {
+    "additionalInfo": {
         "DPVConfirmation": "Y",
         "vacant": "N",
         "business": "N",
@@ -177,7 +177,7 @@ class TestMapResponse:
                 "ZIPCode": "62701",
                 "ZIPPlus4": "1234",
             },
-            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
+            "additionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
         }
         result = USPSClient._map_response(raw)
         assert result["postal_code"] == "62701-1234"
@@ -190,7 +190,7 @@ class TestMapResponse:
                 "state": "IL",
                 "ZIPCode": "62701",
             },
-            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
+            "additionalInfo": {"DPVConfirmation": "Y", "vacant": "N"},
         }
         result = USPSClient._map_response(raw)
         assert result["postal_code"] == "62701"
@@ -204,7 +204,7 @@ class TestMapResponse:
                 "state": "IL",
                 "ZIPCode": "62701",
             },
-            "addressAdditionalInfo": {"DPVConfirmation": "S"},
+            "additionalInfo": {"DPVConfirmation": "S"},
         }
         result = USPSClient._map_response(raw)
         assert result["address_line_2"] == "APT 4"
@@ -217,12 +217,12 @@ class TestMapResponse:
                 "state": "IL",
                 "ZIPCode": "62701",
             },
-            "addressAdditionalInfo": {"DPVConfirmation": "Y", "vacant": "Y"},
+            "additionalInfo": {"DPVConfirmation": "Y", "vacant": "Y"},
         }
         result = USPSClient._map_response(raw)
         assert result["vacant"] == "Y"
 
     def test_map_response_no_street_returns_empty_address_line_1(self) -> None:
-        raw = {"address": {}, "addressAdditionalInfo": {"DPVConfirmation": "N"}}
+        raw = {"address": {}, "additionalInfo": {"DPVConfirmation": "N"}}
         result = USPSClient._map_response(raw)
         assert result["address_line_1"] == ""
