@@ -70,7 +70,29 @@ Commit with:
 docs: add <topic> design doc
 ```
 
-(Use `#<n> docs:` prefix if associated with a GitHub issue.)
+### Step 5b — Open GitHub issue
+
+After committing the design doc, immediately create a GitHub issue to track the work:
+
+```bash
+gh issue create \
+  --title "<topic — concise imperative phrase>" \
+  --body "$(cat <<'EOF'
+## Summary
+<1–3 sentence summary of what was designed>
+
+## Design doc
+`docs/plans/YYYY-MM-DD-<topic>-design.md`
+
+## Scope
+<bullet list of the key decisions / in-scope items from the design>
+EOF
+)"
+```
+
+- Title: short imperative phrase matching the design topic (e.g. "Add rate-limit header to validate endpoint")
+- Report the issue number to the user (e.g. "Opened #42")
+- Use `#<n> docs:` prefix on the Step 5 commit message if the issue number is known before committing; otherwise amend or note it in the issue body
 
 ### Step 6 — Transition to implementation
 
