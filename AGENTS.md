@@ -19,7 +19,6 @@ HTTP request
                                  usps_provider.py  OAuth2 + token bucket; DPV → status
                                  google_provider.py  API key; lat/lng; DPV → status
                                  chain_provider.py   ordered fallback across providers
-                                 errors.py           ProviderRateLimitedError sentinel
                                  _rate_limit.py      shared TokenBucket + retry helpers
 
 models.py           API contract source of truth

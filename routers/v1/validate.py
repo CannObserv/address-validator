@@ -76,7 +76,9 @@ router = APIRouter(
         "- `D` — building confirmed, secondary address not recognised\n"
         "- `N` — address not found\n\n"
         "When no validation provider is configured, `validation.status` is "
-        "`unavailable` and all other result fields are `null`."
+        "`unavailable` and all other result fields are `null`.\n\n"
+        "HTTP 503 is returned when all configured providers are currently "
+        "rate-limited and no further fallbacks are available."
     ),
 )
 async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:

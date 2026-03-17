@@ -86,6 +86,7 @@ def _get_usps_provider(key: str, secret: str, rate_limit_rps: float) -> USPSProv
     """Return the shared :class:`USPSProvider` singleton, creating it if needed."""
     global _usps_provider  # noqa: PLW0603
     if _usps_provider is None:
+        logger.debug("get_provider: creating USPSProvider singleton (%.1f rps)", rate_limit_rps)
         _usps_provider = USPSProvider(
             client=USPSClient(
                 consumer_key=key,
@@ -101,6 +102,7 @@ def _get_google_provider(api_key: str, rate_limit_rps: float) -> GoogleProvider:
     """Return the shared :class:`GoogleProvider` singleton, creating it if needed."""
     global _google_provider  # noqa: PLW0603
     if _google_provider is None:
+        logger.debug("get_provider: creating GoogleProvider singleton (%.1f rps)", rate_limit_rps)
         _google_provider = GoogleProvider(
             client=GoogleClient(
                 api_key=api_key,
@@ -129,8 +131,12 @@ def _build_single_provider(name: str) -> ValidationProvider:
                 "USPS_CONSUMER_KEY and USPS_CONSUMER_SECRET must be set "
                 "when 'usps' appears in VALIDATION_PROVIDER"
             )
-        rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
-        logger.debug("get_provider: building USPSProvider (%.1f rps)", rps)
+        try:
+            rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
+        except ValueError:
+            raise ValueError(
+                "USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')"
+            ) from None
         return _get_usps_provider(key, secret, rps)
 
     if name == "google":
@@ -139,8 +145,12 @@ def _build_single_provider(name: str) -> ValidationProvider:
             raise ValueError(
                 "GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER"
             )
-        rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
-        logger.debug("get_provider: building GoogleProvider (%.1f rps)", rps)
+        try:
+            rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
+        except ValueError:
+            raise ValueError(
+                "GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')"
+            ) from None
         return _get_google_provider(api_key, rps)
 
     raise ValueError(
@@ -152,7 +162,7 @@ def _resolve_provider() -> ValidationProvider:
     """Resolve the configured inner provider(s) from env vars."""
     provider_str = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()
 
-    names = [n.strip() for n in provider_str.split(",") if n.strip() and n.strip() != "none"]
+    names = [s for n in provider_str.split(",") if (s := n.strip()) and s != "none"]
 
     if not names:
         logger.debug("get_provider: using NullProvider")
