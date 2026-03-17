@@ -44,6 +44,10 @@ GOOGLE_API_KEY
 GOOGLE_RATE_LIMIT_RPS
     Maximum Google API requests per second.  Defaults to ``25.0`` (standard
     per-project quota).
+
+VALIDATION_CACHE_TTL_DAYS
+    Days before a cached result is treated as expired and re-validated via
+    the live provider.  Default ``30``.  Set to ``0`` to disable expiry.
 """
 
 import logging
@@ -117,7 +121,22 @@ def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
     """Return the shared :class:`CachingProvider` singleton wrapping *inner*."""
     global _caching_provider  # noqa: PLW0603
     if _caching_provider is None:
-        _caching_provider = CachingProvider(inner=inner, get_db=cache_db.get_db)
+        try:
+            ttl_days = int(os.environ.get("VALIDATION_CACHE_TTL_DAYS", "30"))
+        except ValueError:
+            raise ValueError(
+                "VALIDATION_CACHE_TTL_DAYS must be a non-negative integer "
+                "(e.g. '30'); use 0 to disable expiry"
+            ) from None
+        if ttl_days < 0:
+            raise ValueError(
+                "VALIDATION_CACHE_TTL_DAYS must be a non-negative integer "
+                "(e.g. '30'); use 0 to disable expiry"
+            )
+        logger.debug("get_provider: cache TTL=%d days (0=disabled)", ttl_days)
+        _caching_provider = CachingProvider(
+            inner=inner, get_db=cache_db.get_db, ttl_days=ttl_days
+        )
     return _caching_provider
 
 

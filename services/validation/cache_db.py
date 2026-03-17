@@ -36,7 +36,13 @@ CREATE TABLE IF NOT EXISTS validated_addresses (
     longitude        REAL,
     warnings_json    TEXT    NOT NULL DEFAULT '[]',
     created_at       TEXT    NOT NULL,
-    last_seen_at     TEXT    NOT NULL
+    last_seen_at     TEXT    NOT NULL,
+    validated_at     TEXT    NOT NULL          -- when provider last stored this result;
+                                               -- migrated DBs add this column as nullable via
+                                               -- ALTER TABLE and backfill from created_at
+                                               -- (expression DEFAULT datetime('now') is not used
+                                               -- because SQLite re-evaluates it at query time,
+                                               -- yielding a different value on every read)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_validated_addresses_canonical_key
@@ -82,4 +88,16 @@ async def close_db() -> None:
 
 async def _init_schema(db: aiosqlite.Connection) -> None:
     await db.executescript(_SCHEMA)
+    # Migration: add validated_at if DB predates this column (idempotent).
+    async with db.execute("PRAGMA table_info(validated_addresses)") as cur:
+        existing_columns = {row["name"] for row in await cur.fetchall()}
+    if "validated_at" not in existing_columns:
+        await db.execute(
+            "ALTER TABLE validated_addresses ADD COLUMN validated_at TEXT"
+        )
+        # Backfill: seed from created_at for all pre-existing rows.
+        await db.execute(
+            "UPDATE validated_addresses SET validated_at = created_at"
+        )
+        await db.commit()
     logger.debug("cache_db: schema initialised")

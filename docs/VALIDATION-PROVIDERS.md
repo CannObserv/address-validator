@@ -49,6 +49,16 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 | `USPS_RATE_LIMIT_RPS` | `5.0` | Matches USPS free-tier documented limit |
 | `GOOGLE_RATE_LIMIT_RPS` | `25.0` | Matches Google Address Validation default quota |
 
+## Cache TTL
+
+`VALIDATION_CACHE_TTL_DAYS` (default `30`) — days after which a cached result is re-validated via the live provider. Set to `0` to disable expiry (entries live indefinitely; backward-compatible opt-out).
+
+The TTL is checked against `validated_addresses.validated_at`, which records when a live provider last returned and stored this canonical result. This timestamp is **not** refreshed by cache hits — a frequently-queried entry still expires after `VALIDATION_CACHE_TTL_DAYS` days.
+
+`last_seen_at` continues to track query frequency for observability and is unrelated to expiry.
+
+**Existing deployments**: On first startup after this upgrade, `_init_schema` runs `ALTER TABLE … ADD COLUMN IF NOT EXISTS validated_at` and backfills `validated_at = created_at` for all pre-existing rows.
+
 ## Dynamic quota querying
 
 Neither USPS nor Google expose real-time quota/usage data through their validation APIs. USPS has no such endpoint. Google's quota data is in Cloud Monitoring — a separate GCP API requiring different credentials. Client-side token buckets and 429 detection are the reliable mechanism.

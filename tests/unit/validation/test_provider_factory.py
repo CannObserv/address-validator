@@ -207,3 +207,46 @@ class TestGetProvider:
         result = get_provider()
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, USPSProvider)
+
+    def test_ttl_days_default_is_30(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.delenv("VALIDATION_CACHE_TTL_DAYS", raising=False)
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert result._ttl_days == 30
+
+    def test_ttl_days_env_var_passed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "7")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert result._ttl_days == 7
+
+    def test_ttl_days_zero_allowed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "0")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert result._ttl_days == 0
+
+    def test_ttl_days_invalid_string_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "abc")
+        with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            get_provider()
+
+    def test_ttl_days_negative_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "-1")
+        with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            get_provider()

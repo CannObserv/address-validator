@@ -61,6 +61,7 @@ Env vars in `/etc/address-validator/env`:
 | `GOOGLE_API_KEY` | string | — |
 | `GOOGLE_RATE_LIMIT_RPS` | float | `25.0` |
 | `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |
+| `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 
@@ -115,7 +116,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `auth.py` | API key read once at import time |
 | `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures |
 | `services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
-| `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries |
+| `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows |
 | `services/validation/chain_provider.py` | Only catches `ProviderRateLimitedError` — other exceptions propagate immediately without trying further providers |
 | `services/validation/_rate_limit.py` | `_RETRY_MAX` and backoff constants affect all provider clients; raising these increases latency under throttling |
 

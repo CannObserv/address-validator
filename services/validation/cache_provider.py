@@ -4,14 +4,16 @@ Lookup algorithm
 ----------------
 1. Hash the standardised input components → ``pattern_key``
 2. SELECT from ``query_patterns`` WHERE ``pattern_key = ?``
-3. HIT  → deserialise the linked ``validated_addresses`` row; return immediately
+3. HIT  → fetch the linked ``validated_addresses`` row
+   a. TTL check: if ``ttl_days > 0`` and ``validated_at`` older than threshold → treat as miss
+   b. Update ``last_seen_at``; return deserialised row
 4. MISS → delegate to ``inner.validate(std)``
 
 Store algorithm
 ---------------
 1. Skip entirely when ``result.validation.status == "unavailable"``
 2. Hash the provider-returned address fields → ``canonical_key``
-3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at)
+3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at and validated_at)
 4. INSERT OR IGNORE into ``query_patterns``
 
 The parse → standardise pipeline already normalises casing, abbreviations, and
@@ -23,7 +25,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
@@ -121,6 +123,7 @@ def _row_to_response(row: aiosqlite.Row) -> ValidateResponseV1:
 async def _lookup(
     db: aiosqlite.Connection,
     pattern_key: str,
+    ttl_days: int,
 ) -> ValidateResponseV1 | None:
     async with db.execute(
         "SELECT canonical_key FROM query_patterns WHERE pattern_key = ?",
@@ -152,6 +155,18 @@ async def _lookup(
         await db.commit()
         return None
 
+    if ttl_days:
+        cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
+        validated_at_str = va_row["validated_at"] or va_row["created_at"]
+        if datetime.fromisoformat(validated_at_str) < cutoff:
+            logger.debug(
+                "cache_lookup: expired pattern_key=%s canonical_key=%s validated_at=%s",
+                pattern_key,
+                canonical_key,
+                validated_at_str,
+            )
+            return None
+
     await db.execute(
         "UPDATE validated_addresses SET last_seen_at = ? WHERE canonical_key = ?",
         (_now_iso(), canonical_key),
@@ -182,10 +197,12 @@ async def _store(
             (canonical_key, provider, status, dpv_match_code,
              address_line_1, address_line_2, city, region, postal_code, country,
              validated, components_json, latitude, longitude,
-             warnings_json, created_at, last_seen_at)
+             warnings_json, created_at, last_seen_at, validated_at)
         VALUES
-            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(canonical_key) DO UPDATE SET last_seen_at = excluded.last_seen_at
+            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(canonical_key) DO UPDATE SET
+            last_seen_at = excluded.last_seen_at,
+            validated_at = excluded.validated_at
         """,
         (
             canonical_key,
@@ -203,6 +220,7 @@ async def _store(
             result.latitude,
             result.longitude,
             warnings_json,
+            now,
             now,
             now,
         ),
@@ -246,16 +264,18 @@ class CachingProvider:
         self,
         inner: ValidationProvider,
         get_db: Callable[[], Awaitable[aiosqlite.Connection]],
+        ttl_days: int = 30,
     ) -> None:
         self._inner = inner
         self._get_db = get_db
+        self._ttl_days = ttl_days
 
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
         """Check the cache; delegate to inner provider on miss; store the result."""
         db = await self._get_db()
         pattern_key = _make_pattern_key(std)
 
-        cached = await _lookup(db, pattern_key)
+        cached = await _lookup(db, pattern_key, self._ttl_days)
         if cached is not None:
             return cached
 

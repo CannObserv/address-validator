@@ -71,6 +71,76 @@ class TestSchema:
         assert "idx_validated_addresses_canonical_key" in indexes
         assert "idx_query_patterns_pattern_key" in indexes
 
+    async def test_validated_at_column_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_CACHE_DB", ":memory:")
+        db = await get_db()
+
+        async with db.execute("PRAGMA table_info(validated_addresses)") as cur:
+            columns = {row["name"] for row in await cur.fetchall()}
+
+        assert "validated_at" in columns
+
+    async def test_migration_backfills_validated_at(self) -> None:
+        """Rows that predate the validated_at column are backfilled to created_at."""
+        # Simulate an old DB: create the table without validated_at, insert rows,
+        # then run _init_schema to exercise the migration path.
+        conn = await aiosqlite.connect(":memory:")
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys=ON")
+
+        created_at = "2025-01-15T12:00:00+00:00"
+        await conn.executescript(
+            """
+            CREATE TABLE validated_addresses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                canonical_key TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                status TEXT NOT NULL,
+                dpv_match_code TEXT,
+                address_line_1 TEXT,
+                address_line_2 TEXT,
+                city TEXT,
+                region TEXT,
+                postal_code TEXT,
+                country TEXT NOT NULL,
+                validated TEXT,
+                components_json TEXT,
+                latitude REAL,
+                longitude REAL,
+                warnings_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX idx_validated_addresses_canonical_key
+                ON validated_addresses (canonical_key);
+            CREATE TABLE query_patterns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pattern_key TEXT NOT NULL,
+                canonical_key TEXT NOT NULL REFERENCES validated_addresses(canonical_key),
+                created_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX idx_query_patterns_pattern_key
+                ON query_patterns (pattern_key);
+            """
+        )
+        await conn.execute(
+            "INSERT INTO validated_addresses "
+            "(canonical_key, provider, status, country, warnings_json, created_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("ck-test", "usps", "confirmed", "US", "[]", created_at, created_at),
+        )
+        await conn.commit()
+
+        await _init_schema(conn)  # should add validated_at and backfill
+
+        async with conn.execute(
+            "SELECT validated_at FROM validated_addresses WHERE canonical_key = 'ck-test'"
+        ) as cur:
+            row = await cur.fetchone()
+        await conn.close()
+
+        assert row["validated_at"] == created_at
+
     async def test_foreign_keys_enforced(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Inserting a query_pattern referencing a non-existent canonical_key should fail."""
         monkeypatch.setenv("VALIDATION_CACHE_DB", ":memory:")

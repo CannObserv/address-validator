@@ -1,5 +1,6 @@
 """Unit tests for CachingProvider."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import aiosqlite
@@ -108,6 +109,13 @@ def _make_provider(response: ValidateResponseV1) -> AsyncMock:
     inner = AsyncMock()
     inner.validate = AsyncMock(return_value=response)
     return inner
+
+
+async def _backdate_validated_at(db: aiosqlite.Connection, days_ago: int) -> None:
+    """Set validated_at on all validated_addresses rows to `days_ago` days in the past."""
+    ts = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat()
+    await db.execute("UPDATE validated_addresses SET validated_at = ?", (ts,))
+    await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -337,6 +345,109 @@ class TestDbErrorPropagates:
 
         with pytest.raises(RuntimeError, match="db unavailable"):
             await provider.validate(_make_std())
+
+
+class TestTTLExpiry:
+    async def test_fresh_entry_within_ttl_is_a_hit(self, db: aiosqlite.Connection) -> None:
+        """An entry stored moments ago is not expired; inner is not called on second validate."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=30)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        inner.validate.reset_mock()
+        result = await provider.validate(std)  # hit — fresh
+
+        inner.validate.assert_not_awaited()
+        assert result.validation.status == "confirmed"
+
+    async def test_expired_entry_treated_as_miss(self, db: aiosqlite.Connection) -> None:
+        """An entry older than ttl_days is re-validated via the inner provider."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=30)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        await _backdate_validated_at(db, days_ago=31)
+        inner.validate.reset_mock()
+        await provider.validate(std)  # expired — should call inner
+
+        inner.validate.assert_awaited_once()
+
+    async def test_expired_entry_refreshes_cache(self, db: aiosqlite.Connection) -> None:
+        """After expiry, re-validation refreshes validated_at; the next call is a hit."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=30)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores, validated_at = now
+        await _backdate_validated_at(db, days_ago=31)
+
+        # Second call: expired → inner called → _store refreshes validated_at to now
+        result2 = await provider.validate(std)
+
+        # Third call: fresh validated_at → hit, inner NOT called
+        inner.validate.reset_mock()
+        result3 = await provider.validate(std)
+
+        assert result2.validation.status == "confirmed"
+        assert result3.validation.status == "confirmed"
+        inner.validate.assert_not_awaited()
+
+    async def test_ttl_zero_disables_expiry(self, db: aiosqlite.Connection) -> None:
+        """ttl_days=0 means no expiry regardless of entry age."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=0)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        await _backdate_validated_at(db, days_ago=365)
+        inner.validate.reset_mock()
+        await provider.validate(std)  # should still be a hit
+
+        inner.validate.assert_not_awaited()
+
+    async def test_one_day_short_of_ttl_is_a_hit(self, db: aiosqlite.Connection) -> None:
+        """An entry 29 days old is not expired when ttl_days=30."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=30)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        await _backdate_validated_at(db, days_ago=29)
+        inner.validate.reset_mock()
+        await provider.validate(std)  # should be a hit
+
+        inner.validate.assert_not_awaited()
+
+    async def test_last_seen_at_still_updated_on_hit(self, db: aiosqlite.Connection) -> None:
+        """Cache hits update last_seen_at; validated_at is unchanged."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db), ttl_days=30)
+        std = _make_std()
+
+        await provider.validate(std)  # miss
+
+        # Record the validated_at written by _store
+        async with db.execute("SELECT validated_at FROM validated_addresses") as cur:
+            row = await cur.fetchone()
+        validated_at_before = row["validated_at"]
+
+        await provider.validate(std)  # hit — should bump last_seen_at, not validated_at
+
+        async with db.execute(
+            "SELECT last_seen_at, validated_at FROM validated_addresses"
+        ) as cur:
+            row = await cur.fetchone()
+
+        assert row["validated_at"] == validated_at_before
+        assert row["last_seen_at"] >= validated_at_before  # bumped on hit
 
 
 class TestKeyHelpers:
