@@ -1,6 +1,7 @@
 """Address Validator — FastAPI application entry point."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from routers.v1 import parse as v1_parse
 from routers.v1 import standardize as v1_standardize
 from routers.v1 import validate as v1_validate
 from routers.v1.core import APIError, api_error_response
+from services.validation.cache_db import close_db
 
 _DESCRIPTION = """
 Parse and standardize physical addresses.
@@ -37,7 +39,15 @@ _TAGS = [
     },
 ]
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """FastAPI lifespan context — close the validation cache DB on shutdown."""
+    yield
+    await close_db()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Address Validator API",
     description=_DESCRIPTION,
     # Service version (semver). Bumped to 2.0.0 when unversioned /api/* routes

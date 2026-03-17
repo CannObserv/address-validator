@@ -36,6 +36,8 @@ import os
 
 import httpx
 
+from services.validation import cache_db
+from services.validation.cache_provider import CachingProvider
 from services.validation.google_client import GoogleClient
 from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
@@ -51,6 +53,7 @@ logger = logging.getLogger(__name__)
 _http_client: httpx.AsyncClient | None = None
 _usps_provider: USPSProvider | None = None
 _google_provider: GoogleProvider | None = None
+_caching_provider: CachingProvider | None = None
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -90,14 +93,16 @@ def _get_google_provider(api_key: str) -> GoogleProvider:
     return _google_provider
 
 
-def get_provider() -> ValidationProvider:
-    """Return the configured :class:`ValidationProvider`.
+def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
+    """Return the shared :class:`CachingProvider` singleton wrapping *inner*."""
+    global _caching_provider  # noqa: PLW0603
+    if _caching_provider is None:
+        _caching_provider = CachingProvider(inner=inner, get_db=cache_db.get_db)
+    return _caching_provider
 
-    The USPS and Google providers and their underlying HTTP client are
-    module-level singletons so the token cache and rate-limiter state are
-    shared across all requests.  NullProvider is stateless and is constructed
-    cheaply on each call.
-    """
+
+def _resolve_provider() -> ValidationProvider:
+    """Resolve the configured inner provider from env vars."""
     provider_name = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()
 
     if provider_name in ("none", ""):
@@ -126,3 +131,22 @@ def get_provider() -> ValidationProvider:
         f"Unknown VALIDATION_PROVIDER value: '{provider_name}'. "
         "Supported values: 'none', 'usps', 'google'."
     )
+
+
+def get_provider() -> ValidationProvider:
+    """Return the configured :class:`ValidationProvider`.
+
+    The USPS and Google providers and their underlying HTTP client are
+    module-level singletons so the token cache and rate-limiter state are
+    shared across all requests.  NullProvider is stateless and is constructed
+    cheaply on each call.
+
+    Non-null providers are wrapped in a :class:`CachingProvider` that checks
+    the local SQLite validation cache before delegating to the real backend.
+    NullProvider is returned unwrapped — it returns ``status="unavailable"``
+    and caching its results provides no benefit.
+    """
+    inner = _resolve_provider()
+    if isinstance(inner, NullProvider):
+        return inner
+    return _get_caching_provider(inner)

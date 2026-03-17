@@ -56,6 +56,7 @@ Env vars in `/etc/address-validator/env`:
 | `USPS_CONSUMER_KEY` | string | — |
 | `USPS_CONSUMER_SECRET` | string | — |
 | `GOOGLE_API_KEY` | string | — |
+| `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 

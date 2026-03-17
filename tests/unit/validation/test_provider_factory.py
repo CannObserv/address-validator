@@ -2,7 +2,9 @@
 
 import pytest
 
+import services.validation.cache_db as cache_db_module
 import services.validation.factory as factory_module
+from services.validation.cache_provider import CachingProvider
 from services.validation.factory import get_provider
 from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
@@ -10,15 +12,19 @@ from services.validation.usps_provider import USPSProvider
 
 
 @pytest.fixture(autouse=True)
-def reset_singletons() -> None:
+async def reset_singletons() -> None:
     """Reset module-level provider singletons between tests."""
     factory_module._usps_provider = None
     factory_module._google_provider = None
     factory_module._http_client = None
+    factory_module._caching_provider = None
+    await cache_db_module.close_db()
     yield
     factory_module._usps_provider = None
     factory_module._google_provider = None
     factory_module._http_client = None
+    factory_module._caching_provider = None
+    await cache_db_module.close_db()
 
 
 class TestGetProvider:
@@ -38,13 +44,17 @@ class TestGetProvider:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        assert isinstance(get_provider(), USPSProvider)
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, USPSProvider)
 
     def test_usps_keyword_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "USPS")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        assert isinstance(get_provider(), USPSProvider)
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, USPSProvider)
 
     def test_usps_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """get_provider() must return the same USPSProvider instance each call."""
@@ -68,12 +78,16 @@ class TestGetProvider:
     def test_google_keyword_gives_google_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        assert isinstance(get_provider(), GoogleProvider)
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, GoogleProvider)
 
     def test_google_keyword_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "GOOGLE")
         monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        assert isinstance(get_provider(), GoogleProvider)
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, GoogleProvider)
 
     def test_google_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
@@ -90,3 +104,35 @@ class TestGetProvider:
         monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
         with pytest.raises(ValueError, match="google"):
             get_provider()
+
+    # NullProvider is NOT wrapped in CachingProvider
+    def test_null_provider_returned_unwrapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
+        result = get_provider()
+        assert isinstance(result, NullProvider)
+        assert not isinstance(result, CachingProvider)
+
+    def test_usps_provider_wrapped_in_caching_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, USPSProvider)
+
+    def test_google_provider_wrapped_in_caching_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, GoogleProvider)
+
+    def test_caching_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        assert get_provider() is get_provider()
