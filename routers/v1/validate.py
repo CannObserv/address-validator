@@ -40,6 +40,7 @@ from models import ErrorResponse, ValidateRequestV1, ValidateResponseV1
 from routers.v1.core import APIError, check_country
 from services.parser import parse_address
 from services.standardizer import standardize
+from services.validation.errors import ProviderRateLimitedError
 from services.validation.factory import get_provider
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ router = APIRouter(
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
     summary="Validate an address against an authoritative source",
     description=(
@@ -106,7 +108,14 @@ async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
 
     provider = get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
-    result = await provider.validate(std)
+    try:
+        result = await provider.validate(std)
+    except ProviderRateLimitedError:
+        raise APIError(
+            status_code=503,
+            error="provider_rate_limited",
+            message="All configured validation providers are currently rate-limited. Retry later.",
+        ) from None
 
     if std.warnings:
         result = result.model_copy(update={"warnings": std.warnings + result.warnings})

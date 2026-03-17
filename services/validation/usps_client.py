@@ -1,8 +1,9 @@
 """Low-level USPS Addresses API v3 HTTP client.
 
-Handles OAuth2 client-credentials token acquisition and caching, a simple
-token-bucket rate limiter (5 req/s matching the free-tier limit), and
-mapping of the raw USPS JSON response to a normalised dict consumed by
+Handles OAuth2 client-credentials token acquisition and caching, a token-bucket
+rate limiter (configurable, default 5 req/s matching the free-tier limit),
+exponential-backoff retry on HTTP 429, and mapping of the raw USPS JSON
+response to a normalised dict consumed by
 :class:`~services.validation.usps_provider.USPSProvider`.
 
 Callers should not instantiate this class directly; use
@@ -13,10 +14,17 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from time import monotonic
 from typing import Any
 
 import httpx
+
+from services.validation._rate_limit import (
+    _HTTP_TOO_MANY_REQUESTS,
+    _RETRY_MAX,
+    _parse_retry_after,
+    _TokenBucket,
+)
+from services.validation.errors import ProviderRateLimitedError
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +35,7 @@ _ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
 _TOKEN_REFRESH_BUFFER_S = 60
 
 # Free-tier rate limit: 5 requests/second.
-_RATE_LIMIT_RPS = 5.0
+_DEFAULT_RATE_LIMIT_RPS = 5.0
 
 
 @dataclass
@@ -41,34 +49,6 @@ class USPSToken:
         return datetime.now(tz=UTC) >= self.expires_at
 
 
-class _TokenBucket:
-    """Minimal async token-bucket rate limiter.
-
-    The :class:`asyncio.Lock` is created at instantiation time inside
-    the instance so it is always bound to the correct running event loop.
-    """
-
-    def __init__(self, rate: float, capacity: float) -> None:
-        self.rate = rate
-        self.capacity = capacity
-        self._tokens = capacity
-        self._last_refill = monotonic()
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> None:
-        async with self._lock:
-            now = monotonic()
-            elapsed = now - self._last_refill
-            self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
-            self._last_refill = now
-            if self._tokens < 1:
-                wait = (1 - self._tokens) / self.rate
-                await asyncio.sleep(wait)
-                self._tokens = 0.0
-            else:
-                self._tokens -= 1.0
-
-
 class USPSClient:
     """Async USPS Addresses API v3 client.
 
@@ -80,6 +60,9 @@ class USPSClient:
         OAuth2 client secret.
     http_client:
         Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
+    rate_limit_rps:
+        Maximum requests per second sent to the USPS API.  Defaults to
+        ``5.0`` (free-tier limit).  Set via ``USPS_RATE_LIMIT_RPS`` env var.
     """
 
     def __init__(
@@ -87,13 +70,14 @@ class USPSClient:
         consumer_key: str,
         consumer_secret: str,
         http_client: httpx.AsyncClient,
+        rate_limit_rps: float = _DEFAULT_RATE_LIMIT_RPS,
     ) -> None:
         self._consumer_key = consumer_key
         self._consumer_secret = consumer_secret
         self._http = http_client
         self._token: USPSToken | None = None
         self._token_lock = asyncio.Lock()
-        self._rate_limiter = _TokenBucket(rate=_RATE_LIMIT_RPS, capacity=_RATE_LIMIT_RPS)
+        self._rate_limiter = _TokenBucket(rate=rate_limit_rps, capacity=rate_limit_rps)
 
     async def _get_token(self) -> str:
         """Return a valid access token, fetching a new one if needed.
@@ -135,15 +119,18 @@ class USPSClient:
     ) -> dict[str, Any]:
         """Validate a single US address via the USPS Addresses API v3.
 
+        Retries up to :data:`~services.validation._rate_limit._RETRY_MAX` times
+        on HTTP 429, honouring the ``Retry-After`` header when present and
+        falling back to exponential backoff.  Raises
+        :class:`~services.validation.errors.ProviderRateLimitedError` when all
+        retries are exhausted.
+
         Returns a normalised dict with keys:
         ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
         ``city``, ``region``, ``postal_code``, ``vacant``.
 
-        Raises :class:`httpx.HTTPStatusError` on non-2xx responses.
+        Raises :class:`httpx.HTTPStatusError` on non-429 non-2xx responses.
         """
-        await self._rate_limiter.acquire()
-        token = await self._get_token()
-
         params: dict[str, str] = {"streetAddress": street_address}
         if city:
             params["city"] = city
@@ -152,15 +139,35 @@ class USPSClient:
         if zip_code:
             params["ZIPCode"] = zip_code
 
-        resp = await self._http.get(
-            _ADDRESS_URL,
-            headers={"Authorization": f"Bearer {token}"},
-            params=params,
-        )
-        resp.raise_for_status()
-        raw: dict[str, Any] = resp.json()
+        for attempt in range(_RETRY_MAX + 1):
+            await self._rate_limiter.acquire()
+            token = await self._get_token()
+            resp = await self._http.get(
+                _ADDRESS_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                params=params,
+            )
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
+                    if attempt < _RETRY_MAX:
+                        delay = _parse_retry_after(exc.response, attempt)
+                        logger.warning(
+                            "USPSClient: 429 received, retrying in %.1fs (attempt %d/%d)",
+                            delay,
+                            attempt + 1,
+                            _RETRY_MAX,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    raise ProviderRateLimitedError("usps") from exc
+                raise
 
-        return self._map_response(raw)
+            raw: dict[str, Any] = resp.json()
+            return self._map_response(raw)
+
+        raise ProviderRateLimitedError("usps")  # unreachable, satisfies type checker
 
     @staticmethod
     def _map_response(raw: dict[str, Any]) -> dict[str, Any]:

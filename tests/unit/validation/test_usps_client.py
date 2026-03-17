@@ -2,11 +2,13 @@
 
 import asyncio
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from services.validation._rate_limit import _RETRY_MAX
+from services.validation.errors import ProviderRateLimitedError
 from services.validation.usps_client import USPSClient, USPSToken
 
 TOKEN_RESPONSE = {
@@ -158,13 +160,83 @@ class TestUSPSClient:
     async def test_http_error_propagates(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 500
         bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "404", request=MagicMock(), response=MagicMock()
+            "500", request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
 
         with pytest.raises(httpx.HTTPStatusError):
             await client.validate_address("999 Fake St", "Nowhere", "IL")
+
+    @pytest.mark.asyncio
+    async def test_429_raises_provider_rate_limited_error_after_retries(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        mock_http.get.return_value = bad_resp
+
+        with patch("services.validation.usps_client.asyncio.sleep"), pytest.raises(
+            ProviderRateLimitedError
+        ) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+
+    @pytest.mark.asyncio
+    async def test_429_retries_before_giving_up(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        mock_http.get.return_value = bad_resp
+
+        with patch("services.validation.usps_client.asyncio.sleep"), pytest.raises(
+            ProviderRateLimitedError
+        ):
+            await client.validate_address("123 Main St", "Springfield", "IL")
+
+        # _RETRY_MAX retries + 1 initial attempt
+        assert mock_http.get.call_count == _RETRY_MAX + 1
+
+    @pytest.mark.asyncio
+    async def test_429_then_success_returns_result(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        good_resp = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        mock_http.get.side_effect = [bad_resp, good_resp]
+
+        with patch("services.validation.usps_client.asyncio.sleep"):
+            result = await client.validate_address("123 Main St", "Springfield", "IL")
+        assert result["dpv_match_code"] == "Y"
+
+    @pytest.mark.asyncio
+    async def test_accepts_custom_rate_limit_rps(self, mock_http: AsyncMock) -> None:
+        client = USPSClient(
+            consumer_key="key",
+            consumer_secret="secret",
+            http_client=mock_http,
+            rate_limit_rps=10.0,
+        )
+        assert client._rate_limiter.rate == 10.0
 
 
 class TestMapResponse:

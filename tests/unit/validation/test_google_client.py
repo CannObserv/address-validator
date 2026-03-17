@@ -1,10 +1,12 @@
 """Unit tests for GoogleClient — response mapping and request construction."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from services.validation._rate_limit import _RETRY_MAX, _TokenBucket
+from services.validation.errors import ProviderRateLimitedError
 from services.validation.google_client import GoogleClient
 
 API_KEY = "test-api-key"
@@ -219,3 +221,79 @@ class TestGoogleClientValidateAddress:
         mock_http.post.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):
             await client.validate_address("123 Main St")
+
+    @pytest.mark.asyncio
+    async def test_non_429_status_error_propagates(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 403
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "403", request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+        with pytest.raises(httpx.HTTPStatusError):
+            await client.validate_address("123 Main St")
+
+    @pytest.mark.asyncio
+    async def test_429_raises_provider_rate_limited_error_after_retries(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+
+        with patch("services.validation.google_client.asyncio.sleep"), pytest.raises(
+            ProviderRateLimitedError
+        ) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+
+    @pytest.mark.asyncio
+    async def test_429_retries_before_giving_up(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+
+        with patch("services.validation.google_client.asyncio.sleep"), pytest.raises(
+            ProviderRateLimitedError
+        ):
+            await client.validate_address("123 Main St")
+        assert mock_http.post.call_count == _RETRY_MAX + 1
+
+    @pytest.mark.asyncio
+    async def test_429_then_success_returns_result(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 429
+        bad_resp.headers = {}
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "429", request=MagicMock(), response=bad_resp
+        )
+        good_resp = self._make_response(GOOGLE_RESPONSE_Y)
+        mock_http.post.side_effect = [bad_resp, good_resp]
+
+        with patch("services.validation.google_client.asyncio.sleep"):
+            result = await client.validate_address("123 Main St")
+        assert result["dpv_match_code"] == "Y"
+
+    @pytest.mark.asyncio
+    async def test_has_rate_limiter(self, mock_http: AsyncMock) -> None:
+        client = GoogleClient(api_key=API_KEY, http_client=mock_http)
+        assert isinstance(client._rate_limiter, _TokenBucket)
+
+    @pytest.mark.asyncio
+    async def test_accepts_custom_rate_limit_rps(self, mock_http: AsyncMock) -> None:
+        client = GoogleClient(api_key=API_KEY, http_client=mock_http, rate_limit_rps=50.0)
+        assert client._rate_limiter.rate == 50.0

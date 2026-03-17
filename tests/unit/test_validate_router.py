@@ -11,6 +11,7 @@ from models import (
     ValidateResponseV1,
     ValidationResult,
 )
+from services.validation.errors import ProviderRateLimitedError
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -211,6 +212,19 @@ class TestValidateEndpoint:
             json={"address": "A" * 1001},
         )
         assert resp.status_code == 422
+
+    def test_provider_rate_limited_returns_503(self, client: TestClient) -> None:
+        rate_limited = AsyncMock()
+        rate_limited.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("all")
+        )
+        with patch("routers.v1.validate.get_provider", return_value=rate_limited):
+            resp = client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St, Springfield, IL 62701"},
+            )
+        assert resp.status_code == 503
+        assert resp.json()["error"] == "provider_rate_limited"
 
 
 def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:

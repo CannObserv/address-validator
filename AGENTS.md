@@ -18,6 +18,9 @@ HTTP request
                                  null_provider.py  default no-op
                                  usps_provider.py  OAuth2 + token bucket; DPV → status
                                  google_provider.py  API key; lat/lng; DPV → status
+                                 chain_provider.py   ordered fallback across providers
+                                 errors.py           ProviderRateLimitedError sentinel
+                                 _rate_limit.py      shared TokenBucket + retry helpers
 
 models.py           API contract source of truth
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
@@ -52,10 +55,12 @@ Env vars in `/etc/address-validator/env`:
 
 | Variable | Values | Default |
 |---|---|---|
-| `VALIDATION_PROVIDER` | `none`, `usps`, `google` | `none` |
+| `VALIDATION_PROVIDER` | `none`, `usps`, `google`, or comma-sep list e.g. `usps,google` | `none` |
 | `USPS_CONSUMER_KEY` | string | — |
 | `USPS_CONSUMER_SECRET` | string | — |
+| `USPS_RATE_LIMIT_RPS` | float | `5.0` |
 | `GOOGLE_API_KEY` | string | — |
+| `GOOGLE_RATE_LIMIT_RPS` | float | `25.0` |
 | `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
@@ -112,6 +117,8 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures |
 | `services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
 | `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries |
+| `services/validation/chain_provider.py` | Only catches `ProviderRateLimitedError` — other exceptions propagate immediately without trying further providers |
+| `services/validation/_rate_limit.py` | `_RETRY_MAX` and backoff constants affect all provider clients; raising these increases latency under throttling |
 
 ## Commit convention
 

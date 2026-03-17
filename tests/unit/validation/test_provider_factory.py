@@ -5,6 +5,7 @@ import pytest
 import services.validation.cache_db as cache_db_module
 import services.validation.factory as factory_module
 from services.validation.cache_provider import CachingProvider
+from services.validation.chain_provider import ChainProvider
 from services.validation.factory import get_provider
 from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
@@ -136,3 +137,73 @@ class TestGetProvider:
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         assert get_provider() is get_provider()
+
+    def test_comma_separated_list_gives_chain_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, ChainProvider)
+
+    def test_chain_contains_usps_then_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        chain = result._inner
+        assert isinstance(chain, ChainProvider)
+        assert isinstance(chain._providers[0], USPSProvider)
+        assert isinstance(chain._providers[1], GoogleProvider)
+
+    def test_chain_google_then_usps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google,usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        chain = result._inner
+        assert isinstance(chain, ChainProvider)
+        assert isinstance(chain._providers[0], GoogleProvider)
+        assert isinstance(chain._providers[1], USPSProvider)
+
+    def test_usps_rate_limit_rps_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "10.0")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        usps: USPSProvider = result._inner  # type: ignore[assignment]
+        assert usps._client._rate_limiter.rate == 10.0
+
+    def test_google_rate_limit_rps_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "50.0")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        google: GoogleProvider = result._inner  # type: ignore[assignment]
+        assert google._client._rate_limiter.rate == 50.0
+
+    def test_unknown_provider_in_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,smarty")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        with pytest.raises(ValueError, match="smarty"):
+            get_provider()
+
+    def test_none_mixed_with_valid_gives_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # "none" tokens are filtered out; "usps" remains
+        monkeypatch.setenv("VALIDATION_PROVIDER", "none,usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        result = get_provider()
+        assert isinstance(result, CachingProvider)
+        assert isinstance(result._inner, USPSProvider)
