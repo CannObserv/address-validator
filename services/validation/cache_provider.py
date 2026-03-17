@@ -105,7 +105,7 @@ def _row_to_response(row: aiosqlite.Row) -> ValidateResponseV1:
         validation=ValidationResult(
             status=row["status"],
             dpv_match_code=row["dpv_match_code"],
-            provider=row["provider"],
+            provider=row["provider"] or None,
         ),
         latitude=row["latitude"],
         longitude=row["longitude"],

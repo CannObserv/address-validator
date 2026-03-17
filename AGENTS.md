@@ -109,7 +109,9 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `models.py` | Breaking API change if field names/types change |
 | `usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `auth.py` | API key read once at import time |
-| `services/validation/factory.py` | Module-level singletons — reset to `None` in test fixtures |
+| `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures |
+| `services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
+| `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries |
 
 ## Commit convention
 
