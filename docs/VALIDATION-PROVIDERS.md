@@ -22,7 +22,7 @@ VALIDATION_PROVIDER=usps
 VALIDATION_PROVIDER=usps,google
 ```
 
-When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v1/validate` endpoint returns HTTP 503.
+When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v1/validate` endpoint returns HTTP 429 with a `Retry-After` header.
 
 ## USPS provider
 

@@ -134,9 +134,7 @@ def _build_single_provider(name: str) -> ValidationProvider:
         try:
             rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
         except ValueError:
-            raise ValueError(
-                "USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')"
-            ) from None
+            raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')") from None
         return _get_usps_provider(key, secret, rps)
 
     if name == "google":

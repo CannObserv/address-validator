@@ -152,18 +152,14 @@ class TestUSPSProvider:
         assert result.validated == "123 MAIN ST  SPRINGFIELD, IL 62701-1234"
 
     @pytest.mark.asyncio
-    async def test_lat_lng_are_none(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_lat_lng_are_none(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std())
         assert result.latitude is None
         assert result.longitude is None
 
     @pytest.mark.asyncio
-    async def test_warnings_is_empty(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_warnings_is_empty(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std())
         assert result.warnings == []
@@ -195,9 +191,7 @@ class TestUSPSProvider:
         )
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):
             await provider.validate(_make_std())

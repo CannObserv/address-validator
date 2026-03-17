@@ -182,9 +182,10 @@ class TestUSPSClient:
         )
         mock_http.get.return_value = bad_resp
 
-        with patch("services.validation.usps_client.asyncio.sleep"), pytest.raises(
-            ProviderRateLimitedError
-        ) as exc_info:
+        with (
+            patch("services.validation.usps_client.asyncio.sleep"),
+            pytest.raises(ProviderRateLimitedError) as exc_info,
+        ):
             await client.validate_address("123 Main St", "Springfield", "IL")
         assert exc_info.value.provider == "usps"
 
@@ -201,8 +202,9 @@ class TestUSPSClient:
         )
         mock_http.get.return_value = bad_resp
 
-        with patch("services.validation.usps_client.asyncio.sleep"), pytest.raises(
-            ProviderRateLimitedError
+        with (
+            patch("services.validation.usps_client.asyncio.sleep"),
+            pytest.raises(ProviderRateLimitedError),
         ):
             await client.validate_address("123 Main St", "Springfield", "IL")
 

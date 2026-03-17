@@ -45,9 +45,7 @@ class TestValidateEndpoint:
         assert body["validation"]["status"] == "unavailable"
         assert body["api_version"] == "1"
 
-    def test_raw_string_provider_receives_standardize_response(
-        self, client: TestClient
-    ) -> None:
+    def test_raw_string_provider_receives_standardize_response(self, client: TestClient) -> None:
         provider = _make_null_provider(NULL_RESPONSE)
         with patch("routers.v1.validate.get_provider", return_value=provider):
             client.post(
@@ -173,9 +171,7 @@ class TestValidateEndpoint:
         assert resp.status_code == 400
         assert resp.json()["error"] == "components_or_address_required"
 
-    def test_empty_components_dict_falls_through_to_address_error(
-        self, client: TestClient
-    ) -> None:
+    def test_empty_components_dict_falls_through_to_address_error(self, client: TestClient) -> None:
         # Empty components dict + no address → 400
         resp = client.post(
             "/api/v1/validate",
@@ -213,18 +209,17 @@ class TestValidateEndpoint:
         )
         assert resp.status_code == 422
 
-    def test_provider_rate_limited_returns_503(self, client: TestClient) -> None:
+    def test_provider_rate_limited_returns_429(self, client: TestClient) -> None:
         rate_limited = AsyncMock()
-        rate_limited.validate = AsyncMock(
-            side_effect=ProviderRateLimitedError("all")
-        )
+        rate_limited.validate = AsyncMock(side_effect=ProviderRateLimitedError("all"))
         with patch("routers.v1.validate.get_provider", return_value=rate_limited):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
             )
-        assert resp.status_code == 503
+        assert resp.status_code == 429
         assert resp.json()["error"] == "provider_rate_limited"
+        assert resp.headers["retry-after"] == "1"
 
 
 def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:
@@ -302,9 +297,7 @@ class TestValidateRequestV1Model:
         assert req.components is None
 
     def test_accepts_components_dict(self) -> None:
-        req = ValidateRequestV1(
-            components={"address_number": "123", "street_name": "MAIN"}
-        )
+        req = ValidateRequestV1(components={"address_number": "123", "street_name": "MAIN"})
         assert req.components == {"address_number": "123", "street_name": "MAIN"}
         assert req.address is None
 

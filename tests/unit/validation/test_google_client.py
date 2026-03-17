@@ -247,9 +247,10 @@ class TestGoogleClientValidateAddress:
         )
         mock_http.post.return_value = bad_resp
 
-        with patch("services.validation.google_client.asyncio.sleep"), pytest.raises(
-            ProviderRateLimitedError
-        ) as exc_info:
+        with (
+            patch("services.validation.google_client.asyncio.sleep"),
+            pytest.raises(ProviderRateLimitedError) as exc_info,
+        ):
             await client.validate_address("123 Main St")
         assert exc_info.value.provider == "google"
 
@@ -265,8 +266,9 @@ class TestGoogleClientValidateAddress:
         )
         mock_http.post.return_value = bad_resp
 
-        with patch("services.validation.google_client.asyncio.sleep"), pytest.raises(
-            ProviderRateLimitedError
+        with (
+            patch("services.validation.google_client.asyncio.sleep"),
+            pytest.raises(ProviderRateLimitedError),
         ):
             await client.validate_address("123 Main St")
         assert mock_http.post.call_count == _RETRY_MAX + 1

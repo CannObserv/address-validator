@@ -39,6 +39,7 @@ _TAGS = [
     },
 ]
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — close the validation cache DB on shutdown."""

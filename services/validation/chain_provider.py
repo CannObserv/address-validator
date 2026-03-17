@@ -44,7 +44,5 @@ class ChainProvider:
             try:
                 return await provider.validate(std)
             except ProviderRateLimitedError:
-                logger.warning(
-                    "ChainProvider: %s rate-limited, trying next provider", name
-                )
+                logger.warning("ChainProvider: %s rate-limited, trying next provider", name)
         raise ProviderRateLimitedError("all")

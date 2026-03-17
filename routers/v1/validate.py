@@ -45,6 +45,8 @@ from services.validation.factory import get_provider
 
 logger = logging.getLogger(__name__)
 
+_RATE_LIMITED_RETRY_AFTER_S = 1
+
 router = APIRouter(
     prefix="/api/v1",
     tags=["v1"],
@@ -60,7 +62,7 @@ router = APIRouter(
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
-        503: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
     },
     summary="Validate an address against an authoritative source",
     description=(
@@ -77,8 +79,10 @@ router = APIRouter(
         "- `N` — address not found\n\n"
         "When no validation provider is configured, `validation.status` is "
         "`unavailable` and all other result fields are `null`.\n\n"
-        "HTTP 503 is returned when all configured providers are currently "
-        "rate-limited and no further fallbacks are available."
+        "HTTP 429 is returned when all configured providers are currently "
+        "rate-limited and no further fallbacks are available. "
+        "The response includes a `Retry-After` header indicating the "
+        "recommended number of seconds to wait before retrying."
     ),
 )
 async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
@@ -114,9 +118,10 @@ async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
         result = await provider.validate(std)
     except ProviderRateLimitedError:
         raise APIError(
-            status_code=503,
+            status_code=429,
             error="provider_rate_limited",
             message="All configured validation providers are currently rate-limited. Retry later.",
+            headers={"Retry-After": str(_RATE_LIMITED_RETRY_AFTER_S)},
         ) from None
 
     if std.warnings:

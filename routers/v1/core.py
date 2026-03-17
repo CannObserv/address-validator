@@ -32,10 +32,17 @@ class APIError(Exception):
     wrapping).  The ``API-Version`` header is added by middleware.
     """
 
-    def __init__(self, status_code: int, error: str, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        error: str,
+        message: str,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.status_code = status_code
         self.error = error
         self.message = message
+        self.headers = headers
 
 
 def api_error_response(exc: "APIError") -> JSONResponse:
@@ -52,6 +59,7 @@ def api_error_response(exc: "APIError") -> JSONResponse:
             error=exc.error,
             message=exc.message,
         ).model_dump(),
+        headers=exc.headers,
     )
 
 

@@ -166,7 +166,7 @@ class TestCacheHit:
         provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
         std = _make_std()
 
-        await provider.validate(std)         # miss — stores
+        await provider.validate(std)  # miss — stores
         inner.validate.reset_mock()
         result = await provider.validate(std)  # hit
 

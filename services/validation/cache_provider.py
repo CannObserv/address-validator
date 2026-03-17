@@ -148,9 +148,7 @@ async def _lookup(
             pattern_key,
             canonical_key,
         )
-        await db.execute(
-            "DELETE FROM query_patterns WHERE pattern_key = ?", (pattern_key,)
-        )
+        await db.execute("DELETE FROM query_patterns WHERE pattern_key = ?", (pattern_key,))
         await db.commit()
         return None
 
@@ -175,9 +173,7 @@ async def _store(
     result: ValidateResponseV1,
 ) -> None:
     now = _now_iso()
-    components_json: str | None = (
-        result.components.model_dump_json() if result.components else None
-    )
+    components_json: str | None = result.components.model_dump_json() if result.components else None
     warnings_json = json.dumps(result.warnings)
 
     await db.execute(

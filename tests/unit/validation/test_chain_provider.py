@@ -62,9 +62,7 @@ class TestChainProvider:
         assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
-    async def test_non_rate_limit_error_propagates_immediately(
-        self, std_address: object
-    ) -> None:
+    async def test_non_rate_limit_error_propagates_immediately(self, std_address: object) -> None:
         p1 = AsyncMock()
         p1.validate = AsyncMock(side_effect=ValueError("unexpected"))
         p2 = _mock_provider(_CONFIRMED)
