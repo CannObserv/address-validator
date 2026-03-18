@@ -336,15 +336,69 @@ class TestLatLng:
         assert result.longitude == pytest.approx(-89.6501)
 
 
-class TestDbErrorPropagates:
-    async def test_lookup_db_error_propagates(self) -> None:
-        """An exception from the DB on lookup is not swallowed."""
+class TestFailOpen:
+    async def test_lookup_db_error_calls_inner(self) -> None:
+        """A DB error on lookup fails open — inner provider is called instead of raising."""
         get_db_mock = AsyncMock(side_effect=RuntimeError("db unavailable"))
         inner = _make_provider(_make_confirmed_response())
         provider = CachingProvider(inner=inner, get_db=get_db_mock)
 
-        with pytest.raises(RuntimeError, match="db unavailable"):
-            await provider.validate(_make_std())
+        result = await provider.validate(_make_std())
+
+        inner.validate.assert_awaited_once()
+        assert result.validation.status == "confirmed"
+
+    async def test_lookup_db_error_does_not_raise(self) -> None:
+        """A DB error on lookup is swallowed; the response is returned normally."""
+        get_db_mock = AsyncMock(side_effect=OSError("disk full"))
+        inner = _make_provider(_make_confirmed_response())
+        provider = CachingProvider(inner=inner, get_db=get_db_mock)
+
+        # Must not raise
+        result = await provider.validate(_make_std())
+        assert result is not None
+
+    async def test_store_db_error_returns_result(self, db: aiosqlite.Connection) -> None:
+        """A DB error on store is swallowed — the validated result is still returned."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+
+        # get_db returns a real DB for lookup but raises on the second call (store)
+        call_count = 0
+
+        async def get_db_flaky() -> aiosqlite.Connection:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return db  # lookup succeeds (miss)
+            raise RuntimeError("disk full on write")  # store fails
+
+        provider = CachingProvider(inner=inner, get_db=get_db_flaky)
+
+        # Must not raise; must return the provider result despite store failure
+        result = await provider.validate(_make_std())
+        assert result.validation.status == "confirmed"
+
+    async def test_store_db_error_does_not_cache(self, db: aiosqlite.Connection) -> None:
+        """When store fails, nothing is written to the DB."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+
+        call_count = 0
+
+        async def get_db_flaky() -> aiosqlite.Connection:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return db
+            raise RuntimeError("disk full on write")
+
+        provider = CachingProvider(inner=inner, get_db=get_db_flaky)
+        await provider.validate(_make_std())
+
+        async with db.execute("SELECT COUNT(*) FROM validated_addresses") as cur:
+            count = (await cur.fetchone())[0]
+        assert count == 0
 
 
 class TestTTLExpiry:

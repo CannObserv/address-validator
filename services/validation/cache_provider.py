@@ -256,6 +256,12 @@ class CachingProvider:
     falls through to ``inner`` only on a miss.  Results are stored after every
     successful provider call (``status != "unavailable"``).
 
+    Cache errors (SQLite exceptions, connection failures) are handled with a
+    fail-open policy: on a lookup error the request is forwarded to the inner
+    provider; on a store error the validated result is still returned to the
+    caller.  The cache is advisory — its unavailability must never surface as
+    a request failure.
+
     The ``get_db`` callable is injected rather than imported directly so that
     tests can supply an in-memory connection without touching the module global.
     """
@@ -271,11 +277,20 @@ class CachingProvider:
         self._ttl_days = ttl_days
 
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
-        """Check the cache; delegate to inner provider on miss; store the result."""
-        db = await self._get_db()
+        """Check the cache; delegate to inner provider on miss; store the result.
+
+        Fail-open: any SQLite error during lookup or store is logged as a
+        warning and the request continues without the cache.
+        """
         pattern_key = _make_pattern_key(std)
 
-        cached = await _lookup(db, pattern_key, self._ttl_days)
+        try:
+            db = await self._get_db()
+            cached = await _lookup(db, pattern_key, self._ttl_days)
+        except Exception:
+            logger.warning("cache_lookup: storage error — failing open", exc_info=True)
+            cached = None
+
         if cached is not None:
             return cached
 
@@ -288,6 +303,11 @@ class CachingProvider:
             )
             return result
 
-        canonical_key = _make_canonical_key(result)
-        await _store(db, pattern_key, canonical_key, result)
+        try:
+            db = await self._get_db()
+            canonical_key = _make_canonical_key(result)
+            await _store(db, pattern_key, canonical_key, result)
+        except Exception:
+            logger.warning("cache_store: storage error — result not cached", exc_info=True)
+
         return result
