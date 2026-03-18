@@ -283,6 +283,7 @@ class CachingProvider:
         warning and the request continues without the cache.
         """
         pattern_key = _make_pattern_key(std)
+        db: aiosqlite.Connection | None = None
 
         try:
             db = await self._get_db()
@@ -303,11 +304,11 @@ class CachingProvider:
             )
             return result
 
-        try:
-            db = await self._get_db()
-            canonical_key = _make_canonical_key(result)
-            await _store(db, pattern_key, canonical_key, result)
-        except Exception:
-            logger.warning("cache_store: storage error — result not cached", exc_info=True)
+        if db is not None:
+            try:
+                canonical_key = _make_canonical_key(result)
+                await _store(db, pattern_key, canonical_key, result)
+            except Exception:
+                logger.warning("cache_store: storage error — result not cached", exc_info=True)
 
         return result

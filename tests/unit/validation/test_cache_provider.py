@@ -1,7 +1,7 @@
 """Unit tests for CachingProvider."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import aiosqlite
 import pytest
@@ -358,47 +358,49 @@ class TestFailOpen:
         result = await provider.validate(_make_std())
         assert result is not None
 
-    async def test_store_db_error_returns_result(self, db: aiosqlite.Connection) -> None:
-        """A DB error on store is swallowed — the validated result is still returned."""
+    async def test_store_error_returns_result(self, db: aiosqlite.Connection) -> None:
+        """A storage error during _store is swallowed; the validated result is returned."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
 
-        # get_db returns a real DB for lookup but raises on the second call (store)
-        call_count = 0
+        with patch(
+            "services.validation.cache_provider._store",
+            side_effect=RuntimeError("disk full"),
+        ):
+            result = await provider.validate(_make_std())
 
-        async def get_db_flaky() -> aiosqlite.Connection:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return db  # lookup succeeds (miss)
-            raise RuntimeError("disk full on write")  # store fails
-
-        provider = CachingProvider(inner=inner, get_db=get_db_flaky)
-
-        # Must not raise; must return the provider result despite store failure
-        result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed"
 
-    async def test_store_db_error_does_not_cache(self, db: aiosqlite.Connection) -> None:
-        """When store fails, nothing is written to the DB."""
+    async def test_store_error_does_not_cache(self, db: aiosqlite.Connection) -> None:
+        """When _store raises, nothing is written to the DB."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
 
-        call_count = 0
-
-        async def get_db_flaky() -> aiosqlite.Connection:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return db
-            raise RuntimeError("disk full on write")
-
-        provider = CachingProvider(inner=inner, get_db=get_db_flaky)
-        await provider.validate(_make_std())
+        with patch(
+            "services.validation.cache_provider._store",
+            side_effect=RuntimeError("disk full"),
+        ):
+            await provider.validate(_make_std())
 
         async with db.execute("SELECT COUNT(*) FROM validated_addresses") as cur:
             count = (await cur.fetchone())[0]
         assert count == 0
+
+    async def test_lookup_internal_error_fails_open(self, db: aiosqlite.Connection) -> None:
+        """A _lookup exception (e.g. corrupt row) fails open — inner provider is called."""
+        inner = _make_provider(_make_confirmed_response())
+        provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
+
+        with patch(
+            "services.validation.cache_provider._lookup",
+            side_effect=RuntimeError("corrupt row"),
+        ):
+            result = await provider.validate(_make_std())
+
+        inner.validate.assert_awaited_once()
+        assert result.validation.status == "confirmed"
 
 
 class TestTTLExpiry:
