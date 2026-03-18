@@ -114,7 +114,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `models.py` | Breaking API change if field names/types change |
 | `usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
-| `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures |
+| `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures; `validate_config()` is called from the lifespan startup hook and raises `ValueError` (aborting service start) on misconfiguration — keep in sync with `_check_provider_config` when adding new providers |
 | `services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
 | `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
 | `services/validation/chain_provider.py` | Only catches `ProviderRateLimitedError` — other exceptions propagate immediately without trying further providers |

@@ -1,4 +1,6 @@
-"""Unit tests for the provider factory (get_provider)."""
+"""Unit tests for the provider factory (get_provider, validate_config)."""
+
+import logging
 
 import pytest
 
@@ -6,7 +8,7 @@ import services.validation.cache_db as cache_db_module
 import services.validation.factory as factory_module
 from services.validation.cache_provider import CachingProvider
 from services.validation.chain_provider import ChainProvider
-from services.validation.factory import get_provider
+from services.validation.factory import get_provider, validate_config
 from services.validation.google_provider import GoogleProvider
 from services.validation.null_provider import NullProvider
 from services.validation.usps_provider import USPSProvider
@@ -249,4 +251,185 @@ class TestGetProvider:
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "-1")
         with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            get_provider()
+
+
+class TestValidateConfig:
+    def test_none_provider_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
+        validate_config()  # must not raise
+
+    def test_none_keyword_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "none")
+        validate_config()  # must not raise
+
+    def test_usps_valid_creds_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        validate_config()  # must not raise
+
+    def test_usps_missing_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.delenv("USPS_CONSUMER_KEY", raising=False)
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        with pytest.raises(ValueError, match="USPS_CONSUMER_KEY"):
+            validate_config()
+
+    def test_usps_missing_secret_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.delenv("USPS_CONSUMER_SECRET", raising=False)
+        with pytest.raises(ValueError, match="USPS_CONSUMER_SECRET"):
+            validate_config()
+
+    def test_usps_invalid_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "not-a-number")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            validate_config()
+
+    def test_google_valid_key_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        validate_config()  # must not raise
+
+    def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
+            validate_config()
+
+    def test_google_invalid_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "not-a-number")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+            validate_config()
+
+    def test_unknown_provider_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
+        with pytest.raises(ValueError, match="smarty"):
+            validate_config()
+
+    def test_chain_valid_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        validate_config()  # must not raise
+
+    def test_chain_missing_google_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
+            validate_config()
+
+    def test_invalid_ttl_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "abc")
+        with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            validate_config()
+
+    def test_negative_ttl_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "-1")
+        with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            validate_config()
+
+    def test_none_provider_skips_ttl_validation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TTL is only relevant for non-null providers; none should not validate it."""
+        monkeypatch.setenv("VALIDATION_PROVIDER", "none")
+        monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "abc")
+        validate_config()  # must not raise — TTL irrelevant for NullProvider
+
+    def test_logs_active_provider(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        with caplog.at_level(logging.INFO, logger="services.validation.factory"):
+            validate_config()
+        assert any("usps" in r.message for r in caplog.records)
+
+    def test_logs_none_provider(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
+
+        with caplog.at_level(logging.INFO, logger="services.validation.factory"):
+            validate_config()
+        assert any("none" in r.message for r in caplog.records)
+
+    def test_usps_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            validate_config()
+
+    def test_usps_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            validate_config()
+
+    def test_google_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "0")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+            validate_config()
+
+    def test_google_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "-5.0")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+            validate_config()
+
+
+class TestGetProviderRpsGuard:
+    """Positive-RPS guard is also enforced by get_provider / _build_single_provider."""
+
+    def test_usps_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            get_provider()
+
+    def test_usps_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            get_provider()
+
+    def test_google_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "0")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+            get_provider()
+
+    def test_google_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "-5.0")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
             get_provider()

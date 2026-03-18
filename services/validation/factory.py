@@ -1,5 +1,8 @@
 """Provider factory -- reads env vars and returns the configured backend.
 
+Call :func:`validate_config` from the FastAPI lifespan startup hook to catch
+misconfiguration at startup rather than on the first request.
+
 Environment variables
 ---------------------
 VALIDATION_PROVIDER
@@ -140,8 +143,13 @@ def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
     return _caching_provider
 
 
-def _build_single_provider(name: str) -> ValidationProvider:
-    """Instantiate a single named provider, reading credentials from env."""
+def _check_provider_config(name: str) -> None:
+    """Raise :exc:`ValueError` if env-var credentials for *name* are absent or malformed.
+
+    Validates credentials and rate-limit values without constructing any
+    objects or making network calls.  Called by both :func:`_build_single_provider`
+    (at construction time) and :func:`validate_config` (at startup).
+    """
     if name == "usps":
         key = os.environ.get("USPS_CONSUMER_KEY", "").strip()
         secret = os.environ.get("USPS_CONSUMER_SECRET", "").strip()
@@ -154,7 +162,9 @@ def _build_single_provider(name: str) -> ValidationProvider:
             rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
         except ValueError:
             raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')") from None
-        return _get_usps_provider(key, secret, rps)
+        if rps <= 0:
+            raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')")
+        return
 
     if name == "google":
         api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
@@ -168,9 +178,31 @@ def _build_single_provider(name: str) -> ValidationProvider:
             raise ValueError(
                 "GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')"
             ) from None
-        return _get_google_provider(api_key, rps)
+        if rps <= 0:
+            raise ValueError("GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')")
+        return
 
     raise ValueError(
+        f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."
+    )
+
+
+def _build_single_provider(name: str) -> ValidationProvider:
+    """Instantiate a single named provider, reading credentials from env."""
+    _check_provider_config(name)
+
+    if name == "usps":
+        key = os.environ.get("USPS_CONSUMER_KEY", "").strip()
+        secret = os.environ.get("USPS_CONSUMER_SECRET", "").strip()
+        rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
+        return _get_usps_provider(key, secret, rps)
+
+    if name == "google":
+        api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+        rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
+        return _get_google_provider(api_key, rps)
+
+    raise ValueError(  # pragma: no cover — _check_provider_config already raised
         f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."
     )
 
@@ -192,6 +224,42 @@ def _resolve_provider() -> ValidationProvider:
 
     logger.debug("get_provider: building ChainProvider with %d providers", len(providers))
     return ChainProvider(providers=providers)
+
+
+def validate_config() -> None:
+    """Validate provider configuration from env vars without making network calls.
+
+    Reads the same env vars as :func:`get_provider` and checks that all
+    required credentials are present and well-formed.  Logs at INFO which
+    provider is active.  Raises :exc:`ValueError` on misconfiguration so the
+    FastAPI lifespan hook can surface the error at startup rather than on the
+    first request.
+    """
+    provider_str = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()
+    names = [s for n in provider_str.split(",") if (s := n.strip()) and s != "none"]
+
+    if not names:
+        logger.info("validate_config: provider=none")
+        return
+
+    for name in names:
+        _check_provider_config(name)
+
+    ttl_str = os.environ.get("VALIDATION_CACHE_TTL_DAYS", "30")
+    try:
+        ttl_days = int(ttl_str)
+    except ValueError:
+        raise ValueError(
+            "VALIDATION_CACHE_TTL_DAYS must be a non-negative integer "
+            "(e.g. '30'); use 0 to disable expiry"
+        ) from None
+    if ttl_days < 0:
+        raise ValueError(
+            "VALIDATION_CACHE_TTL_DAYS must be a non-negative integer "
+            "(e.g. '30'); use 0 to disable expiry"
+        )
+
+    logger.info("validate_config: provider=%s ttl=%d days", ",".join(names), ttl_days)
 
 
 def get_provider() -> ValidationProvider:
