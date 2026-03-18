@@ -13,14 +13,11 @@ _header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 _MAX_KEY_LENGTH = 256
 
-# Read the key once at import time so the service fails fast if it is
-# missing and avoids re-reading os.environ on every request.
-_API_KEY: str = os.environ.get("API_KEY", "").strip()
-if not _API_KEY:
-    raise RuntimeError(
-        "API_KEY environment variable is not set or empty. "
-        "The service cannot start without a configured API key."
-    )
+# Read the key once at import time to avoid re-reading os.environ on every
+# request.  None means the env var was absent or empty; require_api_key raises
+# 503 on the first authenticated request so the module stays importable by
+# test infrastructure, type-checkers, and doc generators without the var set.
+_API_KEY: str | None = os.environ.get("API_KEY", "").strip() or None
 
 
 async def require_api_key(
@@ -29,10 +26,17 @@ async def require_api_key(
 ) -> str:
     """Validate the X-API-Key header against the configured key.
 
-    Returns the validated key on success.  Raises 401 when the header
-    is missing and 403 when the key is invalid.
+    Returns the validated key on success.  Raises 503 when the service is
+    misconfigured (API_KEY not set), 401 when the header is missing, and 403
+    when the key is invalid.
     """
     path = request.url.path
+    if _API_KEY is None:
+        logger.error("auth: API_KEY not configured, rejecting request path=%s", path)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service misconfigured: API key not set.",
+        )
     if api_key is None:
         logger.info("auth rejected: missing API key path=%s", path)
         raise HTTPException(

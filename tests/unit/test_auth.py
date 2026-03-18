@@ -27,6 +27,7 @@ class TestRequireApiKey:
 
     @pytest.mark.asyncio
     async def test_valid_key_accepted(self) -> None:
+        assert auth._API_KEY is not None, "conftest must set API_KEY before this test runs"
         result = await auth.require_api_key(_mock_request(), auth._API_KEY)
         assert result == auth._API_KEY
 
@@ -56,13 +57,14 @@ class TestRequireApiKey:
 
 
 class TestApiKeyImportGuard:
-    """The module raises RuntimeError at import time if API_KEY is unset.
+    """auth.py is importable without API_KEY; the guard fires at dependency time.
 
-    We verify the guard fires by running a fresh Python subprocess with
-    API_KEY deliberately absent from its environment.
+    We verify importability by running a fresh Python subprocess with API_KEY
+    deliberately absent from its environment, and verify the runtime guard by
+    calling require_api_key with _API_KEY patched to None.
     """
 
-    def test_missing_key_raises_on_import(self) -> None:
+    def test_module_importable_without_api_key(self) -> None:
         env = {k: v for k, v in os.environ.items() if k != "API_KEY"}
         env["PYTHONPATH"] = _PROJECT_ROOT
         result = subprocess.run(
@@ -72,10 +74,9 @@ class TestApiKeyImportGuard:
             text=True,
             check=False,
         )
-        assert result.returncode != 0
-        assert "API_KEY" in result.stderr
+        assert result.returncode == 0, result.stderr
 
-    def test_empty_key_raises_on_import(self) -> None:
+    def test_module_importable_with_empty_api_key(self) -> None:
         env = {**os.environ, "API_KEY": "", "PYTHONPATH": _PROJECT_ROOT}
         result = subprocess.run(
             [sys.executable, "-c", "import auth"],
@@ -84,5 +85,11 @@ class TestApiKeyImportGuard:
             text=True,
             check=False,
         )
-        assert result.returncode != 0
-        assert "API_KEY" in result.stderr
+        assert result.returncode == 0, result.stderr
+
+    @pytest.mark.asyncio
+    async def test_unconfigured_key_raises_503(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(auth, "_API_KEY", None)
+        with pytest.raises(HTTPException) as exc_info:
+            await auth.require_api_key(_mock_request(), "any-key")
+        assert exc_info.value.status_code == 503

@@ -2,18 +2,16 @@
 
 Auth handling
 -------------
-``auth.py`` reads ``API_KEY`` from the environment **at import time** and
-raises ``RuntimeError`` if the variable is absent or empty.  To prevent that
-from blowing up the test collection we set a sentinel value before any
-application module is imported.  The ``monkeypatch`` fixture then overrides
-``auth._API_KEY`` at the module level for tests that exercise the auth logic
-directly, or overrides the FastAPI dependency for HTTP-level tests.
+``auth.py`` reads ``API_KEY`` once at import time into ``_API_KEY``.  If the
+variable is absent or empty, ``_API_KEY`` is ``None`` and any authenticated
+request returns HTTP 503.  The sentinel value below ensures ``_API_KEY`` is
+populated correctly for all test HTTP clients.
 
 Import order
 ------------
-``from main import app`` must come *after* ``os.environ.setdefault`` below;
-otherwise auth.py raises ``RuntimeError`` at collection time.  This is an
-intentional ordering constraint, not a style issue — PLC0415 is suppressed.
+``from main import app`` must come *after* ``os.environ.setdefault`` below so
+that ``_API_KEY`` is set to the test key when the module is first imported.
+PLC0415 is suppressed on that import.
 """
 
 import os
