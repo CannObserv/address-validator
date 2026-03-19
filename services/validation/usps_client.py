@@ -21,8 +21,8 @@ import httpx
 from services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
+    QuotaGuard,
     _parse_retry_after,
-    _TokenBucket,
 )
 from services.validation.errors import ProviderRateLimitedError
 
@@ -33,9 +33,6 @@ _ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
 
 # Token is refreshed 60 s before it actually expires to avoid races.
 _TOKEN_REFRESH_BUFFER_S = 60
-
-# Free-tier rate limit: 5 requests/second.
-_DEFAULT_RATE_LIMIT_RPS = 5.0
 
 
 @dataclass
@@ -60,9 +57,9 @@ class USPSClient:
         OAuth2 client secret.
     http_client:
         Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
-    rate_limit_rps:
-        Maximum requests per second sent to the USPS API.  Defaults to
-        ``5.0`` (free-tier limit).  Set via ``USPS_RATE_LIMIT_RPS`` env var.
+    quota_guard:
+        A :class:`~services.validation._rate_limit.QuotaGuard` instance
+        for rate limiting.
     """
 
     def __init__(
@@ -70,14 +67,14 @@ class USPSClient:
         consumer_key: str,
         consumer_secret: str,
         http_client: httpx.AsyncClient,
-        rate_limit_rps: float = _DEFAULT_RATE_LIMIT_RPS,
+        quota_guard: QuotaGuard,
     ) -> None:
         self._consumer_key = consumer_key
         self._consumer_secret = consumer_secret
         self._http = http_client
         self._token: USPSToken | None = None
         self._token_lock = asyncio.Lock()
-        self._rate_limiter = _TokenBucket(rate=rate_limit_rps, capacity=rate_limit_rps)
+        self._rate_limiter = quota_guard
 
     async def _get_token(self) -> str:
         """Return a valid access token, fetching a new one if needed.

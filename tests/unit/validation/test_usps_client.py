@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from services.validation._rate_limit import _RETRY_MAX
-from services.validation.errors import ProviderRateLimitedError
+from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
+from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
 from services.validation.usps_client import USPSClient, USPSToken
 
 TOKEN_RESPONSE = {
@@ -58,11 +58,20 @@ class TestUSPSClient:
         return AsyncMock(spec=httpx.AsyncClient)
 
     @pytest.fixture()
-    def client(self, mock_http: AsyncMock) -> USPSClient:
+    def _default_guard(self) -> QuotaGuard:
+        return QuotaGuard(
+            windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
+            latency_budget_s=1.0,
+            provider_name="usps",
+        )
+
+    @pytest.fixture()
+    def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> USPSClient:
         return USPSClient(
             consumer_key="key",
             consumer_secret="secret",
             http_client=mock_http,
+            quota_guard=_default_guard,
         )
 
     def _make_response(self, json_data: dict, status_code: int = 200) -> MagicMock:
@@ -231,15 +240,33 @@ class TestUSPSClient:
             result = await client.validate_address("123 Main St", "Springfield", "IL")
         assert result["dpv_match_code"] == "Y"
 
-    @pytest.mark.asyncio
-    async def test_accepts_custom_rate_limit_rps(self, mock_http: AsyncMock) -> None:
+    def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
+        guard = QuotaGuard(
+            windows=[QuotaWindow(limit=10, duration_s=1.0, mode="soft")],
+            provider_name="usps",
+        )
         client = USPSClient(
             consumer_key="key",
             consumer_secret="secret",
             http_client=mock_http,
-            rate_limit_rps=10.0,
+            quota_guard=guard,
         )
-        assert client._rate_limiter.rate == 10.0
+        assert client._rate_limiter is guard
+
+    @pytest.mark.asyncio
+    async def test_at_capacity_raises_before_http_call(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
+        with patch.object(
+            client._rate_limiter,
+            "acquire",
+            side_effect=ProviderAtCapacityError("usps"),
+        ), pytest.raises(ProviderAtCapacityError):
+            await client.validate_address("123 Main St", "Springfield", "IL")
+
+        mock_http.get.assert_not_called()
+        mock_http.post.assert_not_called()
 
 
 class TestMapResponse:
