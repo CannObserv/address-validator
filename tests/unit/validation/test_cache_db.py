@@ -78,6 +78,19 @@ class TestSchema:
             )
             assert result.fetchone() is not None
 
+    async def test_qp_canonical_key_index_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        engine = await get_engine()
+
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE tablename = 'query_patterns' AND indexname = 'idx_qp_canonical_key'"
+                )
+            )
+            assert result.fetchone() is not None
+
     async def test_foreign_key_enforced(self, db: AsyncEngine) -> None:
         """Inserting a query_pattern referencing a non-existent canonical_key must fail."""
         with pytest.raises(IntegrityError):
