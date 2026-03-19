@@ -11,6 +11,7 @@ dependencies = [
     "pycountry>=26.2.16,<27",
     "httpx>=0.28,<1",
     "aiosqlite>=0.20,<1",
+    "python-ulid>=3.1,<4",
 ]
 
 [dependency-groups]
@@ -36,6 +37,7 @@ omit = [
     "services/__init__.py",
     "routers/__init__.py",
     "routers/v1/__init__.py",
+    "middleware/__init__.py",
 ]
 branch = true
 
@@ -85,4 +87,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["auth", "main", "models", "routers", "services", "usps_data"]
+known-first-party = ["auth", "logging_filter", "main", "middleware", "models", "routers", "services", "usps_data"]

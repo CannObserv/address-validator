@@ -1,5 +1,6 @@
 """Address Validator — FastAPI application entry point."""
 
+import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
@@ -7,6 +8,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from logging_filter import RequestIdFilter
+from middleware.request_id import request_id_middleware
 from routers.v1 import health as v1_health
 from routers.v1 import parse as v1_parse
 from routers.v1 import standardize as v1_standardize
@@ -14,6 +17,8 @@ from routers.v1 import validate as v1_validate
 from routers.v1.core import APIError, api_error_response
 from services.validation.cache_db import close_db
 from services.validation.factory import validate_config
+
+logging.getLogger().addFilter(RequestIdFilter())
 
 _DESCRIPTION = """
 Parse and standardize physical addresses.
@@ -69,6 +74,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+app.middleware("http")(request_id_middleware)
 
 
 @app.exception_handler(APIError)
