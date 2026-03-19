@@ -1,6 +1,9 @@
 """Unit tests for services/validation/errors.py."""
 
-from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderRateLimitedError,
+)
 
 
 class TestProviderRateLimitedError:

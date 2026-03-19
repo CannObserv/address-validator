@@ -2,11 +2,11 @@
 
 from fastapi import APIRouter, Depends
 
-from auth import require_api_key
-from models import ErrorResponse, StandardizeRequestV1, StandardizeResponseV1
-from routers.v1.core import APIError, check_country
-from services.parser import parse_address
-from services.standardizer import standardize
+from address_validator.auth import require_api_key
+from address_validator.models import ErrorResponse, StandardizeRequestV1, StandardizeResponseV1
+from address_validator.routers.v1.core import APIError, check_country
+from address_validator.services.parser import parse_address
+from address_validator.services.standardizer import standardize
 
 router = APIRouter(
     prefix="/api/v1",

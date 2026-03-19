@@ -2,7 +2,7 @@
 
 import json
 
-from routers.v1.core import APIError, api_error_response
+from address_validator.routers.v1.core import APIError, api_error_response
 
 
 class TestApiErrorResponse:

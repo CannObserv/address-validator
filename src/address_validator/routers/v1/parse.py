@@ -2,10 +2,10 @@
 
 from fastapi import APIRouter, Depends
 
-from auth import require_api_key
-from models import ErrorResponse, ParseRequestV1, ParseResponseV1
-from routers.v1.core import APIError, check_country
-from services.parser import parse_address
+from address_validator.auth import require_api_key
+from address_validator.models import ErrorResponse, ParseRequestV1, ParseResponseV1
+from address_validator.routers.v1.core import APIError, check_country
+from address_validator.services.parser import parse_address
 
 router = APIRouter(
     prefix="/api/v1",

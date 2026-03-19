@@ -15,7 +15,7 @@ from typing import Literal
 
 import httpx
 
-from services.validation.errors import ProviderAtCapacityError
+from address_validator.services.validation.errors import ProviderAtCapacityError
 
 # HTTP status code for "Too Many Requests".
 _HTTP_TOO_MANY_REQUESTS = 429
@@ -136,9 +136,7 @@ class QuotaGuard:
                 for i, window in enumerate(self._windows):
                     rate = window.limit / window.duration_s
                     elapsed = now - self._last_refill[i]
-                    self._tokens[i] = min(
-                        float(window.limit), self._tokens[i] + elapsed * rate
-                    )
+                    self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
                     self._last_refill[i] = now
 
             # --- Consume from all windows ---

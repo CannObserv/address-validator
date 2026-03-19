@@ -26,18 +26,17 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "--cov=. --cov-report=term-missing --cov-fail-under=80"
+pythonpath = ["src"]
+addopts = "--cov=src/address_validator --cov-report=term-missing --cov-fail-under=80"
 
 [tool.coverage.run]
-source = ["."]
+source = ["src/address_validator"]
 omit = [
-    ".venv/*",
-    "tests/*",
-    "usps_data/__init__.py",
-    "services/__init__.py",
-    "routers/__init__.py",
-    "routers/v1/__init__.py",
-    "middleware/__init__.py",
+    "src/address_validator/usps_data/__init__.py",
+    "src/address_validator/services/__init__.py",
+    "src/address_validator/routers/__init__.py",
+    "src/address_validator/routers/v1/__init__.py",
+    "src/address_validator/middleware/__init__.py",
 ]
 branch = true
 
@@ -87,4 +86,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["auth", "logging_filter", "main", "middleware", "models", "routers", "services", "usps_data"]
+known-first-party = ["address_validator"]

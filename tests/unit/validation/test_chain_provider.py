@@ -4,10 +4,18 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
-from services.validation.chain_provider import ChainProvider
-from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.models import (
+    ComponentSet,
+    StandardizeResponseV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
+from address_validator.services.validation.chain_provider import ChainProvider
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderRateLimitedError,
+)
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 _CONFIRMED = ValidateResponseV1(
     country="US",
@@ -124,9 +132,7 @@ class TestChainProvider:
         assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
-    async def test_retry_after_propagated_from_at_capacity_error(
-        self, std_address: object
-    ) -> None:
+    async def test_retry_after_propagated_from_at_capacity_error(self, std_address: object) -> None:
         p1 = AsyncMock()
         p1.validate = AsyncMock(
             side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.5)

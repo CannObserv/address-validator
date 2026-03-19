@@ -12,7 +12,7 @@ EnvironmentFile=/etc/address-validator/env
 #   USPS_CONSUMER_KEY=<key from developer.usps.com>
 #   USPS_CONSUMER_SECRET=<secret from developer.usps.com>
 StateDirectory=address-validator
-ExecStart=/home/exedev/address-validator/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/home/exedev/address-validator/.venv/bin/uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=3
 

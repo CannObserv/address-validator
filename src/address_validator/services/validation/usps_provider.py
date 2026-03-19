@@ -2,10 +2,15 @@
 
 import logging
 
-from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
-from services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
-from services.validation.usps_client import USPSClient
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.models import (
+    ComponentSet,
+    StandardizeResponseV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
+from address_validator.services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
+from address_validator.services.validation.usps_client import USPSClient
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 logger = logging.getLogger(__name__)
 

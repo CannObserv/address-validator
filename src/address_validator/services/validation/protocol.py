@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from models import StandardizeResponseV1, ValidateResponseV1
+from address_validator.models import StandardizeResponseV1, ValidateResponseV1
 
 
 @runtime_checkable

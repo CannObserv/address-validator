@@ -7,9 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
-from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
-from services.validation.usps_client import USPSClient, USPSToken
+from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderRateLimitedError,
+)
+from address_validator.services.validation.usps_client import USPSClient, USPSToken
 
 TOKEN_RESPONSE = {
     "access_token": "tok-abc",
@@ -192,7 +195,7 @@ class TestUSPSClient:
         mock_http.get.return_value = bad_resp
 
         with (
-            patch("services.validation.usps_client.asyncio.sleep"),
+            patch("address_validator.services.validation.usps_client.asyncio.sleep"),
             pytest.raises(ProviderRateLimitedError) as exc_info,
         ):
             await client.validate_address("123 Main St", "Springfield", "IL")
@@ -213,7 +216,7 @@ class TestUSPSClient:
         mock_http.get.return_value = bad_resp
 
         with (
-            patch("services.validation.usps_client.asyncio.sleep"),
+            patch("address_validator.services.validation.usps_client.asyncio.sleep"),
             pytest.raises(ProviderRateLimitedError),
         ):
             await client.validate_address("123 Main St", "Springfield", "IL")
@@ -236,7 +239,7 @@ class TestUSPSClient:
 
         mock_http.get.side_effect = [bad_resp, good_resp]
 
-        with patch("services.validation.usps_client.asyncio.sleep"):
+        with patch("address_validator.services.validation.usps_client.asyncio.sleep"):
             result = await client.validate_address("123 Main St", "Springfield", "IL")
         assert result["dpv_match_code"] == "Y"
 
@@ -258,11 +261,14 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
-        with patch.object(
-            client._rate_limiter,
-            "acquire",
-            side_effect=ProviderAtCapacityError("usps"),
-        ), pytest.raises(ProviderAtCapacityError):
+        with (
+            patch.object(
+                client._rate_limiter,
+                "acquire",
+                side_effect=ProviderAtCapacityError("usps"),
+            ),
+            pytest.raises(ProviderAtCapacityError),
+        ):
             await client.validate_address("123 Main St", "Springfield", "IL")
 
         mock_http.get.assert_not_called()

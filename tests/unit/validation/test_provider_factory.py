@@ -4,14 +4,14 @@ import logging
 
 import pytest
 
-import services.validation.cache_db as cache_db_module
-import services.validation.factory as factory_module
-from services.validation.cache_provider import CachingProvider
-from services.validation.chain_provider import ChainProvider
-from services.validation.factory import get_provider, validate_config
-from services.validation.google_provider import GoogleProvider
-from services.validation.null_provider import NullProvider
-from services.validation.usps_provider import USPSProvider
+import address_validator.services.validation.cache_db as cache_db_module
+import address_validator.services.validation.factory as factory_module
+from address_validator.services.validation.cache_provider import CachingProvider
+from address_validator.services.validation.chain_provider import ChainProvider
+from address_validator.services.validation.factory import get_provider, validate_config
+from address_validator.services.validation.google_provider import GoogleProvider
+from address_validator.services.validation.null_provider import NullProvider
+from address_validator.services.validation.usps_provider import USPSProvider
 
 
 @pytest.fixture(autouse=True)
@@ -385,7 +385,7 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        with caplog.at_level(logging.INFO, logger="services.validation.factory"):
+        with caplog.at_level(logging.INFO, logger="address_validator.services.validation.factory"):
             validate_config()
         assert any("usps" in r.message for r in caplog.records)
 
@@ -394,7 +394,7 @@ class TestValidateConfig:
     ) -> None:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
 
-        with caplog.at_level(logging.INFO, logger="services.validation.factory"):
+        with caplog.at_level(logging.INFO, logger="address_validator.services.validation.factory"):
             validate_config()
         assert any("none" in r.message for r in caplog.records)
 

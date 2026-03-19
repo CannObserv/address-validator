@@ -6,13 +6,13 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from services.validation._rate_limit import (
+from address_validator.services.validation._rate_limit import (
     _RETRY_BASE_DELAY_S,
     QuotaGuard,
     QuotaWindow,
     _parse_retry_after,
 )
-from services.validation.errors import ProviderAtCapacityError
+from address_validator.services.validation.errors import ProviderAtCapacityError
 
 
 class TestQuotaGuard:
@@ -43,7 +43,7 @@ class TestQuotaGuard:
     @pytest.mark.asyncio
     async def test_first_acquire_does_not_sleep(self) -> None:
         guard = self._soft_guard()
-        with patch("services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
             await guard.acquire()
         mock_sleep.assert_not_called()
 
@@ -53,7 +53,7 @@ class TestQuotaGuard:
         guard._tokens[0] = 0.0
         guard._last_refill[0] = time.monotonic()
 
-        with patch("services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
             await guard.acquire()
 
         mock_sleep.assert_called_once()
@@ -87,7 +87,7 @@ class TestQuotaGuard:
         guard._last_refill[0] = time.monotonic()
 
         with (
-            patch("services.validation._rate_limit.asyncio.sleep") as mock_sleep,
+            patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep,
             pytest.raises(ProviderAtCapacityError),
         ):
             await guard.acquire()
@@ -131,7 +131,7 @@ class TestQuotaGuard:
         guard._last_refill[0] = now
         guard._last_refill[1] = now
 
-        with patch("services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
             await guard.acquire()
 
         mock_sleep.assert_called_once()
@@ -146,7 +146,7 @@ class TestQuotaGuard:
         guard._tokens[0] = 0.0
         guard._last_refill[0] = time.monotonic() - 0.5  # 0.5s ago → +5 tokens
 
-        with patch("services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
             await guard.acquire()
         mock_sleep.assert_not_called()
 

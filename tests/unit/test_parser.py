@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 import usaddress
 
-from services.parser import (
+from address_validator.services.parser import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
     parse_address,
@@ -167,7 +167,7 @@ class TestParseAddress:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
 
-        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("1804 & 1810 Main St")
 
         assert result.components.values["address_number"] == "1804-1810"
@@ -264,7 +264,7 @@ class TestParseWarnings:
             ("St", "StreetNamePostType"),
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
-        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("1804 & 1810 Main St")
         assert any("1804-1810" in w for w in result.warnings)
 
@@ -277,7 +277,7 @@ class TestParseWarnings:
             [("123", "AddressNumber"), ("Main", "StreetName"), ("456", "AddressNumber")],
             "AddressNumber",
         )
-        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("123 Main 456")
         assert any("Ambiguous parse" in w for w in result.warnings)
         assert not any("joined as range" in w for w in result.warnings)
@@ -294,7 +294,7 @@ class TestParseWarnings:
             ("Springfield", "PlaceName"),
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
-        with mock.patch("services.parser.usaddress.tag", side_effect=exc):
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("123 Main St BSMT, Springfield")
         # BSMT should have been recovered and a warning emitted.
         assert any("Unit designator recovered" in w for w in result.warnings)
@@ -311,7 +311,7 @@ class TestParseWarnings:
 
 class TestParserLogging:
     def test_debug_emitted_on_successful_parse(self, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.DEBUG, logger="services.parser"):
+        with caplog.at_level(logging.DEBUG, logger="address_validator.services.parser"):
             parse_address("123 Main St, Springfield, IL 62701")
         assert "parsed address" in caplog.text
         assert "Street Address" in caplog.text
@@ -325,7 +325,7 @@ class TestParserLogging:
         )
         with (
             mock.patch("usaddress.tag", side_effect=exc),
-            caplog.at_level(logging.DEBUG, logger="services.parser"),
+            caplog.at_level(logging.DEBUG, logger="address_validator.services.parser"),
         ):
             result = parse_address("1804 & 1810 Main St")
         assert result.type == "Ambiguous"
@@ -339,7 +339,7 @@ class TestParserLogging:
         )
         with (
             mock.patch("usaddress.tag", side_effect=exc),
-            caplog.at_level(logging.WARNING, logger="services.parser"),
+            caplog.at_level(logging.WARNING, logger="address_validator.services.parser"),
         ):
             parse_address("1804 & 1810 Main St")
         assert "ambiguous parse" in caplog.text

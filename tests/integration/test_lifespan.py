@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app
+from address_validator.main import app
 
 
 class TestLifespanValidateConfig:

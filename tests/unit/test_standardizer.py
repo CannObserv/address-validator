@@ -4,10 +4,10 @@ import logging
 
 import pytest
 
-from services.standardizer import _get, _lookup, _std_zip, standardize
-from usps_data.directionals import DIRECTIONAL_MAP
-from usps_data.states import STATE_MAP
-from usps_data.suffixes import SUFFIX_MAP
+from address_validator.services.standardizer import _get, _lookup, _std_zip, standardize
+from address_validator.usps_data.directionals import DIRECTIONAL_MAP
+from address_validator.usps_data.states import STATE_MAP
+from address_validator.usps_data.suffixes import SUFFIX_MAP
 
 # ---------------------------------------------------------------------------
 # _lookup
@@ -254,7 +254,7 @@ class TestStandardize:
 class TestStandardizerLogging:
     def test_debug_emitted_on_standardize(self, caplog: pytest.LogCaptureFixture) -> None:
         components = {"address_number": "123", "street_name": "MAIN", "city": "SPRINGFIELD"}
-        with caplog.at_level(logging.DEBUG, logger="services.standardizer"):
+        with caplog.at_level(logging.DEBUG, logger="address_validator.services.standardizer"):
             standardize(components)
         assert "standardizing components" in caplog.text
         assert "count=3" in caplog.text

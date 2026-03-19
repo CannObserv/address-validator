@@ -1,9 +1,9 @@
 """Unit tests for the USPS lookup tables in usps_data/."""
 
-from usps_data.directionals import DIRECTIONAL_MAP
-from usps_data.states import STATE_MAP
-from usps_data.suffixes import SUFFIX_MAP
-from usps_data.units import UNIT_MAP
+from address_validator.usps_data.directionals import DIRECTIONAL_MAP
+from address_validator.usps_data.states import STATE_MAP
+from address_validator.usps_data.suffixes import SUFFIX_MAP
+from address_validator.usps_data.units import UNIT_MAP
 
 
 class TestSuffixMap:

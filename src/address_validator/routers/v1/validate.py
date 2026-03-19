@@ -36,13 +36,13 @@ import math
 
 from fastapi import APIRouter, Depends
 
-from auth import require_api_key
-from models import ErrorResponse, ValidateRequestV1, ValidateResponseV1
-from routers.v1.core import APIError, check_country
-from services.parser import parse_address
-from services.standardizer import standardize
-from services.validation.errors import ProviderRateLimitedError
-from services.validation.factory import get_provider
+from address_validator.auth import require_api_key
+from address_validator.models import ErrorResponse, ValidateRequestV1, ValidateResponseV1
+from address_validator.routers.v1.core import APIError, check_country
+from address_validator.services.parser import parse_address
+from address_validator.services.standardizer import standardize
+from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.factory import get_provider
 
 logger = logging.getLogger(__name__)
 

@@ -7,9 +7,12 @@ Do not instantiate directly in application code.
 
 import logging
 
-from models import StandardizeResponseV1, ValidateResponseV1
-from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
-from services.validation.protocol import ValidationProvider
+from address_validator.models import StandardizeResponseV1, ValidateResponseV1
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderRateLimitedError,
+)
+from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 

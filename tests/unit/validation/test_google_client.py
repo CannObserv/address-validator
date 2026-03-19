@@ -5,9 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
-from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
-from services.validation.google_client import GoogleClient
+from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderRateLimitedError,
+)
+from address_validator.services.validation.google_client import GoogleClient
 
 API_KEY = "test-api-key"
 
@@ -259,7 +262,7 @@ class TestGoogleClientValidateAddress:
         mock_http.post.return_value = bad_resp
 
         with (
-            patch("services.validation.google_client.asyncio.sleep"),
+            patch("address_validator.services.validation.google_client.asyncio.sleep"),
             pytest.raises(ProviderRateLimitedError) as exc_info,
         ):
             await client.validate_address("123 Main St")
@@ -279,7 +282,7 @@ class TestGoogleClientValidateAddress:
         mock_http.post.return_value = bad_resp
 
         with (
-            patch("services.validation.google_client.asyncio.sleep"),
+            patch("address_validator.services.validation.google_client.asyncio.sleep"),
             pytest.raises(ProviderRateLimitedError),
         ):
             await client.validate_address("123 Main St")
@@ -298,7 +301,7 @@ class TestGoogleClientValidateAddress:
         good_resp = self._make_response(GOOGLE_RESPONSE_Y)
         mock_http.post.side_effect = [bad_resp, good_resp]
 
-        with patch("services.validation.google_client.asyncio.sleep"):
+        with patch("address_validator.services.validation.google_client.asyncio.sleep"):
             result = await client.validate_address("123 Main St")
         assert result["dpv_match_code"] == "Y"
 

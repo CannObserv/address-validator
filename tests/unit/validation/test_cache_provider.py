@@ -6,14 +6,19 @@ from unittest.mock import AsyncMock, patch
 import aiosqlite
 import pytest
 
-from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
-from services.validation.cache_db import _init_schema
-from services.validation.cache_provider import (
+from address_validator.models import (
+    ComponentSet,
+    StandardizeResponseV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
+from address_validator.services.validation.cache_db import _init_schema
+from address_validator.services.validation.cache_provider import (
     CachingProvider,
     _make_canonical_key,
     _make_pattern_key,
 )
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -365,7 +370,7 @@ class TestFailOpen:
         provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
 
         with patch(
-            "services.validation.cache_provider._store",
+            "address_validator.services.validation.cache_provider._store",
             side_effect=RuntimeError("disk full"),
         ):
             result = await provider.validate(_make_std())
@@ -379,7 +384,7 @@ class TestFailOpen:
         provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
 
         with patch(
-            "services.validation.cache_provider._store",
+            "address_validator.services.validation.cache_provider._store",
             side_effect=RuntimeError("disk full"),
         ):
             await provider.validate(_make_std())
@@ -394,7 +399,7 @@ class TestFailOpen:
         provider = CachingProvider(inner=inner, get_db=AsyncMock(return_value=db))
 
         with patch(
-            "services.validation.cache_provider._lookup",
+            "address_validator.services.validation.cache_provider._lookup",
             side_effect=RuntimeError("corrupt row"),
         ):
             result = await provider.validate(_make_std())
@@ -497,9 +502,7 @@ class TestTTLExpiry:
 
         await provider.validate(std)  # hit — should bump last_seen_at, not validated_at
 
-        async with db.execute(
-            "SELECT last_seen_at, validated_at FROM validated_addresses"
-        ) as cur:
+        async with db.execute("SELECT last_seen_at, validated_at FROM validated_addresses") as cur:
             row = await cur.fetchone()
 
         assert row["validated_at"] == validated_at_before

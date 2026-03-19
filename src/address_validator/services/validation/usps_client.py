@@ -18,13 +18,13 @@ from typing import Any
 
 import httpx
 
-from services.validation._rate_limit import (
+from address_validator.services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
 )
-from services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import ProviderRateLimitedError
 
 logger = logging.getLogger(__name__)
 

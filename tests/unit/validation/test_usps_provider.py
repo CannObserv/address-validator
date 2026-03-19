@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from models import ComponentSet, StandardizeResponseV1
-from services.validation.usps_provider import USPSProvider
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.services.validation.usps_provider import USPSProvider
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 # Flat dicts matching the updated USPSClient._map_response output
 CLIENT_RESULT_Y = {

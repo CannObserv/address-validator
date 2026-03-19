@@ -71,16 +71,16 @@ import os
 
 import httpx
 
-from services.validation import cache_db
-from services.validation._rate_limit import QuotaGuard, QuotaWindow
-from services.validation.cache_provider import CachingProvider
-from services.validation.chain_provider import ChainProvider
-from services.validation.google_client import GoogleClient
-from services.validation.google_provider import GoogleProvider
-from services.validation.null_provider import NullProvider
-from services.validation.protocol import ValidationProvider
-from services.validation.usps_client import USPSClient
-from services.validation.usps_provider import USPSProvider
+from address_validator.services.validation import cache_db
+from address_validator.services.validation._rate_limit import QuotaGuard, QuotaWindow
+from address_validator.services.validation.cache_provider import CachingProvider
+from address_validator.services.validation.chain_provider import ChainProvider
+from address_validator.services.validation.google_client import GoogleClient
+from address_validator.services.validation.google_provider import GoogleProvider
+from address_validator.services.validation.null_provider import NullProvider
+from address_validator.services.validation.protocol import ValidationProvider
+from address_validator.services.validation.usps_client import USPSClient
+from address_validator.services.validation.usps_provider import USPSProvider
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +173,7 @@ def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
                 "(e.g. '30'); use 0 to disable expiry"
             )
         logger.debug("get_provider: cache TTL=%d days (0=disabled)", ttl_days)
-        _caching_provider = CachingProvider(
-            inner=inner, get_db=cache_db.get_db, ttl_days=ttl_days
-        )
+        _caching_provider = CachingProvider(inner=inner, get_db=cache_db.get_db, ttl_days=ttl_days)
     return _caching_provider
 
 
@@ -207,23 +205,17 @@ def _parse_google_config() -> tuple[str, int, int]:
     """Read, validate, and return ``(api_key, rpm, daily_limit)``."""
     api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
     if not api_key:
-        raise ValueError(
-            "GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER"
-        )
+        raise ValueError("GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER")
     try:
         rpm = int(os.environ.get("GOOGLE_RATE_LIMIT_RPM", "5"))
     except ValueError:
-        raise ValueError(
-            "GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')"
-        ) from None
+        raise ValueError("GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')") from None
     if rpm <= 0:
         raise ValueError("GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')")
     try:
         daily_limit = int(os.environ.get("GOOGLE_DAILY_LIMIT", "160"))
     except ValueError:
-        raise ValueError(
-            "GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')"
-        ) from None
+        raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')") from None
     if daily_limit <= 0:
         raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')")
     return api_key, rpm, daily_limit
@@ -238,9 +230,7 @@ def _parse_latency_budget() -> float:
             "VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')"
         ) from None
     if budget <= 0:
-        raise ValueError(
-            "VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')"
-        )
+        raise ValueError("VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')")
     return budget
 
 

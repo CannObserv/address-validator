@@ -4,14 +4,14 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from models import (
+from address_validator.models import (
     ComponentSet,
     StandardizeResponseV1,
     ValidateRequestV1,
     ValidateResponseV1,
     ValidationResult,
 )
-from services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import ProviderRateLimitedError
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -33,7 +33,7 @@ CONFIRMED_RESPONSE = ValidateResponseV1(
 class TestValidateEndpoint:
     def test_raw_string_returns_200(self, client: TestClient) -> None:
         with patch(
-            "routers.v1.validate.get_provider",
+            "address_validator.routers.v1.validate.get_provider",
             return_value=_make_null_provider(NULL_RESPONSE),
         ):
             resp = client.post(
@@ -47,7 +47,7 @@ class TestValidateEndpoint:
 
     def test_raw_string_provider_receives_standardize_response(self, client: TestClient) -> None:
         provider = _make_null_provider(NULL_RESPONSE)
-        with patch("routers.v1.validate.get_provider", return_value=provider):
+        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
             client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
@@ -59,7 +59,7 @@ class TestValidateEndpoint:
 
     def test_components_dict_returns_200(self, client: TestClient) -> None:
         with patch(
-            "routers.v1.validate.get_provider",
+            "address_validator.routers.v1.validate.get_provider",
             return_value=_make_null_provider(NULL_RESPONSE),
         ):
             resp = client.post(
@@ -80,7 +80,7 @@ class TestValidateEndpoint:
 
     def test_components_takes_precedence_over_address(self, client: TestClient) -> None:
         provider = _make_null_provider(NULL_RESPONSE)
-        with patch("routers.v1.validate.get_provider", return_value=provider):
+        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
             client.post(
                 "/api/v1/validate",
                 json={
@@ -103,7 +103,7 @@ class TestValidateEndpoint:
 
     def test_confirmed_response_shape(self, client: TestClient) -> None:
         with patch(
-            "routers.v1.validate.get_provider",
+            "address_validator.routers.v1.validate.get_provider",
             return_value=_make_null_provider(CONFIRMED_RESPONSE),
         ):
             resp = client.post(
@@ -123,7 +123,7 @@ class TestValidateEndpoint:
             warnings=[],
         )
         with patch(
-            "routers.v1.validate.get_provider",
+            "address_validator.routers.v1.validate.get_provider",
             return_value=_make_null_provider(provider_response),
         ):
             # Address with parenthesized text triggers a parse warning
@@ -143,7 +143,7 @@ class TestValidateEndpoint:
             warnings=[provider_warning],
         )
         provider = _make_null_provider(provider_response)
-        with patch("routers.v1.validate.get_provider", return_value=provider):
+        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
             # Address with parenthesized text triggers a parse/std warning
             resp = client.post(
                 "/api/v1/validate",
@@ -214,7 +214,7 @@ class TestValidateEndpoint:
         rate_limited.validate = AsyncMock(
             side_effect=ProviderRateLimitedError("all", retry_after_seconds=6.3)
         )
-        with patch("routers.v1.validate.get_provider", return_value=rate_limited):
+        with patch("address_validator.routers.v1.validate.get_provider", return_value=rate_limited):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},

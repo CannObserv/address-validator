@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from models import HealthResponse
+from address_validator.models import HealthResponse
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 

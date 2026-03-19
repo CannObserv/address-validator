@@ -2,7 +2,7 @@
 
 import logging
 
-from middleware.request_id import get_request_id
+from address_validator.middleware.request_id import get_request_id
 
 
 class RequestIdFilter(logging.Filter):

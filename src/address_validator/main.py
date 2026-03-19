@@ -8,15 +8,15 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from logging_filter import RequestIdFilter
-from middleware.request_id import request_id_middleware
-from routers.v1 import health as v1_health
-from routers.v1 import parse as v1_parse
-from routers.v1 import standardize as v1_standardize
-from routers.v1 import validate as v1_validate
-from routers.v1.core import APIError, api_error_response
-from services.validation.cache_db import close_db
-from services.validation.factory import validate_config
+from address_validator.logging_filter import RequestIdFilter
+from address_validator.middleware.request_id import request_id_middleware
+from address_validator.routers.v1 import health as v1_health
+from address_validator.routers.v1 import parse as v1_parse
+from address_validator.routers.v1 import standardize as v1_standardize
+from address_validator.routers.v1 import validate as v1_validate
+from address_validator.routers.v1.core import APIError, api_error_response
+from address_validator.services.validation.cache_db import close_db
+from address_validator.services.validation.factory import validate_config
 
 logging.getLogger().addFilter(RequestIdFilter())
 

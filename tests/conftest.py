@@ -25,7 +25,7 @@ TEST_API_KEY = "test-api-key-for-pytest"
 os.environ.setdefault("API_KEY", TEST_API_KEY)
 
 # Deferred import: ordering constraint — must follow os.environ.setdefault.
-from main import app  # noqa: E402
+from address_validator.main import app  # noqa: E402
 
 
 @pytest.fixture(scope="session")

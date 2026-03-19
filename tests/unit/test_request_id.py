@@ -5,8 +5,8 @@ import re
 
 from fastapi.testclient import TestClient
 
-from logging_filter import RequestIdFilter
-from middleware.request_id import _request_id_var, get_request_id
+from address_validator.logging_filter import RequestIdFilter
+from address_validator.middleware.request_id import _request_id_var, get_request_id
 
 # ULID: 26 Crockford base32 characters
 _ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")

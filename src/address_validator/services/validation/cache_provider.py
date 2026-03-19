@@ -29,8 +29,13 @@ from datetime import UTC, datetime, timedelta
 
 import aiosqlite
 
-from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
-from services.validation.protocol import ValidationProvider
+from address_validator.models import (
+    ComponentSet,
+    StandardizeResponseV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
+from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 

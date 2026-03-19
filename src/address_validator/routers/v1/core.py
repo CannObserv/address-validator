@@ -4,7 +4,7 @@ import pycountry
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from models import ErrorResponse
+from address_validator.models import ErrorResponse
 
 # ---------------------------------------------------------------------------
 # Country validation

@@ -5,12 +5,12 @@ import re
 
 import usaddress
 
-from models import ComponentSet, ParseResponseV1
-from usps_data.directionals import DIRECTIONAL_MAP
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
-from usps_data.states import STATE_MAP
-from usps_data.suffixes import SUFFIX_MAP
-from usps_data.units import UNIT_MAP
+from address_validator.models import ComponentSet, ParseResponseV1
+from address_validator.usps_data.directionals import DIRECTIONAL_MAP
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.usps_data.states import STATE_MAP
+from address_validator.usps_data.suffixes import SUFFIX_MAP
+from address_validator.usps_data.units import UNIT_MAP
 
 logger = logging.getLogger(__name__)
 

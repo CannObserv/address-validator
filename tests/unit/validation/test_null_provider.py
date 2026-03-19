@@ -2,9 +2,9 @@
 
 import pytest
 
-from models import ComponentSet, StandardizeResponseV1
-from services.validation.null_provider import NullProvider
-from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.services.validation.null_provider import NullProvider
+from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 
 def _make_std(country: str = "US") -> StandardizeResponseV1:

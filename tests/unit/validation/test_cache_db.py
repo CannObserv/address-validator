@@ -3,8 +3,8 @@
 import aiosqlite
 import pytest
 
-import services.validation.cache_db as cache_db_module
-from services.validation.cache_db import _init_schema, close_db, get_db
+import address_validator.services.validation.cache_db as cache_db_module
+from address_validator.services.validation.cache_db import _init_schema, close_db, get_db
 
 
 @pytest.fixture(autouse=True)

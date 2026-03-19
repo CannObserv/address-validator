@@ -92,12 +92,8 @@ async def _init_schema(db: aiosqlite.Connection) -> None:
     async with db.execute("PRAGMA table_info(validated_addresses)") as cur:
         existing_columns = {row["name"] for row in await cur.fetchall()}
     if "validated_at" not in existing_columns:
-        await db.execute(
-            "ALTER TABLE validated_addresses ADD COLUMN validated_at TEXT"
-        )
+        await db.execute("ALTER TABLE validated_addresses ADD COLUMN validated_at TEXT")
         # Backfill: seed from created_at for all pre-existing rows.
-        await db.execute(
-            "UPDATE validated_addresses SET validated_at = created_at"
-        )
+        await db.execute("UPDATE validated_addresses SET validated_at = created_at")
         await db.commit()
     logger.debug("cache_db: schema initialised")

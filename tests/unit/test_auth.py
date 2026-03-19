@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
-import auth
+from address_validator import auth
 
 _PROJECT_ROOT = str(Path(__file__).parent.parent.parent)
 
@@ -33,7 +33,10 @@ class TestRequireApiKey:
 
     @pytest.mark.asyncio
     async def test_missing_key_raises_401(self, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.INFO, logger="auth"), pytest.raises(HTTPException) as exc_info:
+        with (
+            caplog.at_level(logging.INFO, logger="address_validator.auth"),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await auth.require_api_key(_mock_request("/api/parse"), None)
         assert exc_info.value.status_code == 401
         assert "missing API key" in caplog.text
@@ -42,7 +45,10 @@ class TestRequireApiKey:
     @pytest.mark.asyncio
     async def test_wrong_key_raises_403(self, caplog: pytest.LogCaptureFixture) -> None:
         key = "definitely-wrong-key"
-        with caplog.at_level(logging.INFO, logger="auth"), pytest.raises(HTTPException) as exc_info:
+        with (
+            caplog.at_level(logging.INFO, logger="address_validator.auth"),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await auth.require_api_key(_mock_request("/api/standardize"), key)
         assert exc_info.value.status_code == 403
         assert "invalid API key" in caplog.text
@@ -50,7 +56,10 @@ class TestRequireApiKey:
 
     @pytest.mark.asyncio
     async def test_oversized_key_raises_403(self, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.INFO, logger="auth"), pytest.raises(HTTPException) as exc_info:
+        with (
+            caplog.at_level(logging.INFO, logger="address_validator.auth"),
+            pytest.raises(HTTPException) as exc_info,
+        ):
             await auth.require_api_key(_mock_request(), "x" * 257)
         assert exc_info.value.status_code == 403
         assert "invalid API key" in caplog.text
@@ -66,9 +75,9 @@ class TestApiKeyImportGuard:
 
     def test_module_importable_without_api_key(self) -> None:
         env = {k: v for k, v in os.environ.items() if k != "API_KEY"}
-        env["PYTHONPATH"] = _PROJECT_ROOT
+        env["PYTHONPATH"] = str(Path(_PROJECT_ROOT) / "src")
         result = subprocess.run(
-            [sys.executable, "-c", "import auth"],
+            [sys.executable, "-c", "import address_validator.auth"],
             env=env,
             capture_output=True,
             text=True,
@@ -77,9 +86,9 @@ class TestApiKeyImportGuard:
         assert result.returncode == 0, result.stderr
 
     def test_module_importable_with_empty_api_key(self) -> None:
-        env = {**os.environ, "API_KEY": "", "PYTHONPATH": _PROJECT_ROOT}
+        env = {**os.environ, "API_KEY": "", "PYTHONPATH": str(Path(_PROJECT_ROOT) / "src")}
         result = subprocess.run(
-            [sys.executable, "-c", "import auth"],
+            [sys.executable, "-c", "import address_validator.auth"],
             env=env,
             capture_output=True,
             text=True,

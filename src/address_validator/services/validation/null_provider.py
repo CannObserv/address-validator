@@ -2,7 +2,7 @@
 
 import logging
 
-from models import StandardizeResponseV1, ValidateResponseV1, ValidationResult
+from address_validator.models import StandardizeResponseV1, ValidateResponseV1, ValidationResult
 
 logger = logging.getLogger(__name__)
 
