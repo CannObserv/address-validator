@@ -17,13 +17,9 @@ The script is idempotent: rows already present in PostgreSQL are skipped
 
 Dependencies
 ------------
-Requires ``psycopg2-binary`` (not in the main project deps — install ad hoc)::
+Requires ``asyncpg`` — already present in the project venv::
 
-    pip install psycopg2-binary
-
-or use the asyncpg-compatible URL by running inside the project venv which
-already has asyncpg available — this script uses asyncpg directly when
-psycopg2 is unavailable.
+    uv run python scripts/migrate_sqlite_to_postgres.py
 """
 
 from __future__ import annotations

@@ -116,7 +116,12 @@ async def _backdate_validated_at(engine: AsyncEngine, days_ago: int) -> None:
         )
 
 
+_TABLES = {"validated_addresses", "query_patterns"}
+
+
 async def _count_rows(engine: AsyncEngine, table: str) -> int:
+    if table not in _TABLES:
+        raise ValueError(f"unknown table: {table!r}")
     async with engine.connect() as conn:
         return (await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))).scalar()
 

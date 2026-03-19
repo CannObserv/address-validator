@@ -57,7 +57,7 @@ async def _run_migrations(dsn: str) -> None:
     cfg.set_main_option("sqlalchemy.url", dsn)
 
     logger.debug("cache_db: running alembic upgrade head")
-    await asyncio.get_event_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+    await asyncio.get_running_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
     logger.debug("cache_db: schema up to date")
 
 
