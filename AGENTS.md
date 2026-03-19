@@ -67,7 +67,7 @@ Env vars in `/etc/address-validator/env`:
 | `GOOGLE_RATE_LIMIT_RPM` | positive int | `5` |
 | `GOOGLE_DAILY_LIMIT` | positive int | `160` |
 | `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` |
-| `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |
+| `VALIDATION_CACHE_DSN` | PostgreSQL DSN e.g. `postgresql+asyncpg://user:pass@localhost/address_validator` | — (required when provider is non-null) |
 | `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
@@ -122,7 +122,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `src/address_validator/auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
 | `src/address_validator/services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures; `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; `_parse_latency_budget()`, `_parse_usps_config()`, `_parse_google_config()` — adding a new `QuotaWindow` or changing enforcement mode requires updating factory construction and `validate_config()` in sync |
-| `src/address_validator/services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
+| `src/address_validator/services/validation/cache_db.py` | `AsyncEngine` singleton; `get_engine()` runs `alembic upgrade head` on first call — schema changes go through `alembic/versions/` migrations, not inline DDL |
 | `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
 | `src/address_validator/services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
 | `src/address_validator/services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider |

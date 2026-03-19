@@ -66,7 +66,7 @@ The TTL is checked against `validated_addresses.validated_at`, which records whe
 
 `last_seen_at` continues to track query frequency for observability and is unrelated to expiry.
 
-**Existing deployments**: On first startup after this upgrade, `_init_schema` runs `ALTER TABLE … ADD COLUMN IF NOT EXISTS validated_at` and backfills `validated_at = created_at` for all pre-existing rows.
+**Schema migrations**: Managed by Alembic. `get_engine()` runs `alembic upgrade head` automatically on first call at startup. To migrate data from a prior SQLite cache, run `scripts/migrate_sqlite_to_postgres.py` after applying migrations.
 
 ## Dynamic quota querying
 

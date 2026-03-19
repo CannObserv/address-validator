@@ -15,7 +15,7 @@ from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
-from address_validator.services.validation.cache_db import close_db
+from address_validator.services.validation.cache_db import close_engine
 from address_validator.services.validation.factory import validate_config
 
 logging.getLogger().addFilter(RequestIdFilter())
@@ -51,7 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
     validate_config()
     yield
-    await close_db()
+    await close_engine()
 
 
 app = FastAPI(

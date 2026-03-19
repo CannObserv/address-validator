@@ -21,13 +21,13 @@ async def reset_singletons() -> None:
     factory_module._google_provider = None
     factory_module._http_client = None
     factory_module._caching_provider = None
-    await cache_db_module.close_db()
+    await cache_db_module.close_engine()
     yield
     factory_module._usps_provider = None
     factory_module._google_provider = None
     factory_module._http_client = None
     factory_module._caching_provider = None
-    await cache_db_module.close_db()
+    await cache_db_module.close_engine()
 
 
 class TestGetProvider:
@@ -302,6 +302,7 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
 
     def test_usps_missing_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -329,6 +330,7 @@ class TestValidateConfig:
     def test_google_valid_key_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
 
     def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -347,6 +349,7 @@ class TestValidateConfig:
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
 
     def test_chain_missing_google_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -361,6 +364,7 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "abc")
         with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
             validate_config()
@@ -369,8 +373,17 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "-1")
         with pytest.raises(ValueError, match="VALIDATION_CACHE_TTL_DAYS"):
+            validate_config()
+
+    def test_missing_cache_dsn_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.delenv("VALIDATION_CACHE_DSN", raising=False)
+        with pytest.raises(ValueError, match="VALIDATION_CACHE_DSN"):
             validate_config()
 
     def test_none_provider_skips_ttl_validation(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -385,6 +398,7 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         with caplog.at_level(logging.INFO, logger="address_validator.services.validation.factory"):
             validate_config()
         assert any("usps" in r.message for r in caplog.records)

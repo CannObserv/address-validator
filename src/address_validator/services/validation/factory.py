@@ -61,6 +61,11 @@ VALIDATION_LATENCY_BUDGET_S
     before raising ProviderAtCapacityError.  Must be a positive number.
     Defaults to ``1.0``.
 
+VALIDATION_CACHE_DSN
+    PostgreSQL connection string for the validation cache.
+    Example: postgresql+asyncpg://user:pass@localhost/address_validator
+    Required when a non-null provider is configured.
+
 VALIDATION_CACHE_TTL_DAYS
     Days before a cached result is treated as expired and re-validated via
     the live provider.  Default ``30``.  Set to ``0`` to disable expiry.
@@ -173,7 +178,9 @@ def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
                 "(e.g. '30'); use 0 to disable expiry"
             )
         logger.debug("get_provider: cache TTL=%d days (0=disabled)", ttl_days)
-        _caching_provider = CachingProvider(inner=inner, get_db=cache_db.get_db, ttl_days=ttl_days)
+        _caching_provider = CachingProvider(
+            inner=inner, get_engine=cache_db.get_engine, ttl_days=ttl_days
+        )
     return _caching_provider
 
 
@@ -308,6 +315,13 @@ def validate_config() -> None:
 
     _parse_latency_budget()
 
+    cache_dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+    if not cache_dsn:
+        raise ValueError(
+            "VALIDATION_CACHE_DSN must be set when a non-null validation provider is configured "
+            "(e.g. 'postgresql+asyncpg://user:pass@localhost/address_validator')"
+        )
+
     ttl_str = os.environ.get("VALIDATION_CACHE_TTL_DAYS", "30")
     try:
         ttl_days = int(ttl_str)
@@ -334,7 +348,7 @@ def get_provider() -> ValidationProvider:
     cheaply on each call.
 
     Non-null providers are wrapped in a :class:`CachingProvider` that checks
-    the local SQLite validation cache before delegating to the real backend.
+    the PostgreSQL validation cache before delegating to the real backend.
     NullProvider is returned unwrapped — it returns ``status="unavailable"``
     and caching its results provides no benefit.
 
