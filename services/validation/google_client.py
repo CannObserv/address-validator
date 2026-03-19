@@ -1,9 +1,8 @@
 """Low-level Google Address Validation API HTTP client.
 
 Handles request construction (with ``enableUspsCass: true``), API key
-authentication, a token-bucket rate limiter (configurable, default 25 req/s
-matching the Google Address Validation default quota), exponential-backoff
-retry on HTTP 429, and normalisation of the raw JSON response to a
+authentication, quota enforcement via a :class:`~services.validation._rate_limit.QuotaGuard`,
+exponential-backoff retry on HTTP 429, and normalisation of the raw JSON response to a
 provider-neutral dict consumed by
 :class:`~services.validation.google_provider.GoogleProvider`.
 
