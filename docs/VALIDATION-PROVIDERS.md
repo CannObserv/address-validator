@@ -28,7 +28,8 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 - API: USPS Addresses API v3. Spec archived at `docs/usps-addresses-v3r2_3.yaml`.
 - Auth: OAuth2 client credentials. Token cached 55 min in-process (`asyncio.Lock` prevents concurrent refresh races).
-- Rate limit: token bucket, default 5 req/s (free-tier limit). Configurable via `USPS_RATE_LIMIT_RPS`.
+- Rate limit: multi-window quota guard — per-second soft window (default 5 req/s), per-day soft
+  window (default 10 000/day). Configurable via `USPS_RATE_LIMIT_RPS` and `USPS_DAILY_LIMIT`.
 - 429 retry: up to 3 retries with `Retry-After` header support; falls back to exponential backoff (1 s base, ×2 per attempt + jitter).
 - Register at https://developer.usps.com.
 - `USPSProvider` and its `_http_client` are module-level singletons in `factory.py` — reset in tests.
@@ -37,17 +38,25 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 - API: Google Address Validation API. Single POST with `enableUspsCass: true`.
 - Auth: API key (`GOOGLE_API_KEY`).
-- Rate limit: token bucket, default 25 req/s (standard per-project quota). Configurable via `GOOGLE_RATE_LIMIT_RPS`.
+- Rate limit: multi-window quota guard — per-minute soft window (default 5 req/min), per-day
+  hard ceiling (default 160/day). Configurable via `GOOGLE_RATE_LIMIT_RPM` and
+  `GOOGLE_DAILY_LIMIT`.
 - 429 retry: same retry/backoff policy as USPS (up to 3 retries, `Retry-After` + exponential backoff).
 - Populates `latitude`/`longitude`. Surfaces three verdict flags as warnings.
 - `GoogleProvider` is a module-level singleton in `factory.py` — reset in tests.
 
-## Rate limit env vars
+## Rate limit and quota env vars
 
 | Variable | Default | Notes |
 |---|---|---|
-| `USPS_RATE_LIMIT_RPS` | `5.0` | Matches USPS free-tier documented limit |
-| `GOOGLE_RATE_LIMIT_RPS` | `25.0` | Matches Google Address Validation default quota |
+| `USPS_RATE_LIMIT_RPS` | `5.0` | USPS per-second window limit |
+| `USPS_DAILY_LIMIT` | `10000` | USPS per-day window limit (soft — queues up to latency budget) |
+| `GOOGLE_RATE_LIMIT_RPM` | `5` | Google per-minute window limit (soft) |
+| `GOOGLE_DAILY_LIMIT` | `160` | Google per-day hard ceiling — never exceeded |
+| `VALIDATION_LATENCY_BUDGET_S` | `1.0` | Max seconds a request may queue before overflowing to the next provider |
+
+`GOOGLE_RATE_LIMIT_RPS` has been removed. Rename to `GOOGLE_RATE_LIMIT_RPM` in
+`/etc/address-validator/env`.
 
 ## Cache TTL
 
@@ -65,7 +74,9 @@ Neither USPS nor Google expose real-time quota/usage data through their validati
 
 ## Fallback chain internals
 
-`ChainProvider` (`services/validation/chain_provider.py`) wraps a list of providers. It catches `ProviderRateLimitedError` (raised by a client after all 429 retries) and delegates to the next provider. All other exceptions (network errors, 5xx) propagate immediately. The `CachingProvider` wraps the chain, so a cache hit bypasses all providers in the chain.
+`ChainProvider` catches both `ProviderRateLimitedError` (upstream HTTP 429 after retries) and
+`ProviderAtCapacityError` (local quota exhausted before sending) and delegates to the next
+provider.
 
 ## Notes
 
