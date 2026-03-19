@@ -8,7 +8,7 @@ Do not instantiate directly in application code.
 import logging
 
 from models import StandardizeResponseV1, ValidateResponseV1
-from services.validation.errors import ProviderRateLimitedError
+from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
 from services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
@@ -39,13 +39,15 @@ class ChainProvider:
         self._providers = providers
 
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
-        last_exc: ProviderRateLimitedError | None = None
+        last_exc: ProviderRateLimitedError | ProviderAtCapacityError | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
                 return await provider.validate(std)
-            except ProviderRateLimitedError as exc:
+            except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
                 last_exc = exc
-                logger.warning("ChainProvider: %s rate-limited, trying next provider", name)
+                logger.warning(
+                    "ChainProvider: %s at capacity or rate-limited, trying next provider", name
+                )
         retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
         raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)

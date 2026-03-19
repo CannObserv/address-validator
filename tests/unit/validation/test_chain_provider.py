@@ -6,7 +6,7 @@ import pytest
 
 from models import ComponentSet, StandardizeResponseV1, ValidateResponseV1, ValidationResult
 from services.validation.chain_provider import ChainProvider
-from services.validation.errors import ProviderRateLimitedError
+from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
 from usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 _CONFIRMED = ValidateResponseV1(
@@ -98,6 +98,66 @@ class TestChainProvider:
         chain = ChainProvider(providers=[_mock_provider(_CONFIRMED)])
         result = await chain.validate(std_address)  # type: ignore[arg-type]
         assert result is _CONFIRMED
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_second_on_at_capacity(self, std_address: object) -> None:
+        primary = AsyncMock()
+        primary.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
+        secondary = _mock_provider(_GOOGLE_CONFIRMED)
+        chain = ChainProvider(providers=[primary, secondary])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+        assert result.validation.provider == "google"
+        primary.validate.assert_awaited_once()
+        secondary.validate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_all_when_all_providers_at_capacity(self, std_address: object) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(side_effect=ProviderAtCapacityError("google"))
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+
+    @pytest.mark.asyncio
+    async def test_retry_after_propagated_from_at_capacity_error(
+        self, std_address: object
+    ) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.5)
+        )
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("google", retry_after_seconds=2.0)
+        )
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.retry_after_seconds == 2.0
+
+    @pytest.mark.asyncio
+    async def test_at_capacity_mixed_with_rate_limited_propagates_last(
+        self, std_address: object
+    ) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.1)
+        )
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("google", retry_after_seconds=3.0)
+        )
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.retry_after_seconds == 3.0
 
 
 @pytest.fixture()
