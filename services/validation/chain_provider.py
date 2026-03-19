@@ -15,16 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 class ChainProvider:
-    """Tries each provider in order, falling back when one is rate-limited.
+    """Tries each provider in order, falling back on rate-limit or capacity errors.
 
-    On :class:`~services.validation.errors.ProviderRateLimitedError` from the
+    On :class:`~services.validation.errors.ProviderRateLimitedError` or
+    :class:`~services.validation.errors.ProviderAtCapacityError` from the
     current provider, the next provider in the chain is tried.  If all
-    providers raise :class:`~services.validation.errors.ProviderRateLimitedError`,
+    providers raise :class:`~services.validation.errors.ProviderRateLimitedError`
+    or :class:`~services.validation.errors.ProviderAtCapacityError`,
     a final :class:`~services.validation.errors.ProviderRateLimitedError` with
     ``provider="all"`` is raised for the router to translate to HTTP 503.
 
-    Any non-rate-limit exception (network error, unexpected 5xx, etc.) is
-    re-raised immediately without trying further providers.
+    Any non-rate-limit, non-capacity exception (network error, unexpected 5xx,
+    etc.) is re-raised immediately without trying further providers.
 
     Parameters
     ----------
