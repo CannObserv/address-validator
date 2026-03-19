@@ -196,7 +196,7 @@ Requires Python ≥ 3.12.  Dependencies are managed with
 ```bash
 uv sync                  # install dependencies into .venv/
 export API_KEY="your-secret-key"
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
+uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
 ```
 
 A systemd unit file (`address-validator.service`) is included for
@@ -206,24 +206,28 @@ persistent deployment.  The API key is stored in
 ## Project Structure
 
 ```
-main.py                        # FastAPI app entry point, CORS config
-auth.py                        # API key authentication dependency
-models.py                      # Shared Pydantic request/response models
-routers/
-  v1/
+src/address_validator/
+  main.py                      # FastAPI app entry point, CORS config
+  auth.py                      # API key authentication dependency
+  models.py                    # Shared Pydantic request/response models
+  logging_filter.py            # RequestIdFilter — injects request_id into logs
+  middleware/
+    request_id.py              # ULID generation, X-Request-ID header
+  routers/v1/
     core.py                    # Country validation, APIError, helpers
     health.py                  # GET /api/v1/health
     parse.py                   # POST /api/v1/parse
     standardize.py             # POST /api/v1/standardize
-services/
-  parser.py                    # usaddress wrapper, tag-name mapping
-  standardizer.py              # USPS Pub 28 standardization logic
-usps_data/
-  spec.py                      # Pub 28 spec identifier constants
-  suffixes.py                  # Street suffix abbreviations
-  directionals.py              # Directional abbreviations
-  states.py                    # State name → abbreviation map
-  units.py                     # Secondary unit designators
+  services/
+    parser.py                  # usaddress wrapper, tag-name mapping
+    standardizer.py            # USPS Pub 28 standardization logic
+    validation/                # Provider abstraction + USPS/Google/chain/cache
+  usps_data/
+    spec.py                    # Pub 28 spec identifier constants
+    suffixes.py                # Street suffix abbreviations
+    directionals.py            # Directional abbreviations
+    states.py                  # State name → abbreviation map
+    units.py                   # Secondary unit designators
 docs/
   usps-pub28.md                # Pub 28 research notes
   usps-addresses-v3r2_3.yaml   # Archived USPS Addresses API v3 spec

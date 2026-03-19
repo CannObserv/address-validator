@@ -9,9 +9,9 @@ populated correctly for all test HTTP clients.
 
 Import order
 ------------
-``from main import app`` must come *after* ``os.environ.setdefault`` below so
-that ``_API_KEY`` is set to the test key when the module is first imported.
-PLC0415 is suppressed on that import.
+``from address_validator.main import app`` must come *after*
+``os.environ.setdefault`` below so that ``_API_KEY`` is set to the test key
+when the module is first imported.  PLC0415 is suppressed on that import.
 """
 
 import os

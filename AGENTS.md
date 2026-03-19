@@ -9,6 +9,8 @@ FastAPI service — parses and standardizes US physical addresses per USPS Publi
 ## Architecture
 
 ```
+# All source modules live under src/address_validator/
+
 HTTP request
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
  └─ routers/v1/              thin handlers, validation, error handling
@@ -44,7 +46,7 @@ logging_filter.py   RequestIdFilter — injects request_id into every LogRecord 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
 - Key at `/etc/address-validator/env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`
-- Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from main import app` above the `setdefault` call
+- Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from address_validator.main import app` above the `setdefault` call
 
 ## Logging
 
@@ -112,20 +114,20 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 
 | File/Module | Risk |
 |---|---|
-| `services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect all parsing |
-| `services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect component assignment |
-| `usps_data/` tables | Verify against USPS Pub 28 before editing |
-| `standardizer.py` `_get()` | Every component value flows through this; changes cascade everywhere |
-| `models.py` | Breaking API change if field names/types change |
-| `usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
-| `auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
-| `services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures; `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; `_parse_latency_budget()`, `_parse_usps_config()`, `_parse_google_config()` — adding a new `QuotaWindow` or changing enforcement mode requires updating factory construction and `validate_config()` in sync |
-| `services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
-| `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
-| `services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
-| `services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider |
-| `middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
-| `logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
+| `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect all parsing |
+| `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect component assignment |
+| `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
+| `src/address_validator/services/standardizer.py` `_get()` | Every component value flows through this; changes cascade everywhere |
+| `src/address_validator/models.py` | Breaking API change if field names/types change |
+| `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
+| `src/address_validator/auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
+| `src/address_validator/services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures; `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; `_parse_latency_budget()`, `_parse_usps_config()`, `_parse_google_config()` — adding a new `QuotaWindow` or changing enforcement mode requires updating factory construction and `validate_config()` in sync |
+| `src/address_validator/services/validation/cache_db.py` | Schema changes require DB recreation — `IF NOT EXISTS` silently skips migrations |
+| `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
+| `src/address_validator/services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
+| `src/address_validator/services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider |
+| `src/address_validator/middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
+| `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
 
 ## Commit convention
 
