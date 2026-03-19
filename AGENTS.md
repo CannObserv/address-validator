@@ -10,6 +10,7 @@ FastAPI service — parses and standardizes US physical addresses per USPS Publi
 
 ```
 HTTP request
+ └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
  └─ routers/v1/              thin handlers, validation, error handling
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
@@ -25,6 +26,7 @@ models.py           API contract source of truth
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
+logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 ```
 
 ## Key conventions
@@ -122,6 +124,8 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
 | `services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
 | `services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider |
+| `middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
+| `logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
 
 ## Commit convention
 
