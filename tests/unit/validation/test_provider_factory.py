@@ -414,6 +414,14 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
             validate_config()
 
+    def test_usps_sub_one_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0.5")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            validate_config()
+
     def test_invalid_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
@@ -491,5 +499,13 @@ class TestGetProviderRpsGuard:
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
+        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+            get_provider()
+
+    def test_usps_sub_one_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0.5")
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
             get_provider()
