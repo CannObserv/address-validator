@@ -37,16 +37,16 @@ USPS_CONSUMER_SECRET
     ``VALIDATION_PROVIDER``.
 
 USPS_RATE_LIMIT_RPS
-    Maximum USPS API requests per second.  Defaults to ``5.0`` (free-tier
-    documented limit).
+    Maximum USPS API requests per second.  Must be a positive number.
+    Defaults to ``5.0`` (free-tier documented limit).
 
 GOOGLE_API_KEY
     API key from the Google Cloud Console.  Required when ``google`` appears
     in ``VALIDATION_PROVIDER``.
 
 GOOGLE_RATE_LIMIT_RPS
-    Maximum Google API requests per second.  Defaults to ``25.0`` (standard
-    per-project quota).
+    Maximum Google API requests per second.  Must be a positive number.
+    Defaults to ``25.0`` (standard per-project quota).
 
 VALIDATION_CACHE_TTL_DAYS
     Days before a cached result is treated as expired and re-validated via
