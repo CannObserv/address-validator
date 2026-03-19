@@ -85,8 +85,8 @@ def _make_canonical_key(result: ValidateResponseV1) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -176,20 +176,20 @@ async def _lookup(
 
         if ttl_days:
             cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
-            validated_at_str = va_row["validated_at"] or va_row["created_at"]
-            if datetime.fromisoformat(validated_at_str) < cutoff:
+            validated_at = va_row["validated_at"] or va_row["created_at"]
+            if validated_at < cutoff:
                 logger.debug(
                     "cache_lookup: expired pattern_key=%s canonical_key=%s validated_at=%s",
                     pattern_key,
                     canonical_key,
-                    validated_at_str,
+                    validated_at,
                 )
                 return None
 
     async with engine.begin() as wconn:
         await wconn.execute(
             text("UPDATE validated_addresses SET last_seen_at = :ts WHERE canonical_key = :ck"),
-            {"ts": _now_iso(), "ck": canonical_key},
+            {"ts": _now_utc(), "ck": canonical_key},
         )
 
     logger.debug(
@@ -206,7 +206,7 @@ async def _store(
     canonical_key: str,
     result: ValidateResponseV1,
 ) -> None:
-    now = _now_iso()
+    now = _now_utc()
     components_json: str | None = result.components.model_dump_json() if result.components else None
     warnings_json = json.dumps(result.warnings)
 

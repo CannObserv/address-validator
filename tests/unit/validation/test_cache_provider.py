@@ -108,7 +108,7 @@ def _make_provider(response: ValidateResponseV1) -> AsyncMock:
 
 async def _backdate_validated_at(engine: AsyncEngine, days_ago: int) -> None:
     """Set validated_at on all validated_addresses rows to `days_ago` days in the past."""
-    ts = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat()
+    ts = datetime.now(UTC) - timedelta(days=days_ago)
     async with engine.begin() as conn:
         await conn.execute(
             text("UPDATE validated_addresses SET validated_at = :ts"),

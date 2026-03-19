@@ -1,5 +1,7 @@
 """Unit tests for services.validation.cache_db."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -91,6 +93,37 @@ class TestSchema:
             )
             assert result.fetchone() is not None
 
+    async def test_timestamp_columns_are_timestamptz(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Migration 003 converts all timestamp columns from TEXT to TIMESTAMPTZ."""
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        engine = await get_engine()
+
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT column_name, data_type "
+                    "FROM information_schema.columns "
+                    "WHERE table_name = 'validated_addresses' "
+                    "  AND column_name IN ('created_at', 'last_seen_at', 'validated_at') "
+                    "ORDER BY column_name"
+                )
+            )
+            rows = {r[0]: r[1] for r in result.fetchall()}
+
+        assert rows["created_at"] == "timestamp with time zone"
+        assert rows["last_seen_at"] == "timestamp with time zone"
+        assert rows["validated_at"] == "timestamp with time zone"
+
+        # Also check query_patterns.created_at
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = 'query_patterns' AND column_name = 'created_at'"
+                )
+            )
+            assert result.scalar() == "timestamp with time zone"
+
     async def test_foreign_key_enforced(self, db: AsyncEngine) -> None:
         """Inserting a query_pattern referencing a non-existent canonical_key must fail."""
         with pytest.raises(IntegrityError):
@@ -98,6 +131,7 @@ class TestSchema:
                 await conn.execute(
                     text(
                         "INSERT INTO query_patterns (pattern_key, canonical_key, created_at) "
-                        "VALUES ('pat', 'no-such-canonical', '2026-01-01T00:00:00+00:00')"
-                    )
+                        "VALUES ('pat', 'no-such-canonical', :ts)"
+                    ),
+                    {"ts": datetime.now(UTC)},
                 )
