@@ -168,7 +168,8 @@ class USPSClient:
             raw: dict[str, Any] = resp.json()
             return self._map_response(raw)
 
-        raise ProviderRateLimitedError("usps")  # unreachable, satisfies type checker
+        # unreachable — satisfies the type checker
+        raise ProviderRateLimitedError("usps", retry_after_seconds=0.0)
 
     @staticmethod
     def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
