@@ -31,7 +31,7 @@ _RETRY_BASE_DELAY_S = 1.0
 _RETRY_JITTER_S = 0.5
 
 
-@dataclass
+@dataclass(frozen=True)
 class QuotaWindow:
     """Describes one quota constraint for a :class:`QuotaGuard`.
 
@@ -53,6 +53,12 @@ class QuotaWindow:
     limit: int
     duration_s: float
     mode: Literal["soft", "hard"]
+
+    def __post_init__(self) -> None:
+        if self.limit <= 0:
+            raise ValueError(f"QuotaWindow.limit must be positive, got {self.limit}")
+        if self.duration_s <= 0:
+            raise ValueError(f"QuotaWindow.duration_s must be positive, got {self.duration_s}")
 
 
 class QuotaGuard:
