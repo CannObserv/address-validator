@@ -188,6 +188,7 @@ class TestUSPSClient:
         ):
             await client.validate_address("123 Main St", "Springfield", "IL")
         assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
 
     @pytest.mark.asyncio
     async def test_429_retries_before_giving_up(

@@ -253,6 +253,7 @@ class TestGoogleClientValidateAddress:
         ):
             await client.validate_address("123 Main St")
         assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
 
     @pytest.mark.asyncio
     async def test_429_retries_before_giving_up(

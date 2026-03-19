@@ -62,6 +62,22 @@ class TestChainProvider:
         assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
+    async def test_retry_after_propagated_from_last_provider(self, std_address: object) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("usps", retry_after_seconds=2.0)
+        )
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("google", retry_after_seconds=5.5)
+        )
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.retry_after_seconds == 5.5
+
+    @pytest.mark.asyncio
     async def test_non_rate_limit_error_propagates_immediately(self, std_address: object) -> None:
         p1 = AsyncMock()
         p1.validate = AsyncMock(side_effect=ValueError("unexpected"))

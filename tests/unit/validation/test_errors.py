@@ -19,3 +19,11 @@ class TestProviderRateLimitedError:
     def test_all_sentinel(self) -> None:
         err = ProviderRateLimitedError("all")
         assert err.provider == "all"
+
+    def test_retry_after_seconds_default(self) -> None:
+        err = ProviderRateLimitedError("usps")
+        assert err.retry_after_seconds == 0.0
+
+    def test_retry_after_seconds_stored(self) -> None:
+        err = ProviderRateLimitedError("usps", retry_after_seconds=4.5)
+        assert err.retry_after_seconds == 4.5

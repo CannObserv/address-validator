@@ -211,7 +211,9 @@ class TestValidateEndpoint:
 
     def test_provider_rate_limited_returns_429(self, client: TestClient) -> None:
         rate_limited = AsyncMock()
-        rate_limited.validate = AsyncMock(side_effect=ProviderRateLimitedError("all"))
+        rate_limited.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("all", retry_after_seconds=6.3)
+        )
         with patch("routers.v1.validate.get_provider", return_value=rate_limited):
             resp = client.post(
                 "/api/v1/validate",
@@ -219,7 +221,7 @@ class TestValidateEndpoint:
             )
         assert resp.status_code == 429
         assert resp.json()["error"] == "provider_rate_limited"
-        assert resp.headers["retry-after"] == "1"
+        assert resp.headers["retry-after"] == "7"  # math.ceil(6.3)
 
 
 def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:

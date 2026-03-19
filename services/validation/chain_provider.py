@@ -39,10 +39,13 @@ class ChainProvider:
         self._providers = providers
 
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+        last_exc: ProviderRateLimitedError | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
                 return await provider.validate(std)
-            except ProviderRateLimitedError:
+            except ProviderRateLimitedError as exc:
+                last_exc = exc
                 logger.warning("ChainProvider: %s rate-limited, trying next provider", name)
-        raise ProviderRateLimitedError("all")
+        retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
+        raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)

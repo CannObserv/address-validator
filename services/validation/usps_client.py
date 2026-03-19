@@ -161,7 +161,8 @@ class USPSClient:
                         )
                         await asyncio.sleep(delay)
                         continue
-                    raise ProviderRateLimitedError("usps") from exc
+                    delay = _parse_retry_after(exc.response, attempt)
+                    raise ProviderRateLimitedError("usps", retry_after_seconds=delay) from exc
                 raise
 
             raw: dict[str, Any] = resp.json()

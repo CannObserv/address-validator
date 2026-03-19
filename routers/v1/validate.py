@@ -32,6 +32,7 @@ so upstream callers degrade gracefully.
 """
 
 import logging
+import math
 
 from fastapi import APIRouter, Depends
 
@@ -44,8 +45,6 @@ from services.validation.errors import ProviderRateLimitedError
 from services.validation.factory import get_provider
 
 logger = logging.getLogger(__name__)
-
-_RATE_LIMITED_RETRY_AFTER_S = 1
 
 router = APIRouter(
     prefix="/api/v1",
@@ -116,12 +115,12 @@ async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std)
-    except ProviderRateLimitedError:
+    except ProviderRateLimitedError as exc:
         raise APIError(
             status_code=429,
             error="provider_rate_limited",
             message="All configured validation providers are currently rate-limited. Retry later.",
-            headers={"Retry-After": str(_RATE_LIMITED_RETRY_AFTER_S)},
+            headers={"Retry-After": str(math.ceil(exc.retry_after_seconds))},
         ) from None
 
     if std.warnings:
