@@ -14,7 +14,7 @@ HTTP request
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
      └─ validate         →   parse → standardize → services/validation/
-                                 factory.py        get_provider() reads VALIDATION_PROVIDER env
+                                 factory.py        get_provider() + validate_config() read VALIDATION_PROVIDER env
                                  null_provider.py  default no-op
                                  usps_provider.py  OAuth2 + token bucket; DPV → status
                                  google_provider.py  API key; lat/lng; DPV → status

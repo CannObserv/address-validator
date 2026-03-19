@@ -143,66 +143,77 @@ def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
     return _caching_provider
 
 
+def _parse_usps_config() -> tuple[str, str, float]:
+    """Read, validate, and return ``(key, secret, rps)`` for the USPS provider.
+
+    Raises :exc:`ValueError` on missing credentials or a non-positive RPS value.
+    """
+    key = os.environ.get("USPS_CONSUMER_KEY", "").strip()
+    secret = os.environ.get("USPS_CONSUMER_SECRET", "").strip()
+    if not key or not secret:
+        raise ValueError(
+            "USPS_CONSUMER_KEY and USPS_CONSUMER_SECRET must be set "
+            "when 'usps' appears in VALIDATION_PROVIDER"
+        )
+    try:
+        rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
+    except ValueError:
+        raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')") from None
+    if rps <= 0:
+        raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')")
+    return key, secret, rps
+
+
+def _parse_google_config() -> tuple[str, float]:
+    """Read, validate, and return ``(api_key, rps)`` for the Google provider.
+
+    Raises :exc:`ValueError` on a missing API key or a non-positive RPS value.
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
+    if not api_key:
+        raise ValueError(
+            "GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER"
+        )
+    try:
+        rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
+    except ValueError:
+        raise ValueError(
+            "GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')"
+        ) from None
+    if rps <= 0:
+        raise ValueError("GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')")
+    return api_key, rps
+
+
 def _check_provider_config(name: str) -> None:
     """Raise :exc:`ValueError` if env-var credentials for *name* are absent or malformed.
 
     Validates credentials and rate-limit values without constructing any
-    objects or making network calls.  Called by both :func:`_build_single_provider`
-    (at construction time) and :func:`validate_config` (at startup).
+    objects or making network calls.  Called by :func:`validate_config` at
+    startup; :func:`_build_single_provider` calls the provider-specific
+    parsers directly to avoid re-reading env vars.
     """
     if name == "usps":
-        key = os.environ.get("USPS_CONSUMER_KEY", "").strip()
-        secret = os.environ.get("USPS_CONSUMER_SECRET", "").strip()
-        if not key or not secret:
-            raise ValueError(
-                "USPS_CONSUMER_KEY and USPS_CONSUMER_SECRET must be set "
-                "when 'usps' appears in VALIDATION_PROVIDER"
-            )
-        try:
-            rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
-        except ValueError:
-            raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')") from None
-        if rps <= 0:
-            raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')")
-        return
-
-    if name == "google":
-        api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
-        if not api_key:
-            raise ValueError(
-                "GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER"
-            )
-        try:
-            rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
-        except ValueError:
-            raise ValueError(
-                "GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')"
-            ) from None
-        if rps <= 0:
-            raise ValueError("GOOGLE_RATE_LIMIT_RPS must be a positive number (e.g. '25.0')")
-        return
-
-    raise ValueError(
-        f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."
-    )
+        _parse_usps_config()
+    elif name == "google":
+        _parse_google_config()
+    else:
+        raise ValueError(
+            f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."
+        )
 
 
 def _build_single_provider(name: str) -> ValidationProvider:
     """Instantiate a single named provider, reading credentials from env."""
-    _check_provider_config(name)
-
     if name == "usps":
-        key = os.environ.get("USPS_CONSUMER_KEY", "").strip()
-        secret = os.environ.get("USPS_CONSUMER_SECRET", "").strip()
-        rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
+        key, secret, rps = _parse_usps_config()
         return _get_usps_provider(key, secret, rps)
 
     if name == "google":
-        api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
-        rps = float(os.environ.get("GOOGLE_RATE_LIMIT_RPS", "25.0"))
+        api_key, rps = _parse_google_config()
         return _get_google_provider(api_key, rps)
 
-    raise ValueError(  # pragma: no cover — _check_provider_config already raised
+    raise ValueError(
         f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."
     )
 
