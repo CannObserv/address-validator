@@ -3,7 +3,6 @@
 Provides:
 - :class:`QuotaWindow` — descriptor for a single quota constraint
 - :class:`QuotaGuard` — multi-window async rate limiter
-- :class:`_TokenBucket` — async token-bucket rate limiter (deprecated; use QuotaGuard)
 - :func:`_parse_retry_after` — extracts backoff delay from a 429 response
 - Retry constants: :data:`_RETRY_MAX`, :data:`_RETRY_BASE_DELAY_S`
 """
@@ -64,10 +63,9 @@ class QuotaWindow:
 class QuotaGuard:
     """Multi-window async rate limiter with a latency budget.
 
-    Replaces :class:`_TokenBucket`.  Each :class:`QuotaWindow` is backed by a
-    token bucket (``rate = limit / duration_s``, ``capacity = limit``).  On
-    service start the bucket is full (optimistic — does not know mid-period
-    usage across restarts).
+    Each :class:`QuotaWindow` is backed by a token bucket (``rate = limit / duration_s``,
+    ``capacity = limit``).  On service start the bucket is full (optimistic — does
+    not know mid-period usage across restarts).
 
     ``acquire()`` is the sole entry point.  It:
 
@@ -146,34 +144,6 @@ class QuotaGuard:
             # --- Consume from all windows ---
             for i in range(len(self._windows)):
                 self._tokens[i] -= 1.0
-
-
-class _TokenBucket:
-    """Minimal async token-bucket rate limiter.
-
-    The :class:`asyncio.Lock` is created at instantiation time inside the
-    instance so it is always bound to the correct running event loop.
-    """
-
-    def __init__(self, rate: float, capacity: float) -> None:
-        self.rate = rate
-        self.capacity = capacity
-        self._tokens = capacity
-        self._last_refill = monotonic()
-        self._lock = asyncio.Lock()
-
-    async def acquire(self) -> None:
-        async with self._lock:
-            now = monotonic()
-            elapsed = now - self._last_refill
-            self._tokens = min(self.capacity, self._tokens + elapsed * self.rate)
-            self._last_refill = now
-            if self._tokens < 1:
-                wait = (1 - self._tokens) / self.rate
-                await asyncio.sleep(wait)
-                self._tokens = 0.0
-            else:
-                self._tokens -= 1.0
 
 
 def _parse_retry_after(response: httpx.Response, attempt: int) -> float:
