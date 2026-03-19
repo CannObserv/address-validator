@@ -191,9 +191,9 @@ def _parse_usps_config() -> tuple[str, str, float, int]:
     try:
         rps = float(os.environ.get("USPS_RATE_LIMIT_RPS", "5.0"))
     except ValueError:
-        raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')") from None
-    if rps <= 0:
-        raise ValueError("USPS_RATE_LIMIT_RPS must be a positive number (e.g. '5.0')")
+        raise ValueError("USPS_RATE_LIMIT_RPS must be a number >= 1 (e.g. '5.0')") from None
+    if rps < 1:
+        raise ValueError("USPS_RATE_LIMIT_RPS must be a number >= 1 (e.g. '5.0')")
     try:
         daily_limit = int(os.environ.get("USPS_DAILY_LIMIT", "10000"))
     except ValueError:
@@ -316,8 +316,7 @@ def validate_config() -> None:
     for name in names:
         _check_provider_config(name)
 
-    if names:
-        _parse_latency_budget()
+    _parse_latency_budget()
 
     ttl_str = os.environ.get("VALIDATION_CACHE_TTL_DAYS", "30")
     try:

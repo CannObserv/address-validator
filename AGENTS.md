@@ -57,9 +57,12 @@ Env vars in `/etc/address-validator/env`:
 | `VALIDATION_PROVIDER` | `none`, `usps`, `google`, or comma-sep list e.g. `usps,google` | `none` |
 | `USPS_CONSUMER_KEY` | string | — |
 | `USPS_CONSUMER_SECRET` | string | — |
-| `USPS_RATE_LIMIT_RPS` | float | `5.0` |
+| `USPS_RATE_LIMIT_RPS` | float >= 1 | `5.0` |
+| `USPS_DAILY_LIMIT` | non-negative int | `10000` |
 | `GOOGLE_API_KEY` | string | — |
-| `GOOGLE_RATE_LIMIT_RPS` | float | `25.0` |
+| `GOOGLE_RATE_LIMIT_RPM` | float | `5` |
+| `GOOGLE_DAILY_LIMIT` | positive int | `160` |
+| `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` |
 | `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |
 | `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
 

@@ -1,7 +1,7 @@
 """Low-level USPS Addresses API v3 HTTP client.
 
-Handles OAuth2 client-credentials token acquisition and caching, a token-bucket
-rate limiter (configurable, default 5 req/s matching the free-tier limit),
+Handles OAuth2 client-credentials token acquisition and caching,
+quota enforcement via a :class:`~services.validation._rate_limit.QuotaGuard`,
 exponential-backoff retry on HTTP 429, and mapping of the raw USPS JSON
 response to a normalised dict consumed by
 :class:`~services.validation.usps_provider.USPSProvider`.
