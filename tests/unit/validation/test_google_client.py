@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from services.validation._rate_limit import _RETRY_MAX, _TokenBucket
-from services.validation.errors import ProviderRateLimitedError
+from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
+from services.validation.errors import ProviderAtCapacityError, ProviderRateLimitedError
 from services.validation.google_client import GoogleClient
 
 API_KEY = "test-api-key"
@@ -184,8 +184,19 @@ class TestGoogleClientValidateAddress:
         return AsyncMock(spec=httpx.AsyncClient)
 
     @pytest.fixture()
-    def client(self, mock_http: AsyncMock) -> GoogleClient:
-        return GoogleClient(api_key=API_KEY, http_client=mock_http)
+    def _default_guard(self) -> QuotaGuard:
+        return QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+                QuotaWindow(limit=160, duration_s=86_400.0, mode="hard"),
+            ],
+            latency_budget_s=1.0,
+            provider_name="google",
+        )
+
+    @pytest.fixture()
+    def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> GoogleClient:
+        return GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=_default_guard)
 
     def _make_response(self, json_data: dict, status_code: int = 200) -> MagicMock:
         resp = MagicMock(spec=httpx.Response)
@@ -291,12 +302,27 @@ class TestGoogleClientValidateAddress:
             result = await client.validate_address("123 Main St")
         assert result["dpv_match_code"] == "Y"
 
-    @pytest.mark.asyncio
-    async def test_has_rate_limiter(self, mock_http: AsyncMock) -> None:
-        client = GoogleClient(api_key=API_KEY, http_client=mock_http)
-        assert isinstance(client._rate_limiter, _TokenBucket)
+    def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
+        guard = QuotaGuard(
+            windows=[QuotaWindow(limit=5, duration_s=60.0, mode="soft")],
+            provider_name="google",
+        )
+        client = GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=guard)
+        assert client._rate_limiter is guard
 
     @pytest.mark.asyncio
-    async def test_accepts_custom_rate_limit_rps(self, mock_http: AsyncMock) -> None:
-        client = GoogleClient(api_key=API_KEY, http_client=mock_http, rate_limit_rps=50.0)
-        assert client._rate_limiter.rate == 50.0
+    async def test_at_capacity_raises_before_http_call(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
+        with (
+            patch.object(
+                client._rate_limiter,
+                "acquire",
+                side_effect=ProviderAtCapacityError("google"),
+            ),
+            pytest.raises(ProviderAtCapacityError),
+        ):
+            await client.validate_address("123 Main St")
+
+        mock_http.post.assert_not_called()

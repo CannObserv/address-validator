@@ -20,17 +20,14 @@ import httpx
 from services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
+    QuotaGuard,
     _parse_retry_after,
-    _TokenBucket,
 )
 from services.validation.errors import ProviderRateLimitedError
 
 logger = logging.getLogger(__name__)
 
 _VALIDATE_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
-
-# Google Address Validation API default quota: 25 QPS per project.
-_DEFAULT_RATE_LIMIT_RPS = 25.0
 
 
 class GoogleClient:
@@ -42,21 +39,20 @@ class GoogleClient:
         Google Cloud API key restricted to the Address Validation API.
     http_client:
         Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
-    rate_limit_rps:
-        Maximum requests per second sent to the Google API.  Defaults to
-        ``25.0`` (standard per-project quota).  Set via
-        ``GOOGLE_RATE_LIMIT_RPS`` env var.
+    quota_guard:
+        :class:`~services.validation._rate_limit.QuotaGuard` instance
+        managing rate limits and quota constraints.
     """
 
     def __init__(
         self,
         api_key: str,
         http_client: httpx.AsyncClient,
-        rate_limit_rps: float = _DEFAULT_RATE_LIMIT_RPS,
+        quota_guard: QuotaGuard,
     ) -> None:
         self._api_key = api_key
         self._http = http_client
-        self._rate_limiter = _TokenBucket(rate=rate_limit_rps, capacity=rate_limit_rps)
+        self._rate_limiter = quota_guard
 
     async def validate_address(
         self,
