@@ -175,7 +175,9 @@ class TestGetProvider:
         assert isinstance(chain._providers[0], GoogleProvider)
         assert isinstance(chain._providers[1], USPSProvider)
 
-    def test_usps_rate_limit_rps_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_usps_rate_limit_rps_configures_per_second_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
@@ -183,16 +185,49 @@ class TestGetProvider:
         result = get_provider()
         assert isinstance(result, CachingProvider)
         usps: USPSProvider = result._inner  # type: ignore[assignment]
-        assert usps._client._rate_limiter.rate == 10.0
+        guard = usps._client._rate_limiter
+        assert guard._windows[0].limit == 10
+        assert guard._windows[0].duration_s == 1.0
 
-    def test_google_rate_limit_rps_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_usps_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_DAILY_LIMIT", "5000")
+        result = get_provider()
+        usps: USPSProvider = result._inner  # type: ignore[assignment]
+        guard = usps._client._rate_limiter
+        assert guard._windows[1].limit == 5000
+        assert guard._windows[1].duration_s == 86_400.0
+
+    def test_google_rate_limit_rpm_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "50.0")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "10")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         google: GoogleProvider = result._inner  # type: ignore[assignment]
-        assert google._client._rate_limiter.rate == 50.0
+        guard = google._client._rate_limiter
+        assert guard._windows[0].limit == 10
+        assert guard._windows[0].duration_s == 60.0
+
+    def test_google_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "80")
+        result = get_provider()
+        google: GoogleProvider = result._inner  # type: ignore[assignment]
+        guard = google._client._rate_limiter
+        assert guard._windows[1].limit == 80
+        assert guard._windows[1].mode == "hard"
+
+    def test_google_daily_window_is_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        result = get_provider()
+        google: GoogleProvider = result._inner  # type: ignore[assignment]
+        guard = google._client._rate_limiter
+        assert guard._windows[1].mode == "hard"
 
     def test_unknown_provider_in_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,smarty")
@@ -302,13 +337,6 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
             validate_config()
 
-    def test_google_invalid_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "not-a-number")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
-            validate_config()
-
     def test_unknown_provider_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
         with pytest.raises(ValueError, match="smarty"):
@@ -386,18 +414,64 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
             validate_config()
 
-    def test_google_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "0")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+    def test_invalid_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "not-a-number")
+        with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
             validate_config()
 
-    def test_google_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_zero_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "0")
+        with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
+            validate_config()
+
+    def test_invalid_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_DAILY_LIMIT", "abc")
+        with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
+            validate_config()
+
+    def test_zero_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+        monkeypatch.setenv("USPS_DAILY_LIMIT", "0")
+        with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
+            validate_config()
+
+    def test_invalid_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "-5.0")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "abc")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
+            validate_config()
+
+    def test_zero_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "0")
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
+            validate_config()
+
+    def test_invalid_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "abc")
+        with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
+            validate_config()
+
+    def test_zero_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "0")
+        with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
             validate_config()
 
 
@@ -418,18 +492,4 @@ class TestGetProviderRpsGuard:
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
-            get_provider()
-
-    def test_google_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "0")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
-            get_provider()
-
-    def test_google_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPS", "-5.0")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPS"):
             get_provider()
