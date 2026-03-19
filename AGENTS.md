@@ -16,10 +16,10 @@ HTTP request
      └─ validate         →   parse → standardize → services/validation/
                                  factory.py        get_provider() + validate_config() read VALIDATION_PROVIDER env
                                  null_provider.py  default no-op
-                                 usps_provider.py  OAuth2 + token bucket; DPV → status
+                                 usps_provider.py  OAuth2 + quota guard; DPV → status
                                  google_provider.py  API key; lat/lng; DPV → status
                                  chain_provider.py   ordered fallback across providers
-                                 _rate_limit.py      shared TokenBucket + retry helpers
+                                 _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
 
 models.py           API contract source of truth
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
@@ -58,9 +58,9 @@ Env vars in `/etc/address-validator/env`:
 | `USPS_CONSUMER_KEY` | string | — |
 | `USPS_CONSUMER_SECRET` | string | — |
 | `USPS_RATE_LIMIT_RPS` | float >= 1 | `5.0` |
-| `USPS_DAILY_LIMIT` | non-negative int | `10000` |
+| `USPS_DAILY_LIMIT` | positive int | `10000` |
 | `GOOGLE_API_KEY` | string | — |
-| `GOOGLE_RATE_LIMIT_RPM` | float | `5` |
+| `GOOGLE_RATE_LIMIT_RPM` | positive int | `5` |
 | `GOOGLE_DAILY_LIMIT` | positive int | `160` |
 | `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` |
 | `VALIDATION_CACHE_DB` | path | `/var/lib/address-validator/validation_cache.db` |

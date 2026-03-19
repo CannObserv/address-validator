@@ -70,7 +70,7 @@ The TTL is checked against `validated_addresses.validated_at`, which records whe
 
 ## Dynamic quota querying
 
-Neither USPS nor Google expose real-time quota/usage data through their validation APIs. USPS has no such endpoint. Google's quota data is in Cloud Monitoring — a separate GCP API requiring different credentials. Client-side token buckets and 429 detection are the reliable mechanism.
+Neither USPS nor Google expose real-time quota/usage data through their validation APIs. USPS has no such endpoint. Google's quota data is in Cloud Monitoring — a separate GCP API requiring different credentials. Client-side quota guards and 429 detection are the reliable mechanism.
 
 ## Fallback chain internals
 
