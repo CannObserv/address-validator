@@ -17,19 +17,29 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=today_start.weekday())
 
+    # SAFETY: endpoint literals are hardcoded, not user-supplied.
+    _API_ENDPOINT_FILTER = (
+        "endpoint IN ('/api/v1/parse', '/api/v1/standardize', '/api/v1/validate')"
+    )
+
     async with engine.connect() as conn:
         row = (
             await conn.execute(
-                text("""
+                text(f"""
                     SELECT
                         COUNT(*) AS total,
                         COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
                         COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
                         COUNT(*) FILTER (
                             WHERE status_code >= 400 AND timestamp >= :today
-                        ) AS errors_today
+                            AND {_API_ENDPOINT_FILTER}
+                        ) AS errors_today,
+                        COUNT(*) FILTER (
+                            WHERE timestamp >= :today
+                            AND {_API_ENDPOINT_FILTER}
+                        ) AS api_today
                     FROM audit_log
-                """),
+                """),  # noqa: S608
                 {"today": today_start, "week": week_start},
             )
         ).one()
@@ -46,16 +56,46 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
             )
         ).one()
 
-    requests_today = row.today
-    error_rate = (row.errors_today / requests_today * 100) if requests_today > 0 else None
+        ep_rows = (
+            await conn.execute(
+                text("""
+                    SELECT
+                        endpoint,
+                        COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
+                        COUNT(*) FILTER (WHERE timestamp >= :week) AS week
+                    FROM audit_log
+                    GROUP BY endpoint
+                """),
+                {"today": today_start, "week": week_start},
+            )
+        ).fetchall()
+
+    error_rate = (row.errors_today / row.api_today * 100) if row.api_today > 0 else None
     cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
+    known = {
+        "/api/v1/parse": "/parse",
+        "/api/v1/standardize": "/standardize",
+        "/api/v1/validate": "/validate",
+    }
+    breakdown: dict[str, dict[str, int]] = {
+        "all": {},
+        "week": {},
+        "today": {},
+    }
+    for ep_row in ep_rows:
+        label = known.get(ep_row.endpoint, "other")
+        for period, col in (("all", "total"), ("week", "week"), ("today", "today")):
+            breakdown[period][label] = breakdown[period].get(label, 0) + ep_row._mapping[col]  # noqa: SLF001
+
     return {
-        "requests_today": requests_today,
+        "requests_today": row.today,
         "requests_week": row.week,
         "requests_all": row.total,
         "error_rate": error_rate,
         "cache_hit_rate": cache_hit_rate,
+        "endpoint_breakdown": breakdown,
     }
 
 

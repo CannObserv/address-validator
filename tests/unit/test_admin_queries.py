@@ -58,6 +58,26 @@ async def _seed_rows(engine: AsyncEngine) -> None:
             "vs": None,
             "cache": None,
         },
+        {
+            "ts": now,
+            "ip": "5.6.7.8",
+            "method": "POST",
+            "ep": "/api/v1/standardize",
+            "status": 200,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+        },
+        {
+            "ts": now,
+            "ip": "9.9.9.9",
+            "method": "GET",
+            "ep": "/favicon.ico",
+            "status": 404,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+        },
     ]
     async with engine.begin() as conn:
         for r in rows:
@@ -75,9 +95,21 @@ async def _seed_rows(engine: AsyncEngine) -> None:
 async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_dashboard_stats(db)
-    assert stats["requests_today"] == 4
-    assert stats["requests_all"] == 4
+    assert stats["requests_today"] == 6
+    assert stats["requests_all"] == 6
     assert stats["cache_hit_rate"] == 50.0
+    # Error rate: 1 error (parse 400) out of 5 API requests today = 20%
+    assert stats["error_rate"] == pytest.approx(20.0)
+
+    # Per-endpoint breakdown
+    bd = stats["endpoint_breakdown"]
+    assert bd["all"]["/validate"] == 2
+    assert bd["all"]["/parse"] == 2
+    assert bd["all"]["/standardize"] == 1
+    assert bd["all"]["other"] == 1
+    assert bd["today"]["/validate"] == 2
+    assert bd["today"]["/standardize"] == 1
+    assert bd["today"]["other"] == 1
 
 
 @pytest.mark.asyncio

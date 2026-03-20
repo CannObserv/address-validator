@@ -2,15 +2,30 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <h1 class="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+{% set bd = stats.get("endpoint_breakdown", {}) %}
+{% set ep_order = ["/parse", "/standardize", "/validate", "other"] %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+    {% for label, key, period in [("All Requests", "requests_all", "all"), ("Requests This Week", "requests_week", "week"), ("Requests Today", "requests_today", "today")] %}
     <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Requests Today</p>
-        <p class="text-2xl font-bold text-gray-900">{{ stats.requests_today | default(0) }}</p>
+        <p class="text-sm text-gray-500 mb-1">{{ label }}</p>
+        <p class="text-2xl font-bold text-gray-900">{{ stats.get(key, 0) }}</p>
+        {% set period_bd = bd.get(period, {}) %}
+        {% if period_bd %}
+        <div class="mt-2 border-t border-gray-100 pt-2 space-y-0.5">
+            {% for ep in ep_order %}
+            {% if ep in period_bd %}
+            <div class="flex justify-between text-xs">
+                <span class="text-gray-400">{{ ep }}</span>
+                <span class="text-gray-500 font-medium">{{ period_bd[ep] }}</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Requests This Week</p>
-        <p class="text-2xl font-bold text-gray-900">{{ stats.requests_week | default(0) }}</p>
-    </div>
+    {% endfor %}
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
     <div class="bg-white rounded-lg border border-gray-200 p-4">
         <p class="text-sm text-gray-500 mb-1">Cache Hit Rate</p>
         <p class="text-2xl font-bold text-gray-900">
@@ -25,7 +40,7 @@
     </div>
 </div>
 {% if quota %}
-<h2 class="text-lg font-semibold text-gray-800 mb-3">Provider Quota</h2>
+<h2 class="text-lg font-semibold text-gray-800 mb-3">Validation Provider Quota</h2>
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
     {% for q in quota %}
     <div class="bg-white rounded-lg border border-gray-200 p-4">
@@ -44,7 +59,4 @@
     {% endfor %}
 </div>
 {% endif %}
-<div class="text-sm text-gray-500">
-    Total requests (all time): <strong class="text-gray-700">{{ stats.requests_all | default(0) }}</strong>
-</div>
 {% endblock %}
