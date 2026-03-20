@@ -4,15 +4,12 @@ import math
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
-from address_validator.routers.admin.dashboard import _css_version, _get_quota_info
+from address_validator.routers.admin._config import get_css_version, get_quota_info, templates
 from address_validator.routers.admin.deps import get_admin_user
 from address_validator.routers.admin.queries import get_audit_rows, get_provider_stats
 from address_validator.services.validation import cache_db
-
-templates = Jinja2Templates(directory="src/address_validator/templates")
 
 router = APIRouter(prefix="/providers")
 
@@ -53,7 +50,7 @@ async def provider_detail(
 
     # Find quota for this provider
     quota = None
-    for q in _get_quota_info():
+    for q in get_quota_info():
         if q["provider"] == name:
             quota = q
             break
@@ -71,7 +68,7 @@ async def provider_detail(
             "request": request,
             "user": user,
             "active_nav": f"provider_{name}",
-            "css_version": _css_version,
+            "css_version": get_css_version(),
             "provider_name": name,
             "stats": stats,
             "quota": quota,

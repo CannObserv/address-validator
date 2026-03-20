@@ -1,24 +1,24 @@
 {% for row in rows %}
 <tr class="border-b border-gray-100 hover:bg-gray-50 text-sm">
-    <td class="px-3 py-2 whitespace-nowrap text-gray-500">{{ row.timestamp.strftime('%Y-%m-%d %H:%M:%S') if row.timestamp else '' }}</td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row.client_ip or '' }}</td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row.method or '' }}</td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row.endpoint or '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-500">{{ row["timestamp"].strftime('%Y-%m-%d %H:%M:%S') if row["timestamp"] else '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row["client_ip"] or '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row["method"] or '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row["endpoint"] or '' }}</td>
     <td class="px-3 py-2 whitespace-nowrap">
-        {% if row.status_code and row.status_code < 400 %}
-            <span class="inline-flex items-center gap-1 text-green-700">&#10003; {{ row.status_code }}</span>
-        {% elif row.status_code and row.status_code < 500 %}
-            <span class="inline-flex items-center gap-1 text-yellow-600">&#9650; {{ row.status_code }}</span>
-        {% elif row.status_code %}
-            <span class="inline-flex items-center gap-1 text-red-600">&#10005; {{ row.status_code }}</span>
+        {% if row["status_code"] and row["status_code"] < 400 %}
+            <span class="inline-flex items-center gap-1 text-green-700">&#10003; {{ row["status_code"] }}</span>
+        {% elif row["status_code"] and row["status_code"] < 500 %}
+            <span class="inline-flex items-center gap-1 text-yellow-600">&#9650; {{ row["status_code"] }}</span>
+        {% elif row["status_code"] %}
+            <span class="inline-flex items-center gap-1 text-red-600">&#10005; {{ row["status_code"] }}</span>
         {% endif %}
     </td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700 text-right">{% if row.latency_ms is not none %}{{ row.latency_ms }}ms{% endif %}</td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row.provider or '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-700 text-right">{% if row["latency_ms"] is not none %}{{ row["latency_ms"] }}ms{% endif %}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ row["provider"] or '' }}</td>
     <td class="px-3 py-2 whitespace-nowrap">
-        {% if row.cache_hit is true %}
+        {% if row["cache_hit"] is true %}
             <span class="text-green-600 font-medium">HIT</span>
-        {% elif row.cache_hit is false %}
+        {% elif row["cache_hit"] is false %}
             <span class="text-gray-400">MISS</span>
         {% endif %}
     </td>

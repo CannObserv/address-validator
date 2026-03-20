@@ -45,9 +45,9 @@
 <div class="flex flex-wrap gap-2 mb-8">
     {% for status, count in stats.validation_statuses.items() %}
     <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
-        {% if status == 'confirmed' %}bg-green-100 text-green-800
-        {% elif status == 'unconfirmed' %}bg-yellow-100 text-yellow-800
-        {% elif status == 'vacant' or status == 'invalid' %}bg-red-100 text-red-800
+        {% if status == 'confirmed' or status == 'confirmed_missing_secondary' %}bg-green-100 text-green-800
+        {% elif status == 'confirmed_bad_secondary' %}bg-yellow-100 text-yellow-800
+        {% elif status == 'not_confirmed' %}bg-red-100 text-red-800
         {% else %}bg-gray-100 text-gray-800{% endif %}">
         {{ status }}: {{ count }}
     </span>

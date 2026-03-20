@@ -4,15 +4,12 @@ import math
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
 
-from address_validator.routers.admin.dashboard import _css_version
+from address_validator.routers.admin._config import get_css_version, templates
 from address_validator.routers.admin.deps import get_admin_user
 from address_validator.routers.admin.queries import get_audit_rows
 from address_validator.services.validation import cache_db
-
-templates = Jinja2Templates(directory="src/address_validator/templates")
 
 router = APIRouter(prefix="/audit")
 
@@ -60,7 +57,7 @@ async def audit_list(
             "request": request,
             "user": user,
             "active_nav": "audit",
-            "css_version": _css_version,
+            "css_version": get_css_version(),
             "rows": rows,
             "page": page,
             "total_pages": total_pages,

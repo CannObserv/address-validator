@@ -31,6 +31,22 @@ routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 ```
 
+```
+     └─ middleware/audit.py    records every API request to audit_log (fire-and-forget)
+     └─ routers/admin/         admin dashboard (Jinja2 + HTMX, exe.dev auth)
+         ├─ router.py          top-level /admin router
+         ├─ deps.py            AdminUser from exe.dev proxy headers
+         ├─ _config.py         shared templates, CSS version, quota helpers
+         ├─ dashboard.py       GET /admin/ — landing page
+         ├─ audit_views.py     GET /admin/audit/ — audit log with filters
+         ├─ endpoints.py       GET /admin/endpoints/{name}
+         ├─ providers.py       GET /admin/providers/{name}
+         └─ queries.py         SQL query helpers for dashboard views
+services/audit.py       audit ContextVars + write_audit_row (fail-open DB insert)
+templates/admin/        Jinja2 templates (base, dashboard, audit, endpoints, providers)
+static/admin/css/       Tailwind CSS (input.css + built tailwind.css)
+```
+
 ## Key conventions
 
 - `models.py` is the single source of truth for API contracts; field name/type changes are breaking
@@ -48,6 +64,7 @@ logging_filter.py   RequestIdFilter — injects request_id into every LogRecord 
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`
 - Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from address_validator.main import app` above the `setdefault` call
 - Google provider uses Application Default Credentials (ADC) — no API key. Required IAM roles: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
+- Admin dashboard (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`); any authenticated user is admin
 
 ## Logging
 
@@ -81,6 +98,8 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Restart: `sudo systemctl restart address-validator`
 - Logs: `journalctl -u address-validator -f`
 - Re-install unit: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+- Pre-commit: `uv run pre-commit install` (ruff + Tailwind CSS build)
+- Backfill audit log: `source /etc/address-validator/env && uv run python scripts/backfill_audit_log.py`
 
 ## Testing and linting
 
@@ -132,6 +151,9 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/services/validation/gcp_quota_sync.py` | Quota discovery (Cloud Quotas API), usage monitoring (Cloud Monitoring API), and reconciliation loop; `reconcile_once()` only adjusts tokens downward — never grants above current window level; `run_reconciliation_loop()` runs as background asyncio task, cancelled on shutdown |
 | `src/address_validator/middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
 | `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
+| `src/address_validator/middleware/audit.py` | Runs on every API request; `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must be innermost relative to request_id) |
+| `src/address_validator/routers/admin/queries.py` | Raw SQL with f-string WHERE clause; conditions are hardcoded literals but pattern is fragile if extended carelessly |
+| `src/address_validator/services/audit.py` | ContextVar reset in middleware is load-bearing; `except Exception` in `write_audit_row` is intentional fail-open |
 
 ## Commit convention
 
