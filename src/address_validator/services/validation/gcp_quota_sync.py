@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _ADDRESS_VALIDATION_SERVICE = "addressvalidation.googleapis.com"
+_VALIDATE_ADDRESS_METRIC = "addressvalidation.googleapis.com/validate_address_requests"
 _PACIFIC = ZoneInfo("America/Los_Angeles")
 
 # RPM=5 * 10 min lag → up to ~50 requests of explainable staleness
@@ -37,18 +38,28 @@ def fetch_daily_limit(
     client: cloudquotas_v1.CloudQuotasClient,
     project_id: str,
 ) -> int | None:
-    """Query Cloud Quotas API for the daily limit on Address Validation.
+    """Query Cloud Quotas API for the daily ValidateAddress limit.
+
+    Filters for the ``validate_address_requests`` metric with
+    ``refresh_interval == "day"`` (quota ID
+    ``ValidateAddressRequestsPerDayPerProject``).  Other metrics on the
+    same service (e.g. ``ProvideValidationFeedback``) are ignored.
 
     Returns the enforced daily quota value, or ``None`` if not found or on error.
     """
     parent = f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
     try:
         for info in client.list_quota_infos(parent=parent):
-            if info.refresh_interval == "day" and info.dimensions_infos:
+            if (
+                info.metric == _VALIDATE_ADDRESS_METRIC
+                and info.refresh_interval == "day"
+                and info.dimensions_infos
+            ):
                 value = int(info.dimensions_infos[0].details.value)
                 if value >= _INT64_MAX:
                     logger.info(
-                        "gcp_quota_sync: daily limit is INT64_MAX (no explicit quota set), ignoring"
+                        "gcp_quota_sync: daily limit is INT64_MAX "
+                        "(no explicit quota set), ignoring"
                     )
                     return None
                 logger.info("gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value)

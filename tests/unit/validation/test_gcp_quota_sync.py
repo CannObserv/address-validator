@@ -13,25 +13,43 @@ from address_validator.services.validation.gcp_quota_sync import (
     reconcile_once,
 )
 
+_VALIDATE_METRIC = "addressvalidation.googleapis.com/validate_address_requests"
+_FEEDBACK_METRIC = "addressvalidation.googleapis.com/provide_validation_feedback_requests"
+
+
+def _make_quota_info(metric, refresh_interval, value):
+    info = MagicMock()
+    info.metric = metric
+    info.refresh_interval = refresh_interval
+    info.dimensions_infos = [MagicMock()]
+    info.dimensions_infos[0].details.value = value
+    return info
+
 
 class TestFetchDailyLimit:
-    def test_extracts_daily_limit_from_quota_infos(self) -> None:
+    def test_extracts_daily_limit_from_validate_address_metric(self) -> None:
         mock_client = MagicMock()
-        daily_info = MagicMock()
-        daily_info.refresh_interval = "day"
-        daily_info.dimensions_infos = [MagicMock()]
-        daily_info.dimensions_infos[0].details.value = 200
-        minute_info = MagicMock()
-        minute_info.refresh_interval = "minute"
-        mock_client.list_quota_infos.return_value = [minute_info, daily_info]
+        mock_client.list_quota_infos.return_value = [
+            _make_quota_info(_FEEDBACK_METRIC, "day", 2**63 - 1),
+            _make_quota_info(_VALIDATE_METRIC, "minute", 5),
+            _make_quota_info(_VALIDATE_METRIC, "day", 160),
+        ]
         result = fetch_daily_limit(mock_client, "my-project")
-        assert result == 200
+        assert result == 160
+
+    def test_ignores_feedback_metric(self) -> None:
+        mock_client = MagicMock()
+        mock_client.list_quota_infos.return_value = [
+            _make_quota_info(_FEEDBACK_METRIC, "day", 999),
+        ]
+        result = fetch_daily_limit(mock_client, "my-project")
+        assert result is None
 
     def test_returns_none_when_no_daily_quota_found(self) -> None:
         mock_client = MagicMock()
-        minute_info = MagicMock()
-        minute_info.refresh_interval = "minute"
-        mock_client.list_quota_infos.return_value = [minute_info]
+        mock_client.list_quota_infos.return_value = [
+            _make_quota_info(_VALIDATE_METRIC, "minute", 5),
+        ]
         result = fetch_daily_limit(mock_client, "my-project")
         assert result is None
 
@@ -43,11 +61,9 @@ class TestFetchDailyLimit:
 
     def test_returns_none_when_int64_max(self) -> None:
         mock_client = MagicMock()
-        daily_info = MagicMock()
-        daily_info.refresh_interval = "day"
-        daily_info.dimensions_infos = [MagicMock()]
-        daily_info.dimensions_infos[0].details.value = 2**63 - 1
-        mock_client.list_quota_infos.return_value = [daily_info]
+        mock_client.list_quota_infos.return_value = [
+            _make_quota_info(_VALIDATE_METRIC, "day", 2**63 - 1),
+        ]
         result = fetch_daily_limit(mock_client, "my-project")
         assert result is None
 
