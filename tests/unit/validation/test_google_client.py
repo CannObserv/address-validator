@@ -235,6 +235,20 @@ class TestGoogleClientValidateAddress:
         assert headers.get("Authorization") == "Bearer test-bearer-token"
 
     @pytest.mark.asyncio
+    async def test_refreshes_expired_credentials_via_thread(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.token = "refreshed-token"
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+        mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
+        await client.validate_address("123 Main St")
+        expired_creds.refresh.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_enables_usps_cass(self, client: GoogleClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
         await client.validate_address("123 Main St")

@@ -82,7 +82,6 @@ import logging
 import os
 
 import httpx
-from google.cloud import cloudquotas_v1, monitoring_v3
 
 from address_validator.services.validation import cache_db
 from address_validator.services.validation._rate_limit import (
@@ -165,6 +164,8 @@ def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) ->
 
         if project_id:
             try:
+                from google.cloud import cloudquotas_v1  # noqa: PLC0415
+
                 quotas_client = cloudquotas_v1.CloudQuotasClient(credentials=credentials)
                 discovered = fetch_daily_limit(quotas_client, project_id)
                 if discovered is not None:
@@ -191,6 +192,8 @@ def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) ->
         monitoring_client = None
         if project_id:
             try:
+                from google.cloud import monitoring_v3  # noqa: PLC0415
+
                 monitoring_client = monitoring_v3.MetricServiceClient(credentials=credentials)
                 usage = fetch_daily_usage(monitoring_client, project_id)
                 if usage is not None and usage > 0:
