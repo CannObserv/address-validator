@@ -1,5 +1,7 @@
 """Address Validator — FastAPI application entry point."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -16,7 +18,12 @@ from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
 from address_validator.services.validation.cache_db import close_engine
-from address_validator.services.validation.factory import validate_config
+from address_validator.services.validation.factory import (
+    get_provider,
+    get_reconciliation_params,
+    validate_config,
+)
+from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
 
 logging.getLogger().addFilter(RequestIdFilter())
 
@@ -50,7 +57,29 @@ _TAGS = [
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
     validate_config()
+
+    # Eagerly construct provider singletons so quota sync wiring runs at boot
+    # (get_provider is normally lazy — called on first request).  This ensures
+    # _reconciliation_params is populated before we check it below.
+    get_provider()
+
+    # Start reconciliation background task if Google provider is active
+    reconciliation_task = None
+    params = get_reconciliation_params()
+    if params:
+        reconciliation_task = asyncio.create_task(
+            run_reconciliation_loop(**params),
+            name="google-quota-reconciliation",
+        )
+
     yield
+
+    # Cancel reconciliation task on shutdown
+    if reconciliation_task is not None:
+        reconciliation_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reconciliation_task
+
     await close_engine()
 
 
