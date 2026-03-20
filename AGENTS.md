@@ -42,6 +42,9 @@ routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers)
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
+static/admin/js/    theme.js (dark mode), nav.js (hamburger)
+static/admin/images/ Cannabis Observer brand SVGs
+docs/STYLE.md       visual design, a11y, responsive, and performance standards
 ```
 
 ## Key conventions
