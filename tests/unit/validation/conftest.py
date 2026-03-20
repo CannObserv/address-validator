@@ -32,7 +32,7 @@ async def db(run_cache_migrations: None) -> AsyncEngine:
     engine = create_async_engine(TEST_CACHE_DSN)
     async with engine.begin() as conn:
         await conn.execute(
-            text("TRUNCATE validated_addresses, query_patterns RESTART IDENTITY CASCADE")
+            text("TRUNCATE validated_addresses, query_patterns, audit_log RESTART IDENTITY CASCADE")
         )
     yield engine
     await engine.dispose()
