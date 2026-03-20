@@ -1,13 +1,16 @@
 """Unit tests for services/validation/_rate_limit.py."""
 
 import time
+from datetime import datetime
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
 
 from address_validator.services.validation._rate_limit import (
     _RETRY_BASE_DELAY_S,
+    FixedResetQuotaWindow,
     QuotaGuard,
     QuotaWindow,
     _parse_retry_after,
@@ -172,6 +175,57 @@ class TestQuotaGuard:
         assert len(guard._windows) == 2
         assert len(guard._tokens) == 2
         assert len(guard._last_refill) == 2
+
+    def test_adjust_tokens_decreases_tokens(self) -> None:
+        guard = self._soft_guard(limit=100, duration_s=86_400.0)
+        guard.adjust_tokens(0, -30)
+        assert guard._tokens[0] == 70.0
+
+    def test_adjust_tokens_does_not_go_below_zero(self) -> None:
+        guard = self._soft_guard(limit=100, duration_s=86_400.0)
+        guard.adjust_tokens(0, -200)
+        assert guard._tokens[0] == 0.0
+
+    def test_adjust_tokens_does_not_exceed_limit(self) -> None:
+        guard = self._soft_guard(limit=100, duration_s=86_400.0)
+        guard._tokens[0] = 50.0
+        guard.adjust_tokens(0, 100)
+        assert guard._tokens[0] == 100.0
+
+    def test_adjust_tokens_raises_for_invalid_index(self) -> None:
+        guard = self._soft_guard(limit=100, duration_s=86_400.0)
+        with pytest.raises(IndexError):
+            guard.adjust_tokens(5, -10)
+
+    def test_accepts_fixed_reset_window(self) -> None:
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+                FixedResetQuotaWindow(limit=160, mode="hard"),
+            ],
+            provider_name="google",
+        )
+        assert len(guard._windows) == 2
+        assert guard._tokens[1] == 160.0
+
+    @pytest.mark.asyncio
+    async def test_fixed_reset_window_resets_at_midnight(self) -> None:
+        PT = ZoneInfo("America/Los_Angeles")
+        guard = QuotaGuard(
+            windows=[FixedResetQuotaWindow(limit=160, mode="hard")],
+            provider_name="google",
+        )
+        # Drain tokens and simulate last reset was yesterday
+        guard._tokens[0] = 0.0
+        yesterday = datetime(2026, 3, 19, 23, 0, 0, tzinfo=PT)
+        guard._last_reset = [yesterday]
+
+        today = datetime(2026, 3, 20, 0, 1, 0, tzinfo=PT)
+        patch_target = "address_validator.services.validation._rate_limit._now_in_tz"
+        with patch(patch_target, return_value=today):
+            await guard.acquire()
+        # Tokens should have been reset to full, then 1 consumed
+        assert guard._tokens[0] == 159.0
 
 
 class TestParseRetryAfter:

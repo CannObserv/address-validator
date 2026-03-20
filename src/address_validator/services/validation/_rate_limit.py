@@ -142,7 +142,7 @@ class QuotaGuard:
 
     def __init__(
         self,
-        windows: list[QuotaWindow],
+        windows: list[QuotaWindow | FixedResetQuotaWindow],
         latency_budget_s: float = 1.0,
         provider_name: str = "",
     ) -> None:
@@ -151,14 +151,30 @@ class QuotaGuard:
         self._provider_name = provider_name
         self._tokens: list[float] = [float(w.limit) for w in windows]
         self._last_refill: list[float] = [monotonic() for _ in windows]
+        self._last_reset: list[datetime | None] = [
+            _now_in_tz(w.timezone) if isinstance(w, FixedResetQuotaWindow) else None
+            for w in windows
+        ]
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> None:
+    async def acquire(self) -> None:  # noqa: PLR0912
         """Acquire one token from every window, blocking up to the latency budget."""
         async with self._lock:
+            # --- Fixed-reset windows: reset at day boundary ---
+            for i, window in enumerate(self._windows):
+                if (
+                    isinstance(window, FixedResetQuotaWindow)
+                    and self._last_reset[i] is not None
+                    and window.should_reset(self._last_reset[i])
+                ):
+                    self._tokens[i] = float(window.limit)
+                    self._last_reset[i] = _now_in_tz(window.timezone)
+
             # --- Refill all windows ---
             now = monotonic()
             for i, window in enumerate(self._windows):
+                if isinstance(window, FixedResetQuotaWindow):
+                    continue
                 rate = window.limit / window.duration_s
                 elapsed = now - self._last_refill[i]
                 self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
@@ -172,6 +188,8 @@ class QuotaGuard:
             # --- Soft windows: compute max wait ---
             max_wait = 0.0
             for i, window in enumerate(self._windows):
+                if isinstance(window, FixedResetQuotaWindow):
+                    continue
                 if self._tokens[i] < 1:
                     rate = window.limit / window.duration_s
                     wait = (1 - self._tokens[i]) / rate
@@ -185,6 +203,8 @@ class QuotaGuard:
                 await asyncio.sleep(max_wait)
                 now = monotonic()
                 for i, window in enumerate(self._windows):
+                    if isinstance(window, FixedResetQuotaWindow):
+                        continue
                     rate = window.limit / window.duration_s
                     elapsed = now - self._last_refill[i]
                     self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
@@ -193,6 +213,17 @@ class QuotaGuard:
             # --- Consume from all windows ---
             for i in range(len(self._windows)):
                 self._tokens[i] -= 1.0
+
+    def adjust_tokens(self, window_index: int, delta: float) -> None:
+        """Adjust the token count for a specific window by *delta*.
+
+        Clamps the result to ``[0, window.limit]``.  Intended for
+        reconciliation — call under external synchronisation if needed.
+        """
+        window = self._windows[window_index]  # raises IndexError if out of range
+        self._tokens[window_index] = max(
+            0.0, min(float(window.limit), self._tokens[window_index] + delta)
+        )
 
 
 def _parse_retry_after(response: httpx.Response, attempt: int) -> float:

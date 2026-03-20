@@ -1,6 +1,6 @@
 """Unit tests for FixedResetQuotaWindow."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
@@ -9,6 +9,7 @@ import pytest
 from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
 
 PT = ZoneInfo("America/Los_Angeles")
+_PATCH = "address_validator.services.validation._rate_limit._now_in_tz"
 
 
 class TestFixedResetQuotaWindow:
@@ -29,14 +30,14 @@ class TestFixedResetQuotaWindow:
         # 11:59:00 PM PT → 60 seconds until midnight
         fake_now = datetime(2026, 3, 20, 23, 59, 0, tzinfo=PT)
         w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now):
+        with patch(_PATCH, return_value=fake_now):
             assert w.seconds_until_reset() == pytest.approx(60.0, abs=1.0)
 
     def test_seconds_until_reset_at_start_of_day(self) -> None:
         # 12:00:01 AM PT → ~86399 seconds until next midnight
         fake_now = datetime(2026, 3, 20, 0, 0, 1, tzinfo=PT)
         w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now):
+        with patch(_PATCH, return_value=fake_now):
             remaining = w.seconds_until_reset()
             assert 86_398 <= remaining <= 86_400
 
@@ -45,14 +46,14 @@ class TestFixedResetQuotaWindow:
         # Last reset was yesterday
         yesterday = datetime(2026, 3, 19, 0, 0, 0, tzinfo=PT)
         now = datetime(2026, 3, 20, 0, 0, 1, tzinfo=PT)
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=now):
+        with patch(_PATCH, return_value=now):
             assert w.should_reset(yesterday) is True
 
     def test_should_reset_false_same_day(self) -> None:
         w = FixedResetQuotaWindow(limit=160, mode="hard")
         today_morning = datetime(2026, 3, 20, 8, 0, 0, tzinfo=PT)
         today_afternoon = datetime(2026, 3, 20, 14, 0, 0, tzinfo=PT)
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=today_afternoon):
+        with patch(_PATCH, return_value=today_afternoon):
             assert w.should_reset(today_morning) is False
 
     def test_mode_soft_allowed(self) -> None:
