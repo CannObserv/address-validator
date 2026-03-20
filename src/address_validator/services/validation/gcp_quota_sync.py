@@ -28,6 +28,10 @@ _PACIFIC = ZoneInfo("America/Los_Angeles")
 # RPM=5 * 10 min lag → up to ~50 requests of explainable staleness
 _STALENESS_THRESHOLD = 50
 
+# Cloud Quotas API returns INT64_MAX when no explicit quota is set.
+# Treat as "no limit discovered" so we fall back to the env var override.
+_INT64_MAX = 2**63 - 1
+
 
 def fetch_daily_limit(
     client: cloudquotas_v1.CloudQuotasClient,
@@ -41,9 +45,14 @@ def fetch_daily_limit(
     try:
         for info in client.list_quota_infos(parent=parent):
             if info.refresh_interval == "day" and info.dimensions_infos:
-                value = info.dimensions_infos[0].details.value
+                value = int(info.dimensions_infos[0].details.value)
+                if value >= _INT64_MAX:
+                    logger.info(
+                        "gcp_quota_sync: daily limit is INT64_MAX (no explicit quota set), ignoring"
+                    )
+                    return None
                 logger.info("gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value)
-                return int(value)
+                return value
     except Exception:
         logger.warning(
             "gcp_quota_sync: failed to fetch daily limit from Cloud Quotas", exc_info=True

@@ -41,6 +41,16 @@ class TestFetchDailyLimit:
         result = fetch_daily_limit(mock_client, "my-project")
         assert result is None
 
+    def test_returns_none_when_int64_max(self) -> None:
+        mock_client = MagicMock()
+        daily_info = MagicMock()
+        daily_info.refresh_interval = "day"
+        daily_info.dimensions_infos = [MagicMock()]
+        daily_info.dimensions_infos[0].details.value = 2**63 - 1
+        mock_client.list_quota_infos.return_value = [daily_info]
+        result = fetch_daily_limit(mock_client, "my-project")
+        assert result is None
+
     def test_queries_correct_service(self) -> None:
         mock_client = MagicMock()
         mock_client.list_quota_infos.return_value = []
