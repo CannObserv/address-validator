@@ -37,10 +37,14 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 ## Google provider
 
 - API: Google Address Validation API. Single POST with `enableUspsCass: true`.
-- Auth: API key (`GOOGLE_API_KEY`).
+- Auth: Application Default Credentials (ADC) — no API key. Required IAM roles:
+  - `roles/addressvalidation.user` — call the Address Validation API
+  - `roles/cloudquotas.viewer` — read quota limits at startup
+  - `roles/monitoring.viewer` — read current usage from Cloud Monitoring
 - Rate limit: multi-window quota guard — per-minute soft window (default 5 req/min), per-day
-  hard ceiling (default 160/day). Configurable via `GOOGLE_RATE_LIMIT_RPM` and
-  `GOOGLE_DAILY_LIMIT`.
+  window with fixed midnight PT reset (not rolling 86400 s). Daily limit optional — auto-discovered
+  from Cloud Quotas API if `GOOGLE_DAILY_LIMIT` is unset. Configurable via `GOOGLE_RATE_LIMIT_RPM`
+  and `GOOGLE_DAILY_LIMIT`.
 - 429 retry: same retry/backoff policy as USPS (up to 3 retries, `Retry-After` + exponential backoff).
 - Populates `latitude`/`longitude`. Surfaces three verdict flags as warnings.
 - `GoogleProvider` is a module-level singleton in `factory.py` — reset in tests.
@@ -51,8 +55,10 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 |---|---|---|
 | `USPS_RATE_LIMIT_RPS` | `5.0` | USPS per-second window limit |
 | `USPS_DAILY_LIMIT` | `10000` | USPS per-day window limit (soft — queues up to latency budget) |
+| `GOOGLE_PROJECT_ID` | — | GCP project ID; optional, auto-discovered from ADC if unset |
 | `GOOGLE_RATE_LIMIT_RPM` | `5` | Google per-minute window limit (soft) |
-| `GOOGLE_DAILY_LIMIT` | `160` | Google per-day hard ceiling — never exceeded |
+| `GOOGLE_DAILY_LIMIT` | — | Google per-day limit; optional override, auto-discovered from Cloud Quotas API |
+| `GOOGLE_QUOTA_RECONCILE_INTERVAL_S` | `900` | Seconds between periodic quota reconciliation runs |
 | `VALIDATION_LATENCY_BUDGET_S` | `1.0` | Max seconds a request may queue before overflowing to the next provider |
 
 `GOOGLE_RATE_LIMIT_RPS` has been removed. Rename to `GOOGLE_RATE_LIMIT_RPM` in
@@ -70,7 +76,21 @@ The TTL is checked against `validated_addresses.validated_at`, which records whe
 
 ## Dynamic quota querying
 
-Neither USPS nor Google expose real-time quota/usage data through their validation APIs. USPS has no such endpoint. Google's quota data is in Cloud Monitoring — a separate GCP API requiring different credentials. Client-side quota guards and 429 detection are the reliable mechanism.
+USPS has no real-time quota endpoint — client-side quota guards and 429 detection are the only mechanism.
+
+Google quota is reconciled dynamically via two GCP APIs:
+- **Cloud Quotas API** — reads the current daily limit for the Address Validation API quota dimension
+- **Cloud Monitoring API** — reads cumulative usage for the current calendar day (midnight PT reset)
+
+**Boot sequence:** on provider construction, `gcp_quota_sync.py` calls Cloud Quotas to discover the
+daily limit (sets `GOOGLE_DAILY_LIMIT` if not overridden), then calls Cloud Monitoring to seed the
+current usage into `FixedResetQuotaWindow` so the guard starts with the correct remaining tokens.
+
+**Periodic reconciliation:** `run_reconciliation_loop()` runs as a background asyncio task, invoking
+`reconcile_once()` every `GOOGLE_QUOTA_RECONCILE_INTERVAL_S` seconds (default 900). Each run
+re-reads Cloud Monitoring usage and calls `adjust_tokens()` on the daily window. Reconciliation only
+adjusts tokens **downward** — it never grants additional tokens beyond what the window's own refill
+logic would allow. The task is cancelled on application shutdown.
 
 ## Fallback chain internals
 

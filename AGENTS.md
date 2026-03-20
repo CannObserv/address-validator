@@ -20,7 +20,7 @@ HTTP request
                                  factory.py        get_provider() + validate_config() read VALIDATION_PROVIDER env
                                  null_provider.py  default no-op
                                  usps_provider.py  OAuth2 + quota guard; DPV → status
-                                 google_provider.py  API key; lat/lng; DPV → status
+                                 google_provider.py  ADC; lat/lng; DPV → status
                                  chain_provider.py   ordered fallback across providers
                                  _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
 
@@ -47,6 +47,7 @@ logging_filter.py   RequestIdFilter — injects request_id into every LogRecord 
 - Key at `/etc/address-validator/env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`
 - Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from address_validator.main import app` above the `setdefault` call
+- Google provider uses Application Default Credentials (ADC) — no API key. Required IAM roles: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 
 ## Logging
 
@@ -63,9 +64,10 @@ Env vars in `/etc/address-validator/env`:
 | `USPS_CONSUMER_SECRET` | string | — |
 | `USPS_RATE_LIMIT_RPS` | float >= 1 | `5.0` |
 | `USPS_DAILY_LIMIT` | positive int | `10000` |
-| `GOOGLE_API_KEY` | string | — |
+| `GOOGLE_PROJECT_ID` | optional, auto-discovered from ADC | — |
 | `GOOGLE_RATE_LIMIT_RPM` | positive int | `5` |
-| `GOOGLE_DAILY_LIMIT` | positive int | `160` |
+| `GOOGLE_DAILY_LIMIT` | positive int; optional override, auto-discovered from Cloud Quotas API | — |
+| `GOOGLE_QUOTA_RECONCILE_INTERVAL_S` | positive float | `900` |
 | `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` |
 | `VALIDATION_CACHE_DSN` | PostgreSQL DSN e.g. `postgresql+asyncpg://user:pass@localhost/address_validator` | — (required when provider is non-null) |
 | `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
@@ -125,7 +127,9 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/services/validation/cache_db.py` | `AsyncEngine` singleton; `get_engine()` runs `alembic upgrade head` on first call — schema changes go through `alembic/versions/` migrations, not inline DDL |
 | `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
 | `src/address_validator/services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
-| `src/address_validator/services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider |
+| `src/address_validator/services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider; `FixedResetQuotaWindow` is Google-specific — daily window resets at midnight PT (not rolling 86400 s); `adjust_tokens()` is called by quota reconciliation — only adjusts downward |
+| `src/address_validator/services/validation/gcp_auth.py` | ADC credentials and project ID resolution; `get_credentials()` called at provider construction and during startup validation — credential errors surface as `ValueError` at boot |
+| `src/address_validator/services/validation/gcp_quota_sync.py` | Quota discovery (Cloud Quotas API), usage monitoring (Cloud Monitoring API), and reconciliation loop; `reconcile_once()` only adjusts tokens downward — never grants above current window level; `run_reconciliation_loop()` runs as background asyncio task, cancelled on shutdown |
 | `src/address_validator/middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
 | `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
 
