@@ -10,8 +10,10 @@ Provides:
 import asyncio
 import random
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from time import monotonic
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -58,6 +60,55 @@ class QuotaWindow:
             raise ValueError(f"QuotaWindow.limit must be positive, got {self.limit}")
         if self.duration_s <= 0:
             raise ValueError(f"QuotaWindow.duration_s must be positive, got {self.duration_s}")
+
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
+
+
+def _now_in_tz(tz: ZoneInfo) -> datetime:
+    """Return the current wall-clock time in *tz*.  Extracted for test mocking."""
+    return datetime.now(tz)
+
+
+@dataclass(frozen=True)
+class FixedResetQuotaWindow:
+    """Daily quota window that resets at midnight in a fixed timezone.
+
+    Unlike :class:`QuotaWindow` which uses a rolling token-bucket duration,
+    this window resets to full capacity when the wall-clock day changes in the
+    configured timezone.  Designed for Google Cloud quotas that reset at
+    midnight Pacific Time.
+
+    Parameters
+    ----------
+    limit:
+        Maximum requests allowed per calendar day.
+    mode:
+        ``"soft"`` or ``"hard"`` — same semantics as :class:`QuotaWindow`.
+    timezone:
+        Timezone for the daily reset boundary.  Defaults to
+        ``America/Los_Angeles`` (Pacific Time).
+    """
+
+    limit: int
+    mode: Literal["soft", "hard"]
+    timezone: ZoneInfo = _PACIFIC
+
+    def __post_init__(self) -> None:
+        if self.limit <= 0:
+            raise ValueError(f"FixedResetQuotaWindow.limit must be positive, got {self.limit}")
+
+    def seconds_until_reset(self) -> float:
+        """Seconds remaining until the next midnight in this window's timezone."""
+        now = _now_in_tz(self.timezone)
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        next_midnight = midnight + timedelta(days=1)
+        return (next_midnight - now).total_seconds()
+
+    def should_reset(self, last_reset: datetime) -> bool:
+        """Return True if *last_reset* was on a different calendar day than now."""
+        now = _now_in_tz(self.timezone)
+        return now.date() != last_reset.date()
 
 
 class QuotaGuard:
