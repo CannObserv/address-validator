@@ -71,13 +71,22 @@ VALIDATION_CACHE_TTL_DAYS
 import logging
 import os
 
-import google.auth
 import httpx
+from google.cloud import cloudquotas_v1, monitoring_v3
 
 from address_validator.services.validation import cache_db
-from address_validator.services.validation._rate_limit import QuotaGuard, QuotaWindow
+from address_validator.services.validation._rate_limit import (
+    FixedResetQuotaWindow,
+    QuotaGuard,
+    QuotaWindow,
+)
 from address_validator.services.validation.cache_provider import CachingProvider
 from address_validator.services.validation.chain_provider import ChainProvider
+from address_validator.services.validation.gcp_auth import get_credentials, resolve_project_id
+from address_validator.services.validation.gcp_quota_sync import (
+    fetch_daily_limit,
+    fetch_daily_usage,
+)
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
 from address_validator.services.validation.null_provider import NullProvider
@@ -94,6 +103,7 @@ _http_client: httpx.AsyncClient | None = None
 _usps_provider: USPSProvider | None = None
 _google_provider: GoogleProvider | None = None
 _caching_provider: CachingProvider | None = None
+_reconciliation_params: dict | None = None
 
 
 def _get_http_client() -> httpx.AsyncClient:
@@ -135,21 +145,68 @@ def _get_usps_provider(
 
 def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) -> GoogleProvider:
     global _google_provider  # noqa: PLW0603
+    global _reconciliation_params  # noqa: PLW0603
     if _google_provider is None:
         logger.debug(
             "get_provider: creating GoogleProvider singleton (%d rpm, %d/day)", rpm, daily_limit
         )
-        credentials, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
+        credentials, adc_project = get_credentials()
+        project_id = resolve_project_id(adc_project)
+
+        if project_id:
+            try:
+                quotas_client = cloudquotas_v1.CloudQuotasClient(credentials=credentials)
+                discovered = fetch_daily_limit(quotas_client, project_id)
+                if discovered is not None:
+                    daily_limit = discovered
+            except Exception:
+                logger.warning(
+                    "get_provider: Cloud Quotas API unavailable, using configured limit=%d",
+                    daily_limit,
+                )
+        else:
+            logger.warning(
+                "get_provider: GCP project ID not resolved — quota sync features disabled"
+            )
+
         guard = QuotaGuard(
             windows=[
                 QuotaWindow(limit=rpm, duration_s=60.0, mode="soft"),
-                QuotaWindow(limit=daily_limit, duration_s=86_400.0, mode="hard"),
+                FixedResetQuotaWindow(limit=daily_limit, mode="hard"),
             ],
             latency_budget_s=latency_budget_s,
             provider_name="google",
         )
+
+        monitoring_client = None
+        if project_id:
+            try:
+                monitoring_client = monitoring_v3.MetricServiceClient(credentials=credentials)
+                usage = fetch_daily_usage(monitoring_client, project_id)
+                if usage is not None and usage > 0:
+                    guard.adjust_tokens(1, -usage)
+                    logger.info(
+                        "get_provider: seeded daily quota from Monitoring"
+                        " (used=%d, remaining=%d)",
+                        usage,
+                        daily_limit - usage,
+                    )
+            except Exception:
+                monitoring_client = None
+                logger.warning(
+                    "get_provider: Cloud Monitoring API unavailable, starting with full bucket"
+                )
+
+        if project_id and monitoring_client:
+            interval_s = float(os.environ.get("GOOGLE_QUOTA_RECONCILE_INTERVAL_S", "900"))
+            _reconciliation_params = {
+                "guard": guard,
+                "daily_window_index": 1,
+                "monitoring_client": monitoring_client,
+                "project_id": project_id,
+                "interval_s": interval_s,
+            }
+
         _google_provider = GoogleProvider(
             client=GoogleClient(
                 credentials=credentials,
@@ -158,6 +215,11 @@ def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) ->
             )
         )
     return _google_provider
+
+
+def get_reconciliation_params() -> dict | None:
+    """Return reconciliation loop parameters if Google provider is active."""
+    return _reconciliation_params
 
 
 def _get_caching_provider(inner: ValidationProvider) -> CachingProvider:
@@ -249,6 +311,7 @@ def _check_provider_config(name: str) -> None:
         _parse_usps_config()
     elif name == "google":
         _parse_google_config()
+        get_credentials()  # validates ADC is available
     else:
         raise ValueError(
             f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."

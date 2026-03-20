@@ -7,6 +7,7 @@ import pytest
 
 import address_validator.services.validation.cache_db as cache_db_module
 import address_validator.services.validation.factory as factory_module
+from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
 from address_validator.services.validation.cache_provider import CachingProvider
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.factory import get_provider, validate_config
@@ -22,22 +23,26 @@ async def reset_singletons() -> None:
     factory_module._google_provider = None
     factory_module._http_client = None
     factory_module._caching_provider = None
+    factory_module._reconciliation_params = None
     await cache_db_module.close_engine()
     yield
     factory_module._usps_provider = None
     factory_module._google_provider = None
     factory_module._http_client = None
     factory_module._caching_provider = None
+    factory_module._reconciliation_params = None
     await cache_db_module.close_engine()
 
 
 @pytest.fixture()
 def mock_google_auth():
-    """Patch google.auth.default to return a fake credentials object."""
+    """Patch get_credentials to return fake credentials."""
     creds = MagicMock()
     creds.token = "fake-token"
     creds.valid = True
-    with patch("address_validator.services.validation.factory.google.auth.default") as mock_default:
+    with patch(
+        "address_validator.services.validation.gcp_auth.google.auth.default"
+    ) as mock_default:
         mock_default.return_value = (creds, "fake-project")
         yield mock_default
 
@@ -232,13 +237,14 @@ class TestGetProvider:
         assert guard._windows[1].limit == 80
         assert guard._windows[1].mode == "hard"
 
-    def test_google_daily_window_is_hard(
+    def test_google_daily_window_is_fixed_reset(
         self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
     ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         result = get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
         guard = google._client._rate_limiter
+        assert isinstance(guard._windows[1], FixedResetQuotaWindow)
         assert guard._windows[1].mode == "hard"
 
     def test_unknown_provider_in_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -339,7 +345,9 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
             validate_config()
 
-    def test_google_valid_config_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_valid_config_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
@@ -349,7 +357,9 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="smarty"):
             validate_config()
 
-    def test_chain_valid_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_chain_valid_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
