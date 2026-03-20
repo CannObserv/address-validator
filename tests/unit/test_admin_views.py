@@ -51,6 +51,22 @@ def test_audit_htmx_nonboosted_returns_partial(client: TestClient, admin_headers
     assert "<nav" not in response.text
 
 
+def test_endpoint_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
+    """In-page HTMX request to /admin/endpoints/parse returns rows partial."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get("/admin/endpoints/parse", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" not in response.text
+
+
+def test_provider_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
+    """In-page HTMX request to /admin/providers/usps returns rows partial."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get("/admin/providers/usps", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" not in response.text
+
+
 def test_endpoint_htmx_boosted_returns_full_page(client: TestClient, admin_headers: dict) -> None:
     headers = {**admin_headers, "HX-Request": "true", "HX-Boosted": "true"}
     response = client.get("/admin/endpoints/parse", headers=headers)

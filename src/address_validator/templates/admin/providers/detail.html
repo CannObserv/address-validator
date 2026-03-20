@@ -15,7 +15,7 @@
     <div class="bg-white rounded-lg border border-gray-200 p-4">
         <p class="text-sm text-gray-500 mb-1">Cache Hit Rate</p>
         <p class="text-2xl font-bold text-gray-900">
-            {% if stats.cache_hit_rate is defined and stats.cache_hit_rate is not none %}{{ "%.1f" | format(stats.cache_hit_rate) }}%{% else %}N/A{% endif %}
+            {% if stats.get("cache_hit_rate") is not none %}{{ "%.1f" | format(stats.cache_hit_rate) }}%{% else %}N/A{% endif %}
         </p>
     </div>
     {% if quota %}
