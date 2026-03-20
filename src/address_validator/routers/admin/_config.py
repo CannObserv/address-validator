@@ -12,8 +12,6 @@ _PKG_DIR = Path(__file__).resolve().parent.parent.parent  # src/address_validato
 
 templates = Jinja2Templates(directory=str(_PKG_DIR / "templates"))
 
-STATIC_DIR = str(_PKG_DIR / "static" / "admin")
-
 
 @lru_cache(maxsize=1)
 def get_css_version() -> str:

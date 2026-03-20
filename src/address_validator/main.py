@@ -5,6 +5,7 @@ import contextlib
 import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,6 @@ from fastapi.staticfiles import StaticFiles
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
-from address_validator.routers.admin._config import STATIC_DIR
 from address_validator.routers.admin.router import admin_router
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
@@ -28,6 +28,8 @@ from address_validator.services.validation.factory import (
     validate_config,
 )
 from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
+
+_THIS_DIR = Path(__file__).resolve().parent  # src/address_validator/
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logging.getLogger().addFilter(RequestIdFilter())
@@ -145,6 +147,6 @@ app.include_router(v1_validate.router)
 app.include_router(admin_router)
 app.mount(
     "/static/admin",
-    StaticFiles(directory=STATIC_DIR),
+    StaticFiles(directory=str(_THIS_DIR / "static" / "admin")),
     name="admin-static",
 )

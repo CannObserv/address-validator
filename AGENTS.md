@@ -13,7 +13,8 @@ FastAPI service — parses and standardizes US physical addresses per USPS Publi
 
 HTTP request
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
- └─ routers/v1/              thin handlers, validation, error handling
+ └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
+ └─ routers/v1/               thin handlers, validation, error handling
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
      └─ validate         →   parse → standardize → services/validation/
@@ -23,28 +24,24 @@ HTTP request
                                  google_provider.py  ADC; lat/lng; DPV → status
                                  chain_provider.py   ordered fallback across providers
                                  _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
+ └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
+     ├─ router.py             top-level /admin router
+     ├─ deps.py               AdminUser from exe.dev proxy headers
+     ├─ _config.py            shared templates, CSS version, quota helpers
+     ├─ dashboard.py          GET /admin/ — landing page
+     ├─ audit_views.py        GET /admin/audit/ — audit log with filters
+     ├─ endpoints.py          GET /admin/endpoints/{name}
+     ├─ providers.py          GET /admin/providers/{name}
+     └─ queries.py            SQL query helpers for dashboard views
 
 models.py           API contract source of truth
+services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
-```
-
-```
-     └─ middleware/audit.py    records every API request to audit_log (fire-and-forget)
-     └─ routers/admin/         admin dashboard (Jinja2 + HTMX, exe.dev auth)
-         ├─ router.py          top-level /admin router
-         ├─ deps.py            AdminUser from exe.dev proxy headers
-         ├─ _config.py         shared templates, CSS version, quota helpers
-         ├─ dashboard.py       GET /admin/ — landing page
-         ├─ audit_views.py     GET /admin/audit/ — audit log with filters
-         ├─ endpoints.py       GET /admin/endpoints/{name}
-         ├─ providers.py       GET /admin/providers/{name}
-         └─ queries.py         SQL query helpers for dashboard views
-services/audit.py       audit ContextVars + write_audit_row (fail-open DB insert)
-templates/admin/        Jinja2 templates (base, dashboard, audit, endpoints, providers)
-static/admin/css/       Tailwind CSS (input.css + built tailwind.css)
+templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers)
+static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 ```
 
 ## Key conventions
