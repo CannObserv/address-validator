@@ -186,8 +186,7 @@ def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) ->
                 if usage is not None and usage > 0:
                     guard.adjust_tokens(1, -usage)
                     logger.info(
-                        "get_provider: seeded daily quota from Monitoring"
-                        " (used=%d, remaining=%d)",
+                        "get_provider: seeded daily quota from Monitoring (used=%d, remaining=%d)",
                         usage,
                         daily_limit - usage,
                     )

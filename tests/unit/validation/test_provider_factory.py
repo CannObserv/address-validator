@@ -357,9 +357,7 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="smarty"):
             validate_config()
 
-    def test_chain_valid_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_chain_valid_succeeds(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")

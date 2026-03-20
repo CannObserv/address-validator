@@ -37,16 +37,12 @@ def fetch_daily_limit(
 
     Returns the enforced daily quota value, or ``None`` if not found or on error.
     """
-    parent = (
-        f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
-    )
+    parent = f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
     try:
         for info in client.list_quota_infos(parent=parent):
             if info.refresh_interval == "day" and info.dimensions_infos:
                 value = info.dimensions_infos[0].details.value
-                logger.info(
-                    "gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value
-                )
+                logger.info("gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value)
                 return int(value)
     except Exception:
         logger.warning(
@@ -133,8 +129,7 @@ def reconcile_once(
         level = logging.DEBUG if abs(delta) <= _STALENESS_THRESHOLD else logging.WARNING
         logger.log(
             level,
-            "gcp_quota_sync: quota drift — monitoring=%d local=%d, "
-            "not adjusting up (possible lag)",
+            "gcp_quota_sync: quota drift — monitoring=%d local=%d, not adjusting up (possible lag)",
             reported_usage,
             int(local_usage),
         )
@@ -159,8 +154,6 @@ async def run_reconciliation_loop(
             if usage is not None:
                 reconcile_once(guard, daily_window_index, usage)
             else:
-                logger.debug(
-                    "gcp_quota_sync: no usage data available, skipping reconciliation"
-                )
+                logger.debug("gcp_quota_sync: no usage data available, skipping reconciliation")
         except Exception:
             logger.exception("gcp_quota_sync: reconciliation tick failed")
