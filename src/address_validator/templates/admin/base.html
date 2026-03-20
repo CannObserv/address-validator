@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Admin{% endblock %} — Address Validator</title>
+    <link rel="stylesheet" href="/static/admin/css/tailwind.css?v={{ css_version }}">
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900" hx-boost="true">
+    <header class="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <a href="/admin/" class="text-lg font-semibold text-gray-800">Address Validator Admin</a>
+        <div class="flex items-center gap-4 text-sm text-gray-600">
+            <span>{{ user.email }}</span>
+            <form method="POST" action="/__exe.dev/logout" class="inline">
+                <button type="submit"
+                        class="text-gray-500 hover:text-gray-700 underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 rounded min-h-[44px] min-w-[44px] inline-flex items-center">
+                    Logout
+                </button>
+            </form>
+        </div>
+    </header>
+    <div class="flex flex-col md:flex-row">
+        <nav class="w-full md:w-56 bg-white border-b md:border-b-0 md:border-r border-gray-200 md:min-h-[calc(100vh-57px)]"
+             aria-label="Admin navigation">
+            <ul class="p-2 md:p-4 flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+                <li><a href="/admin/" class="block px-3 py-2 rounded text-sm font-medium min-h-[44px] flex items-center {% if active_nav == 'dashboard' %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-100{% endif %} focus:outline-none focus:ring-2 focus:ring-blue-500">Dashboard</a></li>
+                <li><a href="/admin/audit/" class="block px-3 py-2 rounded text-sm font-medium min-h-[44px] flex items-center {% if active_nav == 'audit' %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-100{% endif %} focus:outline-none focus:ring-2 focus:ring-blue-500">Audit Log</a></li>
+                <li class="text-xs text-gray-400 uppercase tracking-wide pt-3 pb-1 px-3 hidden md:block">Endpoints</li>
+                {% for ep in ['parse', 'standardize', 'validate'] %}
+                <li><a href="/admin/endpoints/{{ ep }}" class="block px-3 py-2 rounded text-sm min-h-[44px] flex items-center {% if active_nav == 'endpoint_' + ep %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-100{% endif %} focus:outline-none focus:ring-2 focus:ring-blue-500">/{{ ep }}</a></li>
+                {% endfor %}
+                <li class="text-xs text-gray-400 uppercase tracking-wide pt-3 pb-1 px-3 hidden md:block">Providers</li>
+                {% for prov in ['usps', 'google'] %}
+                <li><a href="/admin/providers/{{ prov }}" class="block px-3 py-2 rounded text-sm min-h-[44px] flex items-center {% if active_nav == 'provider_' + prov %}bg-blue-50 text-blue-700{% else %}text-gray-700 hover:bg-gray-100{% endif %} focus:outline-none focus:ring-2 focus:ring-blue-500">{{ prov | upper }}</a></li>
+                {% endfor %}
+            </ul>
+        </nav>
+        <main class="flex-1 p-4 md:p-6" aria-live="polite">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

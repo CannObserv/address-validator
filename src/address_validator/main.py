@@ -9,10 +9,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
+from address_validator.routers.admin.router import admin_router
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
@@ -137,3 +139,11 @@ app.include_router(v1_health.router)
 app.include_router(v1_parse.router)
 app.include_router(v1_standardize.router)
 app.include_router(v1_validate.router)
+
+# Admin dashboard
+app.include_router(admin_router)
+app.mount(
+    "/static/admin",
+    StaticFiles(directory="src/address_validator/static/admin"),
+    name="admin-static",
+)

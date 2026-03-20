@@ -17,6 +17,7 @@ dependencies = [
     "google-cloud-quotas>=0.5,<1",
     "google-cloud-monitoring>=2.0,<3",
     "google-auth>=2.0,<3",
+    "jinja2>=3.1.6",
 ]
 
 [dependency-groups]
