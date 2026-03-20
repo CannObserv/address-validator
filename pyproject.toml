@@ -14,6 +14,9 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0,<3",
     "asyncpg>=0.30,<1",
     "alembic>=1.14,<2",
+    "google-cloud-quotas>=0.5,<1",
+    "google-cloud-monitoring>=2.0,<3",
+    "google-auth>=2.0,<3",
 ]
 
 [dependency-groups]
