@@ -54,3 +54,12 @@ def client_no_auth() -> TestClient:
 def client_bad_auth() -> TestClient:
     """A client with a **wrong** X-API-Key — for 403 tests."""
     return TestClient(app, headers={"X-API-Key": "wrong-key"})
+
+
+@pytest.fixture(scope="session")
+def admin_headers() -> dict[str, str]:
+    """Exe.dev proxy auth headers for admin dashboard tests."""
+    return {
+        "X-ExeDev-UserID": "test-user-123",
+        "X-ExeDev-Email": "admin@test.example.com",
+    }
