@@ -47,9 +47,7 @@ def fetch_daily_limit(
 
     Returns the enforced daily quota value, or ``None`` if not found or on error.
     """
-    parent = (
-        f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
-    )
+    parent = f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
     try:
         for info in client.list_quota_infos(parent=parent):
             if (
@@ -60,8 +58,7 @@ def fetch_daily_limit(
                 value = int(info.dimensions_infos[0].details.value)
                 if value >= _INT64_MAX:
                     logger.info(
-                        "gcp_quota_sync: daily limit is INT64_MAX "
-                        "(no explicit quota set), ignoring"
+                        "gcp_quota_sync: daily limit is INT64_MAX (no explicit quota set), ignoring"
                     )
                     return None
                 logger.info("gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value)
