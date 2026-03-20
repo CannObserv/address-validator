@@ -1,83 +1,83 @@
 {% extends "admin/base.html" %}
 {% block title %}{{ provider_name | upper }} — Provider{% endblock %}
 {% block content %}
-<h1 class="text-2xl font-bold text-gray-800 mb-6">{{ provider_name | upper }} Provider</h1>
+<h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">{{ provider_name | upper }} Provider</h1>
 
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Requests Today</p>
-        <p class="text-2xl font-bold text-gray-900">{{ stats.today | default(0) }}</p>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests Today</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.today | default(0) }}</p>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Total Requests</p>
-        <p class="text-2xl font-bold text-gray-900">{{ stats.total | default(0) }}</p>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Requests</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.total | default(0) }}</p>
     </div>
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Cache Hit Rate</p>
-        <p class="text-2xl font-bold text-gray-900">
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Cache Hit Rate</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">
             {% if stats.get("cache_hit_rate") is not none %}{{ "%.1f" | format(stats.cache_hit_rate) }}%{% else %}N/A{% endif %}
         </p>
     </div>
     {% if quota %}
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Daily Quota</p>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Daily Quota</p>
         <div class="flex items-baseline gap-2">
-            <p class="text-2xl font-bold text-gray-900">{{ quota.remaining }}</p>
-            <p class="text-sm text-gray-500">/ {{ quota.limit }}</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ quota.remaining }}</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">/ {{ quota.limit }}</p>
         </div>
-        <div class="mt-2 w-full bg-gray-200 rounded-full h-2" role="progressbar"
+        <div class="mt-2 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2" role="progressbar"
              aria-valuenow="{{ quota.remaining }}" aria-valuemin="0" aria-valuemax="{{ quota.limit }}"
              aria-label="{{ provider_name }} quota usage">
-            <div class="bg-blue-600 h-2 rounded-full"
+            <div class="bg-co-purple h-2 rounded-full"
                  style="width: {{ ((quota.remaining / quota.limit) * 100) | int if quota.limit > 0 else 0 }}%"></div>
         </div>
     </div>
     {% else %}
-    <div class="bg-white rounded-lg border border-gray-200 p-4">
-        <p class="text-sm text-gray-500 mb-1">Daily Quota</p>
-        <p class="text-2xl font-bold text-gray-400">N/A</p>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Daily Quota</p>
+        <p class="text-2xl font-bold text-gray-400 dark:text-gray-500">N/A</p>
     </div>
     {% endif %}
 </div>
 
 {% if stats.validation_statuses %}
-<h2 class="text-lg font-semibold text-gray-800 mb-3">Validation Statuses</h2>
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Validation Statuses</h2>
 <div class="flex flex-wrap gap-2 mb-8">
     {% for status, count in stats.validation_statuses.items() %}
     <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
-        {% if status == 'confirmed' or status == 'confirmed_missing_secondary' %}bg-green-100 text-green-800
-        {% elif status == 'confirmed_bad_secondary' %}bg-yellow-100 text-yellow-800
-        {% elif status == 'not_confirmed' %}bg-red-100 text-red-800
-        {% else %}bg-gray-100 text-gray-800{% endif %}">
+        {% if status == 'confirmed' or status == 'confirmed_missing_secondary' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300
+        {% elif status == 'confirmed_bad_secondary' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300
+        {% elif status == 'not_confirmed' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300
+        {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %}">
         {{ status }}: {{ count }}
     </span>
     {% endfor %}
 </div>
 {% endif %}
 
-<h2 class="text-lg font-semibold text-gray-800 mb-3">Recent Requests</h2>
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Recent Requests</h2>
 
 <form class="flex flex-wrap gap-3 mb-4 items-end"
       hx-get="/admin/providers/{{ provider_name }}"
       hx-target="#audit-rows"
       hx-push-url="true">
     <div>
-        <label for="client_ip" class="block text-xs text-gray-500 mb-1">Client IP</label>
+        <label for="client_ip" class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Client IP</label>
         <input type="text" name="client_ip" id="client_ip" value="{{ filters.client_ip or '' }}"
-               class="border border-gray-300 rounded px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+               class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100"
                placeholder="e.g. 10.0.0.1">
     </div>
     <button type="submit"
-            class="bg-blue-600 text-white px-4 py-1 rounded text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 min-h-[32px]">
+            class="bg-co-purple text-white px-4 py-1 rounded text-sm font-medium hover:bg-co-purple-700 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100 focus:ring-offset-1 dark:ring-offset-gray-800 min-h-[32px]">
         Filter
     </button>
     <a href="/admin/providers/{{ provider_name }}"
-       class="text-sm text-gray-500 hover:text-gray-700 underline self-center">Clear</a>
+       class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline self-center">Clear</a>
 </form>
 
-<div class="overflow-x-auto bg-white rounded-lg border border-gray-200">
+<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
     <table class="w-full text-left">
-        <thead class="sticky top-0 bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
             <tr>
                 <th class="px-3 py-2">Time</th>
                 <th class="px-3 py-2">IP</th>
@@ -99,12 +99,12 @@
 <nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
     {% if page > 1 %}
     <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}"
-       class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">&laquo; Prev</a>
+       class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">&laquo; Prev</a>
     {% endif %}
-    <span class="text-gray-500">Page {{ page }} of {{ total_pages }}</span>
+    <span class="text-gray-500 dark:text-gray-400">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
     <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}"
-       class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">Next &raquo;</a>
+       class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Next &raquo;</a>
     {% endif %}
 </nav>
 {% endif %}
