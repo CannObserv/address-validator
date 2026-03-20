@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from address_validator.logging_filter import RequestIdFilter
+from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
@@ -104,6 +105,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+app.middleware("http")(audit_middleware)
 app.middleware("http")(request_id_middleware)
 
 
