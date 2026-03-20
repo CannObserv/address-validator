@@ -30,3 +30,36 @@ def test_admin_endpoint_detail_404_for_unknown(client: TestClient, admin_headers
 def test_admin_provider_detail_404_for_unknown(client: TestClient, admin_headers: dict) -> None:
     response = client.get("/admin/providers/unknown", headers=admin_headers)
     assert response.status_code == 404
+
+
+# --- hx-boost navigation must return full pages, not partials (#45) ---
+
+
+def test_audit_htmx_boosted_returns_full_page(client: TestClient, admin_headers: dict) -> None:
+    """Boosted nav to /admin/audit/ must return full layout, not rows partial."""
+    headers = {**admin_headers, "HX-Request": "true", "HX-Boosted": "true"}
+    response = client.get("/admin/audit/", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" in response.text
+
+
+def test_audit_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
+    """In-page HTMX request to /admin/audit/ returns rows partial."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get("/admin/audit/", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" not in response.text
+
+
+def test_endpoint_htmx_boosted_returns_full_page(client: TestClient, admin_headers: dict) -> None:
+    headers = {**admin_headers, "HX-Request": "true", "HX-Boosted": "true"}
+    response = client.get("/admin/endpoints/parse", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" in response.text
+
+
+def test_provider_htmx_boosted_returns_full_page(client: TestClient, admin_headers: dict) -> None:
+    headers = {**admin_headers, "HX-Request": "true", "HX-Boosted": "true"}
+    response = client.get("/admin/providers/usps", headers=headers)
+    assert response.status_code == 200
+    assert "<nav" in response.text

@@ -44,8 +44,8 @@ async def audit_list(
     total_pages = max(1, math.ceil(total / _PER_PAGE))
     filters = {"client_ip": client_ip, "endpoint": endpoint, "status_min": status_min}
 
-    # HTMX partial — return just the rows
-    if request.headers.get("HX-Request"):
+    # HTMX partial — return just the rows (skip for boosted nav)
+    if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             "admin/audit/_rows.html",
             {"request": request, "rows": rows},

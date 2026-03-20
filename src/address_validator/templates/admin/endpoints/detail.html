@@ -15,13 +15,13 @@
     <div class="bg-white rounded-lg border border-gray-200 p-4">
         <p class="text-sm text-gray-500 mb-1">Avg Latency</p>
         <p class="text-2xl font-bold text-gray-900">
-            {% if stats.avg_latency_ms is not none %}{{ stats.avg_latency_ms }}ms{% else %}N/A{% endif %}
+            {% if stats.avg_latency_ms is defined and stats.avg_latency_ms is not none %}{{ stats.avg_latency_ms }}ms{% else %}N/A{% endif %}
         </p>
     </div>
     <div class="bg-white rounded-lg border border-gray-200 p-4">
         <p class="text-sm text-gray-500 mb-1">Error Rate</p>
         <p class="text-2xl font-bold {% if stats.error_rate and stats.error_rate > 5 %}text-red-600{% else %}text-gray-900{% endif %}">
-            {% if stats.error_rate is not none %}{{ "%.1f" | format(stats.error_rate) }}%{% else %}N/A{% endif %}
+            {% if stats.error_rate is defined and stats.error_rate is not none %}{{ "%.1f" | format(stats.error_rate) }}%{% else %}N/A{% endif %}
         </p>
     </div>
 </div>
