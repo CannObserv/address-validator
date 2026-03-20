@@ -12,8 +12,6 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.services.validation.google_client import GoogleClient
 
-API_KEY = "test-api-key"
-
 # Minimal realistic Google Address Validation API response for a confirmed address.
 GOOGLE_RESPONSE_Y = {
     "result": {
@@ -198,8 +196,21 @@ class TestGoogleClientValidateAddress:
         )
 
     @pytest.fixture()
-    def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> GoogleClient:
-        return GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=_default_guard)
+    def mock_credentials(self):
+        creds = MagicMock()
+        creds.token = "test-bearer-token"
+        creds.valid = True
+        return creds
+
+    @pytest.fixture()
+    def client(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard, mock_credentials
+    ) -> GoogleClient:
+        return GoogleClient(
+            credentials=mock_credentials,
+            http_client=mock_http,
+            quota_guard=_default_guard,
+        )
 
     def _make_response(self, json_data: dict, status_code: int = 200) -> MagicMock:
         resp = MagicMock(spec=httpx.Response)
@@ -216,11 +227,12 @@ class TestGoogleClientValidateAddress:
         assert "addressvalidation.googleapis.com" in call_args[0][0]
 
     @pytest.mark.asyncio
-    async def test_sends_api_key(self, client: GoogleClient, mock_http: AsyncMock) -> None:
+    async def test_sends_bearer_token(self, client: GoogleClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
         await client.validate_address("123 Main St")
-        call_args = mock_http.post.call_args
-        assert call_args[1]["params"]["key"] == API_KEY
+        call_kwargs = mock_http.post.call_args
+        headers = call_kwargs.kwargs.get("headers") or call_kwargs[1].get("headers", {})
+        assert headers.get("Authorization") == "Bearer test-bearer-token"
 
     @pytest.mark.asyncio
     async def test_enables_usps_cass(self, client: GoogleClient, mock_http: AsyncMock) -> None:
@@ -310,7 +322,10 @@ class TestGoogleClientValidateAddress:
             windows=[QuotaWindow(limit=5, duration_s=60.0, mode="soft")],
             provider_name="google",
         )
-        client = GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=guard)
+        mock_creds = MagicMock()
+        mock_creds.token = "tok"
+        mock_creds.valid = True
+        client = GoogleClient(credentials=mock_creds, http_client=mock_http, quota_guard=guard)
         assert client._rate_limiter is guard
 
     @pytest.mark.asyncio

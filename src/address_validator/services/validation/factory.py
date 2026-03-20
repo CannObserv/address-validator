@@ -21,7 +21,8 @@ VALIDATION_PROVIDER
 
     ``google``
         :class:`~services.validation.google_provider.GoogleProvider` -- calls
-        the Google Address Validation API.  Requires ``GOOGLE_API_KEY``.
+        the Google Address Validation API.  Uses Application Default
+        Credentials (ADC); no additional env var required.
 
     ``usps,google``
         USPS primary with Google fallback.  When USPS returns HTTP 429 after
@@ -39,10 +40,6 @@ USPS_CONSUMER_SECRET
 USPS_RATE_LIMIT_RPS
     Maximum USPS API requests per second.  Must be a positive number.
     Defaults to ``5.0`` (free-tier documented limit).
-
-GOOGLE_API_KEY
-    API key from the Google Cloud Console.  Required when ``google`` appears
-    in ``VALIDATION_PROVIDER``.
 
 GOOGLE_RATE_LIMIT_RPM
     Maximum Google API requests per minute.  Must be a positive integer.
@@ -74,6 +71,7 @@ VALIDATION_CACHE_TTL_DAYS
 import logging
 import os
 
+import google.auth
 import httpx
 
 from address_validator.services.validation import cache_db
@@ -135,13 +133,14 @@ def _get_usps_provider(
     return _usps_provider
 
 
-def _get_google_provider(
-    api_key: str, rpm: int, daily_limit: int, latency_budget_s: float
-) -> GoogleProvider:
+def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) -> GoogleProvider:
     global _google_provider  # noqa: PLW0603
     if _google_provider is None:
         logger.debug(
             "get_provider: creating GoogleProvider singleton (%d rpm, %d/day)", rpm, daily_limit
+        )
+        credentials, _ = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
         guard = QuotaGuard(
             windows=[
@@ -153,7 +152,7 @@ def _get_google_provider(
         )
         _google_provider = GoogleProvider(
             client=GoogleClient(
-                api_key=api_key,
+                credentials=credentials,
                 http_client=_get_http_client(),
                 quota_guard=guard,
             )
@@ -208,11 +207,8 @@ def _parse_usps_config() -> tuple[str, str, float, int]:
     return key, secret, rps, daily_limit
 
 
-def _parse_google_config() -> tuple[str, int, int]:
-    """Read, validate, and return ``(api_key, rpm, daily_limit)``."""
-    api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER")
+def _parse_google_config() -> tuple[int, int]:
+    """Read, validate, and return ``(rpm, daily_limit)``."""
     try:
         rpm = int(os.environ.get("GOOGLE_RATE_LIMIT_RPM", "5"))
     except ValueError:
@@ -225,7 +221,7 @@ def _parse_google_config() -> tuple[str, int, int]:
         raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')") from None
     if daily_limit <= 0:
         raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')")
-    return api_key, rpm, daily_limit
+    return rpm, daily_limit
 
 
 def _parse_latency_budget() -> float:
@@ -267,8 +263,8 @@ def _build_single_provider(name: str) -> ValidationProvider:
         return _get_usps_provider(key, secret, rps, daily_limit, budget)
 
     if name == "google":
-        api_key, rpm, daily_limit = _parse_google_config()
-        return _get_google_provider(api_key, rpm, daily_limit, budget)
+        rpm, daily_limit = _parse_google_config()
+        return _get_google_provider(rpm, daily_limit, budget)
 
     raise ValueError(
         f"Unknown provider name: '{name}'. Supported values: 'none', 'usps', 'google'."

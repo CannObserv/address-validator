@@ -17,11 +17,11 @@ class TestLifespanValidateConfig:
             pass  # pragma: no cover
 
     def test_misconfigured_google_aborts_startup(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Service must refuse to start when Google API key is missing."""
+        """Service must refuse to start when Google rate limit config is invalid."""
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "0")
 
-        with pytest.raises(ValueError, match="GOOGLE_API_KEY"), TestClient(app):
+        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"), TestClient(app):
             pass  # pragma: no cover
 
     def test_valid_none_provider_starts_cleanly(self, monkeypatch: pytest.MonkeyPatch) -> None:

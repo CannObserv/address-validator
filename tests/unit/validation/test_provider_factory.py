@@ -1,6 +1,7 @@
 """Unit tests for the provider factory (get_provider, validate_config)."""
 
 import logging
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,6 +29,17 @@ async def reset_singletons() -> None:
     factory_module._http_client = None
     factory_module._caching_provider = None
     await cache_db_module.close_engine()
+
+
+@pytest.fixture()
+def mock_google_auth():
+    """Patch google.auth.default to return a fake credentials object."""
+    creds = MagicMock()
+    creds.token = "fake-token"
+    creds.valid = True
+    with patch("address_validator.services.validation.factory.google.auth.default") as mock_default:
+        mock_default.return_value = (creds, "fake-project")
+        yield mock_default
 
 
 class TestGetProvider:
@@ -78,30 +90,27 @@ class TestGetProvider:
         with pytest.raises(ValueError, match="smarty"):
             get_provider()
 
-    def test_google_keyword_gives_google_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_keyword_gives_google_provider(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, GoogleProvider)
 
-    def test_google_keyword_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_keyword_case_insensitive(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "GOOGLE")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, GoogleProvider)
 
-    def test_google_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_provider_is_singleton(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
         assert get_provider() is get_provider()
-
-    def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
-            get_provider()
 
     def test_unknown_provider_error_mentions_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
@@ -126,10 +135,9 @@ class TestGetProvider:
         assert isinstance(result._inner, USPSProvider)
 
     def test_google_provider_wrapped_in_caching_provider(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
     ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, GoogleProvider)
@@ -141,21 +149,21 @@ class TestGetProvider:
         assert get_provider() is get_provider()
 
     def test_comma_separated_list_gives_chain_provider(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
     ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, ChainProvider)
 
-    def test_chain_contains_usps_then_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_chain_contains_usps_then_google(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         chain = result._inner
@@ -163,11 +171,12 @@ class TestGetProvider:
         assert isinstance(chain._providers[0], USPSProvider)
         assert isinstance(chain._providers[1], GoogleProvider)
 
-    def test_chain_google_then_usps(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_chain_google_then_usps(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google,usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         result = get_provider()
         assert isinstance(result, CachingProvider)
         chain = result._inner
@@ -200,9 +209,10 @@ class TestGetProvider:
         assert guard._windows[1].limit == 5000
         assert guard._windows[1].duration_s == 86_400.0
 
-    def test_google_rate_limit_rpm_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_rate_limit_rpm_env_var(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "10")
         result = get_provider()
         assert isinstance(result, CachingProvider)
@@ -211,9 +221,10 @@ class TestGetProvider:
         assert guard._windows[0].limit == 10
         assert guard._windows[0].duration_s == 60.0
 
-    def test_google_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_daily_limit_env_var(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "80")
         result = get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
@@ -221,9 +232,10 @@ class TestGetProvider:
         assert guard._windows[1].limit == 80
         assert guard._windows[1].mode == "hard"
 
-    def test_google_daily_window_is_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_daily_window_is_hard(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         result = get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
         guard = google._client._rate_limiter
@@ -327,17 +339,10 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
             validate_config()
 
-    def test_google_valid_key_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_google_valid_config_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
-
-    def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
-            validate_config()
 
     def test_unknown_provider_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
@@ -348,17 +353,8 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
-
-    def test_chain_missing_google_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps,google")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
-            validate_config()
 
     def test_invalid_ttl_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
@@ -470,28 +466,24 @@ class TestValidateConfig:
 
     def test_invalid_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "abc")
         with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
             validate_config()
 
     def test_zero_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "0")
         with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
             validate_config()
 
     def test_invalid_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "abc")
         with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
             validate_config()
 
     def test_zero_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
         monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "0")
         with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
             validate_config()

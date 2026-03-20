@@ -1,6 +1,6 @@
 """Low-level Google Address Validation API HTTP client.
 
-Handles request construction (with ``enableUspsCass: true``), API key
+Handles request construction (with ``enableUspsCass: true``), ADC bearer token
 authentication, quota enforcement via a :class:`~services.validation._rate_limit.QuotaGuard`,
 exponential-backoff retry on HTTP 429, and normalisation of the raw JSON response to a
 provider-neutral dict consumed by
@@ -15,6 +15,8 @@ import logging
 from typing import Any
 
 import httpx
+from google.auth.credentials import Credentials
+from google.auth.transport.requests import Request as AuthRequest
 
 from address_validator.services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
@@ -34,8 +36,8 @@ class GoogleClient:
 
     Parameters
     ----------
-    api_key:
-        Google Cloud API key restricted to the Address Validation API.
+    credentials:
+        Google ADC credentials object used for bearer token authentication.
     http_client:
         Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
     quota_guard:
@@ -45,13 +47,19 @@ class GoogleClient:
 
     def __init__(
         self,
-        api_key: str,
+        credentials: Credentials,
         http_client: httpx.AsyncClient,
         quota_guard: QuotaGuard,
     ) -> None:
-        self._api_key = api_key
+        self._credentials = credentials
         self._http = http_client
         self._rate_limiter = quota_guard
+
+    def _get_auth_headers(self) -> dict[str, str]:
+        """Return Authorization header with a fresh bearer token."""
+        if not self._credentials.valid:
+            self._credentials.refresh(AuthRequest())
+        return {"Authorization": f"Bearer {self._credentials.token}"}
 
     async def validate_address(
         self,
@@ -87,7 +95,7 @@ class GoogleClient:
             logger.debug("GoogleClient: validating address, %d lines", len(address_lines))
             resp = await self._http.post(
                 _VALIDATE_URL,
-                params={"key": self._api_key},
+                headers=self._get_auth_headers(),
                 json={
                     "address": {"addressLines": address_lines},
                     "enableUspsCass": True,
