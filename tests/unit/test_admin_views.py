@@ -79,3 +79,26 @@ def test_provider_htmx_boosted_returns_full_page(client: TestClient, admin_heade
     response = client.get("/admin/providers/usps", headers=headers)
     assert response.status_code == 200
     assert "<nav" in response.text
+
+
+def test_admin_dashboard_has_brand_elements(client: TestClient, admin_headers: dict) -> None:
+    """Dashboard contains Cannabis Observer branding."""
+    response = client.get("/admin/", headers=admin_headers)
+    html = response.text
+    assert "cannabis_observer-icon-square.svg" in html
+    assert "Cannabis Observer" in html
+    assert "Address Validator" in html
+
+
+def test_admin_dashboard_has_dark_mode_toggle(client: TestClient, admin_headers: dict) -> None:
+    """Dashboard contains a dark mode toggle button."""
+    response = client.get("/admin/", headers=admin_headers)
+    assert 'id="theme-toggle"' in response.text
+
+
+def test_admin_dashboard_has_hamburger_nav(client: TestClient, admin_headers: dict) -> None:
+    """Dashboard contains hamburger nav elements for mobile."""
+    response = client.get("/admin/", headers=admin_headers)
+    html = response.text
+    assert 'id="nav-toggle"' in html
+    assert 'id="mobile-nav"' in html
