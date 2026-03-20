@@ -1,6 +1,9 @@
 """Unit tests for GCP quota sync — limit discovery and usage monitoring."""
 
+import asyncio
 from unittest.mock import MagicMock
+
+import pytest
 
 from address_validator.services.validation._rate_limit import (
     FixedResetQuotaWindow,
@@ -11,6 +14,7 @@ from address_validator.services.validation.gcp_quota_sync import (
     fetch_daily_limit,
     fetch_daily_usage,
     reconcile_once,
+    run_reconciliation_loop,
 )
 
 _VALIDATE_METRIC = "addressvalidation.googleapis.com/validate_address_requests"
@@ -130,3 +134,27 @@ class TestReconcileOnce:
         guard = self._make_guard(daily_limit=160, used=150)
         reconcile_once(guard, daily_window_index=1, reported_usage=200)
         assert guard._tokens[1] == 0.0
+
+
+class TestRunReconciliationLoop:
+    async def test_cancellation_exits_cleanly(self) -> None:
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+                FixedResetQuotaWindow(limit=160, mode="hard"),
+            ],
+            provider_name="google",
+        )
+        task = asyncio.create_task(
+            run_reconciliation_loop(
+                guard=guard,
+                daily_window_index=1,
+                monitoring_client=MagicMock(),
+                project_id="test",
+                interval_s=3600,
+            )
+        )
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task

@@ -10,7 +10,7 @@ Provides:
 import asyncio
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import monotonic
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -97,13 +97,6 @@ class FixedResetQuotaWindow:
     def __post_init__(self) -> None:
         if self.limit <= 0:
             raise ValueError(f"FixedResetQuotaWindow.limit must be positive, got {self.limit}")
-
-    def seconds_until_reset(self) -> float:
-        """Seconds remaining until the next midnight in this window's timezone."""
-        now = _now_in_tz(self.timezone)
-        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        next_midnight = midnight + timedelta(days=1)
-        return (next_midnight - now).total_seconds()
 
     def should_reset(self, last_reset: datetime) -> bool:
         """Return True if *last_reset* was on a different calendar day than now."""

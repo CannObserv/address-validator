@@ -41,13 +41,23 @@ USPS_RATE_LIMIT_RPS
     Maximum USPS API requests per second.  Must be a positive number.
     Defaults to ``5.0`` (free-tier documented limit).
 
+GOOGLE_PROJECT_ID
+    GCP project ID.  Optional — auto-discovered from ADC credentials
+    when unset.  Required only if ADC does not carry a project ID
+    (rare outside GCE).
+
 GOOGLE_RATE_LIMIT_RPM
     Maximum Google API requests per minute.  Must be a positive integer.
     Defaults to ``5``.
 
 GOOGLE_DAILY_LIMIT
     Maximum Google API requests per day (hard quota).  Must be a positive
-    integer.  Defaults to ``160``.
+    integer.  Defaults to ``160``.  When Cloud Quotas API is reachable,
+    the discovered limit takes precedence over this env var.
+
+GOOGLE_QUOTA_RECONCILE_INTERVAL_S
+    Seconds between periodic quota reconciliation runs.  Must be a
+    positive number.  Defaults to ``900`` (15 minutes).
 
 USPS_DAILY_LIMIT
     Maximum USPS API requests per day.  Must be a positive integer.
@@ -197,7 +207,12 @@ def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) ->
                 )
 
         if project_id and monitoring_client:
-            interval_s = float(os.environ.get("GOOGLE_QUOTA_RECONCILE_INTERVAL_S", "900"))
+            try:
+                interval_s = float(os.environ.get("GOOGLE_QUOTA_RECONCILE_INTERVAL_S", "900"))
+            except ValueError:
+                interval_s = 900.0
+            if interval_s <= 0:
+                interval_s = 900.0
             _reconciliation_params = {
                 "guard": guard,
                 "daily_window_index": 1,
@@ -353,12 +368,14 @@ def _resolve_provider() -> ValidationProvider:
 
 
 def validate_config() -> None:
-    """Validate provider configuration from env vars without making network calls.
+    """Validate provider configuration at startup.
 
     Reads the same env vars as :func:`get_provider` and checks that all
-    required credentials are present and well-formed.  Logs at INFO which
-    provider is active.  Raises :exc:`ValueError` on misconfiguration so the
-    FastAPI lifespan hook can surface the error at startup rather than on the
+    required credentials are present and well-formed.  For Google, also
+    loads ADC credentials (a local file read for service-account JSON, or
+    a metadata-server call on GCE).  Logs at INFO which provider is
+    active.  Raises :exc:`ValueError` on misconfiguration so the FastAPI
+    lifespan hook can surface the error at startup rather than on the
     first request.
     """
     provider_str = os.environ.get("VALIDATION_PROVIDER", "none").strip().lower()

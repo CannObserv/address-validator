@@ -57,12 +57,9 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 | `USPS_DAILY_LIMIT` | `10000` | USPS per-day window limit (soft — queues up to latency budget) |
 | `GOOGLE_PROJECT_ID` | — | GCP project ID; optional, auto-discovered from ADC if unset |
 | `GOOGLE_RATE_LIMIT_RPM` | `5` | Google per-minute window limit (soft) |
-| `GOOGLE_DAILY_LIMIT` | — | Google per-day limit; optional override, auto-discovered from Cloud Quotas API |
+| `GOOGLE_DAILY_LIMIT` | `160` | Google per-day limit; auto-discovered from Cloud Quotas API when available, env var is fallback |
 | `GOOGLE_QUOTA_RECONCILE_INTERVAL_S` | `900` | Seconds between periodic quota reconciliation runs |
 | `VALIDATION_LATENCY_BUDGET_S` | `1.0` | Max seconds a request may queue before overflowing to the next provider |
-
-`GOOGLE_RATE_LIMIT_RPS` has been removed. Rename to `GOOGLE_RATE_LIMIT_RPM` in
-`/etc/address-validator/env`.
 
 ## Cache TTL
 

@@ -15,9 +15,9 @@ from datetime import UTC, datetime, time
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from google.cloud import cloudquotas_v1, monitoring_v3
-
 if TYPE_CHECKING:
+    from google.cloud import cloudquotas_v1, monitoring_v3
+
     from address_validator.services.validation._rate_limit import QuotaGuard
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,9 @@ def fetch_daily_limit(
 
     Returns the enforced daily quota value, or ``None`` if not found or on error.
     """
-    parent = f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
+    parent = (
+        f"projects/{project_id}/locations/global/services/{_ADDRESS_VALIDATION_SERVICE}"
+    )
     try:
         for info in client.list_quota_infos(parent=parent):
             if (
@@ -82,12 +84,14 @@ def fetch_daily_usage(
 
     Returns the usage count, or ``None`` if unavailable.
     """
+    from google.cloud import monitoring_v3 as monitoring  # noqa: PLC0415
+
     now = datetime.now(_PACIFIC)
     midnight_pt = datetime.combine(now.date(), time.min, tzinfo=_PACIFIC)
     start_utc = midnight_pt.astimezone(UTC)
     end_utc = now.astimezone(UTC)
 
-    interval = monitoring_v3.TimeInterval(
+    interval = monitoring.TimeInterval(
         start_time=start_utc,
         end_time=end_utc,
     )
@@ -102,7 +106,7 @@ def fetch_daily_usage(
                     f' AND resource.label.service = "{_ADDRESS_VALIDATION_SERVICE}"'
                 ),
                 "interval": interval,
-                "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                "view": monitoring.ListTimeSeriesRequest.TimeSeriesView.FULL,
             }
         )
         for series in results:

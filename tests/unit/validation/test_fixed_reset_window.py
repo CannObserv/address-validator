@@ -26,21 +26,6 @@ class TestFixedResetQuotaWindow:
         w = FixedResetQuotaWindow(limit=160, mode="hard")
         assert w.timezone == PT
 
-    def test_seconds_until_reset_near_midnight(self) -> None:
-        # 11:59:00 PM PT → 60 seconds until midnight
-        fake_now = datetime(2026, 3, 20, 23, 59, 0, tzinfo=PT)
-        w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch(_PATCH, return_value=fake_now):
-            assert w.seconds_until_reset() == pytest.approx(60.0, abs=1.0)
-
-    def test_seconds_until_reset_at_start_of_day(self) -> None:
-        # 12:00:01 AM PT → ~86399 seconds until next midnight
-        fake_now = datetime(2026, 3, 20, 0, 0, 1, tzinfo=PT)
-        w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch(_PATCH, return_value=fake_now):
-            remaining = w.seconds_until_reset()
-            assert 86_398 <= remaining <= 86_400
-
     def test_should_reset_true_after_midnight(self) -> None:
         w = FixedResetQuotaWindow(limit=160, mode="hard")
         # Last reset was yesterday

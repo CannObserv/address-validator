@@ -55,10 +55,15 @@ class GoogleClient:
         self._http = http_client
         self._rate_limiter = quota_guard
 
-    def _get_auth_headers(self) -> dict[str, str]:
-        """Return Authorization header with a fresh bearer token."""
+    async def _get_auth_headers(self) -> dict[str, str]:
+        """Return Authorization header with a fresh bearer token.
+
+        Credential refresh is a blocking HTTP call (token endpoint or metadata
+        server).  We offload it to a thread to avoid stalling the event loop.
+        Refreshes are infrequent (~once per hour).
+        """
         if not self._credentials.valid:
-            self._credentials.refresh(AuthRequest())
+            await asyncio.to_thread(self._credentials.refresh, AuthRequest())
         return {"Authorization": f"Bearer {self._credentials.token}"}
 
     async def validate_address(
@@ -95,7 +100,7 @@ class GoogleClient:
             logger.debug("GoogleClient: validating address, %d lines", len(address_lines))
             resp = await self._http.post(
                 _VALIDATE_URL,
-                headers=self._get_auth_headers(),
+                headers=await self._get_auth_headers(),
                 json={
                     "address": {"addressLines": address_lines},
                     "enableUspsCass": True,
