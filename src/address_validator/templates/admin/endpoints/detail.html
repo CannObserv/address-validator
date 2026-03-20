@@ -1,0 +1,96 @@
+{% extends "admin/base.html" %}
+{% block title %}/{{ endpoint_name }} — Endpoint{% endblock %}
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">/api/v1/{{ endpoint_name }}</h1>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-sm text-gray-500 mb-1">Requests Today</p>
+        <p class="text-2xl font-bold text-gray-900">{{ stats.today | default(0) }}</p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-sm text-gray-500 mb-1">This Week</p>
+        <p class="text-2xl font-bold text-gray-900">{{ stats.week | default(0) }}</p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-sm text-gray-500 mb-1">Avg Latency</p>
+        <p class="text-2xl font-bold text-gray-900">
+            {% if stats.avg_latency_ms is not none %}{{ stats.avg_latency_ms }}ms{% else %}N/A{% endif %}
+        </p>
+    </div>
+    <div class="bg-white rounded-lg border border-gray-200 p-4">
+        <p class="text-sm text-gray-500 mb-1">Error Rate</p>
+        <p class="text-2xl font-bold {% if stats.error_rate and stats.error_rate > 5 %}text-red-600{% else %}text-gray-900{% endif %}">
+            {% if stats.error_rate is not none %}{{ "%.1f" | format(stats.error_rate) }}%{% else %}N/A{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if stats.status_codes %}
+<h2 class="text-lg font-semibold text-gray-800 mb-3">Status Codes</h2>
+<div class="flex flex-wrap gap-2 mb-8">
+    {% for code, count in stats.status_codes.items() %}
+    <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium
+        {% if code < 400 %}bg-green-100 text-green-800
+        {% elif code < 500 %}bg-yellow-100 text-yellow-800
+        {% else %}bg-red-100 text-red-800{% endif %}">
+        {{ code }}: {{ count }}
+    </span>
+    {% endfor %}
+</div>
+{% endif %}
+
+<h2 class="text-lg font-semibold text-gray-800 mb-3">Recent Requests</h2>
+
+<form class="flex flex-wrap gap-3 mb-4 items-end"
+      hx-get="/admin/endpoints/{{ endpoint_name }}"
+      hx-target="#audit-rows"
+      hx-push-url="true">
+    <div>
+        <label for="client_ip" class="block text-xs text-gray-500 mb-1">Client IP</label>
+        <input type="text" name="client_ip" id="client_ip" value="{{ filters.client_ip or '' }}"
+               class="border border-gray-300 rounded px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+               placeholder="e.g. 10.0.0.1">
+    </div>
+    <button type="submit"
+            class="bg-blue-600 text-white px-4 py-1 rounded text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 min-h-[32px]">
+        Filter
+    </button>
+    <a href="/admin/endpoints/{{ endpoint_name }}"
+       class="text-sm text-gray-500 hover:text-gray-700 underline self-center">Clear</a>
+</form>
+
+<div class="overflow-x-auto bg-white rounded-lg border border-gray-200">
+    <table class="w-full text-left">
+        <thead class="sticky top-0 bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+            <tr>
+                <th class="px-3 py-2">Time</th>
+                <th class="px-3 py-2">IP</th>
+                <th class="px-3 py-2">Method</th>
+                <th class="px-3 py-2">Endpoint</th>
+                <th class="px-3 py-2">Status</th>
+                <th class="px-3 py-2 text-right">Latency</th>
+                <th class="px-3 py-2">Provider</th>
+                <th class="px-3 py-2">Cache</th>
+            </tr>
+        </thead>
+        <tbody id="audit-rows">
+            {% include "admin/audit/_rows.html" %}
+        </tbody>
+    </table>
+</div>
+
+{% if total_pages > 1 %}
+<nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}"
+       class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">&laquo; Prev</a>
+    {% endif %}
+    <span class="text-gray-500">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}"
+       class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">Next &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
+{% endblock %}
