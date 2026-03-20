@@ -36,6 +36,7 @@ from address_validator.models import (
     ValidateResponseV1,
     ValidationResult,
 )
+from address_validator.services.audit import set_audit_context
 from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
@@ -319,9 +320,20 @@ class CachingProvider:
             cached = None
 
         if cached is not None:
+            set_audit_context(
+                provider=cached.validation.provider,
+                validation_status=cached.validation.status,
+                cache_hit=True,
+            )
             return cached
 
         result: ValidateResponseV1 = await self._inner.validate(std)
+
+        set_audit_context(
+            provider=result.validation.provider,
+            validation_status=result.validation.status,
+            cache_hit=False,
+        )
 
         if result.validation.status == "unavailable":
             logger.debug(
