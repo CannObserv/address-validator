@@ -25,6 +25,7 @@ from address_validator.services.validation.factory import (
 )
 from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logging.getLogger().addFilter(RequestIdFilter())
 
 _DESCRIPTION = """
