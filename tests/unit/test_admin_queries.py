@@ -1,6 +1,6 @@
 """Tests for admin dashboard SQL query helpers."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import text
@@ -164,6 +164,91 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
         assert all(isinstance(v, (int, float)) for v in data[key])
     # requests_24h has hourly buckets — seed rows are all "now" so at least one non-zero.
     assert any(v > 0 for v in data["requests_24h"])
+
+
+async def _seed_stats_rows(engine: AsyncEngine) -> None:
+    """Insert audit_daily_stats rows simulating archived data."""
+    rows = [
+        # Archived: 120 days ago — validate/200/usps/cached
+        {
+            "d": date(2025, 11, 21),
+            "ep": "/api/v1/validate",
+            "provider": "usps",
+            "status": 200,
+            "cache": True,
+            "req_count": 50,
+            "err_count": 0,
+            "avg_lat": 45,
+            "p95_lat": 90,
+        },
+        # Archived: 120 days ago — parse/400/null/null
+        {
+            "d": date(2025, 11, 21),
+            "ep": "/api/v1/parse",
+            "provider": None,
+            "status": 400,
+            "cache": None,
+            "req_count": 10,
+            "err_count": 10,
+            "avg_lat": 5,
+            "p95_lat": 8,
+        },
+    ]
+    async with engine.begin() as conn:
+        for r in rows:
+            await conn.execute(
+                text("""
+                    INSERT INTO audit_daily_stats
+                        (date, endpoint, provider, status_code, cache_hit,
+                         request_count, error_count, avg_latency_ms, p95_latency_ms)
+                    VALUES (:d, :ep, :provider, :status, :cache,
+                            :req_count, :err_count, :avg_lat, :p95_lat)
+                """),
+                r,
+            )
+
+
+@pytest.mark.asyncio
+async def test_dashboard_stats_includes_archived(db: AsyncEngine) -> None:
+    """All-time total includes both live audit_log and archived audit_daily_stats."""
+    await _seed_rows(db)  # 6 live rows
+    await _seed_stats_rows(db)  # 60 archived requests
+
+    stats = await get_dashboard_stats(db)
+    # All-time: 6 live + 60 archived = 66
+    assert stats["requests_all"] == 66
+    # 24h and week should only count live rows
+    assert stats["requests_24h"] == 6
+
+    # Endpoint breakdown all-time should include archived
+    bd = stats["endpoint_breakdown"]
+    assert bd["all"]["/validate"] == 52  # 2 live + 50 archived
+    assert bd["all"]["/parse"] == 12  # 2 live + 10 archived
+
+
+@pytest.mark.asyncio
+async def test_endpoint_stats_includes_archived(db: AsyncEngine) -> None:
+    """Per-endpoint all-time stats include archived data."""
+    await _seed_rows(db)
+    await _seed_stats_rows(db)
+
+    stats = await get_endpoint_stats(db, "validate")
+    assert stats["total"] == 52  # 2 live + 50 archived
+    assert stats["last_24h"] == 2  # Only live
+
+    # Status codes should include archived
+    assert stats["status_codes"][200] == 52
+
+
+@pytest.mark.asyncio
+async def test_provider_stats_includes_archived(db: AsyncEngine) -> None:
+    """Per-provider all-time stats include archived data."""
+    await _seed_rows(db)
+    await _seed_stats_rows(db)
+
+    stats = await get_provider_stats(db, "usps")
+    assert stats["total"] == 52  # 2 live + 50 archived
+    assert stats["last_24h"] == 2  # Only live
 
 
 @pytest.mark.asyncio

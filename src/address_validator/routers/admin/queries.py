@@ -56,6 +56,18 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
             )
         ).one()
 
+        # Archived totals — only count dates before the earliest live row
+        # to avoid double-counting when --backfill has run.
+        archived_total = (
+            await conn.execute(
+                text("""
+                    SELECT COALESCE(SUM(request_count), 0) FROM audit_daily_stats
+                    WHERE date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
+                                  FROM audit_log)
+                """)
+            )
+        ).scalar()
+
         cache_row = (
             await conn.execute(
                 text("""
@@ -70,6 +82,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
             )
         ).one()
 
+        # Live endpoint breakdown
         ep_rows = (
             await conn.execute(
                 text("""
@@ -82,6 +95,19 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     GROUP BY endpoint
                 """),
                 {"last_24h": last_24h, "week": week_start},
+            )
+        ).fetchall()
+
+        # Archived endpoint breakdown — only dates before earliest live row
+        archived_ep_rows = (
+            await conn.execute(
+                text("""
+                    SELECT endpoint, SUM(request_count) AS total
+                    FROM audit_daily_stats
+                    WHERE date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
+                                  FROM audit_log)
+                    GROUP BY endpoint
+                """)
             )
         ).fetchall()
 
@@ -98,16 +124,23 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
         "week": {},
         "24h": {},
     }
+
+    # Live breakdown
     for ep_row in ep_rows:
         label = known.get(ep_row.endpoint, "other")
         periods = (("all", "total"), ("week", "week"), ("24h", "last_24h"))
         for period, col in periods:
             breakdown[period][label] = breakdown[period].get(label, 0) + ep_row._mapping[col]  # noqa: SLF001
 
+    # Add archived totals to "all" period
+    for ar_row in archived_ep_rows:
+        label = known.get(ar_row.endpoint, "other")
+        breakdown["all"][label] = breakdown["all"].get(label, 0) + ar_row.total
+
     return {
         "requests_24h": row.last_24h,
         "requests_week": row.week,
-        "requests_all": row.total,
+        "requests_all": row.total + archived_total,
         "error_rate": error_rate,
         "cache_hit_rate": cache_hit_rate,
         "endpoint_breakdown": breakdown,
@@ -195,12 +228,39 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
             )
         ).one()
 
+        # Archived totals for this endpoint — only dates before earliest live row
+        archived = (
+            await conn.execute(
+                text("""
+                    SELECT
+                        COALESCE(SUM(request_count), 0) AS total,
+                        COALESCE(SUM(error_count), 0) AS errors
+                    FROM audit_daily_stats
+                    WHERE endpoint = :endpoint
+                        AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
+                                    FROM audit_log)
+                """),
+                {"endpoint": endpoint_path},
+            )
+        ).one()
+
+        # Live + archived status code distribution
         status_rows = (
             await conn.execute(
                 text("""
-                    SELECT status_code, COUNT(*) AS count
-                    FROM audit_log
-                    WHERE endpoint = :endpoint
+                    SELECT status_code, SUM(cnt) AS count FROM (
+                        SELECT status_code, COUNT(*) AS cnt
+                        FROM audit_log
+                        WHERE endpoint = :endpoint
+                        GROUP BY status_code
+                        UNION ALL
+                        SELECT status_code, SUM(request_count) AS cnt
+                        FROM audit_daily_stats
+                        WHERE endpoint = :endpoint
+                            AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
+                                        FROM audit_log)
+                        GROUP BY status_code
+                    ) AS combined
                     GROUP BY status_code
                     ORDER BY status_code
                 """),
@@ -208,9 +268,11 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
             )
         ).fetchall()
 
-    error_rate = (row.errors / row.total * 100) if row.total > 0 else None
+    total = row.total + archived.total
+    errors = row.errors + archived.errors
+    error_rate = (errors / total * 100) if total > 0 else None
     return {
-        "total": row.total,
+        "total": total,
         "last_24h": row.last_24h,
         "week": row.week,
         "error_rate": error_rate,
@@ -241,6 +303,20 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).one()
 
+        # Archived total for this provider — only dates before earliest live row
+        archived_total = (
+            await conn.execute(
+                text("""
+                    SELECT COALESCE(SUM(request_count), 0)
+                    FROM audit_daily_stats
+                    WHERE provider = :provider
+                        AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
+                                    FROM audit_log)
+                """),
+                {"provider": provider_name},
+            )
+        ).scalar()
+
         status_rows = (
             await conn.execute(
                 text("""
@@ -256,7 +332,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
 
     cache_hit_rate = (row.cache_hits / row.cache_total * 100) if row.cache_total > 0 else None
     return {
-        "total": row.total,
+        "total": row.total + archived_total,
         "last_24h": row.last_24h,
         "cache_hit_rate": cache_hit_rate,
         "validation_statuses": {r.validation_status: r.count for r in status_rows},
