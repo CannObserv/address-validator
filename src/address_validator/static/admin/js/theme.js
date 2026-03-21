@@ -2,7 +2,8 @@
  * theme.js — Dark mode toggle with localStorage persistence.
  *
  * Default: follows prefers-color-scheme. Manual toggle overrides and
- * persists to localStorage. Loaded at end of <body> with defer.
+ * persists to localStorage. Loaded in <head> with defer. An inline
+ * script in <head> handles synchronous init to prevent FOUC.
  */
 (function () {
     var KEY = 'theme';

@@ -44,8 +44,9 @@ templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, provide
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    theme.js (dark mode), nav.js (hamburger)
 static/admin/images/ Cannabis Observer brand SVGs
-docs/STYLE.md       visual design, a11y, responsive, and performance standards
 ```
+
+See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance standards
 
 ## Key conventions
 

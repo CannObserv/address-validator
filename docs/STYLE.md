@@ -9,8 +9,8 @@ performance rules for the Address Validator admin dashboard.
 
 ### Logo & Wordmark
 
-- **Icon**: `static/admin/images/cannabis_observer-icon-square.svg` — 510×510px square with green-to-purple radial gradient
-- **Wordmark**: `static/admin/images/cannabis_observer-name.svg` — available but not used in dashboard UI
+- **Icon**: `src/address_validator/static/admin/images/cannabis_observer-icon-square.svg` — 510×510px square with green-to-purple radial gradient
+- **Wordmark**: `src/address_validator/static/admin/images/cannabis_observer-name.svg` — available but not used in dashboard UI
 - **Header**: icon (32×32, `w-8 h-8`) + "Address Validator" bold text
 - **Footer**: "A project of Cannabis Observer" + icon (16×16) + decorative emoji `🌱🏛️🔍`
 - **Favicon**: inline SVG data URI — purple magnifying glass matching brand color

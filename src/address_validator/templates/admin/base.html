@@ -13,9 +13,24 @@
     <script src="/static/admin/js/theme.js" defer></script>
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
+{#- Nav items — single source of truth for both mobile and desktop nav -#}
+{% set nav_items = [
+    ('dashboard', '/admin/', 'Dashboard', none),
+    ('audit', '/admin/audit/', 'Audit Log', none),
+] %}
+{% set endpoint_items = [] %}
+{% for ep in ['parse', 'standardize', 'validate'] %}
+    {% set _ = endpoint_items.append(('endpoint_' + ep, '/admin/endpoints/' + ep, '/' + ep, 'Endpoints')) %}
+{% endfor %}
+{% set provider_items = [] %}
+{% for prov in ['usps', 'google'] %}
+    {% set _ = provider_items.append(('provider_' + prov, '/admin/providers/' + prov, prov | upper, 'Providers')) %}
+{% endfor %}
+{% set all_nav_items = nav_items + endpoint_items + provider_items %}
+
 <body class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100" hx-boost="true">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
-    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700" style="--header-h: 57px">
         <div class="px-4 py-3 flex items-center justify-between">
             <a href="/admin/" class="flex items-center gap-2">
                 <img src="/static/admin/images/cannabis_observer-icon-square.svg" alt="Cannabis Observer" class="w-8 h-8" width="32" height="32">
@@ -58,13 +73,8 @@
         {# Mobile nav dropdown #}
         <div id="mobile-nav" class="hidden md:hidden border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
             <div class="px-4 py-3 space-y-1">
-                <a href="/admin/" class="block py-2 text-sm min-h-[44px] flex items-center {% if active_nav == 'dashboard' %}text-co-purple dark:text-co-purple-100 font-medium{% else %}text-gray-700 dark:text-gray-300 hover:text-co-purple-700 dark:hover:text-co-purple-100{% endif %}">Dashboard</a>
-                <a href="/admin/audit/" class="block py-2 text-sm min-h-[44px] flex items-center {% if active_nav == 'audit' %}text-co-purple dark:text-co-purple-100 font-medium{% else %}text-gray-700 dark:text-gray-300 hover:text-co-purple-700 dark:hover:text-co-purple-100{% endif %}">Audit Log</a>
-                {% for ep in ['parse', 'standardize', 'validate'] %}
-                <a href="/admin/endpoints/{{ ep }}" class="block py-2 text-sm min-h-[44px] flex items-center {% if active_nav == 'endpoint_' + ep %}text-co-purple dark:text-co-purple-100 font-medium{% else %}text-gray-700 dark:text-gray-300 hover:text-co-purple-700 dark:hover:text-co-purple-100{% endif %}">/{{ ep }}</a>
-                {% endfor %}
-                {% for prov in ['usps', 'google'] %}
-                <a href="/admin/providers/{{ prov }}" class="block py-2 text-sm min-h-[44px] flex items-center {% if active_nav == 'provider_' + prov %}text-co-purple dark:text-co-purple-100 font-medium{% else %}text-gray-700 dark:text-gray-300 hover:text-co-purple-700 dark:hover:text-co-purple-100{% endif %}">{{ prov | upper }}</a>
+                {% for key, href, label, _group in all_nav_items %}
+                <a href="{{ href }}" class="block py-2 text-sm min-h-[44px] flex items-center {% if active_nav == key %}text-co-purple dark:text-co-purple-100 font-medium{% else %}text-gray-700 dark:text-gray-300 hover:text-co-purple-700 dark:hover:text-co-purple-100{% endif %}">{{ label }}</a>
                 {% endfor %}
                 <div class="py-1 text-xs text-gray-400 font-mono sm:hidden">{{ user.email }}</div>
             </div>
@@ -72,18 +82,16 @@
     </header>
     <div class="flex flex-col md:flex-row">
         {# Desktop sidebar nav — hidden on mobile (hamburger replaces it) #}
-        <nav class="hidden md:block w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 md:min-h-[calc(100vh-57px)]"
+        <nav class="hidden md:block w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 md:min-h-[calc(100vh-var(--header-h,57px))]"
              aria-label="Admin navigation">
             <ul class="p-4 flex flex-col gap-1">
-                <li><a href="/admin/" class="block px-3 py-2 rounded text-sm font-medium min-h-[44px] flex items-center {% if active_nav == 'dashboard' %}bg-co-purple-50 text-co-purple-700 dark:bg-co-purple-800 dark:text-co-purple-100{% else %}text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Dashboard</a></li>
-                <li><a href="/admin/audit/" class="block px-3 py-2 rounded text-sm font-medium min-h-[44px] flex items-center {% if active_nav == 'audit' %}bg-co-purple-50 text-co-purple-700 dark:bg-co-purple-800 dark:text-co-purple-100{% else %}text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Audit Log</a></li>
-                <li class="text-xs text-gray-400 uppercase tracking-wide pt-3 pb-1 px-3">Endpoints</li>
-                {% for ep in ['parse', 'standardize', 'validate'] %}
-                <li><a href="/admin/endpoints/{{ ep }}" class="block px-3 py-2 rounded text-sm min-h-[44px] flex items-center {% if active_nav == 'endpoint_' + ep %}bg-co-purple-50 text-co-purple-700 dark:bg-co-purple-800 dark:text-co-purple-100{% else %}text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">/{{ ep }}</a></li>
-                {% endfor %}
-                <li class="text-xs text-gray-400 uppercase tracking-wide pt-3 pb-1 px-3">Providers</li>
-                {% for prov in ['usps', 'google'] %}
-                <li><a href="/admin/providers/{{ prov }}" class="block px-3 py-2 rounded text-sm min-h-[44px] flex items-center {% if active_nav == 'provider_' + prov %}bg-co-purple-50 text-co-purple-700 dark:bg-co-purple-800 dark:text-co-purple-100{% else %}text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">{{ prov | upper }}</a></li>
+                {% set _current_group = namespace(value=none) %}
+                {% for key, href, label, group in all_nav_items %}
+                {% if group and group != _current_group.value %}
+                <li class="text-xs text-gray-400 uppercase tracking-wide pt-3 pb-1 px-3">{{ group }}</li>
+                {% set _current_group.value = group %}
+                {% endif %}
+                <li><a href="{{ href }}" class="block px-3 py-2 rounded text-sm {% if not group %}font-medium {% endif %}min-h-[44px] flex items-center {% if active_nav == key %}bg-co-purple-50 text-co-purple-700 dark:bg-co-purple-800 dark:text-co-purple-100{% else %}text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700{% endif %} focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">{{ label }}</a></li>
                 {% endfor %}
             </ul>
         </nav>
