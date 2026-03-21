@@ -97,6 +97,7 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_dashboard_stats(db)
     assert stats["requests_today"] == 6
+    assert stats["requests_24h"] == 6
     assert stats["requests_all"] == 6
     assert stats["cache_hit_rate"] == 50.0
     # Error rate: 1 error (parse 400) out of 5 API requests today = 20%
@@ -108,9 +109,9 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     assert bd["all"]["/parse"] == 2
     assert bd["all"]["/standardize"] == 1
     assert bd["all"]["other"] == 1
-    assert bd["today"]["/validate"] == 2
-    assert bd["today"]["/standardize"] == 1
-    assert bd["today"]["other"] == 1
+    assert bd["24h"]["/validate"] == 2
+    assert bd["24h"]["/standardize"] == 1
+    assert bd["24h"]["other"] == 1
 
 
 @pytest.mark.asyncio
@@ -152,7 +153,7 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
     assert set(data.keys()) == {
         "requests_all",
         "requests_week",
-        "requests_today",
+        "requests_24h",
         "cache_hit_rate",
         "error_rate",
     }
@@ -160,8 +161,8 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
     for key in data:
         assert isinstance(data[key], list)
         assert all(isinstance(v, (int, float)) for v in data[key])
-    # requests_today has hourly buckets — seed rows are all "now" so at least one non-zero.
-    assert any(v > 0 for v in data["requests_today"])
+    # requests_24h has hourly buckets — seed rows are all "now" so at least one non-zero.
+    assert any(v > 0 for v in data["requests_24h"])
 
 
 @pytest.mark.asyncio
@@ -170,7 +171,7 @@ async def test_get_sparkline_data_empty_db(db: AsyncEngine) -> None:
     data = await get_sparkline_data(db)
     assert len(data["requests_all"]) == 30
     assert len(data["requests_week"]) == 7
-    assert len(data["requests_today"]) == 24
+    assert len(data["requests_24h"]) == 24
     assert len(data["cache_hit_rate"]) == 7
     assert len(data["error_rate"]) == 7
     for key in data:

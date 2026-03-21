@@ -16,6 +16,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=today_start.weekday())
+    last_24h = now - timedelta(hours=24)
 
     # SAFETY: endpoint literals are hardcoded, not user-supplied.
     _API_ENDPOINT_FILTER = (
@@ -29,6 +30,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     SELECT
                         COUNT(*) AS total,
                         COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
+                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
                         COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
                         COUNT(*) FILTER (
                             WHERE status_code >= 400 AND timestamp >= :today
@@ -40,7 +42,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         ) AS api_today
                     FROM audit_log
                 """),  # noqa: S608
-                {"today": today_start, "week": week_start},
+                {"today": today_start, "last_24h": last_24h, "week": week_start},
             )
         ).one()
 
@@ -63,11 +65,12 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         endpoint,
                         COUNT(*) AS total,
                         COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
+                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
                         COUNT(*) FILTER (WHERE timestamp >= :week) AS week
                     FROM audit_log
                     GROUP BY endpoint
                 """),
-                {"today": today_start, "week": week_start},
+                {"today": today_start, "last_24h": last_24h, "week": week_start},
             )
         ).fetchall()
 
@@ -83,14 +86,17 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
         "all": {},
         "week": {},
         "today": {},
+        "24h": {},
     }
     for ep_row in ep_rows:
         label = known.get(ep_row.endpoint, "other")
-        for period, col in (("all", "total"), ("week", "week"), ("today", "today")):
+        periods = (("all", "total"), ("week", "week"), ("today", "today"), ("24h", "last_24h"))
+        for period, col in periods:
             breakdown[period][label] = breakdown[period].get(label, 0) + ep_row._mapping[col]  # noqa: SLF001
 
     return {
         "requests_today": row.today,
+        "requests_24h": row.last_24h,
         "requests_week": row.week,
         "requests_all": row.total,
         "error_rate": error_rate,
@@ -350,7 +356,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
     return {
         "requests_all": _fill_daily(daily_rows, start_30d, 30),
         "requests_week": _fill_daily(daily_rows, start_7d, 7),
-        "requests_today": _fill_hourly(hourly_rows, start_24h, 24),
+        "requests_24h": _fill_hourly(hourly_rows, start_24h, 24),
         "cache_hit_rate": _fill_rate_daily(cache_rows, start_7d, 7, "hits", "total"),
         "error_rate": _fill_rate_daily(error_rows, start_7d, 7, "errors", "total"),
     }

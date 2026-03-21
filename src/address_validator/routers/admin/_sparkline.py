@@ -8,7 +8,7 @@ SPARKLINE_CONFIG: dict[str, tuple[str, str]] = {
     # key: (color, aria-label)
     "requests_all": ("#6d4488", "All requests over 30 days"),  # co-purple
     "requests_week": ("#2d9f9f", "Requests over 7 days"),  # teal
-    "requests_today": ("#4a7fbf", "Requests over 24 hours"),  # blue
+    "requests_24h": ("#4a7fbf", "Requests over 24 hours"),  # blue
     "cache_hit_rate": ("#d4882a", "Cache hit rate over 7 days"),  # orange
     "error_rate": ("#c44e8a", "Error rate over 7 days"),  # magenta
 }

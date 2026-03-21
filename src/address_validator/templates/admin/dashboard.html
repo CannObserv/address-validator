@@ -5,7 +5,7 @@
 {% set bd = stats.get("endpoint_breakdown", {}) %}
 {% set ep_order = ["/parse", "/standardize", "/validate", "other"] %}
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-    {% for label, key, period in [("All Requests", "requests_all", "all"), ("Requests This Week", "requests_week", "week"), ("Requests Today", "requests_today", "today")] %}
+    {% for label, key, period in [("All Requests", "requests_all", "all"), ("Requests This Week", "requests_week", "week"), ("Last 24 Hours", "requests_24h", "24h")] %}
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">{{ label }}</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.get(key, 0) }}</p>
