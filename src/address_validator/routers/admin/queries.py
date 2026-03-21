@@ -23,6 +23,11 @@ def _time_boundaries() -> dict[str, datetime]:
     }
 
 
+# SQL fragment: restrict audit_daily_stats to dates before the earliest live row,
+# avoiding double-counting when --backfill has populated rollups for recent dates.
+_ARCHIVED_DATE_GUARD = "date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE) FROM audit_log)"
+
+
 async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     """Fetch aggregate stats for the dashboard landing page."""
     tb = _time_boundaries()
@@ -60,11 +65,10 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
         # to avoid double-counting when --backfill has run.
         archived_total = (
             await conn.execute(
-                text("""
+                text(f"""
                     SELECT COALESCE(SUM(request_count), 0) FROM audit_daily_stats
-                    WHERE date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
-                                  FROM audit_log)
-                """)
+                    WHERE {_ARCHIVED_DATE_GUARD}
+                """)  # noqa: S608
             )
         ).scalar()
 
@@ -101,13 +105,12 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
         # Archived endpoint breakdown — only dates before earliest live row
         archived_ep_rows = (
             await conn.execute(
-                text("""
+                text(f"""
                     SELECT endpoint, SUM(request_count) AS total
                     FROM audit_daily_stats
-                    WHERE date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
-                                  FROM audit_log)
+                    WHERE {_ARCHIVED_DATE_GUARD}
                     GROUP BY endpoint
-                """)
+                """)  # noqa: S608
             )
         ).fetchall()
 
@@ -231,15 +234,14 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
         # Archived totals for this endpoint — only dates before earliest live row
         archived = (
             await conn.execute(
-                text("""
+                text(f"""
                     SELECT
                         COALESCE(SUM(request_count), 0) AS total,
                         COALESCE(SUM(error_count), 0) AS errors
                     FROM audit_daily_stats
                     WHERE endpoint = :endpoint
-                        AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
-                                    FROM audit_log)
-                """),
+                        AND {_ARCHIVED_DATE_GUARD}
+                """),  # noqa: S608
                 {"endpoint": endpoint_path},
             )
         ).one()
@@ -247,23 +249,22 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
         # Live + archived status code distribution
         status_rows = (
             await conn.execute(
-                text("""
-                    SELECT status_code, SUM(cnt) AS count FROM (
-                        SELECT status_code, COUNT(*) AS cnt
+                text(f"""
+                    SELECT status_code, SUM(cnt)::integer AS count FROM (
+                        SELECT status_code, COUNT(*)::integer AS cnt
                         FROM audit_log
                         WHERE endpoint = :endpoint
                         GROUP BY status_code
                         UNION ALL
-                        SELECT status_code, SUM(request_count) AS cnt
+                        SELECT status_code, SUM(request_count)::integer AS cnt
                         FROM audit_daily_stats
                         WHERE endpoint = :endpoint
-                            AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
-                                        FROM audit_log)
+                            AND {_ARCHIVED_DATE_GUARD}
                         GROUP BY status_code
                     ) AS combined
                     GROUP BY status_code
                     ORDER BY status_code
-                """),
+                """),  # noqa: S608
                 {"endpoint": endpoint_path},
             )
         ).fetchall()
@@ -306,13 +307,12 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
         # Archived total for this provider — only dates before earliest live row
         archived_total = (
             await conn.execute(
-                text("""
+                text(f"""
                     SELECT COALESCE(SUM(request_count), 0)
                     FROM audit_daily_stats
                     WHERE provider = :provider
-                        AND date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE)
-                                    FROM audit_log)
-                """),
+                        AND {_ARCHIVED_DATE_GUARD}
+                """),  # noqa: S608
                 {"provider": provider_name},
             )
         ).scalar()

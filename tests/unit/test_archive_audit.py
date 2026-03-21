@@ -1,24 +1,18 @@
 """Tests for audit log archive script."""
 
-import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pyarrow.parquet as pq
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
-
-# Add scripts/ to path so we can import the archive module
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-
 from archive_audit import (
     aggregate,
     delete_expired_rows,
     export_parquet,
-    fetch_expired_rows,
-    group_rows_by_date,
+    fetch_expired_dates,
+    fetch_rows_for_date,
 )
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 async def _seed_old_and_new_rows(engine: AsyncEngine) -> None:
@@ -146,12 +140,23 @@ async def test_aggregate_backfill(db: AsyncEngine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_expired_rows(db: AsyncEngine) -> None:
-    """fetch_expired_rows returns only rows older than cutoff."""
+async def test_fetch_expired_dates(db: AsyncEngine) -> None:
+    """fetch_expired_dates returns only dates with rows older than cutoff."""
     await _seed_old_and_new_rows(db)
     cutoff = datetime.now(UTC) - timedelta(days=90)
 
-    rows = await fetch_expired_rows(db, cutoff)
+    dates = await fetch_expired_dates(db, cutoff)
+    assert len(dates) == 1  # All 3 old rows are on the same day
+
+
+@pytest.mark.asyncio
+async def test_fetch_rows_for_date(db: AsyncEngine) -> None:
+    """fetch_rows_for_date returns rows for a single day."""
+    await _seed_old_and_new_rows(db)
+    cutoff = datetime.now(UTC) - timedelta(days=90)
+
+    dates = await fetch_expired_dates(db, cutoff)
+    rows = await fetch_rows_for_date(db, dates[0], cutoff)
     assert len(rows) == 3
     assert all(r["timestamp"] < cutoff for r in rows)
 
@@ -220,7 +225,7 @@ async def test_delete_no_expired_rows(db: AsyncEngine) -> None:
 
 @pytest.mark.asyncio
 async def test_full_archive_cycle(db: AsyncEngine, tmp_path) -> None:
-    """End-to-end: aggregate → export → delete preserves data integrity."""
+    """End-to-end: aggregate → export per-day → delete preserves data integrity."""
     await _seed_old_and_new_rows(db)
     cutoff = datetime.now(UTC) - timedelta(days=90)
 
@@ -228,15 +233,16 @@ async def test_full_archive_cycle(db: AsyncEngine, tmp_path) -> None:
     inserted = await aggregate(db, cutoff=cutoff)
     assert inserted > 0
 
-    # Step 2: Fetch + Export
-    rows = await fetch_expired_rows(db, cutoff)
-    assert len(rows) == 3
+    # Step 2: Fetch day-by-day + Export
+    dates = await fetch_expired_dates(db, cutoff)
+    assert len(dates) == 1
 
-    day_groups = group_rows_by_date(rows)
     total_exported = 0
-    for day_key, day_rows in day_groups.items():
+    for day in dates:
+        day_key = day.strftime("%Y-%m-%d")
+        rows = await fetch_rows_for_date(db, day, cutoff)
         dest = tmp_path / f"audit-{day_key}.parquet"
-        total_exported += export_parquet(day_rows, dest)
+        total_exported += export_parquet(rows, dest)
         assert dest.exists()
     assert total_exported == 3
 

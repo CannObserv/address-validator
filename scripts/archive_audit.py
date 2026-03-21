@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from google.cloud import storage as gcs
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -36,46 +37,39 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_AGGREGATE_SQL = text("""
-    INSERT INTO audit_daily_stats
-        (date, endpoint, provider, status_code, cache_hit,
-         request_count, error_count, avg_latency_ms, p95_latency_ms)
-    SELECT
-        date_trunc('day', timestamp)::date AS date,
-        endpoint,
-        provider,
-        status_code,
-        cache_hit,
-        COUNT(*) AS request_count,
-        COUNT(*) FILTER (WHERE status_code >= 400) AS error_count,
-        AVG(latency_ms)::integer AS avg_latency_ms,
-        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::integer AS p95_latency_ms
-    FROM audit_log
-    WHERE timestamp < :cutoff
-    GROUP BY date, endpoint, provider, status_code, cache_hit
-    ON CONFLICT (date, endpoint, COALESCE(provider, ''), status_code, COALESCE(cache_hit, false))
-    DO NOTHING
-""")
 
-_AGGREGATE_ALL_SQL = text("""
-    INSERT INTO audit_daily_stats
-        (date, endpoint, provider, status_code, cache_hit,
-         request_count, error_count, avg_latency_ms, p95_latency_ms)
-    SELECT
-        date_trunc('day', timestamp)::date AS date,
-        endpoint,
-        provider,
-        status_code,
-        cache_hit,
-        COUNT(*) AS request_count,
-        COUNT(*) FILTER (WHERE status_code >= 400) AS error_count,
-        AVG(latency_ms)::integer AS avg_latency_ms,
-        PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::integer AS p95_latency_ms
-    FROM audit_log
-    GROUP BY date, endpoint, provider, status_code, cache_hit
-    ON CONFLICT (date, endpoint, COALESCE(provider, ''), status_code, COALESCE(cache_hit, false))
-    DO NOTHING
-""")
+def _build_aggregate_sql(*, with_cutoff: bool) -> str:
+    """Build the INSERT...SELECT for aggregation, optionally filtered by cutoff."""
+    where = "WHERE timestamp < :cutoff" if with_cutoff else ""
+    return f"""
+        INSERT INTO audit_daily_stats
+            (date, endpoint, provider, status_code, cache_hit,
+             request_count, error_count, avg_latency_ms, p95_latency_ms)
+        SELECT
+            date_trunc('day', timestamp)::date AS date,
+            endpoint,
+            provider,
+            status_code,
+            cache_hit,
+            COUNT(*) AS request_count,
+            COUNT(*) FILTER (WHERE status_code >= 400) AS error_count,
+            AVG(latency_ms)::integer AS avg_latency_ms,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::integer AS p95_latency_ms
+        FROM audit_log
+        {where}
+        GROUP BY date, endpoint, provider, status_code, cache_hit
+        ON CONFLICT (date, endpoint, COALESCE(provider, ''),
+                     status_code, COALESCE(cache_hit, false))
+        DO NOTHING
+    """  # noqa: S608
+
+
+_AGGREGATE_SQL = text(_build_aggregate_sql(with_cutoff=True))
+_AGGREGATE_ALL_SQL = text(_build_aggregate_sql(with_cutoff=False))
+
+
+class ArchiveError(Exception):
+    """Raised when an archive step fails and the script should abort."""
 
 
 def _parse_args() -> argparse.Namespace:
@@ -123,8 +117,31 @@ async def aggregate(engine: AsyncEngine, *, cutoff: datetime | None = None) -> i
         return result.rowcount
 
 
-async def fetch_expired_rows(engine: AsyncEngine, cutoff: datetime) -> list[dict]:
-    """Fetch all audit_log rows older than cutoff as dicts."""
+async def fetch_expired_dates(engine: AsyncEngine, cutoff: datetime) -> list[datetime]:
+    """Fetch distinct dates that have expired rows, ordered ascending."""
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("""
+                SELECT DISTINCT date_trunc('day', timestamp) AS day
+                FROM audit_log
+                WHERE timestamp < :cutoff
+                ORDER BY day
+            """),
+            {"cutoff": cutoff},
+        )
+        return [r.day for r in result]
+
+
+async def fetch_rows_for_date(
+    engine: AsyncEngine,
+    day: datetime,
+    cutoff: datetime,
+) -> list[dict]:
+    """Fetch audit_log rows for a single day, bounded by cutoff."""
+    day_start = day
+    day_end = day + timedelta(days=1)
+    # Clamp to cutoff so we don't overshoot on the boundary day.
+    end = min(day_end, cutoff)
     async with engine.connect() as conn:
         result = await conn.execute(
             text("""
@@ -132,10 +149,10 @@ async def fetch_expired_rows(engine: AsyncEngine, cutoff: datetime) -> list[dict
                        status_code, latency_ms, provider, validation_status,
                        cache_hit, error_detail
                 FROM audit_log
-                WHERE timestamp < :cutoff
+                WHERE timestamp >= :start AND timestamp < :end
                 ORDER BY timestamp
             """),
-            {"cutoff": cutoff},
+            {"start": day_start, "end": end},
         )
         return [dict(r._mapping) for r in result]  # noqa: SLF001
 
@@ -150,32 +167,21 @@ def export_parquet(rows: list[dict], dest: Path) -> int:
     return len(rows)
 
 
-def group_rows_by_date(rows: list[dict]) -> dict[str, list[dict]]:
-    """Group rows by date string (YYYY-MM-DD) for per-day Parquet files."""
-    groups: dict[str, list[dict]] = {}
-    for row in rows:
-        ts = row["timestamp"]
-        day_key = ts.strftime("%Y-%m-%d")
-        groups.setdefault(day_key, []).append(row)
-    return groups
-
-
-def upload_to_gcs(local_path: Path, bucket_name: str, blob_name: str) -> None:
+def upload_to_gcs(
+    client: gcs.Client,
+    local_path: Path,
+    bucket_name: str,
+    blob_name: str,
+) -> None:
     """Upload a local file to GCS."""
-    from google.cloud import storage  # noqa: PLC0415
-
-    client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(str(local_path))
     logger.info("Uploaded gs://%s/%s", bucket_name, blob_name)
 
 
-def verify_gcs_upload(bucket_name: str, blob_name: str) -> bool:
+def verify_gcs_upload(client: gcs.Client, bucket_name: str, blob_name: str) -> bool:
     """Verify a GCS object exists and has non-zero size."""
-    from google.cloud import storage  # noqa: PLC0415
-
-    client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.reload()
@@ -212,12 +218,14 @@ async def delete_expired_rows(
 
 
 async def vacuum_audit_log(engine: AsyncEngine) -> None:
-    """Run VACUUM ANALYZE on audit_log (requires autocommit)."""
-    raw_conn = await engine.raw_connection()
-    try:
-        await raw_conn.driver_connection.execute("VACUUM ANALYZE audit_log")
-    finally:
-        await raw_conn.close()
+    """Run VACUUM ANALYZE on audit_log.
+
+    Requires execution outside a transaction; uses the engine's pool
+    with AUTOCOMMIT isolation.
+    """
+    async with engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(text("VACUUM ANALYZE audit_log"))
 
 
 async def main() -> None:
@@ -239,40 +247,48 @@ async def main() -> None:
             inserted = await aggregate(engine, cutoff=cutoff)
         logger.info("Aggregated %d rollup rows.", inserted)
 
-        # Step 2: Export expired rows to Parquet
-        rows = await fetch_expired_rows(engine, cutoff)
-        if not rows:
+        # Step 2: Export expired rows to Parquet — one day at a time
+        expired_dates = await fetch_expired_dates(engine, cutoff)
+        if not expired_dates:
             logger.info("No expired rows to archive. Done.")
             return
 
-        logger.info("Exporting %d expired rows to Parquet...", len(rows))
-        day_groups = group_rows_by_date(rows)
+        total_exported = 0
+        gcs_client = gcs.Client() if bucket and not args.skip_upload else None
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            parquet_files: list[tuple[Path, str]] = []
-            for day_key, day_rows in sorted(day_groups.items()):
+            for day in expired_dates:
+                day_key = day.strftime("%Y-%m-%d")
                 year, month, _day = day_key.split("-")
                 filename = f"audit-{day_key}.parquet"
                 local_path = Path(tmpdir) / filename
-                export_parquet(day_rows, local_path)
                 blob_name = f"{prefix}year={year}/month={month}/{filename}"
-                parquet_files.append((local_path, blob_name))
 
-            # Step 3: Upload to GCS
-            if bucket and not args.skip_upload:
-                for local_path, blob_name in parquet_files:
-                    upload_to_gcs(local_path, bucket, blob_name)
+                rows = await fetch_rows_for_date(engine, day, cutoff)
+                exported = export_parquet(rows, local_path)
+                total_exported += exported
+                logger.info("Exported %d rows for %s.", exported, day_key)
 
-                # Step 4: Verify
-                for _local_path, blob_name in parquet_files:
-                    if not verify_gcs_upload(bucket, blob_name):
-                        logger.error("Verification failed for %s. Aborting.", blob_name)
-                        sys.exit(1)
-                logger.info("All %d Parquet files verified in GCS.", len(parquet_files))
-            elif not bucket:
-                logger.warning("AUDIT_ARCHIVE_BUCKET not set — skipping upload.")
-            else:
-                logger.info("Skipping upload (--skip-upload).")
+                # Step 3: Upload to GCS
+                if gcs_client and bucket:
+                    upload_to_gcs(gcs_client, local_path, bucket, blob_name)
+
+                    # Step 4: Verify
+                    if not verify_gcs_upload(gcs_client, bucket, blob_name):
+                        msg = f"Verification failed for {blob_name}"
+                        raise ArchiveError(msg)
+
+                # Remove local file after upload to limit disk usage.
+                local_path.unlink(missing_ok=True)
+
+        if gcs_client:
+            logger.info("All %d Parquet files verified in GCS.", len(expired_dates))
+        elif not bucket:
+            logger.warning("AUDIT_ARCHIVE_BUCKET not set — skipping upload.")
+        else:
+            logger.info("Skipping upload (--skip-upload).")
+
+        logger.info("Exported %d total rows across %d days.", total_exported, len(expired_dates))
 
         # Step 5: Delete expired rows
         deleted = await delete_expired_rows(engine, cutoff)
