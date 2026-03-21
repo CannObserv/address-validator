@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 # Add scripts/ to path so we can import the archive module
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
-from archive_audit import aggregate, delete_expired_rows, export_parquet, fetch_expired_rows
+from archive_audit import (
+    aggregate,
+    delete_expired_rows,
+    export_parquet,
+    fetch_expired_rows,
+    group_rows_by_date,
+)
 
 
 async def _seed_old_and_new_rows(engine: AsyncEngine) -> None:
@@ -210,3 +216,37 @@ async def test_delete_no_expired_rows(db: AsyncEngine) -> None:
 
     deleted = await delete_expired_rows(db, cutoff)
     assert deleted == 0
+
+
+@pytest.mark.asyncio
+async def test_full_archive_cycle(db: AsyncEngine, tmp_path) -> None:
+    """End-to-end: aggregate → export → delete preserves data integrity."""
+    await _seed_old_and_new_rows(db)
+    cutoff = datetime.now(UTC) - timedelta(days=90)
+
+    # Step 1: Aggregate
+    inserted = await aggregate(db, cutoff=cutoff)
+    assert inserted > 0
+
+    # Step 2: Fetch + Export
+    rows = await fetch_expired_rows(db, cutoff)
+    assert len(rows) == 3
+
+    day_groups = group_rows_by_date(rows)
+    total_exported = 0
+    for day_key, day_rows in day_groups.items():
+        dest = tmp_path / f"audit-{day_key}.parquet"
+        total_exported += export_parquet(day_rows, dest)
+        assert dest.exists()
+    assert total_exported == 3
+
+    # Step 3: Delete (skip GCS upload — tested separately)
+    deleted = await delete_expired_rows(db, cutoff)
+    assert deleted == 3
+
+    # Verify: live table has only recent rows
+    async with db.connect() as conn:
+        live_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_log"))).scalar()
+        stats_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_daily_stats"))).scalar()
+    assert live_count == 2  # Only recent rows
+    assert stats_count > 0  # Rollups exist
