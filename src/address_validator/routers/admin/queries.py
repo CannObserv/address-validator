@@ -247,3 +247,109 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
         "cache_hit_rate": cache_hit_rate,
         "validation_statuses": {r.validation_status: r.count for r in status_rows},
     }
+
+
+async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
+    """Fetch time-bucketed values for dashboard sparklines.
+
+    Returns a dict keyed by card name, each value a list of floats
+    (zero-filled for missing buckets).
+    """
+    now = datetime.now(UTC)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_30d = today_start - timedelta(days=29)
+    start_7d = today_start - timedelta(days=6)
+    start_24h = now - timedelta(hours=23)
+    start_24h = start_24h.replace(minute=0, second=0, microsecond=0)
+
+    async with engine.connect() as conn:
+        # Daily request counts — last 30 days.
+        daily_rows = (
+            await conn.execute(
+                text("""
+                    SELECT date_trunc('day', timestamp) AS bucket, COUNT(*) AS cnt
+                    FROM audit_log
+                    WHERE timestamp >= :start
+                    GROUP BY bucket ORDER BY bucket
+                """),
+                {"start": start_30d},
+            )
+        ).fetchall()
+
+        # Hourly request counts — last 24 hours.
+        hourly_rows = (
+            await conn.execute(
+                text("""
+                    SELECT date_trunc('hour', timestamp) AS bucket, COUNT(*) AS cnt
+                    FROM audit_log
+                    WHERE timestamp >= :start
+                    GROUP BY bucket ORDER BY bucket
+                """),
+                {"start": start_24h},
+            )
+        ).fetchall()
+
+        # Daily cache hit rate — last 7 days (validate endpoint only).
+        cache_rows = (
+            await conn.execute(
+                text("""
+                    SELECT
+                        date_trunc('day', timestamp) AS bucket,
+                        COUNT(*) FILTER (WHERE cache_hit = true) AS hits,
+                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL) AS total
+                    FROM audit_log
+                    WHERE endpoint = '/api/v1/validate' AND timestamp >= :start
+                    GROUP BY bucket ORDER BY bucket
+                """),
+                {"start": start_7d},
+            )
+        ).fetchall()
+
+        # Daily error rate — last 7 days (API endpoints only).
+        error_rows = (
+            await conn.execute(
+                text("""
+                    SELECT
+                        date_trunc('day', timestamp) AS bucket,
+                        COUNT(*) FILTER (WHERE status_code >= 400) AS errors,
+                        COUNT(*) AS total
+                    FROM audit_log
+                    WHERE endpoint IN (
+                        '/api/v1/parse', '/api/v1/standardize', '/api/v1/validate'
+                    ) AND timestamp >= :start
+                    GROUP BY bucket ORDER BY bucket
+                """),
+                {"start": start_7d},
+            )
+        ).fetchall()
+
+    # --- Zero-fill helper ---
+    def _fill_daily(rows: list, start: datetime, days: int) -> list[float]:
+        by_day = {r.bucket.date(): float(r.cnt) for r in rows}
+        return [by_day.get((start + timedelta(days=i)).date(), 0.0) for i in range(days)]
+
+    def _fill_hourly(rows: list, start: datetime, hours: int) -> list[float]:
+        by_hour = {r.bucket: float(r.cnt) for r in rows}
+        return [by_hour.get(start + timedelta(hours=i), 0.0) for i in range(hours)]
+
+    def _fill_rate_daily(
+        rows: list,
+        start: datetime,
+        days: int,
+        num_col: str,
+        den_col: str,
+    ) -> list[float]:
+        by_day: dict = {}
+        for r in rows:
+            mapping = r._mapping  # noqa: SLF001
+            den = mapping[den_col]
+            by_day[r.bucket.date()] = (mapping[num_col] / den * 100) if den > 0 else 0.0
+        return [by_day.get((start + timedelta(days=i)).date(), 0.0) for i in range(days)]
+
+    return {
+        "requests_all": _fill_daily(daily_rows, start_30d, 30),
+        "requests_week": _fill_daily(daily_rows, start_7d, 7),
+        "requests_today": _fill_hourly(hourly_rows, start_24h, 24),
+        "cache_hit_rate": _fill_rate_daily(cache_rows, start_7d, 7, "hits", "total"),
+        "error_rate": _fill_rate_daily(error_rows, start_7d, 7, "errors", "total"),
+    }

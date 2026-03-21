@@ -11,6 +11,7 @@ from address_validator.routers.admin.queries import (
     get_dashboard_stats,
     get_endpoint_stats,
     get_provider_stats,
+    get_sparkline_data,
 )
 
 
@@ -141,3 +142,31 @@ async def test_get_provider_stats(db: AsyncEngine) -> None:
     stats = await get_provider_stats(db, "usps")
     assert stats["total"] == 2
     assert "confirmed" in stats["validation_statuses"]
+
+
+@pytest.mark.asyncio
+async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
+    """Sparkline data returns point lists keyed by card name."""
+    await _seed_rows(db)
+    data = await get_sparkline_data(db)
+    assert set(data.keys()) == {
+        "requests_all",
+        "requests_week",
+        "requests_today",
+        "cache_hit_rate",
+        "error_rate",
+    }
+    # Each value is a list of floats.
+    for key in data:
+        assert isinstance(data[key], list)
+        assert all(isinstance(v, (int, float)) for v in data[key])
+    # requests_today has hourly buckets — seed rows are all "now" so at least one non-zero.
+    assert any(v > 0 for v in data["requests_today"])
+
+
+@pytest.mark.asyncio
+async def test_get_sparkline_data_empty_db(db: AsyncEngine) -> None:
+    """Sparkline data returns empty lists on empty audit_log."""
+    data = await get_sparkline_data(db)
+    for key in data:
+        assert all(v == 0 for v in data[key])
