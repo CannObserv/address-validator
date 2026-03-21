@@ -100,7 +100,7 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     assert stats["requests_24h"] == 6
     assert stats["requests_all"] == 6
     assert stats["cache_hit_rate"] == 50.0
-    # Error rate: 1 error (parse 400) out of 5 API requests today = 20%
+    # Error rate: 1 error (parse 400) out of 5 API requests in last 24h = 20%
     assert stats["error_rate"] == pytest.approx(20.0)
 
     # Per-endpoint breakdown

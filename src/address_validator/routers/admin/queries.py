@@ -33,13 +33,13 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
                         COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
                         COUNT(*) FILTER (
-                            WHERE status_code >= 400 AND timestamp >= :today
+                            WHERE status_code >= 400 AND timestamp >= :last_24h
                             AND {_API_ENDPOINT_FILTER}
-                        ) AS errors_today,
+                        ) AS errors_24h,
                         COUNT(*) FILTER (
-                            WHERE timestamp >= :today
+                            WHERE timestamp >= :last_24h
                             AND {_API_ENDPOINT_FILTER}
-                        ) AS api_today
+                        ) AS api_24h
                     FROM audit_log
                 """),  # noqa: S608
                 {"today": today_start, "last_24h": last_24h, "week": week_start},
@@ -74,7 +74,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
             )
         ).fetchall()
 
-    error_rate = (row.errors_today / row.api_today * 100) if row.api_today > 0 else None
+    error_rate = (row.errors_24h / row.api_24h * 100) if row.api_24h > 0 else None
     cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
     known = {
