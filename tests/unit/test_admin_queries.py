@@ -96,7 +96,6 @@ async def _seed_rows(engine: AsyncEngine) -> None:
 async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_dashboard_stats(db)
-    assert stats["requests_today"] == 6
     assert stats["requests_24h"] == 6
     assert stats["requests_all"] == 6
     assert stats["cache_hit_rate"] == 50.0
