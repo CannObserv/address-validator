@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from html import escape
 
-SPARKLINE_COLORS: dict[str, str] = {
-    "requests_all": "#6d4488",  # co-purple
-    "requests_week": "#2d9f9f",  # teal
-    "requests_today": "#4a7fbf",  # blue
-    "cache_hit_rate": "#d4882a",  # orange
-    "error_rate": "#c44e8a",  # magenta
+SPARKLINE_CONFIG: dict[str, tuple[str, str]] = {
+    # key: (color, aria-label)
+    "requests_all": ("#6d4488", "All requests over 30 days"),  # co-purple
+    "requests_week": ("#2d9f9f", "Requests over 7 days"),  # teal
+    "requests_today": ("#4a7fbf", "Requests over 24 hours"),  # blue
+    "cache_hit_rate": ("#d4882a", "Cache hit rate over 7 days"),  # orange
+    "error_rate": ("#c44e8a", "Error rate over 7 days"),  # magenta
 }
+
+SPARKLINE_COLORS: dict[str, str] = {k: v[0] for k, v in SPARKLINE_CONFIG.items()}
 
 # SVG dimensions (viewBox units — scales responsively).
 _WIDTH = 120
@@ -90,7 +93,7 @@ def _no_data_svg(*, color: str, label: str, width: int, height: int, mid_y: floa
     )
     text = (
         f'<text x="{width / 2}" y="{mid_y + 4}" '
-        f'text-anchor="middle" font-size="9" fill="gray" opacity="0.6">No data</text>'
+        f'text-anchor="middle" font-size="9" fill="#9ca3af" aria-hidden="true">No data</text>'
     )
     return _wrap_svg(line + text, label=label or "No data", width=width, height=height)
 

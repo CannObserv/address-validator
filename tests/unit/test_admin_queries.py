@@ -166,7 +166,12 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
 
 @pytest.mark.asyncio
 async def test_get_sparkline_data_empty_db(db: AsyncEngine) -> None:
-    """Sparkline data returns empty lists on empty audit_log."""
+    """Sparkline data returns zero-filled lists on empty audit_log."""
     data = await get_sparkline_data(db)
+    assert len(data["requests_all"]) == 30
+    assert len(data["requests_week"]) == 7
+    assert len(data["requests_today"]) == 24
+    assert len(data["cache_hit_rate"]) == 7
+    assert len(data["error_rate"]) == 7
     for key in data:
         assert all(v == 0 for v in data[key])

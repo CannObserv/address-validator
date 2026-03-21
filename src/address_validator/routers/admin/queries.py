@@ -260,6 +260,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
     start_30d = today_start - timedelta(days=29)
     start_7d = today_start - timedelta(days=6)
     start_24h = now - timedelta(hours=23)
+    # Truncate to start of hour. The current-hour bucket is partial (count so far this hour).
     start_24h = start_24h.replace(minute=0, second=0, microsecond=0)
 
     async with engine.connect() as conn:

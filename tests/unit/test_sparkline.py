@@ -1,6 +1,10 @@
 """Tests for sparkline SVG builder."""
 
-from address_validator.routers.admin._sparkline import SPARKLINE_COLORS, build_sparkline_svg
+from address_validator.routers.admin._sparkline import (
+    SPARKLINE_COLORS,
+    SPARKLINE_CONFIG,
+    build_sparkline_svg,
+)
 
 
 def test_build_sparkline_normal_data() -> None:
@@ -53,7 +57,9 @@ def test_build_sparkline_label_escaped() -> None:
     assert "Rate &quot;high&quot; &amp; rising" in svg
 
 
-def test_sparkline_colors_has_all_keys() -> None:
-    """SPARKLINE_COLORS has entries for all 5 dashboard cards."""
+def test_sparkline_config_has_all_keys() -> None:
+    """SPARKLINE_CONFIG has entries for all 5 dashboard cards."""
     expected = {"requests_all", "requests_week", "requests_today", "cache_hit_rate", "error_rate"}
+    assert set(SPARKLINE_CONFIG.keys()) == expected
+    # SPARKLINE_COLORS is derived from CONFIG — same keys.
     assert set(SPARKLINE_COLORS.keys()) == expected

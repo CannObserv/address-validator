@@ -28,6 +28,7 @@ HTTP request
      ├─ router.py             top-level /admin router
      ├─ deps.py               AdminUser from exe.dev proxy headers
      ├─ _config.py            shared templates, CSS version, quota helpers
+     ├─ _sparkline.py         inline SVG sparkline builder (colors, trend labels)
      ├─ dashboard.py          GET /admin/ — landing page
      ├─ audit_views.py        GET /admin/audit/ — audit log with filters
      ├─ endpoints.py          GET /admin/endpoints/{name}
