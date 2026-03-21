@@ -90,6 +90,9 @@ Env vars in `/etc/address-validator/env`:
 | `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` |
 | `VALIDATION_CACHE_DSN` | PostgreSQL DSN e.g. `postgresql+asyncpg://user:pass@localhost/address_validator` | — (required when provider is non-null) |
 | `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
+| `AUDIT_RETENTION_DAYS` | non-negative int | `90` |
+| `AUDIT_ARCHIVE_BUCKET` | GCS bucket name | — (required for archival) |
+| `AUDIT_ARCHIVE_PREFIX` | string | `audit/` |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 
@@ -102,6 +105,9 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Re-install unit: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
 - Pre-commit: `uv run pre-commit install` (ruff + Tailwind CSS build)
 - Backfill audit log: `source /etc/address-validator/env && uv run python scripts/backfill_audit_log.py`
+- Archive audit log: `source /etc/address-validator/env && uv run python scripts/archive_audit.py`
+- Backfill rollups: `source /etc/address-validator/env && uv run python scripts/archive_audit.py --backfill`
+- Install timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
 
 ## Testing and linting
 
@@ -156,6 +162,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/middleware/audit.py` | Runs on every API request; `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must be innermost relative to request_id) |
 | `src/address_validator/routers/admin/queries.py` | Raw SQL with f-string WHERE clause; conditions are hardcoded literals but pattern is fragile if extended carelessly |
 | `src/address_validator/services/audit.py` | ContextVar reset in middleware is load-bearing; `except Exception` in `write_audit_row` is intentional fail-open |
+| `scripts/archive_audit.py` | Deletes audit_log rows after archival — verify GCS upload succeeded before deletion; `ON CONFLICT DO NOTHING` in aggregation is load-bearing for idempotency |
 
 ## Commit convention
 
