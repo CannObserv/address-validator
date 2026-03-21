@@ -108,7 +108,7 @@ def test_admin_dashboard_has_sparklines(client: TestClient, admin_headers: dict)
     """Dashboard HTML contains sparkline SVG elements."""
     response = client.get("/admin/", headers=admin_headers)
     html = response.text
-    # All 5 sparklines should render (even if "No data").
-    assert html.count('role="img"') >= 5
-    # Spot-check one aria-label.
-    assert "aria-label=" in html
+    # Exactly 5 sparklines should render (even if "No data").
+    assert html.count('role="img"') == 5
+    # Spot-check a specific sparkline label.
+    assert "All requests over 30 days" in html

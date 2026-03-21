@@ -26,18 +26,20 @@ async def admin_dashboard(request: Request) -> Response:
     user = get_admin_user(request)
     if isinstance(user, RedirectResponse):
         return user
+    engine = None
+    stats: dict = {}
     try:
         engine = await cache_db.get_engine()
         stats = await get_dashboard_stats(engine)
-    except Exception:
-        engine = None
-        stats = {}
+    except Exception:  # noqa: S110 — fail-open: dashboard renders without stats
+        pass
+    sparkline_points: dict = {}
     try:
         if engine is None:
             engine = await cache_db.get_engine()
         sparkline_points = await get_sparkline_data(engine)
-    except Exception:
-        sparkline_points = {}
+    except Exception:  # noqa: S110 — fail-open: sparklines degrade to "No data"
+        pass
     sparkline_svgs = {
         key: build_sparkline_svg(
             sparkline_points.get(key, []),
