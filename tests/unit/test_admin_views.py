@@ -102,3 +102,13 @@ def test_admin_dashboard_has_hamburger_nav(client: TestClient, admin_headers: di
     html = response.text
     assert 'id="nav-toggle"' in html
     assert 'id="mobile-nav"' in html
+
+
+def test_admin_dashboard_has_sparklines(client: TestClient, admin_headers: dict) -> None:
+    """Dashboard HTML contains sparkline SVG elements."""
+    response = client.get("/admin/", headers=admin_headers)
+    html = response.text
+    # All 5 sparklines should render (even if "No data").
+    assert html.count('role="img"') >= 5
+    # Spot-check one aria-label.
+    assert "aria-label=" in html

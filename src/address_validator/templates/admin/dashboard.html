@@ -9,6 +9,9 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">{{ label }}</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.get(key, 0) }}</p>
+        {% if sparkline_svgs and key in sparkline_svgs %}
+        <div class="mt-2">{{ sparkline_svgs[key] | safe }}</div>
+        {% endif %}
         {% set period_bd = bd.get(period, {}) %}
         {% if period_bd %}
         <div class="mt-2 border-t border-gray-100 dark:border-gray-600 pt-2 space-y-0.5">
@@ -31,12 +34,18 @@
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">
             {% if stats.get("cache_hit_rate") is not none %}{{ "%.1f" | format(stats.cache_hit_rate) }}%{% else %}N/A{% endif %}
         </p>
+        {% if sparkline_svgs and "cache_hit_rate" in sparkline_svgs %}
+        <div class="mt-2">{{ sparkline_svgs.cache_hit_rate | safe }}</div>
+        {% endif %}
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Error Rate (Today)</p>
         <p class="text-2xl font-bold {% if stats.get("error_rate") and stats.error_rate > 5 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-gray-100{% endif %}">
             {% if stats.get("error_rate") is not none %}{{ "%.1f" | format(stats.error_rate) }}%{% else %}N/A{% endif %}
         </p>
+        {% if sparkline_svgs and "error_rate" in sparkline_svgs %}
+        <div class="mt-2">{{ sparkline_svgs.error_rate | safe }}</div>
+        {% endif %}
     </div>
 </div>
 {% if quota %}
