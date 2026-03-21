@@ -134,6 +134,7 @@ async def test_get_endpoint_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_endpoint_stats(db, "parse")
     assert stats["total"] == 2
+    assert stats["last_24h"] == 2
     assert 400 in stats["status_codes"]
 
 
@@ -142,6 +143,7 @@ async def test_get_provider_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_provider_stats(db, "usps")
     assert stats["total"] == 2
+    assert stats["last_24h"] == 2
     assert "confirmed" in stats["validation_statuses"]
 
 

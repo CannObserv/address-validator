@@ -11,12 +11,24 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 
-async def get_dashboard_stats(engine: AsyncEngine) -> dict:
-    """Fetch aggregate stats for the dashboard landing page."""
+def _time_boundaries() -> dict[str, datetime]:
+    """Compute reusable time boundaries for dashboard queries."""
     now = datetime.now(UTC)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = today_start - timedelta(days=today_start.weekday())
-    last_24h = now - timedelta(hours=24)
+    return {
+        "now": now,
+        "today": today_start,
+        "last_24h": now - timedelta(hours=24),
+        "week": today_start - timedelta(days=today_start.weekday()),
+    }
+
+
+async def get_dashboard_stats(engine: AsyncEngine) -> dict:
+    """Fetch aggregate stats for the dashboard landing page."""
+    tb = _time_boundaries()
+    today_start = tb["today"]
+    week_start = tb["week"]
+    last_24h = tb["last_24h"]
 
     # SAFETY: endpoint literals are hardcoded, not user-supplied.
     _API_ENDPOINT_FILTER = (
@@ -169,9 +181,7 @@ async def get_audit_rows(
 async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
     """Fetch stats for a specific endpoint."""
     endpoint_path = f"/api/v1/{endpoint_name}"
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    week_start = today_start - timedelta(days=today_start.weekday())
+    tb = _time_boundaries()
 
     async with engine.connect() as conn:
         row = (
@@ -179,14 +189,14 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                 text("""
                     SELECT
                         COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
+                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
                         COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
                         COUNT(*) FILTER (WHERE status_code >= 400) AS errors,
                         AVG(latency_ms) FILTER (WHERE latency_ms IS NOT NULL) AS avg_latency
                     FROM audit_log
                     WHERE endpoint = :endpoint
                 """),
-                {"today": today_start, "week": week_start, "endpoint": endpoint_path},
+                {"last_24h": tb["last_24h"], "week": tb["week"], "endpoint": endpoint_path},
             )
         ).one()
 
@@ -206,7 +216,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
     error_rate = (row.errors / row.total * 100) if row.total > 0 else None
     return {
         "total": row.total,
-        "today": row.today,
+        "last_24h": row.last_24h,
         "week": row.week,
         "error_rate": error_rate,
         "avg_latency_ms": round(row.avg_latency) if row.avg_latency else None,
@@ -216,8 +226,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
 
 async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
     """Fetch stats for a specific validation provider."""
-    now = datetime.now(UTC)
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tb = _time_boundaries()
 
     async with engine.connect() as conn:
         row = (
@@ -225,13 +234,15 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
                 text("""
                     SELECT
                         COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :today) AS today,
-                        COUNT(*) FILTER (WHERE cache_hit = true) AS cache_hits,
-                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL) AS cache_total
+                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
+                        COUNT(*) FILTER (WHERE cache_hit = true
+                            AND timestamp >= :week) AS cache_hits,
+                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL
+                            AND timestamp >= :week) AS cache_total
                     FROM audit_log
                     WHERE provider = :provider
                 """),
-                {"today": today_start, "provider": provider_name},
+                {"last_24h": tb["last_24h"], "week": tb["week"], "provider": provider_name},
             )
         ).one()
 
@@ -251,7 +262,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
     cache_hit_rate = (row.cache_hits / row.cache_total * 100) if row.cache_total > 0 else None
     return {
         "total": row.total,
-        "today": row.today,
+        "last_24h": row.last_24h,
         "cache_hit_rate": cache_hit_rate,
         "validation_statuses": {r.validation_status: r.count for r in status_rows},
     }
