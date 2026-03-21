@@ -1,0 +1,14 @@
+[Unit]
+Description=Archive expired audit_log rows to GCS
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=exedev
+WorkingDirectory=/home/exedev/address-validator
+EnvironmentFile=/etc/address-validator/env
+Environment=PYTHONPATH=/home/exedev/address-validator/src
+ExecStart=/home/exedev/address-validator/.venv/bin/python scripts/archive_audit.py
+
+[Install]
+WantedBy=multi-user.target
