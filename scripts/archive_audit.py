@@ -223,8 +223,7 @@ async def vacuum_audit_log(engine: AsyncEngine) -> None:
     Requires execution outside a transaction; uses the engine's pool
     with AUTOCOMMIT isolation.
     """
-    async with engine.connect() as conn:
-        await conn.execution_options(isolation_level="AUTOCOMMIT")
+    async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
         await conn.execute(text("VACUUM ANALYZE audit_log"))
 
 
