@@ -54,7 +54,9 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         COUNT(*) FILTER (WHERE cache_hit IS NOT NULL) AS total
                     FROM audit_log
                     WHERE endpoint = '/api/v1/validate'
+                        AND timestamp >= :week
                 """),
+                {"week": week_start},
             )
         ).one()
 
