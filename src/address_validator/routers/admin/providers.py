@@ -50,7 +50,7 @@ async def provider_detail(
 
     # Find quota for this provider
     quota = None
-    for q in get_quota_info():
+    for q in get_quota_info(request):
         if q["provider"] == name:
             quota = q
             break

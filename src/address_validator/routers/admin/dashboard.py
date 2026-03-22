@@ -48,7 +48,7 @@ async def admin_dashboard(request: Request) -> Response:
             "active_nav": "dashboard",
             "css_version": get_css_version(),
             "stats": stats,
-            "quota": get_quota_info(),
+            "quota": get_quota_info(request),
             "sparkline_svgs": sparkline_svgs,
         },
     )

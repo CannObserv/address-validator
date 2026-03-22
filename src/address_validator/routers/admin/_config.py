@@ -4,9 +4,8 @@ import subprocess
 from functools import lru_cache
 from pathlib import Path
 
+from fastapi import Request
 from fastapi.templating import Jinja2Templates
-
-from address_validator.services.validation import factory
 
 _PKG_DIR = Path(__file__).resolve().parent.parent.parent  # src/address_validator/
 
@@ -25,29 +24,9 @@ def get_css_version() -> str:
         return "dev"
 
 
-def get_quota_info() -> list[dict]:
-    """Read current quota state from provider singletons."""
-    quota = []
-    usps = factory._usps_provider  # noqa: SLF001
-    if usps and hasattr(usps, "_client") and hasattr(usps._client, "_rate_limiter"):  # noqa: SLF001
-        guard = usps._client._rate_limiter  # noqa: SLF001
-        if len(guard._windows) > 1:  # noqa: SLF001
-            quota.append(
-                {
-                    "provider": "usps",
-                    "remaining": int(guard._tokens[1]),  # noqa: SLF001
-                    "limit": guard._windows[1].limit,  # noqa: SLF001
-                }
-            )
-    google = factory._google_provider  # noqa: SLF001
-    if google and hasattr(google, "_client") and hasattr(google._client, "_rate_limiter"):  # noqa: SLF001
-        guard = google._client._rate_limiter  # noqa: SLF001
-        if len(guard._windows) > 1:  # noqa: SLF001
-            quota.append(
-                {
-                    "provider": "google",
-                    "remaining": int(guard._tokens[1]),  # noqa: SLF001
-                    "limit": guard._windows[1].limit,  # noqa: SLF001
-                }
-            )
-    return quota
+def get_quota_info(request: Request) -> list[dict]:
+    """Read current quota state from the provider registry."""
+    registry = getattr(request.app.state, "registry", None)
+    if registry is None:
+        return []
+    return registry.get_quota_info()
