@@ -21,14 +21,14 @@ async def admin_dashboard(request: Request) -> Response:
     engine = None
     stats: dict = {}
     try:
-        engine = await cache_db.get_engine()
+        engine = cache_db.get_engine()
         stats = await get_dashboard_stats(engine)
     except Exception:  # noqa: S110 — fail-open: dashboard renders without stats
         pass
     sparkline_points: dict = {}
     try:
         if engine is None:
-            engine = await cache_db.get_engine()
+            engine = cache_db.get_engine()
         sparkline_points = await get_sparkline_data(engine)
     except Exception:  # noqa: S110 — fail-open: sparklines degrade to "No data"
         pass

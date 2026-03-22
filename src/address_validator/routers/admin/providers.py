@@ -32,7 +32,7 @@ async def provider_detail(
         return user
 
     try:
-        engine = await cache_db.get_engine()
+        engine = cache_db.get_engine()
         stats = await get_provider_stats(engine, name)
         rows, total = await get_audit_rows(
             engine,

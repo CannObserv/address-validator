@@ -8,7 +8,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 import address_validator.services.validation.cache_db as cache_db_module
-from address_validator.services.validation.cache_db import close_engine, get_engine
+from address_validator.services.validation.cache_db import (
+    close_engine,
+    get_engine,
+    init_engine,
+)
 from tests.unit.validation.conftest import TEST_CACHE_DSN
 
 
@@ -20,30 +24,50 @@ async def reset_engine() -> None:
     await close_engine()
 
 
-class TestGetEngine:
+class TestInitEngine:
     async def test_missing_dsn_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("VALIDATION_CACHE_DSN", raising=False)
         with pytest.raises(RuntimeError, match="VALIDATION_CACHE_DSN"):
-            await get_engine()
+            await init_engine()
 
-    async def test_returns_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_creates_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine = await get_engine()
+        await init_engine()
+        engine = get_engine()
         assert isinstance(engine, AsyncEngine)
 
-    async def test_returns_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_idempotent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine1 = await get_engine()
-        engine2 = await get_engine()
+        await init_engine()
+        engine1 = get_engine()
+        await init_engine()  # second call is a no-op
+        engine2 = get_engine()
         assert engine1 is engine2
 
     async def test_close_engine_resets_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine1 = await get_engine()
+        await init_engine()
+        engine1 = get_engine()
         await close_engine()
-        engine2 = await get_engine()
+        await init_engine()
+        engine2 = get_engine()
         assert engine1 is not engine2
 
+
+class TestGetEngine:
+    def test_raises_before_init(self) -> None:
+        with pytest.raises(RuntimeError, match="init_engine"):
+            get_engine()
+
+    async def test_returns_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        await init_engine()
+        engine1 = get_engine()
+        engine2 = get_engine()
+        assert engine1 is engine2
+
+
+class TestCloseEngine:
     async def test_close_engine_when_none_is_noop(self) -> None:
         cache_db_module._engine = None
         await close_engine()  # must not raise
@@ -52,7 +76,8 @@ class TestGetEngine:
 class TestSchema:
     async def test_tables_exist(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine = await get_engine()
+        await init_engine()
+        engine = get_engine()
 
         async with engine.connect() as conn:
             result = await conn.execute(
@@ -69,7 +94,8 @@ class TestSchema:
 
     async def test_validated_at_column_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine = await get_engine()
+        await init_engine()
+        engine = get_engine()
 
         async with engine.connect() as conn:
             result = await conn.execute(
@@ -82,7 +108,8 @@ class TestSchema:
 
     async def test_qp_canonical_key_index_exists(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine = await get_engine()
+        await init_engine()
+        engine = get_engine()
 
         async with engine.connect() as conn:
             result = await conn.execute(
@@ -96,7 +123,8 @@ class TestSchema:
     async def test_timestamp_columns_are_timestamptz(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Migration 003 converts all timestamp columns from TEXT to TIMESTAMPTZ."""
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
-        engine = await get_engine()
+        await init_engine()
+        engine = get_engine()
 
         async with engine.connect() as conn:
             result = await conn.execute(

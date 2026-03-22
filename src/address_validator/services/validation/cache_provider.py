@@ -24,7 +24,7 @@ equivalent inputs to the same hash.
 import hashlib
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import RowMapping, text
@@ -296,7 +296,7 @@ class CachingProvider:
     def __init__(
         self,
         inner: ValidationProvider,
-        get_engine: Callable[[], Awaitable[AsyncEngine]],
+        get_engine: Callable[[], AsyncEngine],
         ttl_days: int = 30,
     ) -> None:
         self._inner = inner
@@ -313,7 +313,7 @@ class CachingProvider:
         engine: AsyncEngine | None = None
 
         try:
-            engine = await self._get_engine()
+            engine = self._get_engine()
             cached = await _lookup(engine, pattern_key, self._ttl_days)
         except Exception:
             logger.warning("cache_lookup: storage error — failing open", exc_info=True)

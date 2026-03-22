@@ -32,7 +32,7 @@ async def endpoint_detail(
         return user
 
     try:
-        engine = await cache_db.get_engine()
+        engine = cache_db.get_engine()
         stats = await get_endpoint_stats(engine, name)
         rows, total = await get_audit_rows(
             engine,

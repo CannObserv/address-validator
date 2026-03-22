@@ -29,7 +29,7 @@ async def audit_list(
         return user
 
     try:
-        engine = await cache_db.get_engine()
+        engine = cache_db.get_engine()
         rows, total = await get_audit_rows(
             engine,
             page=page,

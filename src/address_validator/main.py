@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,7 +22,7 @@ from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
-from address_validator.services.validation.cache_db import close_engine
+from address_validator.services.validation.cache_db import close_engine, init_engine
 from address_validator.services.validation.config import ValidationConfig, validate_config
 from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
 from address_validator.services.validation.registry import ProviderRegistry
@@ -60,6 +61,9 @@ _TAGS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
+    if os.environ.get("VALIDATION_CACHE_DSN", "").strip():
+        await init_engine()
+
     config = validate_config()
     if config is None:
         config = ValidationConfig()

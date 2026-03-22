@@ -1,7 +1,7 @@
 """Unit tests for CachingProvider."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import text
@@ -141,7 +141,7 @@ class TestCacheMiss:
     async def test_cache_miss_calls_inner(self, db: AsyncEngine) -> None:
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         result = await provider.validate(std)
@@ -152,7 +152,7 @@ class TestCacheMiss:
     async def test_miss_stores_pattern(self, db: AsyncEngine) -> None:
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)
@@ -168,7 +168,7 @@ class TestCacheMiss:
     async def test_miss_stores_canonical(self, db: AsyncEngine) -> None:
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         await provider.validate(_make_std())
 
@@ -187,7 +187,7 @@ class TestCacheHit:
     async def test_hit_skips_inner(self, db: AsyncEngine) -> None:
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)  # miss — stores
@@ -201,7 +201,7 @@ class TestCacheHit:
         """All response fields survive the serialize → deserialize round-trip."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)
@@ -243,7 +243,7 @@ class TestCacheHit:
         )
 
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         await provider.validate(std1)  # miss
         inner.validate.reset_mock()
@@ -257,7 +257,7 @@ class TestUnavailableNotCached:
     async def test_unavailable_not_stored(self, db: AsyncEngine) -> None:
         response = _make_unavailable_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         await provider.validate(_make_std())
 
@@ -266,7 +266,7 @@ class TestUnavailableNotCached:
     async def test_unavailable_calls_inner_every_time(self, db: AsyncEngine) -> None:
         response = _make_unavailable_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)
@@ -279,7 +279,7 @@ class TestNotConfirmedCached:
     async def test_not_confirmed_is_stored_and_retrieved(self, db: AsyncEngine) -> None:
         response = _make_not_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)
@@ -303,7 +303,7 @@ class TestWarnings:
             warnings=["provider: inferred city"],
         )
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         std = _make_std()
         std_with_warnings = StandardizeResponseV1(
@@ -330,7 +330,7 @@ class TestLatLng:
             warnings=[],
         )
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
         std = _make_std()
 
         await provider.validate(std)
@@ -343,7 +343,7 @@ class TestLatLng:
 class TestFailOpen:
     async def test_lookup_db_error_calls_inner(self) -> None:
         """A DB error on lookup fails open — inner provider is called instead of raising."""
-        get_engine_mock = AsyncMock(side_effect=RuntimeError("db unavailable"))
+        get_engine_mock = MagicMock(side_effect=RuntimeError("db unavailable"))
         inner = _make_provider(_make_confirmed_response())
         provider = CachingProvider(inner=inner, get_engine=get_engine_mock)
 
@@ -354,7 +354,7 @@ class TestFailOpen:
 
     async def test_lookup_db_error_does_not_raise(self) -> None:
         """A DB error on lookup is swallowed; the response is returned normally."""
-        get_engine_mock = AsyncMock(side_effect=OSError("disk full"))
+        get_engine_mock = MagicMock(side_effect=OSError("disk full"))
         inner = _make_provider(_make_confirmed_response())
         provider = CachingProvider(inner=inner, get_engine=get_engine_mock)
 
@@ -365,7 +365,7 @@ class TestFailOpen:
         """A storage error during _store is swallowed; the validated result is returned."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         with patch(
             "address_validator.services.validation.cache_provider._store",
@@ -379,7 +379,7 @@ class TestFailOpen:
         """When _store raises, nothing is written to the DB."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         with patch(
             "address_validator.services.validation.cache_provider._store",
@@ -392,7 +392,7 @@ class TestFailOpen:
     async def test_lookup_internal_error_fails_open(self, db: AsyncEngine) -> None:
         """A _lookup exception (e.g. corrupt row) fails open — inner provider is called."""
         inner = _make_provider(_make_confirmed_response())
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         with patch(
             "address_validator.services.validation.cache_provider._lookup",
@@ -409,7 +409,7 @@ class TestTTLExpiry:
         """An entry stored moments ago is not expired; inner is not called on second validate."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
         std = _make_std()
 
         await provider.validate(std)  # miss — stores
@@ -423,7 +423,7 @@ class TestTTLExpiry:
         """An entry older than ttl_days is re-validated via the inner provider."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
         std = _make_std()
 
         await provider.validate(std)  # miss — stores
@@ -437,7 +437,7 @@ class TestTTLExpiry:
         """After expiry, re-validation refreshes validated_at; the next call is a hit."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
         std = _make_std()
 
         await provider.validate(std)  # miss — stores, validated_at = now
@@ -456,7 +456,7 @@ class TestTTLExpiry:
         """ttl_days=0 means no expiry regardless of entry age."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=0)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=0)
         std = _make_std()
 
         await provider.validate(std)  # miss — stores
@@ -470,7 +470,7 @@ class TestTTLExpiry:
         """An entry 29 days old is not expired when ttl_days=30."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
         std = _make_std()
 
         await provider.validate(std)  # miss — stores
@@ -484,7 +484,7 @@ class TestTTLExpiry:
         """Cache hits update last_seen_at; validated_at is unchanged."""
         response = _make_confirmed_response()
         inner = _make_provider(response)
-        provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
         std = _make_std()
 
         await provider.validate(std)  # miss

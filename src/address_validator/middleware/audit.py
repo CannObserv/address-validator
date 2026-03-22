@@ -90,7 +90,7 @@ async def audit_middleware(
 
     # Fire-and-forget: write audit row without blocking the response
     try:
-        engine = await get_engine()
+        engine = get_engine()
     except Exception:
         return response
 

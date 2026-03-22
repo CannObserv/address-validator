@@ -25,20 +25,31 @@ logger = logging.getLogger(__name__)
 _engine: AsyncEngine | None = None
 
 
-async def get_engine() -> AsyncEngine:
-    """Return the shared async engine, creating it lazily on first call.
+async def init_engine() -> None:
+    """Create the shared async engine and run Alembic migrations.
 
-    Also runs ``alembic upgrade head`` on first call so schema migrations are
-    applied automatically at startup without a separate deploy step.
+    Must be called exactly once during application startup (from the FastAPI
+    lifespan hook) before any request handling begins.  Raises ``RuntimeError``
+    if ``VALIDATION_CACHE_DSN`` is not set or the database is unreachable.
     """
     global _engine  # noqa: PLW0603
+    if _engine is not None:
+        return
+    dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+    if not dsn:
+        raise RuntimeError("VALIDATION_CACHE_DSN is not set; cannot open the validation cache")
+    logger.debug("cache_db: creating engine dsn=%s", _redact_dsn(dsn))
+    _engine = create_async_engine(dsn, pool_size=5, max_overflow=10)
+    await _run_migrations(dsn)
+
+
+def get_engine() -> AsyncEngine:
+    """Return the shared async engine.
+
+    Raises ``RuntimeError`` if :func:`init_engine` has not been called.
+    """
     if _engine is None:
-        dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
-        if not dsn:
-            raise RuntimeError("VALIDATION_CACHE_DSN is not set; cannot open the validation cache")
-        logger.debug("cache_db: creating engine dsn=%s", _redact_dsn(dsn))
-        _engine = create_async_engine(dsn, pool_size=5, max_overflow=10)
-        await _run_migrations(dsn)
+        raise RuntimeError("Engine not initialised — call init_engine() during startup")
     return _engine
 
 

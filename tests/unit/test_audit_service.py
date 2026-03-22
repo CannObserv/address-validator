@@ -1,7 +1,7 @@
 """Tests for the audit service ContextVars and write helper."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import text
@@ -102,7 +102,7 @@ async def test_cache_provider_sets_audit_context_on_miss(db: AsyncEngine) -> Non
     reset_audit_context()
 
     inner = AsyncMock()
-    provider = CachingProvider(inner=inner, get_engine=AsyncMock(return_value=db), ttl_days=30)
+    provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
 
     result = ValidateResponseV1(
         country="US",
