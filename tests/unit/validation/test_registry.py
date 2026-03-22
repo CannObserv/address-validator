@@ -332,6 +332,11 @@ class TestDiscoverGoogleQuota:
                 "address_validator.services.validation.registry.fetch_daily_limit",
                 return_value=500,
             ),
+            patch("google.cloud.monitoring_v3.MetricServiceClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_usage",
+                return_value=None,
+            ),
         ):
             reg = _make_registry(
                 monkeypatch,
@@ -411,7 +416,7 @@ class TestSetupReconciliation:
             assert params["project_id"] == "fake-project"
             assert "guard" in params
             assert "interval_s" in params
-            assert "daily_window_index" in params
+            assert params["daily_window_index"] == 1
 
     def test_monitoring_success_seeds_tokens(
         self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
