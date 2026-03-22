@@ -2,7 +2,7 @@
 
 import pytest
 
-import address_validator.services.validation.cache_db as cache_db_module
+import address_validator.db.engine as cache_db_module
 from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
 from address_validator.services.validation.cache_provider import CachingProvider
 from address_validator.services.validation.chain_provider import ChainProvider

@@ -9,7 +9,7 @@ import logging
 import httpx
 from pydantic import ValidationError
 
-from address_validator.services.validation import cache_db
+from address_validator.db import engine as db_engine
 from address_validator.services.validation._rate_limit import (
     FixedResetQuotaWindow,
     QuotaGuard,
@@ -256,6 +256,6 @@ class ProviderRegistry:
         logger.debug("get_provider: cache TTL=%d days (0=disabled)", self._config.cache_ttl_days)
         return CachingProvider(
             inner=inner,
-            get_engine=cache_db.get_engine,
+            get_engine=db_engine.get_engine,
             ttl_days=self._config.cache_ttl_days,
         )

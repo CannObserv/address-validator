@@ -1,4 +1,4 @@
-"""Unit tests for services.validation.cache_db."""
+"""Unit tests for db.engine."""
 
 from datetime import UTC, datetime
 from unittest.mock import patch
@@ -8,8 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-import address_validator.services.validation.cache_db as cache_db_module
-from address_validator.services.validation.cache_db import (
+import address_validator.db.engine as engine_module
+from address_validator.db.engine import (
     close_engine,
     get_engine,
     init_engine,
@@ -61,14 +61,14 @@ class TestInitEngine:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
         with (
             patch(
-                "address_validator.services.validation.cache_db._run_migrations",
+                "address_validator.db.engine._run_migrations",
                 side_effect=RuntimeError("migration boom"),
             ),
             pytest.raises(RuntimeError, match="migration boom"),
         ):
             await init_engine()
         # Engine must be None — not left in a half-initialised state
-        assert cache_db_module._engine is None
+        assert engine_module._engine is None
         with pytest.raises(RuntimeError, match="init_engine"):
             get_engine()
 
@@ -88,7 +88,7 @@ class TestGetEngine:
 
 class TestCloseEngine:
     async def test_close_engine_when_none_is_noop(self) -> None:
-        cache_db_module._engine = None
+        engine_module._engine = None
         await close_engine()  # must not raise
 
 

@@ -1,4 +1,4 @@
-"""PostgreSQL-backed validation cache — engine management and schema migrations.
+"""PostgreSQL async engine — lifecycle and Alembic migrations.
 
 Environment variables
 ---------------------
@@ -38,9 +38,9 @@ async def init_engine() -> None:
         return
     dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
     if not dsn:
-        logger.debug("cache_db: VALIDATION_CACHE_DSN not set — skipping engine init")
+        logger.debug("engine: VALIDATION_CACHE_DSN not set — skipping engine init")
         return
-    logger.debug("cache_db: creating engine dsn=%s", _redact_dsn(dsn))
+    logger.debug("engine: creating engine dsn=%s", _redact_dsn(dsn))
     _engine = create_async_engine(dsn, pool_size=5, max_overflow=10)
     try:
         await _run_migrations(dsn)
@@ -66,7 +66,7 @@ async def close_engine() -> None:
     if _engine is not None:
         await _engine.dispose()
         _engine = None
-        logger.debug("cache_db: engine disposed")
+        logger.debug("engine: engine disposed")
 
 
 async def _run_migrations(dsn: str) -> None:
@@ -74,9 +74,9 @@ async def _run_migrations(dsn: str) -> None:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", dsn)
 
-    logger.debug("cache_db: running alembic upgrade head")
+    logger.debug("engine: running alembic upgrade head")
     await asyncio.get_running_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
-    logger.debug("cache_db: schema up to date")
+    logger.debug("engine: schema up to date")
 
 
 def _redact_dsn(dsn: str) -> str:

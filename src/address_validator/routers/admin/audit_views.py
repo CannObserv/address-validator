@@ -6,10 +6,10 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.responses import Response
 
+from address_validator.db.engine import get_engine
 from address_validator.routers.admin._config import get_css_version, templates
 from address_validator.routers.admin.deps import get_admin_user
 from address_validator.routers.admin.queries import get_audit_rows
-from address_validator.services.validation import cache_db
 
 router = APIRouter(prefix="/audit")
 
@@ -29,7 +29,7 @@ async def audit_list(
         return user
 
     try:
-        engine = cache_db.get_engine()
+        engine = get_engine()
         rows, total = await get_audit_rows(
             engine,
             page=page,

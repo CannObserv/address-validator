@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from address_validator.db.engine import close_engine, get_engine, init_engine
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
@@ -23,7 +24,6 @@ from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
-from address_validator.services.validation.cache_db import close_engine, get_engine, init_engine
 from address_validator.services.validation.config import ValidationConfig, validate_config
 from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
 from address_validator.services.validation.registry import ProviderRegistry
