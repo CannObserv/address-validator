@@ -46,15 +46,10 @@ def test_audit_row_receives_request_id(client: TestClient) -> None:
     test catches that silently-broken scenario.
     """
     mock_write = AsyncMock()
-    with (
-        patch(
-            "address_validator.middleware.audit.write_audit_row",
-            mock_write,
-        ),
-        patch(
-            "address_validator.middleware.audit.get_engine",
-            return_value="fake-engine",
-        ),
+    client.app.state.engine = "fake-engine"  # type: ignore[union-attr]
+    with patch(
+        "address_validator.middleware.audit.write_audit_row",
+        mock_write,
     ):
         client.post(
             "/api/v1/parse",

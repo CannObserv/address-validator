@@ -24,7 +24,6 @@ from address_validator.services.audit import (
     reset_audit_context,
     write_audit_row,
 )
-from address_validator.services.validation.cache_db import get_engine
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +88,8 @@ async def audit_middleware(
     elapsed_ms = int((time.monotonic() - start) * 1000)
 
     # Fire-and-forget: write audit row without blocking the response
-    try:
-        engine = get_engine()
-    except Exception:
+    engine = getattr(request.app.state, "engine", None)
+    if engine is None:
         return response
 
     task = asyncio.create_task(
