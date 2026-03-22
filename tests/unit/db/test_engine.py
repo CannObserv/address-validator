@@ -14,7 +14,7 @@ from address_validator.db.engine import (
     get_engine,
     init_engine,
 )
-from tests.unit.validation.conftest import TEST_CACHE_DSN
+from tests.unit.conftest import TEST_CACHE_DSN
 
 
 @pytest.fixture(autouse=True)

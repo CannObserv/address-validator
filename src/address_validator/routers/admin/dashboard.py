@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.responses import Response
 
-from address_validator.db.engine import get_engine
+from address_validator.db import engine as db_engine
 from address_validator.routers.admin._config import get_css_version, get_quota_info, templates
 from address_validator.routers.admin._sparkline import SPARKLINE_CONFIG, build_sparkline_svg
 from address_validator.routers.admin.deps import get_admin_user
@@ -21,14 +21,14 @@ async def admin_dashboard(request: Request) -> Response:
     engine = None
     stats: dict = {}
     try:
-        engine = get_engine()
+        engine = db_engine.get_engine()
         stats = await get_dashboard_stats(engine)
     except Exception:  # noqa: S110 — fail-open: dashboard renders without stats
         pass
     sparkline_points: dict = {}
     try:
         if engine is None:
-            engine = get_engine()
+            engine = db_engine.get_engine()
         sparkline_points = await get_sparkline_data(engine)
     except Exception:  # noqa: S110 — fail-open: sparklines degrade to "No data"
         pass

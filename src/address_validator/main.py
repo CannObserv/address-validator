@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from address_validator.db.engine import close_engine, get_engine, init_engine
+from address_validator.db import engine as db_engine
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
@@ -62,9 +62,9 @@ _TAGS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
-    await init_engine()
+    await db_engine.init_engine()
     try:
-        app.state.engine = get_engine()  # None when no DSN configured
+        app.state.engine = db_engine.get_engine()  # None when no DSN configured
     except RuntimeError:
         app.state.engine = None
 
@@ -95,7 +95,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await reconciliation_task
 
     await registry.close()
-    await close_engine()
+    await db_engine.close_engine()
 
 
 app = FastAPI(

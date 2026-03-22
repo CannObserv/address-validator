@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.responses import Response
 
-from address_validator.db.engine import get_engine
+from address_validator.db import engine as db_engine
 from address_validator.routers.admin._config import get_css_version, templates
 from address_validator.routers.admin.deps import get_admin_user
 from address_validator.routers.admin.queries import get_audit_rows, get_endpoint_stats
@@ -32,7 +32,7 @@ async def endpoint_detail(
         return user
 
     try:
-        engine = get_engine()
+        engine = db_engine.get_engine()
         stats = await get_endpoint_stats(engine, name)
         rows, total = await get_audit_rows(
             engine,
