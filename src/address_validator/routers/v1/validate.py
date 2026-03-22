@@ -34,7 +34,7 @@ so upstream callers degrade gracefully.
 import logging
 import math
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from address_validator.auth import require_api_key
 from address_validator.models import ErrorResponse, ValidateRequestV1, ValidateResponseV1
@@ -42,7 +42,6 @@ from address_validator.routers.v1.core import APIError, check_country
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import ProviderRateLimitedError
-from address_validator.services.validation.factory import get_provider
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ router = APIRouter(
         "recommended number of seconds to wait before retrying."
     ),
 )
-async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
+async def validate_address_v1(req: ValidateRequestV1, request: Request) -> ValidateResponseV1:
     check_country(req.country)
 
     upstream_warnings: list[str] = []
@@ -111,7 +110,7 @@ async def validate_address_v1(req: ValidateRequestV1) -> ValidateResponseV1:
 
     std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
 
-    provider = get_provider()
+    provider = request.app.state.registry.get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std)

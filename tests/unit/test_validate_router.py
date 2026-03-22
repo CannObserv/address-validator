@@ -1,9 +1,10 @@
 """HTTP-level tests for POST /api/v1/validate."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
+from address_validator.main import app
 from address_validator.models import (
     ComponentSet,
     StandardizeResponseV1,
@@ -30,12 +31,16 @@ CONFIRMED_RESPONSE = ValidateResponseV1(
 )
 
 
+def _mock_registry_with(provider):
+    """Context manager that temporarily sets app.state.registry to return the given provider."""
+    mock_reg = MagicMock()
+    mock_reg.get_provider.return_value = provider
+    return patch.object(app.state, "registry", mock_reg)
+
+
 class TestValidateEndpoint:
     def test_raw_string_returns_200(self, client: TestClient) -> None:
-        with patch(
-            "address_validator.routers.v1.validate.get_provider",
-            return_value=_make_null_provider(NULL_RESPONSE),
-        ):
+        with _mock_registry_with(_make_null_provider(NULL_RESPONSE)):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
@@ -47,21 +52,17 @@ class TestValidateEndpoint:
 
     def test_raw_string_provider_receives_standardize_response(self, client: TestClient) -> None:
         provider = _make_null_provider(NULL_RESPONSE)
-        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
+        with _mock_registry_with(provider):
             client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
             )
         provider.validate.assert_awaited_once()
         call_arg = provider.validate.call_args[0][0]
-        # Provider receives a StandardizeResponseV1, not the raw request
         assert isinstance(call_arg, StandardizeResponseV1)
 
     def test_components_dict_returns_200(self, client: TestClient) -> None:
-        with patch(
-            "address_validator.routers.v1.validate.get_provider",
-            return_value=_make_null_provider(NULL_RESPONSE),
-        ):
+        with _mock_registry_with(_make_null_provider(NULL_RESPONSE)):
             resp = client.post(
                 "/api/v1/validate",
                 json={
@@ -80,7 +81,7 @@ class TestValidateEndpoint:
 
     def test_components_takes_precedence_over_address(self, client: TestClient) -> None:
         provider = _make_null_provider(NULL_RESPONSE)
-        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
+        with _mock_registry_with(provider):
             client.post(
                 "/api/v1/validate",
                 json={
@@ -98,14 +99,10 @@ class TestValidateEndpoint:
         provider.validate.assert_awaited_once()
         call_arg = provider.validate.call_args[0][0]
         assert isinstance(call_arg, StandardizeResponseV1)
-        # components path was used; city standardized from dict, not parsed from "should be ignored"
         assert call_arg.city == "SPRINGFIELD"
 
     def test_confirmed_response_shape(self, client: TestClient) -> None:
-        with patch(
-            "address_validator.routers.v1.validate.get_provider",
-            return_value=_make_null_provider(CONFIRMED_RESPONSE),
-        ):
+        with _mock_registry_with(_make_null_provider(CONFIRMED_RESPONSE)):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
@@ -122,11 +119,7 @@ class TestValidateEndpoint:
             validation=ValidationResult(status="unavailable"),
             warnings=[],
         )
-        with patch(
-            "address_validator.routers.v1.validate.get_provider",
-            return_value=_make_null_provider(provider_response),
-        ):
-            # Address with parenthesized text triggers a parse warning
+        with _mock_registry_with(_make_null_provider(provider_response)):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St (rear) Springfield IL 62701"},
@@ -143,8 +136,7 @@ class TestValidateEndpoint:
             warnings=[provider_warning],
         )
         provider = _make_null_provider(provider_response)
-        with patch("address_validator.routers.v1.validate.get_provider", return_value=provider):
-            # Address with parenthesized text triggers a parse/std warning
+        with _mock_registry_with(provider):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St (rear) Springfield IL 62701"},
@@ -152,7 +144,6 @@ class TestValidateEndpoint:
         body = resp.json()
         warnings = body["warnings"]
         assert provider_warning in warnings
-        # standardize/parse warnings come before provider warnings
         assert warnings.index(provider_warning) > 0
 
     def test_blank_address_returns_400(self, client: TestClient) -> None:
@@ -172,7 +163,6 @@ class TestValidateEndpoint:
         assert resp.json()["error"] == "components_or_address_required"
 
     def test_empty_components_dict_falls_through_to_address_error(self, client: TestClient) -> None:
-        # Empty components dict + no address → 400
         resp = client.post(
             "/api/v1/validate",
             json={"components": {}},
@@ -214,14 +204,14 @@ class TestValidateEndpoint:
         rate_limited.validate = AsyncMock(
             side_effect=ProviderRateLimitedError("all", retry_after_seconds=6.3)
         )
-        with patch("address_validator.routers.v1.validate.get_provider", return_value=rate_limited):
+        with _mock_registry_with(rate_limited):
             resp = client.post(
                 "/api/v1/validate",
                 json={"address": "123 Main St, Springfield, IL 62701"},
             )
         assert resp.status_code == 429
         assert resp.json()["error"] == "provider_rate_limited"
-        assert resp.headers["retry-after"] == "7"  # math.ceil(6.3)
+        assert resp.headers["retry-after"] == "7"
 
 
 def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:
@@ -304,7 +294,6 @@ class TestValidateRequestV1Model:
         assert req.address is None
 
     def test_both_fields_none_is_valid_at_model_level(self) -> None:
-        # Validation happens in the router, not the model
         req = ValidateRequestV1()
         assert req.address is None
         assert req.components is None
