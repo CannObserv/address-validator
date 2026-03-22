@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import logging
-import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -61,8 +60,7 @@ _TAGS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
-    if os.environ.get("VALIDATION_CACHE_DSN", "").strip():
-        await init_engine()
+    await init_engine()
 
     config = validate_config()
     if config is None:

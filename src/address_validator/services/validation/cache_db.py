@@ -5,8 +5,9 @@ Environment variables
 VALIDATION_CACHE_DSN
     PostgreSQL connection string in SQLAlchemy async format.
     Example: postgresql+asyncpg://user:pass@localhost/address_validator
-    Required when a non-null validation provider is configured.
-    Set to a test DSN in tests (e.g. pointing at address_validator_test).
+    When set, ``init_engine()`` creates the shared engine and runs Alembic
+    migrations at startup.  When unset, init is a no-op (parse/standardize
+    endpoints work without a database).
 """
 
 import asyncio
@@ -37,10 +38,16 @@ async def init_engine() -> None:
         return
     dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
     if not dsn:
-        raise RuntimeError("VALIDATION_CACHE_DSN is not set; cannot open the validation cache")
+        logger.debug("cache_db: VALIDATION_CACHE_DSN not set — skipping engine init")
+        return
     logger.debug("cache_db: creating engine dsn=%s", _redact_dsn(dsn))
     _engine = create_async_engine(dsn, pool_size=5, max_overflow=10)
-    await _run_migrations(dsn)
+    try:
+        await _run_migrations(dsn)
+    except Exception:
+        await _engine.dispose()
+        _engine = None
+        raise
 
 
 def get_engine() -> AsyncEngine:

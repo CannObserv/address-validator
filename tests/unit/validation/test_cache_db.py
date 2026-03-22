@@ -1,6 +1,7 @@
 """Unit tests for services.validation.cache_db."""
 
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import text
@@ -25,10 +26,11 @@ async def reset_engine() -> None:
 
 
 class TestInitEngine:
-    async def test_missing_dsn_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_missing_dsn_is_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("VALIDATION_CACHE_DSN", raising=False)
-        with pytest.raises(RuntimeError, match="VALIDATION_CACHE_DSN"):
-            await init_engine()
+        await init_engine()  # must not raise
+        with pytest.raises(RuntimeError, match="init_engine"):
+            get_engine()
 
     async def test_creates_engine(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
@@ -52,6 +54,23 @@ class TestInitEngine:
         await init_engine()
         engine2 = get_engine()
         assert engine1 is not engine2
+
+    async def test_migration_failure_rolls_back_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        with (
+            patch(
+                "address_validator.services.validation.cache_db._run_migrations",
+                side_effect=RuntimeError("migration boom"),
+            ),
+            pytest.raises(RuntimeError, match="migration boom"),
+        ):
+            await init_engine()
+        # Engine must be None — not left in a half-initialised state
+        assert cache_db_module._engine is None
+        with pytest.raises(RuntimeError, match="init_engine"):
+            get_engine()
 
 
 class TestGetEngine:
