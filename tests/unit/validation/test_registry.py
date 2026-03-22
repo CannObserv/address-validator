@@ -1,5 +1,8 @@
 """Unit tests for validation/registry.py — ProviderRegistry."""
 
+import logging
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 import address_validator.db.engine as cache_db_module
@@ -315,3 +318,155 @@ class TestGetQuotaInfo:
         assert len(info) == 2
         providers = {entry["provider"] for entry in info}
         assert providers == {"usps", "google"}
+
+
+class TestDiscoverGoogleQuota:
+    """Tests for _discover_google_quota called through _build_google_provider."""
+
+    def test_discovery_success_overrides_config_limit(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
+        mock_client = MagicMock()
+        with (
+            patch("google.cloud.cloudquotas_v1.CloudQuotasClient", return_value=mock_client),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_limit",
+                return_value=500,
+            ),
+        ):
+            reg = _make_registry(
+                monkeypatch,
+                VALIDATION_PROVIDER="google",
+                GOOGLE_DAILY_LIMIT="1000",
+            )
+            result = reg.get_provider()
+            google: GoogleProvider = result._inner  # type: ignore[assignment]
+            assert google.client.quota_guard._windows[1].limit == 500
+
+    def test_discovery_failure_falls_back_to_config(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with (
+            patch(
+                "google.cloud.cloudquotas_v1.CloudQuotasClient",
+                side_effect=RuntimeError("quota api down"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            reg = _make_registry(
+                monkeypatch,
+                VALIDATION_PROVIDER="google",
+                GOOGLE_DAILY_LIMIT="1000",
+            )
+            result = reg.get_provider()
+            google: GoogleProvider = result._inner  # type: ignore[assignment]
+            assert google.client.quota_guard._windows[1].limit == 1000
+            assert "Cloud Quotas API unavailable" in caplog.text
+
+    def test_no_project_id_logs_warning(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        creds = MagicMock()
+        with (
+            patch(
+                "address_validator.services.validation.gcp_auth.google.auth.default",
+                return_value=(creds, None),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            monkeypatch.delenv("GOOGLE_PROJECT_ID", raising=False)
+            reg = _make_registry(monkeypatch, VALIDATION_PROVIDER="google")
+            reg.get_provider()
+            assert "quota sync features disabled" in caplog.text
+
+
+class TestSetupReconciliation:
+    """Tests for _setup_reconciliation called through _build_google_provider."""
+
+    def test_monitoring_success_sets_reconciliation_params(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
+        mock_monitoring = MagicMock()
+        with (
+            patch("google.cloud.cloudquotas_v1.CloudQuotasClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_limit",
+                return_value=None,
+            ),
+            patch("google.cloud.monitoring_v3.MetricServiceClient", return_value=mock_monitoring),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_usage",
+                return_value=100,
+            ),
+        ):
+            reg = _make_registry(monkeypatch, VALIDATION_PROVIDER="google")
+            reg.get_provider()
+            params = reg.get_reconciliation_params()
+            assert params is not None
+            assert params["monitoring_client"] is mock_monitoring
+            assert params["project_id"] == "fake-project"
+            assert "guard" in params
+            assert "interval_s" in params
+            assert "daily_window_index" in params
+
+    def test_monitoring_success_seeds_tokens(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
+    ) -> None:
+        with (
+            patch("google.cloud.cloudquotas_v1.CloudQuotasClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_limit",
+                return_value=None,
+            ),
+            patch("google.cloud.monitoring_v3.MetricServiceClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_usage",
+                return_value=200,
+            ),
+        ):
+            reg = _make_registry(
+                monkeypatch,
+                VALIDATION_PROVIDER="google",
+                GOOGLE_DAILY_LIMIT="500",
+            )
+            reg.get_provider()
+            assert reg._google_provider is not None
+            state = reg._google_provider.client.quota_guard.get_daily_quota_state()
+            assert state is not None
+            assert state["remaining"] == 300  # 500 - 200
+
+    def test_monitoring_failure_leaves_reconciliation_params_none(
+        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with (
+            patch("google.cloud.cloudquotas_v1.CloudQuotasClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_limit",
+                return_value=None,
+            ),
+            patch(
+                "google.cloud.monitoring_v3.MetricServiceClient",
+                side_effect=RuntimeError("monitoring down"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            reg = _make_registry(monkeypatch, VALIDATION_PROVIDER="google")
+            reg.get_provider()
+            assert reg.get_reconciliation_params() is None
+            assert "Cloud Monitoring API unavailable" in caplog.text
+
+    def test_no_project_id_skips_reconciliation(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        creds = MagicMock()
+        with (
+            patch(
+                "address_validator.services.validation.gcp_auth.google.auth.default",
+                return_value=(creds, None),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            monkeypatch.delenv("GOOGLE_PROJECT_ID", raising=False)
+            reg = _make_registry(monkeypatch, VALIDATION_PROVIDER="google")
+            reg.get_provider()
+            assert reg.get_reconciliation_params() is None
