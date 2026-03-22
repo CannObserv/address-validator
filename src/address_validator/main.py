@@ -112,6 +112,12 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+# ── Middleware ordering is load-bearing ──────────────────────────────
+# FastAPI middleware is LIFO: last-registered wraps outermost, so it
+# *executes first*.  request_id_middleware must execute BEFORE
+# audit_middleware so that get_request_id() returns a value when the
+# audit row is written.  Do NOT reorder these two lines.
+# Regression test: tests/unit/test_audit_middleware.py::test_audit_row_receives_request_id
 app.middleware("http")(audit_middleware)
 app.middleware("http")(request_id_middleware)
 
