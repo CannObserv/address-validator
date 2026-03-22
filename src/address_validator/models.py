@@ -172,8 +172,9 @@ class ValidateRequestV1(CountryRequestMixin, AddressInputMixin):
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok"] = "ok"
+    status: Literal["ok", "degraded"] = "ok"
     api_version: Literal["1"] = "1"
+    database: Literal["ok", "error", "unconfigured"] = "unconfigured"
 
 
 class ValidationResult(BaseModel):
