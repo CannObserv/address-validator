@@ -31,7 +31,7 @@ class GoogleProvider:
     making this a full drop-in replacement for :class:`USPSProvider` that
     additionally returns geocoordinates.
 
-    Constructed by :func:`~services.validation.factory.get_provider`; do not
+    Constructed by :class:`~services.validation.registry.ProviderRegistry`; do not
     instantiate directly in application code.
     """
 

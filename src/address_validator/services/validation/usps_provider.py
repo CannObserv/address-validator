@@ -23,7 +23,7 @@ class USPSProvider:
     ``address_line_1`` field carries the standardized street line sent to the
     USPS API.
 
-    Constructed by :func:`~services.validation.factory.get_provider`; do not
+    Constructed by :class:`~services.validation.registry.ProviderRegistry`; do not
     instantiate directly in application code.
     """
 

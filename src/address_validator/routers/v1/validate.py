@@ -26,7 +26,7 @@ Warnings emitted by the parse or standardize step are merged into the
 provider itself.
 
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
-(see :mod:`services.validation.factory`).  When no provider is configured
+(see :mod:`services.validation.config`).  When no provider is configured
 the endpoint still returns HTTP 200 with ``validation.status='unavailable'``
 so upstream callers degrade gracefully.
 """

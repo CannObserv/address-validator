@@ -7,7 +7,7 @@ response to a normalised dict consumed by
 :class:`~services.validation.usps_provider.USPSProvider`.
 
 Callers should not instantiate this class directly; use
-:func:`~services.validation.factory.get_provider` instead.
+:class:`~services.validation.registry.ProviderRegistry` instead.
 """
 
 import asyncio

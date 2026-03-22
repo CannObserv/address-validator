@@ -1,6 +1,6 @@
 """ChainProvider — tries providers in order, falling back on rate-limit errors.
 
-Constructed by :func:`~services.validation.factory.get_provider` when
+Constructed by :class:`~services.validation.registry.ProviderRegistry` when
 ``VALIDATION_PROVIDER`` contains more than one comma-separated value.
 Do not instantiate directly in application code.
 """
