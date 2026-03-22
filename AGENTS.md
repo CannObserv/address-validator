@@ -150,6 +150,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
 | `src/address_validator/services/standardizer.py` `_get()` | Every component value flows through this; changes cascade everywhere |
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
+| `src/address_validator/models.py` `AddressInputMixin` | Single enforcement point for address/components input validation across all endpoints — removing or weakening the `model_validator` silently removes the 422 guard for both `/standardize` and `/validate` |
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `src/address_validator/auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
 | `src/address_validator/services/validation/config.py` | `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; pydantic-settings validators enforce business rules — changes affect all env-var parsing |

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from address_validator.main import app
 from address_validator.models import (
     ComponentSet,
+    StandardizeRequestV1,
     StandardizeResponseV1,
     ValidateRequestV1,
     ValidateResponseV1,
@@ -154,6 +155,7 @@ class TestValidateEndpoint:
             json={"address": "   "},
         )
         assert resp.status_code == 422
+        assert resp.json()["error"] == "validation_error"
 
     def test_missing_both_fields_returns_422(self, client: TestClient) -> None:
         resp = client.post(
@@ -161,6 +163,7 @@ class TestValidateEndpoint:
             json={},
         )
         assert resp.status_code == 422
+        assert resp.json()["error"] == "validation_error"
 
     def test_empty_components_dict_returns_422(self, client: TestClient) -> None:
         resp = client.post(
@@ -168,6 +171,7 @@ class TestValidateEndpoint:
             json={"components": {}},
         )
         assert resp.status_code == 422
+        assert resp.json()["error"] == "validation_error"
 
     def test_unsupported_country_returns_422(self, client: TestClient) -> None:
         resp = client.post(
@@ -298,4 +302,28 @@ class TestValidateRequestV1Model:
 
     def test_country_defaults_to_us(self) -> None:
         req = ValidateRequestV1(address="123 Main St")
+        assert req.country == "US"
+
+
+class TestStandardizeRequestV1Model:
+    def test_accepts_raw_address_string(self) -> None:
+        req = StandardizeRequestV1(address="123 Main St, Springfield, IL 62701")
+        assert req.address == "123 Main St, Springfield, IL 62701"
+        assert req.components is None
+
+    def test_accepts_components_dict(self) -> None:
+        req = StandardizeRequestV1(components={"address_number": "123", "street_name": "MAIN"})
+        assert req.components == {"address_number": "123", "street_name": "MAIN"}
+        assert req.address is None
+
+    def test_both_fields_none_raises_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            StandardizeRequestV1()
+
+    def test_blank_address_raises_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            StandardizeRequestV1(address="   ")
+
+    def test_country_defaults_to_us(self) -> None:
+        req = StandardizeRequestV1(address="123 Main St")
         assert req.country == "US"

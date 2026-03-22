@@ -56,7 +56,6 @@ router = APIRouter(
     "/validate",
     response_model=ValidateResponseV1,
     responses={
-        400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},

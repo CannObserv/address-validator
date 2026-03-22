@@ -27,10 +27,12 @@ class TestV1StandardizeFromAddress:
     def test_blank_address_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={"address": "   "})
         assert response.status_code == 422
+        assert response.json()["error"] == "validation_error"
 
     def test_no_address_or_components_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={})
         assert response.status_code == 422
+        assert response.json()["error"] == "validation_error"
 
     def test_address_too_long_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={"address": "A" * 1001})

@@ -7,7 +7,8 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
+from address_validator.models import ErrorResponse
 from address_validator.routers.admin.router import admin_router
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
@@ -136,6 +138,33 @@ async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
     header is appended downstream by :func:`add_api_version_header`.
     """
     return api_error_response(exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Convert Pydantic request validation errors to the uniform :class:`ErrorResponse` shape.
+
+    Pydantic raises :exc:`~fastapi.exceptions.RequestValidationError` for
+    both field-level failures (e.g. ``max_length``) and model-level
+    ``model_validator`` failures.  Without this handler FastAPI emits
+    ``{"detail": [...]}``; this handler normalises all 422s to
+    ``{"error": "validation_error", "message": "...", "api_version": "1"}``.
+
+    For ``ValueError``-based validators the human message is extracted from
+    the exception context (``ctx["error"]``) to avoid the redundant
+    ``"Value error, "`` prefix Pydantic v2 prepends to ``msg``.
+    """
+    messages: list[str] = []
+    for err in exc.errors():
+        ctx_error = err.get("ctx", {}).get("error")
+        messages.append(str(ctx_error) if isinstance(ctx_error, Exception) else err["msg"])
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content=ErrorResponse(
+            error="validation_error",
+            message="; ".join(messages),
+        ).model_dump(),
+    )
 
 
 @app.middleware("http")
