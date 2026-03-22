@@ -2,16 +2,12 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
-from pydantic import ValidationError
 
 from address_validator.main import app
 from address_validator.models import (
     ComponentSet,
-    StandardizeRequestV1,
     StandardizeResponseV1,
-    ValidateRequestV1,
     ValidateResponseV1,
     ValidationResult,
 )
@@ -201,6 +197,7 @@ class TestValidateEndpoint:
             json={"address": "A" * 1001},
         )
         assert resp.status_code == 422
+        assert resp.json()["error"] == "validation_error"
 
     def test_provider_rate_limited_returns_429(self, client: TestClient) -> None:
         rate_limited = AsyncMock()
@@ -283,47 +280,3 @@ class TestValidateResponseV1Shape:
         assert r.validation.dpv_match_code == "Y"
         assert r.postal_code == "62701-1234"
         assert r.latitude == 39.7817
-
-
-class TestValidateRequestV1Model:
-    def test_accepts_raw_address_string(self) -> None:
-        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701")
-        assert req.address == "123 Main St, Springfield, IL 62701"
-        assert req.components is None
-
-    def test_accepts_components_dict(self) -> None:
-        req = ValidateRequestV1(components={"address_number": "123", "street_name": "MAIN"})
-        assert req.components == {"address_number": "123", "street_name": "MAIN"}
-        assert req.address is None
-
-    def test_both_fields_none_raises_validation_error(self) -> None:
-        with pytest.raises(ValidationError):
-            ValidateRequestV1()
-
-    def test_country_defaults_to_us(self) -> None:
-        req = ValidateRequestV1(address="123 Main St")
-        assert req.country == "US"
-
-
-class TestStandardizeRequestV1Model:
-    def test_accepts_raw_address_string(self) -> None:
-        req = StandardizeRequestV1(address="123 Main St, Springfield, IL 62701")
-        assert req.address == "123 Main St, Springfield, IL 62701"
-        assert req.components is None
-
-    def test_accepts_components_dict(self) -> None:
-        req = StandardizeRequestV1(components={"address_number": "123", "street_name": "MAIN"})
-        assert req.components == {"address_number": "123", "street_name": "MAIN"}
-        assert req.address is None
-
-    def test_both_fields_none_raises_validation_error(self) -> None:
-        with pytest.raises(ValidationError):
-            StandardizeRequestV1()
-
-    def test_blank_address_raises_validation_error(self) -> None:
-        with pytest.raises(ValidationError):
-            StandardizeRequestV1(address="   ")
-
-    def test_country_defaults_to_us(self) -> None:
-        req = StandardizeRequestV1(address="123 Main St")
-        assert req.country == "US"

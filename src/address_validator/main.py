@@ -153,6 +153,9 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     For ``ValueError``-based validators the human message is extracted from
     the exception context (``ctx["error"]``) to avoid the redundant
     ``"Value error, "`` prefix Pydantic v2 prepends to ``msg``.
+
+    The ``API-Version: 1`` response header is appended downstream by
+    :func:`add_api_version_header` for all ``/api/v1/`` paths.
     """
     messages: list[str] = []
     for err in exc.errors():

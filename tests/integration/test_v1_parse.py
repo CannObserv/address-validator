@@ -55,12 +55,14 @@ class TestV1ParseValidation:
     def test_address_too_long_returns_422(self, client) -> None:
         response = client.post("/api/v1/parse", json={"address": "A" * 1001})
         assert response.status_code == 422
+        assert response.json()["error"] == "validation_error"
 
     def test_empty_body_returns_422(self, client) -> None:
         response = client.post(
             "/api/v1/parse", content=b"", headers={"content-type": "application/json"}
         )
         assert response.status_code == 422
+        assert response.json()["error"] == "validation_error"
 
     def test_invalid_country_returns_422(self, client) -> None:
         response = client.post("/api/v1/parse", json={"address": "123 Main St", "country": "XX"})
