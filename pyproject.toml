@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn>=0.41,<1",
     "usaddress>=0.5.16,<1",
     "pydantic>=2.12,<3",
+    "pydantic-settings>=2.9,<3",
     "pycountry>=26.2.16,<27",
     "httpx>=0.28,<1",
     "python-ulid>=3.1,<4",
