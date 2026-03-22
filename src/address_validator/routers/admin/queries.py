@@ -1,14 +1,41 @@
-"""Shared SQL query helpers for admin dashboard views."""
+"""Shared SQL query helpers for admin dashboard views.
+
+All queries use SQLAlchemy Core expressions — no raw SQL f-strings.
+"""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import text
+import sqlalchemy as sa
+from sqlalchemy import func, select, union_all
+
+from address_validator.db.tables import audit_daily_stats, audit_log
 
 if TYPE_CHECKING:
+    from sqlalchemy import ColumnElement, Select
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+# ---------------------------------------------------------------------------
+# Shared expressions
+# ---------------------------------------------------------------------------
+
+_ERROR_STATUS_MIN = 400
+_API_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
+_API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
+
+# Date guard: restrict audit_daily_stats to dates before the earliest live row,
+# avoiding double-counting when --backfill has populated rollups for recent dates.
+_ARCHIVED_DATE_GUARD = (
+    audit_daily_stats.c.date
+    < select(
+        func.coalesce(
+            func.min(sa.cast(audit_log.c.timestamp, sa.Date)),
+            func.current_date(),
+        )
+    ).scalar_subquery()
+)
 
 
 def _time_boundaries() -> dict[str, datetime]:
@@ -23,9 +50,30 @@ def _time_boundaries() -> dict[str, datetime]:
     }
 
 
-# SQL fragment: restrict audit_daily_stats to dates before the earliest live row,
-# avoiding double-counting when --backfill has populated rollups for recent dates.
-_ARCHIVED_DATE_GUARD = "date < (SELECT COALESCE(MIN(timestamp)::date, CURRENT_DATE) FROM audit_log)"
+# ---------------------------------------------------------------------------
+# Composable helpers
+# ---------------------------------------------------------------------------
+
+
+def _from_live(columns: list, *where: ColumnElement) -> Select:
+    """Build a SELECT from audit_log with optional WHERE clauses."""
+    stmt = select(*columns)
+    for cond in where:
+        stmt = stmt.where(cond)
+    return stmt
+
+
+def _from_archived(columns: list, *where: ColumnElement) -> Select:
+    """Build a SELECT from audit_daily_stats with the date guard baked in."""
+    stmt = select(*columns).where(_ARCHIVED_DATE_GUARD)
+    for cond in where:
+        stmt = stmt.where(cond)
+    return stmt
+
+
+# ---------------------------------------------------------------------------
+# Dashboard stats
+# ---------------------------------------------------------------------------
 
 
 async def get_dashboard_stats(engine: AsyncEngine) -> dict:
@@ -34,83 +82,79 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     week_start = tb["week"]
     last_24h = tb["last_24h"]
 
-    # SAFETY: endpoint literals are hardcoded, not user-supplied.
-    _API_ENDPOINT_FILTER = (
-        "endpoint IN ('/api/v1/parse', '/api/v1/standardize', '/api/v1/validate')"
-    )
-
     async with engine.connect() as conn:
+        # Live counts
         row = (
             await conn.execute(
-                text(f"""
-                    SELECT
-                        COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
-                        COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
-                        COUNT(*) FILTER (
-                            WHERE status_code >= 400 AND timestamp >= :last_24h
-                            AND {_API_ENDPOINT_FILTER}
-                        ) AS errors_24h,
-                        COUNT(*) FILTER (
-                            WHERE timestamp >= :last_24h
-                            AND {_API_ENDPOINT_FILTER}
-                        ) AS api_24h
-                    FROM audit_log
-                """),  # noqa: S608
-                {"last_24h": last_24h, "week": week_start},
+                _from_live(
+                    [
+                        func.count().label("total"),
+                        func.count().filter(audit_log.c.timestamp >= last_24h).label("last_24h"),
+                        func.count().filter(audit_log.c.timestamp >= week_start).label("week"),
+                        func.count()
+                        .filter(
+                            audit_log.c.status_code >= _ERROR_STATUS_MIN,
+                            audit_log.c.timestamp >= last_24h,
+                            _API_ENDPOINT_FILTER,
+                        )
+                        .label("errors_24h"),
+                        func.count()
+                        .filter(
+                            audit_log.c.timestamp >= last_24h,
+                            _API_ENDPOINT_FILTER,
+                        )
+                        .label("api_24h"),
+                    ],
+                )
             )
         ).one()
 
-        # Archived totals — only count dates before the earliest live row
-        # to avoid double-counting when --backfill has run.
+        # Archived totals — only dates before earliest live row
         archived_total = (
             await conn.execute(
-                text(f"""
-                    SELECT COALESCE(SUM(request_count), 0) FROM audit_daily_stats
-                    WHERE {_ARCHIVED_DATE_GUARD}
-                """)  # noqa: S608
+                _from_archived(
+                    [func.coalesce(func.sum(audit_daily_stats.c.request_count), 0)],
+                )
             )
         ).scalar()
 
+        # Cache hit rate — live only, validate endpoint, this week
         cache_row = (
             await conn.execute(
-                text("""
-                    SELECT
-                        COUNT(*) FILTER (WHERE cache_hit = true) AS hits,
-                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL) AS total
-                    FROM audit_log
-                    WHERE endpoint = '/api/v1/validate'
-                        AND timestamp >= :week
-                """),
-                {"week": week_start},
+                _from_live(
+                    [
+                        func.count().filter(audit_log.c.cache_hit.is_(True)).label("hits"),
+                        func.count().filter(audit_log.c.cache_hit.isnot(None)).label("total"),
+                    ],
+                    audit_log.c.endpoint == "/api/v1/validate",
+                    audit_log.c.timestamp >= week_start,
+                )
             )
         ).one()
 
         # Live endpoint breakdown
         ep_rows = (
             await conn.execute(
-                text("""
-                    SELECT
-                        endpoint,
-                        COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
-                        COUNT(*) FILTER (WHERE timestamp >= :week) AS week
-                    FROM audit_log
-                    GROUP BY endpoint
-                """),
-                {"last_24h": last_24h, "week": week_start},
+                _from_live(
+                    [
+                        audit_log.c.endpoint,
+                        func.count().label("total"),
+                        func.count().filter(audit_log.c.timestamp >= last_24h).label("last_24h"),
+                        func.count().filter(audit_log.c.timestamp >= week_start).label("week"),
+                    ],
+                ).group_by(audit_log.c.endpoint)
             )
         ).fetchall()
 
-        # Archived endpoint breakdown — only dates before earliest live row
+        # Archived endpoint breakdown
         archived_ep_rows = (
             await conn.execute(
-                text(f"""
-                    SELECT endpoint, SUM(request_count) AS total
-                    FROM audit_daily_stats
-                    WHERE {_ARCHIVED_DATE_GUARD}
-                    GROUP BY endpoint
-                """)  # noqa: S608
+                _from_archived(
+                    [
+                        audit_daily_stats.c.endpoint,
+                        func.sum(audit_daily_stats.c.request_count).label("total"),
+                    ],
+                ).group_by(audit_daily_stats.c.endpoint)
             )
         ).fetchall()
 
@@ -150,6 +194,11 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Audit log browsing
+# ---------------------------------------------------------------------------
+
+
 async def get_audit_rows(
     engine: AsyncEngine,
     *,
@@ -161,52 +210,52 @@ async def get_audit_rows(
     status_min: int | None = None,
 ) -> tuple[list[dict], int]:
     """Fetch paginated, filtered audit_log rows. Returns (rows, total_count)."""
-    conditions = []
-    params: dict = {}
+    conditions: list[ColumnElement] = []
 
     if endpoint:
-        conditions.append("endpoint = :endpoint")
-        params["endpoint"] = f"/api/v1/{endpoint}"
+        conditions.append(audit_log.c.endpoint == f"/api/v1/{endpoint}")
     if provider:
-        conditions.append("provider = :provider")
-        params["provider"] = provider
+        conditions.append(audit_log.c.provider == provider)
     if client_ip:
-        conditions.append("client_ip = :client_ip")
-        params["client_ip"] = client_ip
+        conditions.append(audit_log.c.client_ip == client_ip)
     if status_min:
-        conditions.append("status_code >= :status_min")
-        params["status_min"] = status_min
-
-    # SAFETY: conditions list contains only hardcoded column/operator literals;
-    # all user-supplied values go through :parameterized placeholders in params dict.
-    where = " AND ".join(conditions) if conditions else "1=1"
+        conditions.append(audit_log.c.status_code >= status_min)
 
     async with engine.connect() as conn:
-        count_row = (
-            await conn.execute(
-                text(f"SELECT COUNT(*) FROM audit_log WHERE {where}"),  # noqa: S608
-                params,
-            )
-        ).one()
-        total = count_row[0]
+        count_stmt = _from_live([func.count()], *conditions)
+        total = (await conn.execute(count_stmt)).scalar()
 
-        params["limit"] = per_page
-        params["offset"] = (page - 1) * per_page
-        result = await conn.execute(
-            text(f"""
-                SELECT id, timestamp, request_id, client_ip, method, endpoint,
-                       status_code, latency_ms, provider, validation_status,
-                       cache_hit, error_detail
-                FROM audit_log
-                WHERE {where}
-                ORDER BY timestamp DESC
-                LIMIT :limit OFFSET :offset
-            """),  # noqa: S608
-            params,
+        row_stmt = (
+            _from_live(
+                [
+                    audit_log.c.id,
+                    audit_log.c.timestamp,
+                    audit_log.c.request_id,
+                    audit_log.c.client_ip,
+                    audit_log.c.method,
+                    audit_log.c.endpoint,
+                    audit_log.c.status_code,
+                    audit_log.c.latency_ms,
+                    audit_log.c.provider,
+                    audit_log.c.validation_status,
+                    audit_log.c.cache_hit,
+                    audit_log.c.error_detail,
+                ],
+                *conditions,
+            )
+            .order_by(audit_log.c.timestamp.desc())
+            .limit(per_page)
+            .offset((page - 1) * per_page)
         )
+        result = await conn.execute(row_stmt)
         rows = [dict(r._mapping) for r in result]  # noqa: SLF001
 
     return rows, total
+
+
+# ---------------------------------------------------------------------------
+# Per-endpoint stats
+# ---------------------------------------------------------------------------
 
 
 async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
@@ -215,57 +264,72 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
     tb = _time_boundaries()
 
     async with engine.connect() as conn:
+        # Live stats
         row = (
             await conn.execute(
-                text("""
-                    SELECT
-                        COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
-                        COUNT(*) FILTER (WHERE timestamp >= :week) AS week,
-                        COUNT(*) FILTER (WHERE status_code >= 400) AS errors,
-                        AVG(latency_ms) FILTER (WHERE latency_ms IS NOT NULL) AS avg_latency
-                    FROM audit_log
-                    WHERE endpoint = :endpoint
-                """),
-                {"last_24h": tb["last_24h"], "week": tb["week"], "endpoint": endpoint_path},
+                _from_live(
+                    [
+                        func.count().label("total"),
+                        func.count()
+                        .filter(audit_log.c.timestamp >= tb["last_24h"])
+                        .label("last_24h"),
+                        func.count().filter(audit_log.c.timestamp >= tb["week"]).label("week"),
+                        func.count()
+                        .filter(audit_log.c.status_code >= _ERROR_STATUS_MIN)
+                        .label("errors"),
+                        func.avg(audit_log.c.latency_ms)
+                        .filter(audit_log.c.latency_ms.isnot(None))
+                        .label("avg_latency"),
+                    ],
+                    audit_log.c.endpoint == endpoint_path,
+                )
             )
         ).one()
 
-        # Archived totals for this endpoint — only dates before earliest live row
+        # Archived totals for this endpoint
         archived = (
             await conn.execute(
-                text(f"""
-                    SELECT
-                        COALESCE(SUM(request_count), 0) AS total,
-                        COALESCE(SUM(error_count), 0) AS errors
-                    FROM audit_daily_stats
-                    WHERE endpoint = :endpoint
-                        AND {_ARCHIVED_DATE_GUARD}
-                """),  # noqa: S608
-                {"endpoint": endpoint_path},
+                _from_archived(
+                    [
+                        func.coalesce(func.sum(audit_daily_stats.c.request_count), 0).label(
+                            "total"
+                        ),
+                        func.coalesce(func.sum(audit_daily_stats.c.error_count), 0).label("errors"),
+                    ],
+                    audit_daily_stats.c.endpoint == endpoint_path,
+                )
             )
         ).one()
 
         # Live + archived status code distribution
+        live_status = (
+            select(
+                audit_log.c.status_code,
+                sa.cast(func.count(), sa.Integer).label("cnt"),
+            )
+            .where(audit_log.c.endpoint == endpoint_path)
+            .group_by(audit_log.c.status_code)
+        )
+        archived_status = (
+            select(
+                audit_daily_stats.c.status_code,
+                sa.cast(func.sum(audit_daily_stats.c.request_count), sa.Integer).label("cnt"),
+            )
+            .where(
+                audit_daily_stats.c.endpoint == endpoint_path,
+                _ARCHIVED_DATE_GUARD,
+            )
+            .group_by(audit_daily_stats.c.status_code)
+        )
+        combined = union_all(live_status, archived_status).subquery("combined")
         status_rows = (
             await conn.execute(
-                text(f"""
-                    SELECT status_code, SUM(cnt)::integer AS count FROM (
-                        SELECT status_code, COUNT(*)::integer AS cnt
-                        FROM audit_log
-                        WHERE endpoint = :endpoint
-                        GROUP BY status_code
-                        UNION ALL
-                        SELECT status_code, SUM(request_count)::integer AS cnt
-                        FROM audit_daily_stats
-                        WHERE endpoint = :endpoint
-                            AND {_ARCHIVED_DATE_GUARD}
-                        GROUP BY status_code
-                    ) AS combined
-                    GROUP BY status_code
-                    ORDER BY status_code
-                """),  # noqa: S608
-                {"endpoint": endpoint_path},
+                select(
+                    combined.c.status_code,
+                    sa.cast(func.sum(combined.c.cnt), sa.Integer).label("count"),
+                )
+                .group_by(combined.c.status_code)
+                .order_by(combined.c.status_code)
             )
         ).fetchall()
 
@@ -282,6 +346,11 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Per-provider stats
+# ---------------------------------------------------------------------------
+
+
 async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
     """Fetch stats for a specific validation provider."""
     tb = _time_boundaries()
@@ -289,44 +358,52 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
     async with engine.connect() as conn:
         row = (
             await conn.execute(
-                text("""
-                    SELECT
-                        COUNT(*) AS total,
-                        COUNT(*) FILTER (WHERE timestamp >= :last_24h) AS last_24h,
-                        COUNT(*) FILTER (WHERE cache_hit = true
-                            AND timestamp >= :week) AS cache_hits,
-                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL
-                            AND timestamp >= :week) AS cache_total
-                    FROM audit_log
-                    WHERE provider = :provider
-                """),
-                {"last_24h": tb["last_24h"], "week": tb["week"], "provider": provider_name},
+                _from_live(
+                    [
+                        func.count().label("total"),
+                        func.count()
+                        .filter(audit_log.c.timestamp >= tb["last_24h"])
+                        .label("last_24h"),
+                        func.count()
+                        .filter(
+                            audit_log.c.cache_hit.is_(True),
+                            audit_log.c.timestamp >= tb["week"],
+                        )
+                        .label("cache_hits"),
+                        func.count()
+                        .filter(
+                            audit_log.c.cache_hit.isnot(None),
+                            audit_log.c.timestamp >= tb["week"],
+                        )
+                        .label("cache_total"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                )
             )
         ).one()
 
-        # Archived total for this provider — only dates before earliest live row
+        # Archived total for this provider
         archived_total = (
             await conn.execute(
-                text(f"""
-                    SELECT COALESCE(SUM(request_count), 0)
-                    FROM audit_daily_stats
-                    WHERE provider = :provider
-                        AND {_ARCHIVED_DATE_GUARD}
-                """),  # noqa: S608
-                {"provider": provider_name},
+                _from_archived(
+                    [func.coalesce(func.sum(audit_daily_stats.c.request_count), 0)],
+                    audit_daily_stats.c.provider == provider_name,
+                )
             )
         ).scalar()
 
         status_rows = (
             await conn.execute(
-                text("""
-                    SELECT validation_status, COUNT(*) AS count
-                    FROM audit_log
-                    WHERE provider = :provider AND validation_status IS NOT NULL
-                    GROUP BY validation_status
-                    ORDER BY count DESC
-                """),
-                {"provider": provider_name},
+                _from_live(
+                    [
+                        audit_log.c.validation_status,
+                        func.count().label("count"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.validation_status.isnot(None),
+                )
+                .group_by(audit_log.c.validation_status)
+                .order_by(func.count().desc())
             )
         ).fetchall()
 
@@ -337,6 +414,11 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
         "cache_hit_rate": cache_hit_rate,
         "validation_statuses": {r.validation_status: r.count for r in status_rows},
     }
+
+
+# ---------------------------------------------------------------------------
+# Sparkline data
+# ---------------------------------------------------------------------------
 
 
 async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
@@ -352,64 +434,67 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
     # Truncate to start of hour. The current-hour bucket is partial (count so far this hour).
     start_24h = (now - timedelta(hours=23)).replace(minute=0, second=0, microsecond=0)
 
+    day_bucket = func.date_trunc("day", audit_log.c.timestamp).label("bucket")
+    hour_bucket = func.date_trunc("hour", audit_log.c.timestamp).label("bucket")
+
     async with engine.connect() as conn:
         # Daily request counts — last 30 days.
         daily_rows = (
             await conn.execute(
-                text("""
-                    SELECT date_trunc('day', timestamp) AS bucket, COUNT(*) AS cnt
-                    FROM audit_log
-                    WHERE timestamp >= :start
-                    GROUP BY bucket ORDER BY bucket
-                """),
-                {"start": start_30d},
+                _from_live(
+                    [day_bucket, func.count().label("cnt")],
+                    audit_log.c.timestamp >= start_30d,
+                )
+                .group_by(sa.literal_column("bucket"))
+                .order_by(sa.literal_column("bucket"))
             )
         ).fetchall()
 
         # Hourly request counts — last 24 hours.
         hourly_rows = (
             await conn.execute(
-                text("""
-                    SELECT date_trunc('hour', timestamp) AS bucket, COUNT(*) AS cnt
-                    FROM audit_log
-                    WHERE timestamp >= :start
-                    GROUP BY bucket ORDER BY bucket
-                """),
-                {"start": start_24h},
+                _from_live(
+                    [hour_bucket, func.count().label("cnt")],
+                    audit_log.c.timestamp >= start_24h,
+                )
+                .group_by(sa.literal_column("bucket"))
+                .order_by(sa.literal_column("bucket"))
             )
         ).fetchall()
 
         # Daily cache hit rate — last 7 days (validate endpoint only).
         cache_rows = (
             await conn.execute(
-                text("""
-                    SELECT
-                        date_trunc('day', timestamp) AS bucket,
-                        COUNT(*) FILTER (WHERE cache_hit = true) AS hits,
-                        COUNT(*) FILTER (WHERE cache_hit IS NOT NULL) AS total
-                    FROM audit_log
-                    WHERE endpoint = '/api/v1/validate' AND timestamp >= :start
-                    GROUP BY bucket ORDER BY bucket
-                """),
-                {"start": start_7d},
+                _from_live(
+                    [
+                        day_bucket,
+                        func.count().filter(audit_log.c.cache_hit.is_(True)).label("hits"),
+                        func.count().filter(audit_log.c.cache_hit.isnot(None)).label("total"),
+                    ],
+                    audit_log.c.endpoint == "/api/v1/validate",
+                    audit_log.c.timestamp >= start_7d,
+                )
+                .group_by(sa.literal_column("bucket"))
+                .order_by(sa.literal_column("bucket"))
             )
         ).fetchall()
 
         # Daily error rate — last 7 days (API endpoints only).
         error_rows = (
             await conn.execute(
-                text("""
-                    SELECT
-                        date_trunc('day', timestamp) AS bucket,
-                        COUNT(*) FILTER (WHERE status_code >= 400) AS errors,
-                        COUNT(*) AS total
-                    FROM audit_log
-                    WHERE endpoint IN (
-                        '/api/v1/parse', '/api/v1/standardize', '/api/v1/validate'
-                    ) AND timestamp >= :start
-                    GROUP BY bucket ORDER BY bucket
-                """),
-                {"start": start_7d},
+                _from_live(
+                    [
+                        day_bucket,
+                        func.count()
+                        .filter(audit_log.c.status_code >= _ERROR_STATUS_MIN)
+                        .label("errors"),
+                        func.count().label("total"),
+                    ],
+                    _API_ENDPOINT_FILTER,
+                    audit_log.c.timestamp >= start_7d,
+                )
+                .group_by(sa.literal_column("bucket"))
+                .order_by(sa.literal_column("bucket"))
             )
         ).fetchall()
 

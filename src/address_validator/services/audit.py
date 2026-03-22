@@ -12,7 +12,7 @@ import logging
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
-from sqlalchemy import text
+from address_validator.db.tables import audit_log
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -66,19 +66,6 @@ def set_audit_context(
         _audit_cache_hit.set(cache_hit)
 
 
-_INSERT_SQL = text("""
-    INSERT INTO audit_log (
-        timestamp, request_id, client_ip, method, endpoint,
-        status_code, latency_ms, provider, validation_status,
-        cache_hit, error_detail
-    ) VALUES (
-        :timestamp, :request_id, :client_ip, :method, :endpoint,
-        :status_code, :latency_ms, :provider, :validation_status,
-        :cache_hit, :error_detail
-    )
-""")
-
-
 async def write_audit_row(
     engine: AsyncEngine,
     *,
@@ -98,20 +85,19 @@ async def write_audit_row(
     try:
         async with engine.begin() as conn:
             await conn.execute(
-                _INSERT_SQL,
-                {
-                    "timestamp": timestamp,
-                    "request_id": request_id,
-                    "client_ip": client_ip,
-                    "method": method,
-                    "endpoint": endpoint,
-                    "status_code": status_code,
-                    "latency_ms": latency_ms,
-                    "provider": provider,
-                    "validation_status": validation_status,
-                    "cache_hit": cache_hit,
-                    "error_detail": error_detail,
-                },
+                audit_log.insert().values(
+                    timestamp=timestamp,
+                    request_id=request_id,
+                    client_ip=client_ip,
+                    method=method,
+                    endpoint=endpoint,
+                    status_code=status_code,
+                    latency_ms=latency_ms,
+                    provider=provider,
+                    validation_status=validation_status,
+                    cache_hit=cache_hit,
+                    error_detail=error_detail,
+                )
             )
     except Exception:
         logger.warning("audit: failed to write audit row", exc_info=True)

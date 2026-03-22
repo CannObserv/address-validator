@@ -28,9 +28,15 @@ from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import sqlalchemy as sa
 from google.cloud import storage as gcs
-from sqlalchemy import text
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from address_validator.db.tables import audit_daily_stats, audit_log
+
+_ERROR_STATUS_MIN = 400
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -38,34 +44,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _build_aggregate_sql(*, with_cutoff: bool) -> str:
-    """Build the INSERT...SELECT for aggregation, optionally filtered by cutoff."""
-    where = "WHERE timestamp < :cutoff" if with_cutoff else ""
-    return f"""
-        INSERT INTO audit_daily_stats
-            (date, endpoint, provider, status_code, cache_hit,
-             request_count, error_count, avg_latency_ms, p95_latency_ms)
-        SELECT
-            date_trunc('day', timestamp)::date AS date,
-            endpoint,
-            provider,
-            status_code,
-            cache_hit,
-            COUNT(*) AS request_count,
-            COUNT(*) FILTER (WHERE status_code >= 400) AS error_count,
-            AVG(latency_ms)::integer AS avg_latency_ms,
-            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms)::integer AS p95_latency_ms
-        FROM audit_log
-        {where}
-        GROUP BY date, endpoint, provider, status_code, cache_hit
-        ON CONFLICT (date, endpoint, COALESCE(provider, ''),
-                     status_code, COALESCE(cache_hit, false))
-        DO NOTHING
-    """  # noqa: S608
+def _build_aggregate_select(*, cutoff: bool) -> sa.Select:
+    """Build the SELECT portion of the aggregation query."""
+    stmt = select(
+        sa.cast(func.date_trunc("day", audit_log.c.timestamp), sa.Date).label("date"),
+        audit_log.c.endpoint,
+        audit_log.c.provider,
+        audit_log.c.status_code,
+        audit_log.c.cache_hit,
+        func.count().label("request_count"),
+        func.count().filter(audit_log.c.status_code >= _ERROR_STATUS_MIN).label("error_count"),
+        sa.cast(func.avg(audit_log.c.latency_ms), sa.Integer).label("avg_latency_ms"),
+        sa.cast(
+            func.percentile_cont(0.95).within_group(audit_log.c.latency_ms),
+            sa.Integer,
+        ).label("p95_latency_ms"),
+    ).group_by(
+        sa.literal_column("date"),
+        audit_log.c.endpoint,
+        audit_log.c.provider,
+        audit_log.c.status_code,
+        audit_log.c.cache_hit,
+    )
+    if cutoff:
+        stmt = stmt.where(audit_log.c.timestamp < sa.bindparam("cutoff"))
+    return stmt
 
 
-_AGGREGATE_SQL = text(_build_aggregate_sql(with_cutoff=True))
-_AGGREGATE_ALL_SQL = text(_build_aggregate_sql(with_cutoff=False))
+_AGG_COLUMNS = [
+    "date",
+    "endpoint",
+    "provider",
+    "status_code",
+    "cache_hit",
+    "request_count",
+    "error_count",
+    "avg_latency_ms",
+    "p95_latency_ms",
+]
 
 
 class ArchiveError(Exception):
@@ -105,30 +121,28 @@ async def aggregate(engine: AsyncEngine, *, cutoff: datetime | None = None) -> i
     If cutoff is None, aggregates ALL rows (backfill mode).
     Returns number of rows inserted.
     """
-    if cutoff is None:
-        sql = _AGGREGATE_ALL_SQL
-        params: dict = {}
-    else:
-        sql = _AGGREGATE_SQL
-        params = {"cutoff": cutoff}
+    select_stmt = _build_aggregate_select(cutoff=cutoff is not None)
+    insert_stmt = (
+        pg_insert(audit_daily_stats).from_select(_AGG_COLUMNS, select_stmt).on_conflict_do_nothing()
+    )
+    params: dict = {} if cutoff is None else {"cutoff": cutoff}
 
     async with engine.begin() as conn:
-        result = await conn.execute(sql, params)
+        result = await conn.execute(insert_stmt, params)
         return result.rowcount
 
 
 async def fetch_expired_dates(engine: AsyncEngine, cutoff: datetime) -> list[datetime]:
     """Fetch distinct dates that have expired rows, ordered ascending."""
+    day_col = func.date_trunc("day", audit_log.c.timestamp).label("day")
+    stmt = (
+        select(day_col)
+        .distinct()
+        .where(audit_log.c.timestamp < cutoff)
+        .order_by(sa.literal_column("day"))
+    )
     async with engine.connect() as conn:
-        result = await conn.execute(
-            text("""
-                SELECT DISTINCT date_trunc('day', timestamp) AS day
-                FROM audit_log
-                WHERE timestamp < :cutoff
-                ORDER BY day
-            """),
-            {"cutoff": cutoff},
-        )
+        result = await conn.execute(stmt)
         return [r.day for r in result]
 
 
@@ -142,18 +156,26 @@ async def fetch_rows_for_date(
     day_end = day + timedelta(days=1)
     # Clamp to cutoff so we don't overshoot on the boundary day.
     end = min(day_end, cutoff)
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            text("""
-                SELECT id, timestamp, request_id, client_ip, method, endpoint,
-                       status_code, latency_ms, provider, validation_status,
-                       cache_hit, error_detail
-                FROM audit_log
-                WHERE timestamp >= :start AND timestamp < :end
-                ORDER BY timestamp
-            """),
-            {"start": day_start, "end": end},
+    stmt = (
+        select(
+            audit_log.c.id,
+            audit_log.c.timestamp,
+            audit_log.c.request_id,
+            audit_log.c.client_ip,
+            audit_log.c.method,
+            audit_log.c.endpoint,
+            audit_log.c.status_code,
+            audit_log.c.latency_ms,
+            audit_log.c.provider,
+            audit_log.c.validation_status,
+            audit_log.c.cache_hit,
+            audit_log.c.error_detail,
         )
+        .where(audit_log.c.timestamp >= day_start, audit_log.c.timestamp < end)
+        .order_by(audit_log.c.timestamp)
+    )
+    async with engine.connect() as conn:
+        result = await conn.execute(stmt)
         return [dict(r._mapping) for r in result]  # noqa: SLF001
 
 
@@ -197,18 +219,10 @@ async def delete_expired_rows(
     """Delete audit_log rows older than cutoff in batches. Returns total deleted."""
     total_deleted = 0
     while True:
+        subq = select(audit_log.c.id).where(audit_log.c.timestamp < cutoff).limit(batch_size)
+        stmt = audit_log.delete().where(audit_log.c.id.in_(subq))
         async with engine.begin() as conn:
-            result = await conn.execute(
-                text("""
-                    DELETE FROM audit_log
-                    WHERE id IN (
-                        SELECT id FROM audit_log
-                        WHERE timestamp < :cutoff
-                        LIMIT :batch_size
-                    )
-                """),
-                {"cutoff": cutoff, "batch_size": batch_size},
-            )
+            result = await conn.execute(stmt)
             deleted = result.rowcount
             total_deleted += deleted
             if deleted < batch_size:
