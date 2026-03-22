@@ -326,9 +326,8 @@ class TestDiscoverGoogleQuota:
     def test_discovery_success_overrides_config_limit(
         self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
     ) -> None:
-        mock_client = MagicMock()
         with (
-            patch("google.cloud.cloudquotas_v1.CloudQuotasClient", return_value=mock_client),
+            patch("google.cloud.cloudquotas_v1.CloudQuotasClient"),
             patch(
                 "address_validator.services.validation.registry.fetch_daily_limit",
                 return_value=500,
@@ -350,6 +349,11 @@ class TestDiscoverGoogleQuota:
             patch(
                 "google.cloud.cloudquotas_v1.CloudQuotasClient",
                 side_effect=RuntimeError("quota api down"),
+            ),
+            patch("google.cloud.monitoring_v3.MetricServiceClient"),
+            patch(
+                "address_validator.services.validation.registry.fetch_daily_usage",
+                return_value=None,
             ),
             caplog.at_level(logging.WARNING),
         ):
