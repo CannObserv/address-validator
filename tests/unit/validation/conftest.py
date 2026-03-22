@@ -1,10 +1,11 @@
 """Shared fixtures for validation unit tests.
 
 Provides a PostgreSQL-backed async engine for cache tests.
-Migrations are applied once per session; tables are truncated between tests.
 """
 
 from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 from alembic.config import Config
@@ -24,6 +25,19 @@ def run_cache_migrations() -> None:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", TEST_CACHE_DSN)
     command.upgrade(cfg, "head")
+
+
+@pytest.fixture()
+def mock_google_auth():
+    """Patch get_credentials to return fake credentials."""
+    creds = MagicMock()
+    creds.token = "fake-token"
+    creds.valid = True
+    with patch(
+        "address_validator.services.validation.gcp_auth.google.auth.default"
+    ) as mock_default:
+        mock_default.return_value = (creds, "fake-project")
+        yield mock_default
 
 
 @pytest.fixture()

@@ -218,6 +218,18 @@ class QuotaGuard:
             0.0, min(float(window.limit), self._tokens[window_index] + delta)
         )
 
+    _DAILY_WINDOW_INDEX = 1
+
+    def get_daily_quota_state(self) -> dict | None:
+        """Return remaining/limit for the daily window, or None if no daily window."""
+        if len(self._windows) <= self._DAILY_WINDOW_INDEX:
+            return None
+        idx = self._DAILY_WINDOW_INDEX
+        return {
+            "remaining": int(self._tokens[idx]),
+            "limit": self._windows[idx].limit,
+        }
+
 
 def _parse_retry_after(response: httpx.Response, attempt: int) -> float:
     """Return the number of seconds to wait before retrying after a 429.

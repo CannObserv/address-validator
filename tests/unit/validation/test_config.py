@@ -1,7 +1,6 @@
 """Unit tests for validation/config.py — pydantic-settings config models."""
 
 import logging
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,19 +10,6 @@ from address_validator.services.validation.config import (
     ValidationConfig,
     validate_config,
 )
-
-
-@pytest.fixture()
-def mock_google_auth():
-    """Patch get_credentials to return fake credentials."""
-    creds = MagicMock()
-    creds.token = "fake-token"
-    creds.valid = True
-    with patch(
-        "address_validator.services.validation.gcp_auth.google.auth.default"
-    ) as mock_default:
-        mock_default.return_value = (creds, "fake-project")
-        yield mock_default
 
 
 class TestUSPSConfig:
@@ -170,14 +156,16 @@ class TestValidationConfig:
 class TestValidateConfig:
     def test_none_provider_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
-        validate_config()  # must not raise
+        result = validate_config()
+        assert result is None
 
     def test_usps_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
         monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
         monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
-        validate_config()  # must not raise
+        result = validate_config()
+        assert isinstance(result, ValidationConfig)
 
     def test_missing_cache_dsn_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
@@ -202,12 +190,14 @@ class TestValidateConfig:
     def test_google_valid(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
-        validate_config()  # must not raise
+        result = validate_config()
+        assert isinstance(result, ValidationConfig)
 
     def test_none_skips_ttl_validation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "none")
         monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "abc")
-        validate_config()  # must not raise — TTL irrelevant for NullProvider
+        result = validate_config()
+        assert result is None
 
     def test_logs_active_provider(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture

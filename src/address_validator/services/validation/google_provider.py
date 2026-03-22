@@ -38,6 +38,11 @@ class GoogleProvider:
     def __init__(self, client: GoogleClient) -> None:
         self._client = client
 
+    @property
+    def client(self) -> GoogleClient:
+        """Expose the client for quota state inspection."""
+        return self._client
+
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
         logger.debug("GoogleProvider.validate: calling Google API, country=%s", std.country)
         raw = await self._client.validate_address(

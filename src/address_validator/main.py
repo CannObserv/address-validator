@@ -60,9 +60,9 @@ _TAGS = [
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
-    validate_config()
-
-    config = ValidationConfig()
+    config = validate_config()
+    if config is None:
+        config = ValidationConfig()
     registry = ProviderRegistry(config)
 
     # Eagerly construct provider singletons so quota sync wiring runs at boot

@@ -76,6 +76,11 @@ class USPSClient:
         self._token_lock = asyncio.Lock()
         self._rate_limiter = quota_guard
 
+    @property
+    def quota_guard(self) -> QuotaGuard:
+        """Expose the rate limiter for quota state inspection."""
+        return self._rate_limiter
+
     async def _get_token(self) -> str:
         """Return a valid access token, fetching a new one if needed.
 

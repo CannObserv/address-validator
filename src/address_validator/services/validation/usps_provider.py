@@ -30,6 +30,11 @@ class USPSProvider:
     def __init__(self, client: USPSClient) -> None:
         self._client = client
 
+    @property
+    def client(self) -> USPSClient:
+        """Expose the client for quota state inspection."""
+        return self._client
+
     async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
         logger.debug("USPSProvider.validate: calling USPS API, country=%s", std.country)
         raw = await self._client.validate_address(

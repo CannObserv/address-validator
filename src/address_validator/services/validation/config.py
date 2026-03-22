@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 _SUPPORTED_PROVIDERS = ("none", "usps", "google")
 
 
-def _settings_error(exc: ValidationError, prefix: str) -> ValueError:
+def settings_error(exc: ValidationError, prefix: str) -> ValueError:
     """Convert a pydantic ValidationError into a ValueError with env-var names.
 
     Missing required fields and value errors are re-expressed using the full
@@ -135,12 +135,12 @@ def _check_provider_config(name: str) -> None:
         try:
             USPSConfig()
         except ValidationError as exc:
-            raise _settings_error(exc, "USPS_") from None
+            raise settings_error(exc, "USPS_") from None
     elif name == "google":
         try:
             GoogleConfig()
         except ValidationError as exc:
-            raise _settings_error(exc, "GOOGLE_") from None
+            raise settings_error(exc, "GOOGLE_") from None
         get_credentials()
     else:
         raise ValueError(
@@ -149,11 +149,14 @@ def _check_provider_config(name: str) -> None:
         )
 
 
-def validate_config() -> None:
+def validate_config() -> ValidationConfig | None:
     """Validate all provider configuration at startup.
 
     Reads env vars, checks required credentials are present, and validates
     rate-limit/budget/TTL values.  Raises :exc:`ValueError` on misconfiguration.
+
+    Returns the :class:`ValidationConfig` when a real provider is configured,
+    or ``None`` when provider is ``none``.
     """
     # Parse the provider string first — use a raw env read so that an invalid
     # cache_ttl_days value does not prevent us from checking the provider.
@@ -162,12 +165,12 @@ def validate_config() -> None:
 
     if not names:
         logger.info("validate_config: provider=none")
-        return
+        return None
 
     try:
         val_cfg = ValidationConfig()
     except ValidationError as exc:
-        raise _settings_error(exc, "VALIDATION_") from None
+        raise settings_error(exc, "VALIDATION_") from None
 
     for name in names:
         _check_provider_config(name)
@@ -180,3 +183,4 @@ def validate_config() -> None:
         )
 
     logger.info("validate_config: provider=%s ttl=%d days", ",".join(names), val_cfg.cache_ttl_days)
+    return val_cfg

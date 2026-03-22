@@ -18,10 +18,11 @@ from address_validator.services.validation._rate_limit import (
 from address_validator.services.validation.cache_provider import CachingProvider
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.config import (
+    _SUPPORTED_PROVIDERS,
     GoogleConfig,
     USPSConfig,
     ValidationConfig,
-    _settings_error,
+    settings_error,
 )
 from address_validator.services.validation.gcp_auth import get_credentials, resolve_project_id
 from address_validator.services.validation.gcp_quota_sync import (
@@ -36,8 +37,6 @@ from address_validator.services.validation.usps_client import USPSClient
 from address_validator.services.validation.usps_provider import USPSProvider
 
 logger = logging.getLogger(__name__)
-
-_SUPPORTED_PROVIDERS = ("none", "usps", "google")
 
 
 class ProviderRegistry:
@@ -70,17 +69,9 @@ class ProviderRegistry:
         for name, prov in [("usps", self._usps_provider), ("google", self._google_provider)]:
             if prov is None:
                 continue
-            if not hasattr(prov, "_client") or not hasattr(prov._client, "_rate_limiter"):  # noqa: SLF001
-                continue
-            guard = prov._client._rate_limiter  # noqa: SLF001
-            if len(guard._windows) > 1:  # noqa: SLF001
-                quota.append(
-                    {
-                        "provider": name,
-                        "remaining": int(guard._tokens[1]),  # noqa: SLF001
-                        "limit": guard._windows[1].limit,  # noqa: SLF001
-                    }
-                )
+            state = prov.client.quota_guard.get_daily_quota_state()
+            if state:
+                quota.append({"provider": name, **state})
         return quota
 
     async def close(self) -> None:
@@ -121,13 +112,13 @@ class ProviderRegistry:
             try:
                 cfg = USPSConfig()
             except ValidationError as exc:
-                raise _settings_error(exc, "USPS_") from None
+                raise settings_error(exc, "USPS_") from None
             return self._build_usps_provider(cfg, budget)
         if name == "google":
             try:
                 cfg = GoogleConfig()
             except ValidationError as exc:
-                raise _settings_error(exc, "GOOGLE_") from None
+                raise settings_error(exc, "GOOGLE_") from None
             return self._build_google_provider(cfg, budget)
         raise ValueError(
             f"Unknown provider name: '{name}'. "
@@ -237,10 +228,12 @@ class ProviderRegistry:
             usage = fetch_daily_usage(monitoring_client, project_id)
             if usage is not None and usage > 0:
                 guard.adjust_tokens(1, -usage)
+                state = guard.get_daily_quota_state()
+                daily_limit = state["limit"] if state else 0
                 logger.info(
                     "get_provider: seeded daily quota from Monitoring (used=%d, remaining=%d)",
                     usage,
-                    guard._windows[1].limit - usage,  # noqa: SLF001
+                    daily_limit - usage,
                 )
         except Exception:
             monitoring_client = None

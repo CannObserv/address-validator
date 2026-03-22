@@ -1,7 +1,5 @@
 """Unit tests for validation/registry.py — ProviderRegistry."""
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 import address_validator.services.validation.cache_db as cache_db_module
@@ -21,19 +19,6 @@ async def _cleanup_engine() -> None:
     await cache_db_module.close_engine()
     yield
     await cache_db_module.close_engine()
-
-
-@pytest.fixture()
-def mock_google_auth():
-    """Patch get_credentials to return fake credentials."""
-    creds = MagicMock()
-    creds.token = "fake-token"
-    creds.valid = True
-    with patch(
-        "address_validator.services.validation.gcp_auth.google.auth.default"
-    ) as mock_default:
-        mock_default.return_value = (creds, "fake-project")
-        yield mock_default
 
 
 def _make_registry(monkeypatch: pytest.MonkeyPatch, **env: str) -> ProviderRegistry:
@@ -184,7 +169,7 @@ class TestGetProvider:
         )
         result = reg.get_provider()
         usps: USPSProvider = result._inner  # type: ignore[assignment]
-        guard = usps._client._rate_limiter
+        guard = usps.client.quota_guard
         assert guard._windows[0].limit == 10
 
     def test_usps_daily_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -197,7 +182,7 @@ class TestGetProvider:
         )
         result = reg.get_provider()
         usps: USPSProvider = result._inner  # type: ignore[assignment]
-        guard = usps._client._rate_limiter
+        guard = usps.client.quota_guard
         assert guard._windows[1].limit == 5000
 
     def test_google_rpm(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
@@ -208,7 +193,7 @@ class TestGetProvider:
         )
         result = reg.get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
+        guard = google.client.quota_guard
         assert guard._windows[0].limit == 10
 
     def test_google_daily_limit(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
@@ -219,7 +204,7 @@ class TestGetProvider:
         )
         result = reg.get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
+        guard = google.client.quota_guard
         assert guard._windows[1].limit == 80
         assert guard._windows[1].mode == "hard"
 
@@ -229,7 +214,7 @@ class TestGetProvider:
         reg = _make_registry(monkeypatch, VALIDATION_PROVIDER="google")
         result = reg.get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
+        guard = google.client.quota_guard
         assert isinstance(guard._windows[1], FixedResetQuotaWindow)
 
     def test_unknown_in_list_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
