@@ -163,7 +163,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/middleware/request_id.py` | Runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; do not move the `set` call after `call_next` |
 | `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
 | `src/address_validator/middleware/audit.py` | Runs on every API request; `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must be innermost relative to request_id) |
-| `src/address_validator/db/tables.py` | SQLAlchemy Core Table definitions — column changes here affect all query modules and `services/audit.py`; must stay in sync with Alembic migrations |
+| `src/address_validator/db/tables.py` | SQLAlchemy Core Table definitions and shared constants — column changes and shared constants here affect all query modules, `services/audit.py`, and `scripts/archive_audit.py`; must stay in sync with Alembic migrations |
 | `src/address_validator/routers/admin/queries.py` | SQLAlchemy Core query composition; `_ARCHIVED_DATE_GUARD` scalar subquery and `_from_archived` helper are shared by multiple functions — changes affect all archived-data queries |
 | `src/address_validator/services/audit.py` | ContextVar reset in middleware is load-bearing; `except Exception` in `write_audit_row` is intentional fail-open |
 | `scripts/archive_audit.py` | Deletes audit_log rows after archival — verify GCS upload succeeded before deletion; `ON CONFLICT DO NOTHING` in aggregation is load-bearing for idempotency |
