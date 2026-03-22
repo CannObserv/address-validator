@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
     await init_engine()
     try:
-        app.state.engine = get_engine()
+        app.state.engine = get_engine()  # None when no DSN configured
     except RuntimeError:
         app.state.engine = None
 
