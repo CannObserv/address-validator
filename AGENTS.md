@@ -18,7 +18,8 @@ HTTP request
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
      └─ validate         →   parse → standardize → services/validation/
-                                 factory.py        get_provider() + validate_config() read VALIDATION_PROVIDER env
+                                 config.py         pydantic-settings models (USPSConfig, GoogleConfig, ValidationConfig) + validate_config()
+                                 registry.py       ProviderRegistry class — provider lifecycle, quota info, no globals
                                  null_provider.py  default no-op
                                  usps_provider.py  OAuth2 + quota guard; DPV → status
                                  google_provider.py  ADC; lat/lng; DPV → status
@@ -150,7 +151,8 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `src/address_validator/auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
-| `src/address_validator/services/validation/factory.py` | Module-level singletons (`_usps_provider`, `_google_provider`, `_http_client`, `_caching_provider`) — reset to `None` in test fixtures; `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; `_parse_latency_budget()`, `_parse_usps_config()`, `_parse_google_config()` — adding a new `QuotaWindow` or changing enforcement mode requires updating factory construction and `validate_config()` in sync |
+| `src/address_validator/services/validation/config.py` | `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; pydantic-settings validators enforce business rules — changes affect all env-var parsing |
+| `src/address_validator/services/validation/registry.py` | `ProviderRegistry` owns provider lifecycle — `_build_google_provider` mixes credential resolution, quota discovery, monitoring, and reconciliation wiring; `get_quota_info()` exposes internal guard state to admin dashboard; instance stored on `app.state.registry` |
 | `src/address_validator/services/validation/cache_db.py` | `AsyncEngine` singleton; `get_engine()` runs `alembic upgrade head` on first call — schema changes go through `alembic/versions/` migrations, not inline DDL |
 | `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type |
 | `src/address_validator/services/validation/chain_provider.py` | Catches both `ProviderRateLimitedError` and `ProviderAtCapacityError` — other exceptions propagate immediately without trying further providers |
