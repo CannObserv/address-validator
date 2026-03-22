@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.models import ErrorResponse, StandardizeRequestV1, StandardizeResponseV1
-from address_validator.routers.v1.core import APIError, check_country
+from address_validator.routers.v1.core import check_country
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 
@@ -32,22 +32,10 @@ def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
 
     if req.components:
         comps = req.components
-    elif req.address is not None:
-        raw = req.address.strip()
-        if not raw:
-            raise APIError(
-                status_code=400,
-                error="address_required",
-                message="Provide 'address' (non-empty string) or 'components' (non-empty object).",
-            )
-        parse_result = parse_address(raw, country=req.country)
+    else:
+        # model_validator guarantees address is non-blank when components is absent
+        parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
-    else:
-        raise APIError(
-            status_code=400,
-            error="components_or_address_required",
-            message="Provide 'address' (non-empty string) or 'components' (non-empty object).",
-        )
 
     return standardize(comps, country=req.country, upstream_warnings=upstream_warnings)

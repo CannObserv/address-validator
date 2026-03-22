@@ -24,14 +24,13 @@ class TestV1StandardizeFromAddress:
         assert body["region"] == "WA"
         assert body["postal_code"] == "98101"
 
-    def test_blank_address_returns_400(self, client) -> None:
+    def test_blank_address_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={"address": "   "})
-        assert response.status_code == 400
+        assert response.status_code == 422
 
-    def test_no_address_or_components_returns_400(self, client) -> None:
+    def test_no_address_or_components_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={})
-        assert response.status_code == 400
-        assert response.json()["error"] == "components_or_address_required"
+        assert response.status_code == 422
 
     def test_address_too_long_returns_422(self, client) -> None:
         response = client.post("/api/v1/standardize", json={"address": "A" * 1001})

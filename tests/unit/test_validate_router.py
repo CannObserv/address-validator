@@ -2,7 +2,9 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from address_validator.main import app
 from address_validator.models import (
@@ -146,29 +148,26 @@ class TestValidateEndpoint:
         assert provider_warning in warnings
         assert warnings.index(provider_warning) > 0
 
-    def test_blank_address_returns_400(self, client: TestClient) -> None:
+    def test_blank_address_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"address": "   "},
         )
-        assert resp.status_code == 400
-        assert resp.json()["error"] == "address_required"
+        assert resp.status_code == 422
 
-    def test_missing_both_fields_returns_400(self, client: TestClient) -> None:
+    def test_missing_both_fields_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={},
         )
-        assert resp.status_code == 400
-        assert resp.json()["error"] == "components_or_address_required"
+        assert resp.status_code == 422
 
-    def test_empty_components_dict_falls_through_to_address_error(self, client: TestClient) -> None:
+    def test_empty_components_dict_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"components": {}},
         )
-        assert resp.status_code == 400
-        assert resp.json()["error"] == "components_or_address_required"
+        assert resp.status_code == 422
 
     def test_unsupported_country_returns_422(self, client: TestClient) -> None:
         resp = client.post(
@@ -293,10 +292,9 @@ class TestValidateRequestV1Model:
         assert req.components == {"address_number": "123", "street_name": "MAIN"}
         assert req.address is None
 
-    def test_both_fields_none_is_valid_at_model_level(self) -> None:
-        req = ValidateRequestV1()
-        assert req.address is None
-        assert req.components is None
+    def test_both_fields_none_raises_validation_error(self) -> None:
+        with pytest.raises(ValidationError):
+            ValidateRequestV1()
 
     def test_country_defaults_to_us(self) -> None:
         req = ValidateRequestV1(address="123 Main St")

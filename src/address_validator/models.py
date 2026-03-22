@@ -9,9 +9,9 @@ Note: ``api_version`` in response bodies refers to the route namespace
 The two signals are intentionally decoupled.
 """
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ComponentSet(BaseModel):
@@ -113,19 +113,38 @@ class CountryRequestMixin(BaseModel):
         return v  # type: ignore[return-value]
 
 
+class AddressInputMixin(BaseModel):
+    """Mixin that adds ``address``/``components`` input fields to v1 request models.
+
+    Enforces that at least one of ``address`` (non-blank string) or
+    ``components`` (non-empty dict) is supplied.  When both are provided,
+    ``components`` takes precedence in the router.
+    """
+
+    address: str | None = Field(None, max_length=1000)
+    components: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def require_address_or_components(self) -> Self:
+        has_components = bool(self.components)
+        has_address = self.address is not None and self.address.strip() != ""
+        if not has_components and not has_address:
+            raise ValueError(
+                "Provide 'address' (non-empty string) or 'components' (non-empty object)."
+            )
+        return self
+
+
 class ParseRequestV1(CountryRequestMixin):
     address: str = Field(..., max_length=1000)
 
 
-class StandardizeRequestV1(CountryRequestMixin):
+class StandardizeRequestV1(CountryRequestMixin, AddressInputMixin):
     """Accept either a raw address string *or* pre-parsed components.
 
     When both ``address`` and ``components`` are provided, ``components``
     takes precedence and ``address`` is ignored.
     """
-
-    address: str | None = Field(None, max_length=1000)
-    components: dict[str, str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +152,7 @@ class StandardizeRequestV1(CountryRequestMixin):
 # ---------------------------------------------------------------------------
 
 
-class ValidateRequestV1(CountryRequestMixin):
+class ValidateRequestV1(CountryRequestMixin, AddressInputMixin):
     """Request body for POST /api/v1/validate.
 
     Accepts either a raw address string *or* pre-parsed components — mirroring
@@ -143,12 +162,8 @@ class ValidateRequestV1(CountryRequestMixin):
 
     ``address`` is the full raw address string (not just the street line).
     When both fields are supplied, ``components`` takes precedence and
-    ``address`` is ignored.  Validation of which fields are present happens
-    in the router, not here.
+    ``address`` is ignored.
     """
-
-    address: str | None = Field(None, max_length=1000)
-    components: dict[str, str] | None = None
 
 
 # ---------------------------------------------------------------------------
