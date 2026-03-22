@@ -66,7 +66,8 @@ See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance s
 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
 - Key at `/etc/address-validator/env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
-- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`
+- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`
+- `GET /api/v1/health` returns `{"status": "ok"|"degraded", "api_version": "1", "database": "ok"|"error"|"unconfigured"}`; HTTP 503 when `status == "degraded"` (DB unreachable); `database == "unconfigured"` when no DSN is configured
 - Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from address_validator.main import app` above the `setdefault` call
 - Google provider uses Application Default Credentials (ADC) — no API key. Required IAM roles: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin dashboard (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`); any authenticated user is admin

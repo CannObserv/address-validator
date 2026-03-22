@@ -35,6 +35,7 @@ class TestHealth:
         assert response.status_code == 200
         assert response.json()["database"] == "ok"
         assert response.json()["status"] == "ok"
+        mock_conn.execute.assert_awaited_once()
 
     def test_health_database_error(self, client) -> None:
         """When SELECT 1 fails, status is 'degraded' and HTTP 503 is returned."""
@@ -42,7 +43,6 @@ class TestHealth:
         mock_engine.connect.return_value.__aenter__ = AsyncMock(
             side_effect=Exception("connection refused")
         )
-        mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
         with patch.object(client.app.state, "engine", mock_engine, create=True):
             response = client.get("/api/v1/health")
