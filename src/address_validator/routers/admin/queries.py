@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlalchemy import func, select, union_all
 
-from address_validator.db.tables import audit_daily_stats, audit_log
+from address_validator.db.tables import ERROR_STATUS_MIN, audit_daily_stats, audit_log
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement, Select
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 # Shared expressions
 # ---------------------------------------------------------------------------
 
-_ERROR_STATUS_MIN = 400
 _API_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
 _API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
 
@@ -57,7 +56,7 @@ def _time_boundaries() -> dict[str, datetime]:
 
 def _from_live(columns: list, *where: ColumnElement) -> Select:
     """Build a SELECT from audit_log with optional WHERE clauses."""
-    stmt = select(*columns)
+    stmt = select(*columns).select_from(audit_log)
     for cond in where:
         stmt = stmt.where(cond)
     return stmt
@@ -65,7 +64,7 @@ def _from_live(columns: list, *where: ColumnElement) -> Select:
 
 def _from_archived(columns: list, *where: ColumnElement) -> Select:
     """Build a SELECT from audit_daily_stats with the date guard baked in."""
-    stmt = select(*columns).where(_ARCHIVED_DATE_GUARD)
+    stmt = select(*columns).select_from(audit_daily_stats).where(_ARCHIVED_DATE_GUARD)
     for cond in where:
         stmt = stmt.where(cond)
     return stmt
@@ -93,7 +92,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         func.count().filter(audit_log.c.timestamp >= week_start).label("week"),
                         func.count()
                         .filter(
-                            audit_log.c.status_code >= _ERROR_STATUS_MIN,
+                            audit_log.c.status_code >= ERROR_STATUS_MIN,
                             audit_log.c.timestamp >= last_24h,
                             _API_ENDPOINT_FILTER,
                         )
@@ -275,7 +274,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                         .label("last_24h"),
                         func.count().filter(audit_log.c.timestamp >= tb["week"]).label("week"),
                         func.count()
-                        .filter(audit_log.c.status_code >= _ERROR_STATUS_MIN)
+                        .filter(audit_log.c.status_code >= ERROR_STATUS_MIN)
                         .label("errors"),
                         func.avg(audit_log.c.latency_ms)
                         .filter(audit_log.c.latency_ms.isnot(None))
@@ -486,7 +485,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
                     [
                         day_bucket,
                         func.count()
-                        .filter(audit_log.c.status_code >= _ERROR_STATUS_MIN)
+                        .filter(audit_log.c.status_code >= ERROR_STATUS_MIN)
                         .label("errors"),
                         func.count().label("total"),
                     ],

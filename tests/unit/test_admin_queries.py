@@ -114,6 +114,14 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_audit_rows_unfiltered(db: AsyncEngine) -> None:
+    await _seed_rows(db)
+    rows, total = await get_audit_rows(db)
+    assert total == 6
+    assert len(rows) == 6
+
+
+@pytest.mark.asyncio
 async def test_get_audit_rows_with_filter(db: AsyncEngine) -> None:
     await _seed_rows(db)
     rows, total = await get_audit_rows(db, endpoint="parse")

@@ -34,9 +34,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from address_validator.db.tables import audit_daily_stats, audit_log
-
-_ERROR_STATUS_MIN = 400
+from address_validator.db.tables import ERROR_STATUS_MIN, audit_daily_stats, audit_log
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -53,7 +51,7 @@ def _build_aggregate_select(*, cutoff: bool) -> sa.Select:
         audit_log.c.status_code,
         audit_log.c.cache_hit,
         func.count().label("request_count"),
-        func.count().filter(audit_log.c.status_code >= _ERROR_STATUS_MIN).label("error_count"),
+        func.count().filter(audit_log.c.status_code >= ERROR_STATUS_MIN).label("error_count"),
         sa.cast(func.avg(audit_log.c.latency_ms), sa.Integer).label("avg_latency_ms"),
         sa.cast(
             func.percentile_cont(0.95).within_group(audit_log.c.latency_ms),

@@ -27,6 +27,9 @@ audit_log = sa.Table(
     sa.Column("error_detail", sa.Text(), nullable=True),
 )
 
+# Shared query constants
+ERROR_STATUS_MIN = 400
+
 audit_daily_stats = sa.Table(
     "audit_daily_stats",
     metadata,
