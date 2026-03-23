@@ -132,6 +132,9 @@ class TestQuotaGuard:
             latency_budget_s=2.0,
             provider_name="test",
         )
+        # Window 0: rate=1/s, tokens=0.5 → needs (1 - 0.5) / 1 = 0.5s
+        # Window 1: rate=1/s, tokens=0.8 → needs (1 - 0.8) / 1 = 0.2s
+        # Max = 0.5s; budget = 2.0s → should sleep ~0.5s, not ~0.7s (sum)
         guard._tokens[0] = 0.5
         guard._tokens[1] = 0.8
         now = time.monotonic()

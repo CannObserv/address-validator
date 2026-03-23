@@ -118,8 +118,9 @@ class QuotaGuard:
        immediately if any ``"hard"`` window has no token.
     3. Computes the maximum wait across all windows that need one.
     4. Raises if that wait exceeds ``latency_budget_s``.
-    5. Sleeps the required wait, re-refills, then consumes one token from
-       every window.
+    5. Releases lock, sleeps the required wait, re-acquires lock, then
+       re-checks token availability and consumes one token from every
+       window (loops if needed).
 
     Parameters
     ----------
