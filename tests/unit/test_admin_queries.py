@@ -97,6 +97,7 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     await _seed_rows(db)
     stats = await get_dashboard_stats(db)
     assert stats["requests_24h"] == 6
+    assert stats["requests_7d"] == 6
     assert stats["requests_all"] == 6
     assert stats["cache_hit_rate"] == 50.0
     # Error rate: 1 error (parse 400) out of 5 API requests in last 24h = 20%
@@ -108,6 +109,10 @@ async def test_get_dashboard_stats(db: AsyncEngine) -> None:
     assert bd["all"]["/parse"] == 2
     assert bd["all"]["/standardize"] == 1
     assert bd["all"]["other"] == 1
+    assert bd["7d"]["/validate"] == 2
+    assert bd["7d"]["/parse"] == 2
+    assert bd["7d"]["/standardize"] == 1
+    assert bd["7d"]["other"] == 1
     assert bd["24h"]["/validate"] == 2
     assert bd["24h"]["/standardize"] == 1
     assert bd["24h"]["other"] == 1
@@ -161,7 +166,7 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
     data = await get_sparkline_data(db)
     assert set(data.keys()) == {
         "requests_all",
-        "requests_week",
+        "requests_7d",
         "requests_24h",
         "cache_hit_rate",
         "error_rate",
@@ -225,8 +230,9 @@ async def test_dashboard_stats_includes_archived(db: AsyncEngine) -> None:
     stats = await get_dashboard_stats(db)
     # All-time: 6 live + 60 archived = 66
     assert stats["requests_all"] == 66
-    # 24h and week should only count live rows
+    # 24h and 7d should only count live rows
     assert stats["requests_24h"] == 6
+    assert stats["requests_7d"] == 6
 
     # Endpoint breakdown all-time should include archived
     bd = stats["endpoint_breakdown"]
@@ -264,7 +270,7 @@ async def test_get_sparkline_data_empty_db(db: AsyncEngine) -> None:
     """Sparkline data returns zero-filled lists on empty audit_log."""
     data = await get_sparkline_data(db)
     assert len(data["requests_all"]) == 30
-    assert len(data["requests_week"]) == 7
+    assert len(data["requests_7d"]) == 7
     assert len(data["requests_24h"]) == 24
     assert len(data["cache_hit_rate"]) == 7
     assert len(data["error_rate"]) == 7

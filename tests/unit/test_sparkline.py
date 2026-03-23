@@ -59,7 +59,7 @@ def test_build_sparkline_label_escaped() -> None:
 
 def test_sparkline_config_has_all_keys() -> None:
     """SPARKLINE_CONFIG has entries for all 5 dashboard cards."""
-    expected = {"requests_all", "requests_week", "requests_24h", "cache_hit_rate", "error_rate"}
+    expected = {"requests_all", "requests_7d", "requests_24h", "cache_hit_rate", "error_rate"}
     assert set(SPARKLINE_CONFIG.keys()) == expected
     # SPARKLINE_COLORS is derived from CONFIG — same keys.
     assert set(SPARKLINE_COLORS.keys()) == expected

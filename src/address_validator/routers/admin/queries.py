@@ -45,7 +45,7 @@ def _time_boundaries() -> dict[str, datetime]:
         "now": now,
         "today": today_start,
         "last_24h": now - timedelta(hours=24),
-        "week": today_start - timedelta(days=today_start.weekday()),
+        "last_7d": now - timedelta(days=7),
     }
 
 
@@ -78,7 +78,7 @@ def _from_archived(columns: list, *where: ColumnElement) -> Select:
 async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     """Fetch aggregate stats for the dashboard landing page."""
     tb = _time_boundaries()
-    week_start = tb["week"]
+    last_7d = tb["last_7d"]
     last_24h = tb["last_24h"]
 
     async with engine.connect() as conn:
@@ -89,7 +89,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     [
                         func.count().label("total"),
                         func.count().filter(audit_log.c.timestamp >= last_24h).label("last_24h"),
-                        func.count().filter(audit_log.c.timestamp >= week_start).label("week"),
+                        func.count().filter(audit_log.c.timestamp >= last_7d).label("last_7d"),
                         func.count()
                         .filter(
                             audit_log.c.status_code >= ERROR_STATUS_MIN,
@@ -117,7 +117,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
             )
         ).scalar()
 
-        # Cache hit rate — live only, validate endpoint, this week
+        # Cache hit rate — live only, validate endpoint, last 7 days
         cache_row = (
             await conn.execute(
                 _from_live(
@@ -126,7 +126,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         func.count().filter(audit_log.c.cache_hit.isnot(None)).label("total"),
                     ],
                     audit_log.c.endpoint == "/api/v1/validate",
-                    audit_log.c.timestamp >= week_start,
+                    audit_log.c.timestamp >= last_7d,
                 )
             )
         ).one()
@@ -139,7 +139,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         audit_log.c.endpoint,
                         func.count().label("total"),
                         func.count().filter(audit_log.c.timestamp >= last_24h).label("last_24h"),
-                        func.count().filter(audit_log.c.timestamp >= week_start).label("week"),
+                        func.count().filter(audit_log.c.timestamp >= last_7d).label("last_7d"),
                     ],
                 ).group_by(audit_log.c.endpoint)
             )
@@ -167,14 +167,14 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     }
     breakdown: dict[str, dict[str, int]] = {
         "all": {},
-        "week": {},
+        "7d": {},
         "24h": {},
     }
 
     # Live breakdown
     for ep_row in ep_rows:
         label = known.get(ep_row.endpoint, "other")
-        periods = (("all", "total"), ("week", "week"), ("24h", "last_24h"))
+        periods = (("all", "total"), ("7d", "last_7d"), ("24h", "last_24h"))
         for period, col in periods:
             breakdown[period][label] = breakdown[period].get(label, 0) + ep_row._mapping[col]  # noqa: SLF001
 
@@ -185,7 +185,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
 
     return {
         "requests_24h": row.last_24h,
-        "requests_week": row.week,
+        "requests_7d": row.last_7d,
         "requests_all": row.total + archived_total,
         "error_rate": error_rate,
         "cache_hit_rate": cache_hit_rate,
@@ -272,7 +272,9 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                         func.count()
                         .filter(audit_log.c.timestamp >= tb["last_24h"])
                         .label("last_24h"),
-                        func.count().filter(audit_log.c.timestamp >= tb["week"]).label("week"),
+                        func.count()
+                        .filter(audit_log.c.timestamp >= tb["last_7d"])
+                        .label("last_7d"),
                         func.count()
                         .filter(audit_log.c.status_code >= ERROR_STATUS_MIN)
                         .label("errors"),
@@ -338,7 +340,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
     return {
         "total": total,
         "last_24h": row.last_24h,
-        "week": row.week,
+        "last_7d": row.last_7d,
         "error_rate": error_rate,
         "avg_latency_ms": round(row.avg_latency) if row.avg_latency else None,
         "status_codes": {r.status_code: r.count for r in status_rows},
@@ -366,13 +368,13 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
                         func.count()
                         .filter(
                             audit_log.c.cache_hit.is_(True),
-                            audit_log.c.timestamp >= tb["week"],
+                            audit_log.c.timestamp >= tb["last_7d"],
                         )
                         .label("cache_hits"),
                         func.count()
                         .filter(
                             audit_log.c.cache_hit.isnot(None),
-                            audit_log.c.timestamp >= tb["week"],
+                            audit_log.c.timestamp >= tb["last_7d"],
                         )
                         .label("cache_total"),
                     ],
@@ -522,7 +524,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
 
     return {
         "requests_all": _fill_daily(daily_rows, start_30d, 30),
-        "requests_week": _fill_daily(daily_rows, start_7d, 7),
+        "requests_7d": _fill_daily(daily_rows, start_7d, 7),
         "requests_24h": _fill_hourly(hourly_rows, start_24h, 24),
         "cache_hit_rate": _fill_rate_daily(cache_rows, start_7d, 7, "hits", "total"),
         "error_rate": _fill_rate_daily(error_rows, start_7d, 7, "errors", "total"),
