@@ -324,7 +324,8 @@ class TestQuotaGuard:
 
         def controlled_monotonic() -> float:
             call_count[0] += 1
-            # Advance 0.4s per call — after ~4 calls (1.6s) exceeds 1.5s budget
+            # Advance 0.4s per call; deadline check on 2nd iteration (call 5)
+            # returns base + 2.0, exceeding deadline of base + 1.9
             return base + call_count[0] * 0.4
 
         async def mock_sleep(duration: float) -> None:

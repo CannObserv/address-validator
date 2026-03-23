@@ -31,6 +31,10 @@ _RETRY_BASE_DELAY_S = 1.0
 # Maximum jitter (seconds) added to exponential backoff to avoid thundering herd.
 _RETRY_JITTER_S = 0.5
 
+# Sub-nanosecond threshold below which a computed wait is treated as zero.
+# Prevents floating-point dust from triggering a sleep + re-acquire cycle.
+_WAIT_EPSILON_S = 1e-9
+
 
 @dataclass(frozen=True)
 class QuotaWindow:
@@ -193,7 +197,7 @@ class QuotaGuard:
                         max_wait = max(max_wait, wait)
 
                 # --- No wait needed: consume and return ---
-                if max_wait == 0:
+                if max_wait < _WAIT_EPSILON_S:
                     for i in range(len(self._windows)):
                         self._tokens[i] -= 1.0
                     return
