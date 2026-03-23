@@ -203,7 +203,7 @@ class QuotaGuard:
                     return
 
                 # --- Wait would exceed deadline: reject ---
-                if monotonic() + max_wait > deadline:
+                if now + max_wait > deadline:
                     raise ProviderAtCapacityError(self._provider_name)
 
                 wait = max_wait
