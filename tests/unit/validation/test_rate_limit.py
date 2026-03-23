@@ -1,5 +1,6 @@
 """Unit tests for services/validation/_rate_limit.py."""
 
+import asyncio
 import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -239,6 +240,109 @@ class TestQuotaGuard:
             await guard.acquire()
         # Tokens should have been reset to full, then 1 consumed
         assert guard._tokens[0] == 159.0
+
+    @pytest.mark.asyncio
+    async def test_concurrent_acquires_sleep_in_parallel(self) -> None:
+        """Two callers with empty bucket should both enter sleep concurrently."""
+        guard = self._soft_guard(limit=2, duration_s=1.0, latency_budget_s=2.0)
+        guard._tokens[0] = 0.0
+        guard._last_refill[0] = time.monotonic()
+
+        max_concurrent = 0
+        active = 0
+
+        _original_sleep = asyncio.sleep
+
+        async def tracking_sleep(duration: float) -> None:
+            nonlocal max_concurrent, active
+            active += 1
+            max_concurrent = max(max_concurrent, active)
+            await _original_sleep(0)  # yield so second caller can enter sleep
+            # Set tokens *after* yield so both callers are in sleep first
+            guard._tokens[0] = float(guard._windows[0].limit)
+            active -= 1
+
+        with patch(
+            "address_validator.services.validation._rate_limit.asyncio.sleep",
+            side_effect=tracking_sleep,
+        ):
+            await asyncio.gather(guard.acquire(), guard.acquire())
+
+        # Both callers should have slept concurrently (max_concurrent >= 2)
+        assert max_concurrent >= 2, (
+            f"Expected concurrent sleeps but max_concurrent={max_concurrent}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_retry_when_token_stolen_after_sleep(self) -> None:
+        """If another caller consumes the token while we sleep, loop retries."""
+        guard = self._soft_guard(limit=1, duration_s=1.0, latency_budget_s=3.0)
+        guard._tokens[0] = 0.0
+        guard._last_refill[0] = time.monotonic()
+
+        sleep_call_count = 0
+
+        async def mock_sleep(duration: float) -> None:
+            nonlocal sleep_call_count
+            sleep_call_count += 1
+            if sleep_call_count == 1:
+                # Simulate token refill but then stolen by another caller
+                guard._tokens[0] = 0.0
+                # Advance last_refill so next iteration computes a fresh wait
+                guard._last_refill[0] = time.monotonic()
+            else:
+                # Second sleep: let tokens refill normally
+                guard._tokens[0] = 1.0
+
+        with patch(
+            "address_validator.services.validation._rate_limit.asyncio.sleep",
+            side_effect=mock_sleep,
+        ):
+            await guard.acquire()
+
+        # Should have slept twice (first attempt: token stolen; second: success)
+        assert sleep_call_count == 2
+        # Token consumed
+        assert guard._tokens[0] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_deadline_expiry_across_retries(self) -> None:
+        """Tokens always stolen after sleep → budget exhausted → ProviderAtCapacityError."""
+        # rate=1/s, budget=1.5s — allows ~1 sleep of 1s, but not a second
+        guard = self._soft_guard(limit=1, duration_s=1.0, latency_budget_s=1.5)
+        guard._tokens[0] = 0.0
+        guard._last_refill[0] = time.monotonic()
+
+        # Use a controlled clock: each monotonic() call advances by a fixed step.
+        # acquire() calls monotonic() at least 3 times per iteration:
+        #   1. deadline = monotonic() + budget   (only first iteration)
+        #   2. now = monotonic()                 (refill)
+        #   3. monotonic() + max_wait > deadline (check)
+        # We need the deadline check on the 2nd iteration to exceed the budget.
+        base = time.monotonic()
+        call_count = [0]
+
+        def controlled_monotonic() -> float:
+            call_count[0] += 1
+            # Advance 0.4s per call — after ~4 calls (1.6s) exceeds 1.5s budget
+            return base + call_count[0] * 0.4
+
+        async def mock_sleep(duration: float) -> None:
+            # Token never becomes available — always stolen
+            guard._tokens[0] = 0.0
+
+        with (
+            patch(
+                "address_validator.services.validation._rate_limit.asyncio.sleep",
+                side_effect=mock_sleep,
+            ),
+            patch(
+                "address_validator.services.validation._rate_limit.monotonic",
+                side_effect=controlled_monotonic,
+            ),
+            pytest.raises(ProviderAtCapacityError),
+        ):
+            await guard.acquire()
 
 
 class TestParseRetryAfter:
