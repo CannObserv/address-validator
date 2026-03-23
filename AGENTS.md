@@ -68,7 +68,7 @@ See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance s
 - Key at `/etc/address-validator/env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`
 - `GET /api/v1/health` returns `{"status": "ok"|"degraded", "api_version": "1", "database": "ok"|"error"|"unconfigured"}`; HTTP 503 when `status == "degraded"` (DB unreachable); `database == "unconfigured"` when no DSN is configured
-- Tests: `conftest.py` sets `API_KEY` before importing app — don't move the `from address_validator.main import app` above the `setdefault` call
+- Tests: `conftest.py` sets `API_KEY` via `os.environ.setdefault` — value is read by the lifespan startup hook when `TestClient` first starts the app
 - Google provider uses Application Default Credentials (ADC) — no API key. Required IAM roles: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin dashboard (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`); any authenticated user is admin
 
@@ -154,7 +154,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
 | `src/address_validator/models.py` `AddressInputMixin` | Single enforcement point for address/components input validation across all endpoints — removing or weakening the `model_validator` silently removes the 422 guard for both `/standardize` and `/validate` |
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
-| `src/address_validator/auth.py` | API key read once at import time; raises 503 on first request if `API_KEY` unset — module is importable without the env var |
+| `src/address_validator/auth.py` | API key read from `app.state.api_key` (set by lifespan); raises 503 when `API_KEY` unset — module is importable without the env var |
 | `src/address_validator/services/validation/config.py` | `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; pydantic-settings validators enforce business rules — changes affect all env-var parsing |
 | `src/address_validator/services/validation/registry.py` | `ProviderRegistry` owns provider lifecycle — `_build_google_provider` mixes credential resolution, quota discovery, monitoring, and reconciliation wiring; `get_quota_info()` reads quota state via public `provider.client.quota_guard` API; instance stored on `app.state.registry` |
 | `src/address_validator/db/engine.py` | `AsyncEngine` singleton; `init_engine()` (lifespan) creates engine + runs Alembic; `get_engine()` is sync, raises pre-init — schema changes go through `alembic/versions/` |

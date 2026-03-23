@@ -13,12 +13,22 @@ from fastapi import HTTPException
 from address_validator import auth
 
 _PROJECT_ROOT = str(Path(__file__).parent.parent.parent)
+_CONFIGURED_KEY = "configured-test-key"
 
 
-def _mock_request(path: str = "/api/test") -> MagicMock:
-    """Return a minimal mock of a FastAPI/Starlette Request."""
+def _mock_request(
+    path: str = "/api/test",
+    configured_key: str | None = _CONFIGURED_KEY,
+) -> MagicMock:
+    """Return a minimal mock of a FastAPI/Starlette Request.
+
+    ``configured_key`` is stored on ``req.app.state.api_key`` to simulate the
+    value set by the lifespan startup hook.  Pass ``None`` to simulate a
+    misconfigured service.
+    """
     req = MagicMock()
     req.url.path = path
+    req.app.state.api_key = configured_key
     return req
 
 
@@ -27,9 +37,8 @@ class TestRequireApiKey:
 
     @pytest.mark.asyncio
     async def test_valid_key_accepted(self) -> None:
-        assert auth._API_KEY is not None, "conftest must set API_KEY before this test runs"
-        result = await auth.require_api_key(_mock_request(), auth._API_KEY)
-        assert result == auth._API_KEY
+        result = await auth.require_api_key(_mock_request(), _CONFIGURED_KEY)
+        assert result == _CONFIGURED_KEY
 
     @pytest.mark.asyncio
     async def test_missing_key_raises_401(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -70,7 +79,7 @@ class TestApiKeyImportGuard:
 
     We verify importability by running a fresh Python subprocess with API_KEY
     deliberately absent from its environment, and verify the runtime guard by
-    calling require_api_key with _API_KEY patched to None.
+    passing a request with app.state.api_key set to None.
     """
 
     def test_module_importable_without_api_key(self) -> None:
@@ -97,8 +106,7 @@ class TestApiKeyImportGuard:
         assert result.returncode == 0, result.stderr
 
     @pytest.mark.asyncio
-    async def test_unconfigured_key_raises_503(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(auth, "_API_KEY", None)
+    async def test_unconfigured_key_raises_503(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
-            await auth.require_api_key(_mock_request(), "any-key")
+            await auth.require_api_key(_mock_request(configured_key=None), "any-key")
         assert exc_info.value.status_code == 503

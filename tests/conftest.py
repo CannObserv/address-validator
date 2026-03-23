@@ -1,30 +1,13 @@
-"""Shared pytest fixtures for the address-validator test suite.
-
-Auth handling
--------------
-``auth.py`` reads ``API_KEY`` once at import time into ``_API_KEY``.  If the
-variable is absent or empty, ``_API_KEY`` is ``None`` and any authenticated
-request returns HTTP 503.  The sentinel value below ensures ``_API_KEY`` is
-populated correctly for all test HTTP clients.
-
-Import order
-------------
-``from address_validator.main import app`` must come *after*
-``os.environ.setdefault`` below so that ``_API_KEY`` is set to the test key
-when the module is first imported.  PLC0415 is suppressed on that import.
-"""
+"""Shared pytest fixtures for the address-validator test suite."""
 
 import os
 
 import pytest
 from fastapi.testclient import TestClient
 
-# Must be set before application modules are imported so auth.py doesn't
-# raise at collection time.
 TEST_API_KEY = "test-api-key-for-pytest"
 os.environ.setdefault("API_KEY", TEST_API_KEY)
 
-# Deferred import: ordering constraint — must follow os.environ.setdefault.
 from address_validator.main import app  # noqa: E402
 
 

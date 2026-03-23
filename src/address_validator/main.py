@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -61,7 +62,9 @@ _TAGS = [
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
+    """FastAPI lifespan context — set API key, validate config, and close DB on shutdown."""
+    app.state.api_key = os.environ.get("API_KEY", "").strip() or None
+
     await db_engine.init_engine()
     try:
         app.state.engine = db_engine.get_engine()  # None when no DSN configured
