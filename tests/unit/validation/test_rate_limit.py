@@ -56,7 +56,14 @@ class TestQuotaGuard:
         guard._tokens[0] = 0.0
         guard._last_refill[0] = time.monotonic()
 
-        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        async def refilling_sleep(duration: float) -> None:
+            # Simulate token refill that would happen during real sleep
+            guard._tokens[0] = 1.0
+
+        with patch(
+            "address_validator.services.validation._rate_limit.asyncio.sleep",
+            side_effect=refilling_sleep,
+        ) as mock_sleep:
             await guard.acquire()
 
         mock_sleep.assert_called_once()
@@ -117,9 +124,6 @@ class TestQuotaGuard:
 
     @pytest.mark.asyncio
     async def test_multi_window_wait_is_max_not_sum(self) -> None:
-        # Window 0: rate=1/s, tokens=0.5 → needs 0.5s
-        # Window 1: rate=1/s, tokens=0.8 → needs 0.2s
-        # Max = 0.5s; budget = 2.0s → should sleep ~0.5s, not ~0.7s
         guard = QuotaGuard(
             windows=[
                 QuotaWindow(limit=1, duration_s=1.0, mode="soft"),
@@ -134,12 +138,18 @@ class TestQuotaGuard:
         guard._last_refill[0] = now
         guard._last_refill[1] = now
 
-        with patch("address_validator.services.validation._rate_limit.asyncio.sleep") as mock_sleep:
+        async def refilling_sleep(duration: float) -> None:
+            guard._tokens[0] = 1.0
+            guard._tokens[1] = 1.0
+
+        with patch(
+            "address_validator.services.validation._rate_limit.asyncio.sleep",
+            side_effect=refilling_sleep,
+        ) as mock_sleep:
             await guard.acquire()
 
         mock_sleep.assert_called_once()
         sleep_time = mock_sleep.call_args[0][0]
-        # Should be ~0.5s (max), not ~0.7s (sum); allow floating point tolerance
         assert 0.45 <= sleep_time <= 0.6
 
     @pytest.mark.asyncio

@@ -152,48 +152,21 @@ class QuotaGuard:
 
     async def acquire(self) -> None:  # noqa: PLR0912
         """Acquire one token from every window, blocking up to the latency budget."""
-        async with self._lock:
-            # --- Fixed-reset windows: reset at day boundary ---
-            for i, window in enumerate(self._windows):
-                if (
-                    isinstance(window, FixedResetQuotaWindow)
-                    and self._last_reset[i] is not None
-                    and window.should_reset(self._last_reset[i])
-                ):
-                    self._tokens[i] = float(window.limit)
-                    self._last_reset[i] = _now_in_tz(window.timezone)
+        deadline = monotonic() + self._latency_budget_s
 
-            # --- Refill all windows ---
-            now = monotonic()
-            for i, window in enumerate(self._windows):
-                if isinstance(window, FixedResetQuotaWindow):
-                    continue
-                rate = window.limit / window.duration_s
-                elapsed = now - self._last_refill[i]
-                self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
-                self._last_refill[i] = now
+        while True:
+            async with self._lock:
+                # --- Fixed-reset windows: reset at day boundary ---
+                for i, window in enumerate(self._windows):
+                    if (
+                        isinstance(window, FixedResetQuotaWindow)
+                        and self._last_reset[i] is not None
+                        and window.should_reset(self._last_reset[i])
+                    ):
+                        self._tokens[i] = float(window.limit)
+                        self._last_reset[i] = _now_in_tz(window.timezone)
 
-            # --- Hard windows: reject immediately if exhausted ---
-            for i, window in enumerate(self._windows):
-                if window.mode == "hard" and self._tokens[i] < 1:
-                    raise ProviderAtCapacityError(self._provider_name)
-
-            # --- Soft windows: compute max wait ---
-            max_wait = 0.0
-            for i, window in enumerate(self._windows):
-                if isinstance(window, FixedResetQuotaWindow):
-                    continue
-                if self._tokens[i] < 1:
-                    rate = window.limit / window.duration_s
-                    wait = (1 - self._tokens[i]) / rate
-                    max_wait = max(max_wait, wait)
-
-            if max_wait > self._latency_budget_s:
-                raise ProviderAtCapacityError(self._provider_name)
-
-            # --- Sleep if needed, then re-refill ---
-            if max_wait > 0:
-                await asyncio.sleep(max_wait)
+                # --- Refill all windows ---
                 now = monotonic()
                 for i, window in enumerate(self._windows):
                     if isinstance(window, FixedResetQuotaWindow):
@@ -203,9 +176,36 @@ class QuotaGuard:
                     self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
                     self._last_refill[i] = now
 
-            # --- Consume from all windows ---
-            for i in range(len(self._windows)):
-                self._tokens[i] -= 1.0
+                # --- Hard windows: reject immediately if exhausted ---
+                for i, window in enumerate(self._windows):
+                    if window.mode == "hard" and self._tokens[i] < 1:
+                        raise ProviderAtCapacityError(self._provider_name)
+
+                # --- Soft windows: compute max wait ---
+                max_wait = 0.0
+                for i, window in enumerate(self._windows):
+                    if isinstance(window, FixedResetQuotaWindow):
+                        continue
+                    if self._tokens[i] < 1:
+                        rate = window.limit / window.duration_s
+                        wait = (1 - self._tokens[i]) / rate
+                        max_wait = max(max_wait, wait)
+
+                # --- No wait needed: consume and return ---
+                if max_wait == 0:
+                    for i in range(len(self._windows)):
+                        self._tokens[i] -= 1.0
+                    return
+
+                # --- Wait would exceed deadline: reject ---
+                if monotonic() + max_wait > deadline:
+                    raise ProviderAtCapacityError(self._provider_name)
+
+                wait = max_wait
+
+            # --- Lock released: sleep concurrently with other waiters ---
+            await asyncio.sleep(wait)
+            # Loop back to re-acquire lock and re-check token availability
 
     def adjust_tokens(self, window_index: int, delta: float) -> None:
         """Adjust the token count for a specific window by *delta*.
