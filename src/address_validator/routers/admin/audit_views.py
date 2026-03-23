@@ -2,13 +2,12 @@
 
 import math
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse
 from starlette.responses import Response
 
-from address_validator.db import engine as db_engine
 from address_validator.routers.admin._config import get_css_version, templates
-from address_validator.routers.admin.deps import get_admin_user
+from address_validator.routers.admin.deps import AdminContext, get_admin_context
 from address_validator.routers.admin.queries import get_audit_rows
 
 router = APIRouter(prefix="/audit")
@@ -23,23 +22,16 @@ async def audit_list(
     client_ip: str | None = Query(None),
     endpoint: str | None = Query(None),
     status_min: int | None = Query(None, ge=100, le=599),
+    ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
-    user = get_admin_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
-    try:
-        engine = db_engine.get_engine()
-        rows, total = await get_audit_rows(
-            engine,
-            page=page,
-            per_page=_PER_PAGE,
-            endpoint=endpoint,
-            client_ip=client_ip,
-            status_min=status_min,
-        )
-    except Exception:
-        rows, total = [], 0
+    rows, total = await get_audit_rows(
+        ctx.engine,
+        page=page,
+        per_page=_PER_PAGE,
+        endpoint=endpoint,
+        client_ip=client_ip,
+        status_min=status_min,
+    )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
     filters = {"client_ip": client_ip, "endpoint": endpoint, "status_min": status_min}
@@ -55,7 +47,7 @@ async def audit_list(
         "admin/audit/list.html",
         {
             "request": request,
-            "user": user,
+            "user": ctx.user,
             "active_nav": "audit",
             "css_version": get_css_version(),
             "rows": rows,

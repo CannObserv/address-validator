@@ -2,13 +2,12 @@
 
 import math
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
 from starlette.responses import Response
 
-from address_validator.db import engine as db_engine
 from address_validator.routers.admin._config import get_css_version, templates
-from address_validator.routers.admin.deps import get_admin_user
+from address_validator.routers.admin.deps import AdminContext, get_admin_context
 from address_validator.routers.admin.queries import get_audit_rows, get_endpoint_stats
 
 router = APIRouter(prefix="/endpoints")
@@ -23,27 +22,19 @@ async def endpoint_detail(
     name: str,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
+    ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     if name not in _VALID_ENDPOINTS:
         raise HTTPException(status_code=404, detail="Unknown endpoint")
 
-    user = get_admin_user(request)
-    if isinstance(user, RedirectResponse):
-        return user
-
-    try:
-        engine = db_engine.get_engine()
-        stats = await get_endpoint_stats(engine, name)
-        rows, total = await get_audit_rows(
-            engine,
-            page=page,
-            per_page=_PER_PAGE,
-            endpoint=name,
-            client_ip=client_ip,
-        )
-    except Exception:
-        stats = {}
-        rows, total = [], 0
+    stats = await get_endpoint_stats(ctx.engine, name)
+    rows, total = await get_audit_rows(
+        ctx.engine,
+        page=page,
+        per_page=_PER_PAGE,
+        endpoint=name,
+        client_ip=client_ip,
+    )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
     filters = {"client_ip": client_ip}
@@ -59,7 +50,7 @@ async def endpoint_detail(
         "admin/endpoints/detail.html",
         {
             "request": request,
-            "user": user,
+            "user": ctx.user,
             "active_nav": f"endpoint_{name}",
             "css_version": get_css_version(),
             "endpoint_name": name,

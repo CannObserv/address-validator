@@ -95,5 +95,8 @@ ignore = [
     "SLF001",  # Private member access is intentional in tests
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["address_validator"]

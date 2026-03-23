@@ -1,29 +1,83 @@
 """Integration tests for admin dashboard views."""
 
+from unittest.mock import patch
+
+import pytest
 from starlette.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _mock_engine(client: TestClient):
+    """Set a fake engine on app.state so admin routes don't 503.
+
+    Tests that explicitly need engine=None override this by setting it themselves.
+    Query functions are patched to return empty results since there is no real DB.
+    """
+    original = getattr(client.app.state, "engine", None)  # type: ignore[union-attr]
+    client.app.state.engine = "fake-engine"  # type: ignore[union-attr]
+
+    async def _empty_stats(_engine):
+        return {}
+
+    async def _empty_sparkline(_engine):
+        return {}
+
+    async def _empty_rows(_engine, **_kw):
+        return [], 0
+
+    async def _empty_endpoint_stats(_engine, _name):
+        return {}
+
+    async def _empty_provider_stats(_engine, _name):
+        return {}
+
+    with (
+        patch(
+            "address_validator.routers.admin.dashboard.get_dashboard_stats",
+            side_effect=_empty_stats,
+        ),
+        patch(
+            "address_validator.routers.admin.dashboard.get_sparkline_data",
+            side_effect=_empty_sparkline,
+        ),
+        patch(
+            "address_validator.routers.admin.audit_views.get_audit_rows",
+            side_effect=_empty_rows,
+        ),
+        patch(
+            "address_validator.routers.admin.endpoints.get_audit_rows",
+            side_effect=_empty_rows,
+        ),
+        patch(
+            "address_validator.routers.admin.endpoints.get_endpoint_stats",
+            side_effect=_empty_endpoint_stats,
+        ),
+        patch(
+            "address_validator.routers.admin.providers.get_audit_rows",
+            side_effect=_empty_rows,
+        ),
+        patch(
+            "address_validator.routers.admin.providers.get_provider_stats",
+            side_effect=_empty_provider_stats,
+        ),
+    ):
+        yield
+    client.app.state.engine = original  # type: ignore[union-attr]
 
 
 def test_admin_dashboard_503_when_no_engine(client: TestClient, admin_headers: dict) -> None:
     """Authenticated request returns 503 when database engine is None."""
-    original = getattr(client.app.state, "engine", None)  # type: ignore[union-attr]
-    try:
-        client.app.state.engine = None  # type: ignore[union-attr]
-        response = client.get("/admin/", headers=admin_headers)
-        assert response.status_code == 503
-        assert "Database Not Available" in response.text
-    finally:
-        client.app.state.engine = original  # type: ignore[union-attr]
+    client.app.state.engine = None  # type: ignore[union-attr]
+    response = client.get("/admin/", headers=admin_headers)
+    assert response.status_code == 503
+    assert "Database Not Available" in response.text
 
 
 def test_admin_audit_503_when_no_engine(client: TestClient, admin_headers: dict) -> None:
     """Audit view returns 503 when database engine is None."""
-    original = getattr(client.app.state, "engine", None)  # type: ignore[union-attr]
-    try:
-        client.app.state.engine = None  # type: ignore[union-attr]
-        response = client.get("/admin/audit/", headers=admin_headers)
-        assert response.status_code == 503
-    finally:
-        client.app.state.engine = original  # type: ignore[union-attr]
+    client.app.state.engine = None  # type: ignore[union-attr]
+    response = client.get("/admin/audit/", headers=admin_headers)
+    assert response.status_code == 503
 
 
 def test_admin_dashboard_requires_auth(client_no_auth: TestClient) -> None:
