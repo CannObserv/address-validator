@@ -3,6 +3,29 @@
 from starlette.testclient import TestClient
 
 
+def test_admin_dashboard_503_when_no_engine(client: TestClient, admin_headers: dict) -> None:
+    """Authenticated request returns 503 when database engine is None."""
+    original = getattr(client.app.state, "engine", None)  # type: ignore[union-attr]
+    try:
+        client.app.state.engine = None  # type: ignore[union-attr]
+        response = client.get("/admin/", headers=admin_headers)
+        assert response.status_code == 503
+        assert "Database Not Available" in response.text
+    finally:
+        client.app.state.engine = original  # type: ignore[union-attr]
+
+
+def test_admin_audit_503_when_no_engine(client: TestClient, admin_headers: dict) -> None:
+    """Audit view returns 503 when database engine is None."""
+    original = getattr(client.app.state, "engine", None)  # type: ignore[union-attr]
+    try:
+        client.app.state.engine = None  # type: ignore[union-attr]
+        response = client.get("/admin/audit/", headers=admin_headers)
+        assert response.status_code == 503
+    finally:
+        client.app.state.engine = original  # type: ignore[union-attr]
+
+
 def test_admin_dashboard_requires_auth(client_no_auth: TestClient) -> None:
     """Unauthenticated request to /admin/ redirects to login."""
     response = client_no_auth.get("/admin/", follow_redirects=False)

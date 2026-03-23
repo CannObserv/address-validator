@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from address_validator.db import engine as db_engine
@@ -19,6 +19,9 @@ from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.audit import audit_middleware
 from address_validator.middleware.request_id import request_id_middleware
 from address_validator.models import ErrorResponse
+from address_validator.routers.admin._config import get_css_version
+from address_validator.routers.admin._config import templates as admin_templates
+from address_validator.routers.admin.deps import AdminAuthRequired, DatabaseUnavailable
 from address_validator.routers.admin.router import admin_router
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
@@ -114,6 +117,26 @@ app = FastAPI(
     contact={"name": "Cannabis Observer", "email": "greg@cannabis.observer"},
     license_info={"name": "Proprietary"},
 )
+
+
+@app.exception_handler(AdminAuthRequired)
+async def _admin_auth_redirect(request: Request, exc: AdminAuthRequired) -> Response:
+    return RedirectResponse(url=exc.redirect_url, status_code=302)
+
+
+@app.exception_handler(DatabaseUnavailable)
+async def _admin_db_unavailable(request: Request, exc: DatabaseUnavailable) -> Response:
+    return admin_templates.TemplateResponse(
+        "admin/error_503.html",
+        {
+            "request": request,
+            "user": exc.user,
+            "active_nav": "",
+            "css_version": get_css_version(),
+        },
+        status_code=503,
+    )
+
 
 app.add_middleware(
     CORSMiddleware,
