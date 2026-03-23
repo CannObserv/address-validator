@@ -64,7 +64,7 @@ class TestGetAdminUser:
         url = exc_info.value.redirect_url
         assert "/admin/audit/" in url
         # query string is percent-encoded inside the redirect param
-        assert "page%3D2" in url or "page=2" in url
+        assert "page%3D2" in url
 
 
 class TestGetAdminContext:

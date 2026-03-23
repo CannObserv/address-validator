@@ -24,6 +24,7 @@ class AdminAuthRequired(Exception):
 
     def __init__(self, redirect_url: str) -> None:
         self.redirect_url = redirect_url
+        super().__init__(redirect_url)
 
 
 class DatabaseUnavailable(Exception):
@@ -31,6 +32,7 @@ class DatabaseUnavailable(Exception):
 
     def __init__(self, user: "AdminUser") -> None:
         self.user = user
+        super().__init__("database engine not configured")
 
 
 # ---------------------------------------------------------------------------
