@@ -1,17 +1,41 @@
-"""Admin dashboard authentication via exe.dev proxy headers.
+"""Admin dashboard dependency injection.
 
-The exe.dev reverse proxy injects X-ExeDev-UserID and X-ExeDev-Email headers
-when the user is authenticated. If absent, the user needs to log in via
-the /__exe.dev/login endpoint.
+Provides ``AdminContext`` via FastAPI ``Depends()`` — bundles authenticated
+user, database engine, and request into a single typed dependency.
 
-Any authenticated exe.dev user is treated as an admin (no RBAC).
+Custom exceptions (``AdminAuthRequired``, ``DatabaseUnavailable``) let
+dependencies abort requests; exception handlers in ``main.py`` convert them
+to the appropriate HTML responses (302 redirect / 503 error page).
 """
 
 from dataclasses import dataclass
 from urllib.parse import quote
 
 from fastapi import Request
-from starlette.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+# ---------------------------------------------------------------------------
+# Custom exceptions — caught by app-level exception handlers in main.py
+# ---------------------------------------------------------------------------
+
+
+class AdminAuthRequired(Exception):
+    """User is not authenticated via exe.dev proxy headers."""
+
+    def __init__(self, redirect_url: str) -> None:
+        self.redirect_url = redirect_url
+
+
+class DatabaseUnavailable(Exception):
+    """Database engine is not configured or not initialised."""
+
+    def __init__(self, user: "AdminUser") -> None:
+        self.user = user
+
+
+# ---------------------------------------------------------------------------
+# Value objects
+# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -22,8 +46,22 @@ class AdminUser:
     email: str
 
 
-def get_admin_user(request: Request) -> AdminUser | RedirectResponse:
-    """Read exe.dev proxy headers and return AdminUser or redirect to login."""
+@dataclass(frozen=True)
+class AdminContext:
+    """Composite dependency injected into every admin route handler."""
+
+    user: AdminUser
+    engine: AsyncEngine
+    request: Request
+
+
+# ---------------------------------------------------------------------------
+# Dependency functions (used with FastAPI Depends())
+# ---------------------------------------------------------------------------
+
+
+def get_admin_user(request: Request) -> AdminUser:
+    """Read exe.dev proxy headers; raise ``AdminAuthRequired`` if absent."""
     user_id = request.headers.get("X-ExeDev-UserID")
     email = request.headers.get("X-ExeDev-Email")
 
@@ -31,9 +69,22 @@ def get_admin_user(request: Request) -> AdminUser | RedirectResponse:
         next_url = str(request.url.path)
         if request.url.query:
             next_url = f"{next_url}?{request.url.query}"
-        return RedirectResponse(
-            url=f"/__exe.dev/login?redirect={quote(next_url)}",
-            status_code=302,
+        raise AdminAuthRequired(
+            redirect_url=f"/__exe.dev/login?redirect={quote(next_url)}",
         )
 
     return AdminUser(user_id=user_id, email=email)
+
+
+def get_admin_context(request: Request) -> AdminContext:
+    """Composite dependency — auth first, then engine.
+
+    Raises ``AdminAuthRequired`` if unauthenticated.
+    Raises ``DatabaseUnavailable`` if engine is None (carries the user for
+    the 503 template).
+    """
+    user = get_admin_user(request)
+    engine = getattr(request.app.state, "engine", None)
+    if engine is None:
+        raise DatabaseUnavailable(user=user)
+    return AdminContext(user=user, engine=engine, request=request)
