@@ -46,7 +46,10 @@ routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers)
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
-static/admin/js/    theme.js (dark mode), nav.js (hamburger)
+static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)
+tests/js/           Vitest + jsdom tests for admin JS (npm test)
+package.json        Node dev-only deps (vitest, jsdom); type: "module"
+vitest.config.js    Vitest config — jsdom environment, tests/js/ scope
 static/admin/images/ Cannabis Observer brand SVGs
 ```
 
@@ -118,6 +121,7 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 ```
 uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
+npm test                        # admin JS tests (vitest + jsdom)
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
