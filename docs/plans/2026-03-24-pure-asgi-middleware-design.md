@@ -50,10 +50,13 @@ wrap the `send` callable to intercept `http.response.start` messages.
 
 ### Middleware ordering
 
-`app.add_middleware` is LIFO. Current registration order preserved:
-1. `ApiVersionHeaderMiddleware` (outermost after CORS)
-2. `AuditMiddleware`
-3. `RequestIdMiddleware` (innermost — executes first)
+`app.add_middleware` is LIFO: last-registered wraps outermost, so it
+executes first.  Execution order (outermost → innermost):
+
+1. `ApiVersionHeaderMiddleware` (outermost — executes first)
+2. `RequestIdMiddleware` (sets ContextVar before inner middlewares run)
+3. `AuditMiddleware` (reads ContextVars after endpoint returns)
+4. `CORSMiddleware` (innermost)
 
 ## File changes
 

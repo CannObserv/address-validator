@@ -5,9 +5,8 @@ task as the endpoint so ContextVars propagate correctly in both directions.
 """
 
 from contextvars import ContextVar
-from typing import Any
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from ulid import ULID
 
 _request_id_var: ContextVar[str] = ContextVar("request_id", default="")
@@ -32,7 +31,7 @@ class RequestIdMiddleware:
         request_id = str(ULID())
         token = _request_id_var.set(request_id)
 
-        async def send_with_request_id(message: dict[str, Any]) -> None:
+        async def send_with_request_id(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"x-request-id", request_id.encode()))

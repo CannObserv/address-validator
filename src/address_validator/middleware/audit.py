@@ -11,9 +11,8 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any
 
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from address_validator.middleware.request_id import get_request_id
 from address_validator.services.audit import (
@@ -90,7 +89,7 @@ class AuditMiddleware:
         status_code = 0
         start = time.monotonic()
 
-        async def capture_status(message: dict[str, Any]) -> None:
+        async def capture_status(message: Message) -> None:
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message.get("status", 0)

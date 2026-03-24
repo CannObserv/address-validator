@@ -12,6 +12,7 @@ FastAPI service — parses and standardizes US physical addresses per USPS Publi
 # All source modules live under src/address_validator/
 
 HTTP request
+ └─ middleware/api_version.py appends API-Version header on /api/v1/ responses
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
  └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
  └─ routers/v1/               thin handlers, validation, error handling

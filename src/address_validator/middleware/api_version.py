@@ -4,9 +4,7 @@ Pure ASGI implementation — appends ``API-Version: 1`` to all responses
 on ``/api/v1/`` routes.
 """
 
-from typing import Any
-
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
 class ApiVersionHeaderMiddleware:
@@ -25,7 +23,7 @@ class ApiVersionHeaderMiddleware:
             await self.app(scope, receive, send)
             return
 
-        async def send_with_api_version(message: dict[str, Any]) -> None:
+        async def send_with_api_version(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"api-version", b"1"))
