@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import re
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 if TYPE_CHECKING:
     from starlette.testclient import TestClient
 
-from address_validator.middleware.audit import _should_audit
+from fastapi import FastAPI
+from starlette.testclient import TestClient as TC
+
+from address_validator.middleware.audit import AuditMiddleware, _should_audit
+from address_validator.middleware.request_id import RequestIdMiddleware
+from address_validator.services.audit import set_audit_context
 
 # ULID: 26 Crockford base-32 characters.
 _ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -64,3 +69,40 @@ def test_audit_row_receives_request_id(client: TestClient) -> None:
     request_id = mock_write.call_args.kwargs["request_id"]
     assert request_id is not None, "request_id was None — middleware ordering is broken"
     assert _ULID_RE.match(request_id), f"request_id {request_id!r} is not a valid ULID"
+
+
+def test_audit_row_receives_validation_context_vars() -> None:
+    """Regression: ContextVars set during the endpoint must propagate to audit.
+
+    With BaseHTTPMiddleware, call_next() ran the endpoint in a child asyncio
+    task.  ContextVars set in the child (by CachingProvider.set_audit_context)
+    were invisible to the parent task that writes the audit row.  Pure ASGI
+    middleware fixes this by running everything in one task.
+
+    Uses a minimal FastAPI app to isolate the middleware behaviour from the
+    full application stack.
+    """
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()  # non-None so audit writes
+
+    @mini.get("/api/v1/fake")
+    async def _fake_endpoint() -> dict[str, str]:
+        set_audit_context(provider="usps", validation_status="confirmed", cache_hit=False)
+        return {"ok": "true"}
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TC(mini)
+        tc.get("/api/v1/fake")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["provider"] == "usps", (
+        f"provider should be 'usps', got {kwargs['provider']!r} — ContextVar not propagated"
+    )
+    assert kwargs["validation_status"] == "confirmed", (
+        f"validation_status should be 'confirmed', got {kwargs['validation_status']!r}"
+    )
+    assert kwargs["cache_hit"] is False, f"cache_hit should be False, got {kwargs['cache_hit']!r}"

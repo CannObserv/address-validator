@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 import os
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,8 +16,9 @@ from fastapi.staticfiles import StaticFiles
 
 from address_validator.db import engine as db_engine
 from address_validator.logging_filter import RequestIdFilter
-from address_validator.middleware.audit import audit_middleware
-from address_validator.middleware.request_id import request_id_middleware
+from address_validator.middleware.api_version import ApiVersionHeaderMiddleware
+from address_validator.middleware.audit import AuditMiddleware
+from address_validator.middleware.request_id import RequestIdMiddleware
 from address_validator.models import ErrorResponse
 from address_validator.routers.admin._config import get_css_version
 from address_validator.routers.admin._config import templates as admin_templates
@@ -145,13 +146,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # ── Middleware ordering is load-bearing ──────────────────────────────
-# FastAPI middleware is LIFO: last-registered wraps outermost, so it
-# *executes first*.  request_id_middleware must execute BEFORE
-# audit_middleware so that get_request_id() returns a value when the
-# audit row is written.  Do NOT reorder these two lines.
+# add_middleware is LIFO: last-registered wraps outermost, so it
+# *executes first*.  RequestIdMiddleware must execute BEFORE
+# AuditMiddleware so that get_request_id() returns a value when the
+# audit row is written.  Do NOT reorder these lines.
 # Regression test: tests/unit/test_audit_middleware.py::test_audit_row_receives_request_id
-app.middleware("http")(audit_middleware)
-app.middleware("http")(request_id_middleware)
+app.add_middleware(AuditMiddleware)
+app.add_middleware(RequestIdMiddleware)
 
 
 @app.exception_handler(APIError)
@@ -196,15 +197,7 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     )
 
 
-@app.middleware("http")
-async def add_api_version_header(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    """Append ``API-Version: 1`` to all responses on ``/api/v1/`` routes."""
-    response = await call_next(request)
-    if request.url.path.startswith("/api/v1/"):
-        response.headers["API-Version"] = "1"
-    return response
+app.add_middleware(ApiVersionHeaderMiddleware)
 
 
 # v1 routes (current)

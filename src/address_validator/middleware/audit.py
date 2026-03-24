@@ -1,9 +1,8 @@
 """Audit logging middleware — records every API request to the audit_log table.
 
-Runs inside the request_id middleware so the ULID is available via ContextVar.
-Captures timing, client IP, status code, and validation-specific ContextVars
-(provider, status, cache_hit). Writes are fire-and-forget via asyncio.create_task
-to avoid adding latency to the response path.
+Pure ASGI implementation — no BaseHTTPMiddleware.  Runs in the same asyncio
+task as the endpoint so ContextVars set by the validation pipeline (provider,
+status, cache_hit) are visible when the audit row is written.
 
 Skips non-API routes: /, /docs, /redoc, /openapi.json, /admin/*, /static/*.
 """
@@ -11,10 +10,8 @@ Skips non-API routes: /, /docs, /redoc, /openapi.json, /admin/*, /static/*.
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-
-from fastapi import Request, Response
+from typing import Any
 
 from address_validator.middleware.request_id import get_request_id
 from address_validator.services.audit import (
@@ -26,6 +23,10 @@ from address_validator.services.audit import (
 )
 
 logger = logging.getLogger(__name__)
+
+Scope = dict[str, Any]
+Receive = Any
+Send = Any
 
 # Strong references to fire-and-forget tasks so they aren't garbage-collected.
 _background_tasks: set[asyncio.Task[None]] = set()
@@ -41,13 +42,14 @@ def _should_audit(path: str) -> bool:
     return not any(path.startswith(p) for p in _SKIP_PREFIXES)
 
 
-def _get_client_ip(request: Request) -> str:
-    """Extract client IP from X-Forwarded-For or fall back to request.client."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
+def _get_client_ip(scope: Scope) -> str:
+    """Extract client IP from X-Forwarded-For or fall back to scope client."""
+    for name, value in scope.get("headers", []):
+        if name == b"x-forwarded-for":
+            return value.decode().split(",")[0].strip()
+    client = scope.get("client")
+    if client:
+        return client[0]
     return "unknown"
 
 
@@ -69,46 +71,61 @@ def _error_detail_from_status(status_code: int) -> str | None:
     return phrases.get(status_code, f"http_{status_code}")
 
 
-async def audit_middleware(
-    request: Request,
-    call_next: Callable[[Request], Awaitable[Response]],
-) -> Response:
+class AuditMiddleware:
     """Record API requests to the audit_log table after the response is sent."""
-    path = request.url.path
 
-    if not _should_audit(path):
-        return await call_next(request)
+    def __init__(self, app: Any) -> None:
+        self.app = app
 
-    # Reset audit ContextVars so non-validate requests don't inherit
-    # stale values from a previous request on the same asyncio task.
-    reset_audit_context()
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    start = time.monotonic()
-    response = await call_next(request)
-    elapsed_ms = int((time.monotonic() - start) * 1000)
+        path: str = scope.get("path", "")
+        if not _should_audit(path):
+            await self.app(scope, receive, send)
+            return
 
-    # Fire-and-forget: write audit row without blocking the response
-    engine = getattr(request.app.state, "engine", None)
-    if engine is None:
-        return response
+        reset_audit_context()
 
-    task = asyncio.create_task(
-        write_audit_row(
-            engine,
-            timestamp=datetime.now(UTC),
-            request_id=get_request_id() or None,
-            client_ip=_get_client_ip(request),
-            method=request.method,
-            endpoint=path,
-            status_code=response.status_code,
-            latency_ms=elapsed_ms,
-            provider=get_audit_provider(),
-            validation_status=get_audit_validation_status(),
-            cache_hit=get_audit_cache_hit(),
-            error_detail=_error_detail_from_status(response.status_code),
+        status_code = 0
+        start = time.monotonic()
+
+        async def capture_status(message: dict[str, Any]) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 0)
+            await send(message)
+
+        await self.app(scope, receive, capture_status)
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+
+        from starlette.requests import Request  # noqa: PLC0415
+
+        request = Request(scope)
+        engine = getattr(request.app.state, "engine", None)
+        if engine is None:
+            return
+
+        method: str = scope.get("method", "")
+
+        task = asyncio.create_task(
+            write_audit_row(
+                engine,
+                timestamp=datetime.now(UTC),
+                request_id=get_request_id() or None,
+                client_ip=_get_client_ip(scope),
+                method=method,
+                endpoint=path,
+                status_code=status_code,
+                latency_ms=elapsed_ms,
+                provider=get_audit_provider(),
+                validation_status=get_audit_validation_status(),
+                cache_hit=get_audit_cache_hit(),
+                error_detail=_error_detail_from_status(status_code),
+            )
         )
-    )
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
-
-    return response
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
