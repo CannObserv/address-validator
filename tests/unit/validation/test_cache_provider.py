@@ -4,9 +4,10 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
     StandardizeResponseV1,
@@ -110,26 +111,28 @@ async def _backdate_validated_at(engine: AsyncEngine, days_ago: int) -> None:
     """Set validated_at on all validated_addresses rows to `days_ago` days in the past."""
     ts = datetime.now(UTC) - timedelta(days=days_ago)
     async with engine.begin() as conn:
-        await conn.execute(
-            text("UPDATE validated_addresses SET validated_at = :ts"),
-            {"ts": ts},
-        )
+        await conn.execute(update(validated_addresses).values(validated_at=ts))
 
 
-_TABLES = {"validated_addresses", "query_patterns"}
+_TABLE_MAP = {
+    "validated_addresses": validated_addresses,
+    "query_patterns": query_patterns,
+}
 
 
 async def _count_rows(engine: AsyncEngine, table: str) -> int:
-    if table not in _TABLES:
+    t = _TABLE_MAP.get(table)
+    if t is None:
         raise ValueError(f"unknown table: {table!r}")
     async with engine.connect() as conn:
-        return (await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))).scalar()
+        return (await conn.execute(select(func.count()).select_from(t))).scalar()
 
 
-async def _fetch_one(engine: AsyncEngine, query: str, params: dict | None = None):  # type: ignore[return]
+async def _fetch_one(engine: AsyncEngine, table, *where):
+    """Fetch one row from a Core Table with optional WHERE clauses."""
     async with engine.connect() as conn:
-        result = await conn.execute(text(query), params or {})
-        return result.mappings().fetchone()
+        stmt = select(table).where(*where) if where else select(table)
+        return (await conn.execute(stmt)).mappings().fetchone()
 
 
 # ---------------------------------------------------------------------------
@@ -158,11 +161,7 @@ class TestCacheMiss:
         await provider.validate(std)
 
         pattern_key = _make_pattern_key(std)
-        row = await _fetch_one(
-            db,
-            "SELECT * FROM query_patterns WHERE pattern_key = :pk",
-            {"pk": pattern_key},
-        )
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
         assert row is not None
 
     async def test_miss_stores_canonical(self, db: AsyncEngine) -> None:
@@ -174,9 +173,7 @@ class TestCacheMiss:
 
         canonical_key = _make_canonical_key(response)
         row = await _fetch_one(
-            db,
-            "SELECT * FROM validated_addresses WHERE canonical_key = :ck",
-            {"ck": canonical_key},
+            db, validated_addresses, validated_addresses.c.canonical_key == canonical_key
         )
         assert row is not None
         assert row["status"] == "confirmed"
@@ -489,14 +486,12 @@ class TestTTLExpiry:
 
         await provider.validate(std)  # miss
 
-        row_before = await _fetch_one(db, "SELECT validated_at FROM validated_addresses")
+        row_before = await _fetch_one(db, validated_addresses)
         validated_at_before = row_before["validated_at"]
 
         await provider.validate(std)  # hit — should bump last_seen_at, not validated_at
 
-        row_after = await _fetch_one(
-            db, "SELECT last_seen_at, validated_at FROM validated_addresses"
-        )
+        row_after = await _fetch_one(db, validated_addresses)
         assert row_after["validated_at"] == validated_at_before
         assert row_after["last_seen_at"] >= validated_at_before
 

@@ -116,7 +116,7 @@ def _row_to_response(row: RowMapping) -> ValidateResponseV1:
         validation=ValidationResult(
             status=row["status"],
             dpv_match_code=row["dpv_match_code"],
-            provider=row["provider"] or None,
+            provider=row["provider"],
         ),
         latitude=row["latitude"],
         longitude=row["longitude"],

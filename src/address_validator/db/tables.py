@@ -73,7 +73,7 @@ validated_addresses = sa.Table(
     sa.Column("components_json", JSONB(), nullable=True),
     sa.Column("latitude", sa.Double(), nullable=True),
     sa.Column("longitude", sa.Double(), nullable=True),
-    sa.Column("warnings_json", JSONB(), nullable=False, server_default="'[]'"),
+    sa.Column("warnings_json", JSONB(), nullable=False, server_default=sa.text("'[]'")),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("validated_at", sa.DateTime(timezone=True), nullable=False),
