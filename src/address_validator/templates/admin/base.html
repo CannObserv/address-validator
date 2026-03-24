@@ -10,7 +10,7 @@
     /* Synchronous dark-mode init — prevents FOUC */
     (function(){var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d)}())
     </script>
-    <script src="/static/admin/js/theme.js"></script>
+    <script type="module" src="/static/admin/js/theme.js"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
 {#- Nav items — single source of truth for both mobile and desktop nav -#}
@@ -113,6 +113,6 @@
             </div>
         </div>
     </footer>
-    <script src="/static/admin/js/nav.js" defer></script>
+    <script type="module" src="/static/admin/js/nav.js"></script>
 </body>
 </html>

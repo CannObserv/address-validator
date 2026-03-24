@@ -4,13 +4,13 @@
  * Toggles #mobile-nav visibility, swaps open/close SVG icons,
  * manages aria-expanded state, and closes on Escape key.
  */
-(function () {
+export function initNav() {
     var btn = document.getElementById('nav-toggle');
     var menu = document.getElementById('mobile-nav');
     var iconOpen = document.getElementById('nav-icon-open');
     var iconClose = document.getElementById('nav-icon-close');
 
-    if (!btn || !menu) return;
+    if (!btn || !menu) return null;
 
     function closeMenu() {
         menu.classList.add('hidden');
@@ -32,4 +32,8 @@
             btn.focus();
         }
     });
-}());
+
+    return { closeMenu: closeMenu };
+}
+
+initNav();
