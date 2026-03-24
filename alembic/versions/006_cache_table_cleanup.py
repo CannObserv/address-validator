@@ -51,10 +51,14 @@ def upgrade() -> None:
     )
 
     # 3. CHECK constraint on status
+    _valid = (
+        "'confirmed', 'confirmed_missing_secondary',"
+        " 'confirmed_bad_secondary', 'not_confirmed', 'unavailable'"
+    )
     op.create_check_constraint(
         "ck_validated_addresses_status",
         "validated_addresses",
-        "status IN ('confirmed', 'partially_confirmed', 'not_confirmed', 'unavailable')",
+        f"status IN ({_valid})",
     )
 
 
