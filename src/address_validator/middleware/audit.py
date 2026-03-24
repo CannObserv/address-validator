@@ -13,6 +13,8 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+from starlette.types import ASGIApp, Receive, Scope, Send
+
 from address_validator.middleware.request_id import get_request_id
 from address_validator.services.audit import (
     get_audit_cache_hit,
@@ -23,10 +25,6 @@ from address_validator.services.audit import (
 )
 
 logger = logging.getLogger(__name__)
-
-Scope = dict[str, Any]
-Receive = Any
-Send = Any
 
 # Strong references to fire-and-forget tasks so they aren't garbage-collected.
 _background_tasks: set[asyncio.Task[None]] = set()
@@ -74,7 +72,7 @@ def _error_detail_from_status(status_code: int) -> str | None:
 class AuditMiddleware:
     """Record API requests to the audit_log table after the response is sent."""
 
-    def __init__(self, app: Any) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -102,10 +100,8 @@ class AuditMiddleware:
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
-        from starlette.requests import Request  # noqa: PLC0415
-
-        request = Request(scope)
-        engine = getattr(request.app.state, "engine", None)
+        app = scope.get("app")
+        engine = getattr(app.state, "engine", None) if app else None
         if engine is None:
             return
 

@@ -7,11 +7,8 @@ task as the endpoint so ContextVars propagate correctly in both directions.
 from contextvars import ContextVar
 from typing import Any
 
+from starlette.types import ASGIApp, Receive, Scope, Send
 from ulid import ULID
-
-Scope = dict[str, Any]
-Receive = Any
-Send = Any
 
 _request_id_var: ContextVar[str] = ContextVar("request_id", default="")
 
@@ -24,7 +21,7 @@ def get_request_id() -> str:
 class RequestIdMiddleware:
     """Generate a ULID per request, store it in a ContextVar, echo in X-Request-ID."""
 
-    def __init__(self, app: Any) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

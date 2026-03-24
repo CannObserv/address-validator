@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
-if TYPE_CHECKING:
-    from starlette.testclient import TestClient
-
 from fastapi import FastAPI
-from starlette.testclient import TestClient as TC
+from starlette.testclient import TestClient
 
 from address_validator.middleware.audit import AuditMiddleware, _should_audit
 from address_validator.middleware.request_id import RequestIdMiddleware
@@ -94,7 +90,7 @@ def test_audit_row_receives_validation_context_vars() -> None:
 
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
-        tc = TC(mini)
+        tc = TestClient(mini)
         tc.get("/api/v1/fake")
 
     mock_write.assert_called_once()

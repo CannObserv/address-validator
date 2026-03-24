@@ -147,12 +147,15 @@ app.add_middleware(
 )
 # ── Middleware ordering is load-bearing ──────────────────────────────
 # add_middleware is LIFO: last-registered wraps outermost, so it
-# *executes first*.  RequestIdMiddleware must execute BEFORE
-# AuditMiddleware so that get_request_id() returns a value when the
-# audit row is written.  Do NOT reorder these lines.
-# Regression test: tests/unit/test_audit_middleware.py::test_audit_row_receives_request_id
+# *executes first*.  Execution order (outermost → innermost):
+#   ApiVersionHeaderMiddleware → RequestIdMiddleware → AuditMiddleware → CORS
+# RequestIdMiddleware must execute BEFORE AuditMiddleware so that
+# get_request_id() returns a value when the audit row is written.
+# Do NOT reorder these lines.
+# Regression tests: tests/unit/test_audit_middleware.py
 app.add_middleware(AuditMiddleware)
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(ApiVersionHeaderMiddleware)
 
 
 @app.exception_handler(APIError)
@@ -162,7 +165,7 @@ async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
     Bypasses FastAPI's default ``HTTPException`` wrapping so the wire
     format is ``{"error": "...", "message": "...", "api_version": "1"}``
     rather than ``{"detail": {...}}``.  The ``API-Version`` response
-    header is appended downstream by :func:`add_api_version_header`.
+    header is appended by :class:`ApiVersionHeaderMiddleware`.
     """
     return api_error_response(exc)
 
@@ -181,8 +184,8 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     the exception context (``ctx["error"]``) to avoid the redundant
     ``"Value error, "`` prefix Pydantic v2 prepends to ``msg``.
 
-    The ``API-Version: 1`` response header is appended downstream by
-    :func:`add_api_version_header` for all ``/api/v1/`` paths.
+    The ``API-Version: 1`` response header is appended by
+    :class:`ApiVersionHeaderMiddleware` for all ``/api/v1/`` paths.
     """
     messages: list[str] = []
     for err in exc.errors():
@@ -195,9 +198,6 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
             message="; ".join(messages),
         ).model_dump(),
     )
-
-
-app.add_middleware(ApiVersionHeaderMiddleware)
 
 
 # v1 routes (current)

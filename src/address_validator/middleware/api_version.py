@@ -6,15 +6,13 @@ on ``/api/v1/`` routes.
 
 from typing import Any
 
-Scope = dict[str, Any]
-Receive = Any
-Send = Any
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class ApiVersionHeaderMiddleware:
     """Append ``API-Version: 1`` to all responses on ``/api/v1/`` routes."""
 
-    def __init__(self, app: Any) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
