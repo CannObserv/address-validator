@@ -27,9 +27,11 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import RowMapping, text
+from sqlalchemy import RowMapping, delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
     StandardizeResponseV1,
@@ -98,9 +100,9 @@ def _now_utc() -> datetime:
 def _row_to_response(row: RowMapping) -> ValidateResponseV1:
     components: ComponentSet | None = None
     if row["components_json"]:
-        components = ComponentSet.model_validate_json(row["components_json"])
+        components = ComponentSet.model_validate(row["components_json"])
 
-    warnings: list[str] = json.loads(row["warnings_json"])
+    warnings: list[str] = row["warnings_json"]
 
     return ValidateResponseV1(
         address_line_1=row["address_line_1"],
@@ -136,8 +138,9 @@ async def _lookup(
         qp_row = (
             (
                 await conn.execute(
-                    text("SELECT canonical_key FROM query_patterns WHERE pattern_key = :pk"),
-                    {"pk": pattern_key},
+                    select(query_patterns.c.canonical_key).where(
+                        query_patterns.c.pattern_key == pattern_key
+                    ),
                 )
             )
             .mappings()
@@ -153,8 +156,9 @@ async def _lookup(
         va_row = (
             (
                 await conn.execute(
-                    text("SELECT * FROM validated_addresses WHERE canonical_key = :ck"),
-                    {"ck": canonical_key},
+                    select(validated_addresses).where(
+                        validated_addresses.c.canonical_key == canonical_key
+                    ),
                 )
             )
             .mappings()
@@ -170,8 +174,7 @@ async def _lookup(
             )
             async with engine.begin() as wconn:
                 await wconn.execute(
-                    text("DELETE FROM query_patterns WHERE pattern_key = :pk"),
-                    {"pk": pattern_key},
+                    delete(query_patterns).where(query_patterns.c.pattern_key == pattern_key),
                 )
             return None
 
@@ -189,8 +192,9 @@ async def _lookup(
 
     async with engine.begin() as wconn:
         await wconn.execute(
-            text("UPDATE validated_addresses SET last_seen_at = :ts WHERE canonical_key = :ck"),
-            {"ts": _now_utc(), "ck": canonical_key},
+            update(validated_addresses)
+            .where(validated_addresses.c.canonical_key == canonical_key)
+            .values(last_seen_at=_now_utc()),
         )
 
     logger.debug(
@@ -208,59 +212,48 @@ async def _store(
     result: ValidateResponseV1,
 ) -> None:
     now = _now_utc()
-    components_json: str | None = result.components.model_dump_json() if result.components else None
-    warnings_json = json.dumps(result.warnings)
+    components_json = result.components.model_dump(mode="python") if result.components else None
+    warnings_json = result.warnings
 
     async with engine.begin() as conn:
         await conn.execute(
-            text(
-                """
-                INSERT INTO validated_addresses
-                    (canonical_key, provider, status, dpv_match_code,
-                     address_line_1, address_line_2, city, region, postal_code, country,
-                     validated, components_json, latitude, longitude,
-                     warnings_json, created_at, last_seen_at, validated_at)
-                VALUES
-                    (:canonical_key, :provider, :status, :dpv_match_code,
-                     :address_line_1, :address_line_2, :city, :region, :postal_code, :country,
-                     :validated, :components_json, :latitude, :longitude,
-                     :warnings_json, :created_at, :last_seen_at, :validated_at)
-                ON CONFLICT (canonical_key) DO UPDATE SET
-                    last_seen_at = EXCLUDED.last_seen_at,
-                    validated_at = EXCLUDED.validated_at
-                """
+            pg_insert(validated_addresses)
+            .values(
+                canonical_key=canonical_key,
+                provider=result.validation.provider,
+                status=result.validation.status,
+                dpv_match_code=result.validation.dpv_match_code,
+                address_line_1=result.address_line_1,
+                address_line_2=result.address_line_2,
+                city=result.city,
+                region=result.region,
+                postal_code=result.postal_code,
+                country=result.country,
+                validated=result.validated,
+                components_json=components_json,
+                latitude=result.latitude,
+                longitude=result.longitude,
+                warnings_json=warnings_json,
+                created_at=now,
+                last_seen_at=now,
+                validated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=[validated_addresses.c.canonical_key],
+                set_={"last_seen_at": now, "validated_at": now},
             ),
-            {
-                "canonical_key": canonical_key,
-                "provider": result.validation.provider or "",
-                "status": result.validation.status,
-                "dpv_match_code": result.validation.dpv_match_code,
-                "address_line_1": result.address_line_1,
-                "address_line_2": result.address_line_2,
-                "city": result.city,
-                "region": result.region,
-                "postal_code": result.postal_code,
-                "country": result.country,
-                "validated": result.validated,
-                "components_json": components_json,
-                "latitude": result.latitude,
-                "longitude": result.longitude,
-                "warnings_json": warnings_json,
-                "created_at": now,
-                "last_seen_at": now,
-                "validated_at": now,
-            },
         )
 
         await conn.execute(
-            text(
-                """
-                INSERT INTO query_patterns (pattern_key, canonical_key, created_at)
-                VALUES (:pattern_key, :canonical_key, :created_at)
-                ON CONFLICT (pattern_key) DO NOTHING
-                """
+            pg_insert(query_patterns)
+            .values(
+                pattern_key=pattern_key,
+                canonical_key=canonical_key,
+                created_at=now,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[query_patterns.c.pattern_key],
             ),
-            {"pattern_key": pattern_key, "canonical_key": canonical_key, "created_at": now},
         )
 
     logger.debug(
