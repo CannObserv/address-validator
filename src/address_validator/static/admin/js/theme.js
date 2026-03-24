@@ -2,8 +2,9 @@
  * theme.js — Dark mode toggle with localStorage persistence.
  *
  * Default: follows prefers-color-scheme. Manual toggle overrides and
- * persists to localStorage. Loaded in <head> with defer. An inline
- * script in <head> handles synchronous init to prevent FOUC.
+ * persists to localStorage. Loaded in <head> (no defer needed — only
+ * touches document/documentElement). An inline script in <head>
+ * handles synchronous init to prevent FOUC.
  */
 (function () {
     var KEY = 'theme';
@@ -28,14 +29,11 @@
         }
     });
 
-    /* Toggle button wired up after DOM ready */
-    document.addEventListener('DOMContentLoaded', function () {
-        var btn = document.getElementById('theme-toggle');
-        if (!btn) return;
-        btn.addEventListener('click', function () {
-            var next = html.classList.contains('dark') ? 'light' : 'dark';
-            localStorage.setItem(KEY, next);
-            apply(next);
-        });
+    /* Toggle button — event delegation survives hx-boost DOM swaps */
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#theme-toggle')) return;
+        var next = html.classList.contains('dark') ? 'light' : 'dark';
+        localStorage.setItem(KEY, next);
+        apply(next);
     });
 }());
