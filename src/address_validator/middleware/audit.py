@@ -68,6 +68,47 @@ def _error_detail_from_status(status_code: int) -> str | None:
     return phrases.get(status_code, f"http_{status_code}")
 
 
+_VALIDATE_ENDPOINT = "/api/v1/validate"
+_2XX_MIN = 200
+_2XX_MAX = 300
+
+
+def _check_validate_invariants(
+    endpoint: str,
+    status_code: int,
+    provider: str | None,
+    validation_status: str | None,
+    cache_hit: bool | None,
+) -> bool:
+    """Check that a successful /validate audit row has all expected fields.
+
+    Returns True when invariants hold, False when violated (and logs WARNING).
+    Only applies to /api/v1/validate with 2xx status codes.
+    """
+    if endpoint != _VALIDATE_ENDPOINT:
+        return True
+    if not (_2XX_MIN <= status_code < _2XX_MAX):
+        return True
+
+    missing = []
+    if provider is None:
+        missing.append("provider")
+    if validation_status is None:
+        missing.append("validation_status")
+    if cache_hit is None:
+        missing.append("cache_hit")
+
+    if missing:
+        logger.warning(
+            "audit_invariant_violated: %s 2xx but NULL fields: %s",
+            endpoint,
+            ", ".join(missing),
+        )
+        return False
+
+    return True
+
+
 class AuditMiddleware:
     """Record API requests to the audit_log table after the response is sent."""
 
@@ -106,6 +147,16 @@ class AuditMiddleware:
 
         method: str = scope.get("method", "")
 
+        provider = get_audit_provider()
+        validation_status = get_audit_validation_status()
+        cache_hit = get_audit_cache_hit()
+        error_detail = _error_detail_from_status(status_code)
+
+        if not _check_validate_invariants(
+            path, status_code, provider, validation_status, cache_hit
+        ):
+            error_detail = "audit_invariant_violated"
+
         task = asyncio.create_task(
             write_audit_row(
                 engine,
@@ -116,10 +167,10 @@ class AuditMiddleware:
                 endpoint=path,
                 status_code=status_code,
                 latency_ms=elapsed_ms,
-                provider=get_audit_provider(),
-                validation_status=get_audit_validation_status(),
-                cache_hit=get_audit_cache_hit(),
-                error_detail=_error_detail_from_status(status_code),
+                provider=provider,
+                validation_status=validation_status,
+                cache_hit=cache_hit,
+                error_detail=error_detail,
             )
         )
         _background_tasks.add(task)

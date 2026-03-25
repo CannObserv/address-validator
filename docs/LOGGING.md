@@ -27,6 +27,8 @@ To include it in formatted output, add `%(request_id)s` to the uvicorn log forma
 | Google API call start | `DEBUG` | `services.validation.google_provider` | `country=`, `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
+| Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
+| Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
 
 Log level controlled by uvicorn `--log-level` (set in systemd unit). `DEBUG` off in production.
 

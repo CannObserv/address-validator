@@ -1,5 +1,6 @@
 """Unit tests for CachingProvider."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -521,3 +522,53 @@ class TestKeyHelpers:
             validation=ValidationResult(status="confirmed", dpv_match_code="Y", provider="usps"),
         )
         assert _make_canonical_key(resp1) != _make_canonical_key(resp2)
+
+
+_CACHE_LOGGER = "address_validator.services.validation.cache_provider"
+
+
+class TestValidateInfoLog:
+    async def test_cache_hit_logs_info(
+        self, db: AsyncEngine, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        with caplog.at_level(logging.INFO, logger=_CACHE_LOGGER):
+            await provider.validate(std)  # hit
+
+        assert any(
+            "provider=usps" in r.message and "cache_hit=true" in r.message for r in caplog.records
+        )
+
+    async def test_cache_miss_logs_info(
+        self, db: AsyncEngine, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        with caplog.at_level(logging.INFO, logger=_CACHE_LOGGER):
+            await provider.validate(_make_std())
+
+        assert any(
+            "provider=usps" in r.message and "cache_hit=false" in r.message for r in caplog.records
+        )
+
+    async def test_unavailable_logs_info(
+        self, db: AsyncEngine, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        response = _make_unavailable_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        with caplog.at_level(logging.INFO, logger=_CACHE_LOGGER):
+            await provider.validate(_make_std())
+
+        assert any(
+            "status=unavailable" in r.message and "cache_hit=false" in r.message
+            for r in caplog.records
+        )

@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import re
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    import pytest
+
 from starlette.testclient import TestClient
 
-from address_validator.middleware.audit import AuditMiddleware, _should_audit
+from address_validator.middleware.audit import (
+    AuditMiddleware,
+    _check_validate_invariants,
+    _should_audit,
+)
 from address_validator.middleware.request_id import RequestIdMiddleware
 from address_validator.services.audit import set_audit_context
 
@@ -102,3 +112,84 @@ def test_audit_row_receives_validation_context_vars() -> None:
         f"validation_status should be 'confirmed', got {kwargs['validation_status']!r}"
     )
     assert kwargs["cache_hit"] is False, f"cache_hit should be False, got {kwargs['cache_hit']!r}"
+
+
+# ---------------------------------------------------------------------------
+# _check_validate_invariants unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_invariants_pass_when_all_fields_present() -> None:
+    assert _check_validate_invariants("/api/v1/validate", 200, "usps", "confirmed", True) is True
+
+
+def test_invariants_fail_on_null_provider() -> None:
+    assert _check_validate_invariants("/api/v1/validate", 200, None, "confirmed", False) is False
+
+
+def test_invariants_fail_on_null_validation_status() -> None:
+    assert _check_validate_invariants("/api/v1/validate", 200, "usps", None, False) is False
+
+
+def test_invariants_fail_on_null_cache_hit() -> None:
+    assert _check_validate_invariants("/api/v1/validate", 200, "usps", "confirmed", None) is False
+
+
+def test_invariants_skip_non_2xx() -> None:
+    """Non-2xx status codes are not checked — NULL fields are expected for 422, 500, etc."""
+    assert _check_validate_invariants("/api/v1/validate", 422, None, None, None) is True
+
+
+def test_invariants_skip_non_validate_endpoint() -> None:
+    """Non-validate endpoints are not checked even if all fields are NULL."""
+    assert _check_validate_invariants("/api/v1/parse", 200, None, None, None) is True
+
+
+def test_invariants_violation_sets_error_detail(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Integration: audit row gets error_detail='audit_invariant_violated' on violation."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.post("/api/v1/validate")
+    async def _fake_validate() -> dict[str, str]:
+        # Simulate broken ContextVar propagation — no set_audit_context call
+        return {"ok": "true"}
+
+    mock_write = AsyncMock()
+    with (
+        patch("address_validator.middleware.audit.write_audit_row", mock_write),
+        caplog.at_level(logging.WARNING, logger="address_validator.middleware.audit"),
+    ):
+        tc = TestClient(mini)
+        tc.post("/api/v1/validate")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["error_detail"] == "audit_invariant_violated"
+    assert any("audit_invariant_violated" in r.message for r in caplog.records)
+
+
+def test_invariants_no_override_when_fields_present() -> None:
+    """When all audit fields are set, error_detail is not overridden."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.post("/api/v1/validate")
+    async def _fake_validate() -> dict[str, str]:
+        set_audit_context(provider="usps", validation_status="confirmed", cache_hit=False)
+        return {"ok": "true"}
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini)
+        tc.post("/api/v1/validate")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["error_detail"] is None

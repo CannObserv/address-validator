@@ -318,6 +318,11 @@ class CachingProvider:
                 validation_status=cached.validation.status,
                 cache_hit=True,
             )
+            logger.info(
+                "validate: provider=%s status=%s cache_hit=true",
+                cached.validation.provider,
+                cached.validation.status,
+            )
             return cached
 
         result: ValidateResponseV1 = await self._inner.validate(std)
@@ -326,6 +331,12 @@ class CachingProvider:
             provider=result.validation.provider,
             validation_status=result.validation.status,
             cache_hit=False,
+        )
+
+        logger.info(
+            "validate: provider=%s status=%s cache_hit=false",
+            result.validation.provider,
+            result.validation.status,
         )
 
         if result.validation.status == "unavailable":
