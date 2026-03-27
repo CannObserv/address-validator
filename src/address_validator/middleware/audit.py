@@ -17,6 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from address_validator.middleware.request_id import get_request_id
 from address_validator.services.audit import (
     get_audit_cache_hit,
+    get_audit_pattern_key,
     get_audit_provider,
     get_audit_validation_status,
     reset_audit_context,
@@ -150,6 +151,7 @@ class AuditMiddleware:
         provider = get_audit_provider()
         validation_status = get_audit_validation_status()
         cache_hit = get_audit_cache_hit()
+        pattern_key = get_audit_pattern_key()
         error_detail = _error_detail_from_status(status_code)
 
         if not _check_validate_invariants(
@@ -171,6 +173,7 @@ class AuditMiddleware:
                 validation_status=validation_status,
                 cache_hit=cache_hit,
                 error_detail=error_detail,
+                pattern_key=pattern_key,
             )
         )
         _background_tasks.add(task)
