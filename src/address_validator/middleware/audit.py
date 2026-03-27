@@ -23,6 +23,11 @@ from address_validator.services.audit import (
     reset_audit_context,
     write_audit_row,
 )
+from address_validator.services.training_candidates import (
+    get_candidate_data,
+    reset_candidate_data,
+    write_training_candidate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +132,7 @@ class AuditMiddleware:
             return
 
         reset_audit_context()
+        reset_candidate_data()
 
         status_code = 0
         start = time.monotonic()
@@ -178,3 +184,12 @@ class AuditMiddleware:
         )
         _background_tasks.add(task)
         task.add_done_callback(_background_tasks.discard)
+
+        # Fire-and-forget training candidate write if parser flagged one
+        candidate = get_candidate_data()
+        if candidate is not None:
+            candidate_task = asyncio.create_task(
+                write_training_candidate(engine=engine, **candidate)
+            )
+            _background_tasks.add(candidate_task)
+            candidate_task.add_done_callback(_background_tasks.discard)
