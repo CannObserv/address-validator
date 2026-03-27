@@ -1,5 +1,6 @@
 """HTTP-level tests for POST /api/v1/validate."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -212,6 +213,35 @@ class TestValidateEndpoint:
         assert resp.status_code == 429
         assert resp.json()["error"] == "provider_rate_limited"
         assert resp.headers["retry-after"] == "7"
+
+    def test_address_string_raw_input_passed_to_provider(self, client: TestClient) -> None:
+        """The original address string is passed as raw_input to the provider."""
+        provider = _make_null_provider(NULL_RESPONSE)
+        with _mock_registry_with(provider):
+            client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St, Springfield, IL 62701"},
+            )
+        kwargs = provider.validate.call_args.kwargs
+        assert kwargs.get("raw_input") == "123 Main St, Springfield, IL 62701"
+
+    def test_components_raw_input_is_json(self, client: TestClient) -> None:
+        """Component dict input is JSON-serialised as raw_input."""
+        comps = {
+            "address_number": "123",
+            "street_name": "MAIN",
+            "street_suffix": "ST",
+            "city": "SPRINGFIELD",
+            "region": "IL",
+            "postal_code": "62701",
+        }
+        provider = _make_null_provider(NULL_RESPONSE)
+        with _mock_registry_with(provider):
+            client.post("/api/v1/validate", json={"components": comps})
+
+        raw = provider.validate.call_args.kwargs.get("raw_input")
+        assert raw is not None
+        assert json.loads(raw) == comps
 
 
 def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:

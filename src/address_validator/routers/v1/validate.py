@@ -31,6 +31,7 @@ the endpoint still returns HTTP 200 with ``validation.status='unavailable'``
 so upstream callers degrade gracefully.
 """
 
+import json
 import logging
 import math
 
@@ -89,18 +90,20 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
 
     if req.components:
         comps = req.components
+        raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     else:
         # model_validator guarantees address is non-blank when components is absent
         parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
+        raw_input = req.address
 
     std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
 
     provider = request.app.state.registry.get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
-        result = await provider.validate(std)
+        result = await provider.validate(std, raw_input=raw_input)
     except ProviderRateLimitedError as exc:
         raise APIError(
             status_code=429,
