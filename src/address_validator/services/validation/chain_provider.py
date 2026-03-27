@@ -43,12 +43,14 @@ class ChainProvider:
             raise ValueError("ChainProvider requires at least one provider")
         self._providers = providers
 
-    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+    async def validate(
+        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+    ) -> ValidateResponseV1:
         last_exc: ProviderRateLimitedError | ProviderAtCapacityError | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
-                return await provider.validate(std)
+                return await provider.validate(std, raw_input=raw_input)
             except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
                 last_exc = exc
                 logger.warning(

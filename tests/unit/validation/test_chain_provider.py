@@ -165,6 +165,29 @@ class TestChainProvider:
             await chain.validate(std_address)  # type: ignore[arg-type]
         assert exc_info.value.retry_after_seconds == 3.0
 
+    @pytest.mark.asyncio
+    async def test_raw_input_threaded_to_provider(self, std_address) -> None:
+        """ChainProvider must forward raw_input to each sub-provider."""
+        provider = _mock_provider(_CONFIRMED)
+        chain = ChainProvider(providers=[provider])
+
+        await chain.validate(std_address, raw_input="123 Main St, Springfield IL")
+
+        provider.validate.assert_awaited_once_with(
+            std_address, raw_input="123 Main St, Springfield IL"
+        )
+
+    @pytest.mark.asyncio
+    async def test_raw_input_threaded_on_fallback(self, std_address) -> None:
+        """raw_input is passed to the fallback provider, not lost on retry."""
+        first = _rate_limited_provider()
+        second = _mock_provider(_GOOGLE_CONFIRMED)
+        chain = ChainProvider(providers=[first, second])
+
+        await chain.validate(std_address, raw_input="456 Elm Ave")
+
+        second.validate.assert_awaited_once_with(std_address, raw_input="456 Elm Ave")
+
 
 @pytest.fixture()
 def std_address():
