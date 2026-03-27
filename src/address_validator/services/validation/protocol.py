@@ -21,5 +21,11 @@ class ValidationProvider(Protocol):
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
-        """Validate the standardised address *std* and return an authoritative response."""
+        """Validate the standardised address *std* and return an authoritative response.
+
+        Args:
+            std: Fully normalised address from the parse → standardize pipeline.
+            raw_input: If provided, carries the original pre-parse caller string for
+                providers that store it; most providers accept and ignore it.
+        """
         ...

@@ -195,3 +195,12 @@ class TestUSPSProvider:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):
             await provider.validate(_make_std())
+
+    @pytest.mark.asyncio
+    async def test_validate_accepts_raw_input_kwarg(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        """USPSProvider.validate must accept raw_input without raising."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
+        assert result.validation.status == "confirmed"
