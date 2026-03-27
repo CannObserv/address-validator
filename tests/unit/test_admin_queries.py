@@ -276,3 +276,90 @@ async def test_get_sparkline_data_empty_db(db: AsyncEngine) -> None:
     assert len(data["error_rate"]) == 7
     for key in data:
         assert all(v == 0 for v in data[key])
+
+
+async def _seed_cache_row(
+    engine: AsyncEngine,
+    *,
+    pattern_key: str,
+    raw_input: str,
+    audit_pattern_key: str | None = None,
+) -> None:
+    """Insert a query_patterns row and optionally link an audit_log row via pattern_key."""
+    now = datetime.now(UTC)
+    async with engine.begin() as conn:
+        # Insert a minimal validated_addresses row first (FK requirement)
+        await conn.execute(
+            text("""
+                INSERT INTO validated_addresses
+                    (canonical_key, provider, status, country,
+                     created_at, last_seen_at, validated_at)
+                VALUES (:ck, 'usps', 'confirmed', 'US', :now, :now, :now)
+                ON CONFLICT DO NOTHING
+            """),
+            {"ck": f"canonical_{pattern_key}", "now": now},
+        )
+        await conn.execute(
+            text("""
+                INSERT INTO query_patterns (pattern_key, canonical_key, created_at, raw_input)
+                VALUES (:pk, :ck, :now, :raw)
+            """),
+            {"pk": pattern_key, "ck": f"canonical_{pattern_key}", "now": now, "raw": raw_input},
+        )
+        if audit_pattern_key is not None:
+            await conn.execute(
+                text("""
+                    UPDATE audit_log SET pattern_key = :pk
+                    WHERE id = (
+                        SELECT id FROM audit_log
+                        WHERE pattern_key IS NULL
+                        LIMIT 1
+                    )
+                """),
+                {"pk": audit_pattern_key},
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_by_raw_input(db: AsyncEngine) -> None:
+    """raw_input filter returns only rows joined to a matching query_patterns entry."""
+    await _seed_rows(db)
+
+    # Assign pattern_key to the first validate row, seed matching query_patterns entry
+    pk = "aaaa1111"
+    async with db.begin() as conn:
+        await conn.execute(
+            text("""
+                UPDATE audit_log SET pattern_key = :pk
+                WHERE id = (
+                    SELECT id FROM audit_log
+                    WHERE endpoint = '/api/v1/validate'
+                      AND pattern_key IS NULL
+                    ORDER BY id
+                    LIMIT 1
+                )
+            """),
+            {"pk": pk},
+        )
+    await _seed_cache_row(db, pattern_key=pk, raw_input="123 Main St, Springfield IL")
+
+    rows, total = await get_audit_rows(db, raw_input="Springfield")
+    assert total == 1
+    assert rows[0]["raw_input"] == "123 Main St, Springfield IL"
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_raw_input_not_set_excluded(db: AsyncEngine) -> None:
+    """Rows without a linked query_patterns entry are excluded when filtering by raw_input."""
+    await _seed_rows(db)
+
+    _rows, total = await get_audit_rows(db, raw_input="anything")
+    assert total == 0
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_includes_raw_input_column(db: AsyncEngine) -> None:
+    """Each returned row dict contains a 'raw_input' key (NULL when no cache link)."""
+    await _seed_rows(db)
+    rows, _ = await get_audit_rows(db)
+    assert all("raw_input" in r for r in rows)

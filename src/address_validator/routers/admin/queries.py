@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING
 import sqlalchemy as sa
 from sqlalchemy import func, select, union_all
 
-from address_validator.db.tables import ERROR_STATUS_MIN, audit_daily_stats, audit_log
+from address_validator.db.tables import (
+    ERROR_STATUS_MIN,
+    audit_daily_stats,
+    audit_log,
+    query_patterns,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement, Select
@@ -207,6 +212,7 @@ async def get_audit_rows(
     provider: str | None = None,
     client_ip: str | None = None,
     status_min: int | None = None,
+    raw_input: str | None = None,
 ) -> tuple[list[dict], int]:
     """Fetch paginated, filtered audit_log rows. Returns (rows, total_count)."""
     conditions: list[ColumnElement] = []
@@ -219,30 +225,39 @@ async def get_audit_rows(
         conditions.append(audit_log.c.client_ip == client_ip)
     if status_min:
         conditions.append(audit_log.c.status_code >= status_min)
+    if raw_input:
+        conditions.append(query_patterns.c.raw_input.ilike(f"%{raw_input}%"))
+
+    joined = audit_log.outerjoin(
+        query_patterns,
+        audit_log.c.pattern_key == query_patterns.c.pattern_key,
+    )
 
     async with engine.connect() as conn:
-        count_stmt = _from_live([func.count()], *conditions)
+        count_stmt = select(func.count()).select_from(joined)
+        for cond in conditions:
+            count_stmt = count_stmt.where(cond)
         total = (await conn.execute(count_stmt)).scalar()
 
+        row_stmt = select(
+            audit_log.c.id,
+            audit_log.c.timestamp,
+            audit_log.c.request_id,
+            audit_log.c.client_ip,
+            audit_log.c.method,
+            audit_log.c.endpoint,
+            audit_log.c.status_code,
+            audit_log.c.latency_ms,
+            audit_log.c.provider,
+            audit_log.c.validation_status,
+            audit_log.c.cache_hit,
+            audit_log.c.error_detail,
+            query_patterns.c.raw_input,
+        ).select_from(joined)
+        for cond in conditions:
+            row_stmt = row_stmt.where(cond)
         row_stmt = (
-            _from_live(
-                [
-                    audit_log.c.id,
-                    audit_log.c.timestamp,
-                    audit_log.c.request_id,
-                    audit_log.c.client_ip,
-                    audit_log.c.method,
-                    audit_log.c.endpoint,
-                    audit_log.c.status_code,
-                    audit_log.c.latency_ms,
-                    audit_log.c.provider,
-                    audit_log.c.validation_status,
-                    audit_log.c.cache_hit,
-                    audit_log.c.error_detail,
-                ],
-                *conditions,
-            )
-            .order_by(audit_log.c.timestamp.desc())
+            row_stmt.order_by(audit_log.c.timestamp.desc())
             .limit(per_page)
             .offset((page - 1) * per_page)
         )
