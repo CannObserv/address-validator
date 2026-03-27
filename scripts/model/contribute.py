@@ -1,0 +1,216 @@
+"""Contribute training data to the usaddress upstream repo.
+
+Two-stage process:
+  1. Push training + test XML to our fork (fast, unblocked)
+  2. Open a PR from our fork to datamade/usaddress (gated, explicit confirmation)
+
+Usage:
+    python scripts/model/contribute.py --name multi-unit --stage fork
+    python scripts/model/contribute.py --name multi-unit --stage upstream
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+import usaddress
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+DATA_DIR = PROJECT_ROOT / "training" / "data"
+TEST_CASES_DIR = PROJECT_ROOT / "training" / "test_cases"
+MANIFESTS_DIR = PROJECT_ROOT / "training" / "manifests"
+
+# Our fork — update when fork is created
+FORK_REPO = ""  # e.g. "CannObserv/usaddress"
+UPSTREAM_REPO = "datamade/usaddress"
+
+
+def _find_manifest(name: str) -> dict | None:
+    """Find a manifest by name (matches anywhere in the manifest ID)."""
+    for manifest_file in sorted(MANIFESTS_DIR.glob("*.json"), reverse=True):
+        with manifest_file.open() as f:
+            manifest = json.load(f)
+        if name in manifest.get("id", ""):
+            return manifest
+    return None
+
+
+def _first_address_from_xml(xml_path: Path) -> str | None:
+    """Extract the first address string from a training XML file."""
+    try:
+        tree = ET.parse(xml_path)  # noqa: S314
+        root = tree.getroot()
+        first_addr = root.find("AddressString")
+        if first_addr is not None:
+            return " ".join(child.text or "" for child in first_addr)
+    except Exception:  # noqa: S110
+        pass
+    return None
+
+
+def _generate_pr_body(manifest: dict, training_xml: Path, test_xml: Path | None) -> str:
+    """Generate a PR body following upstream conventions (based on merged PRs)."""
+    description = manifest["description"]
+    usaddress_version = manifest.get("usaddress_version", "unknown")
+
+    # Build before/after example from first training address
+    example_lines: list[str] = []
+    address = _first_address_from_xml(training_xml)
+    if address:
+        try:
+            result = usaddress.parse(address)
+            example_lines.append("```python")
+            example_lines.append(">>> import usaddress")
+            example_lines.append(f'>>> usaddress.parse("{address}")')
+            example_lines.append(str(result))
+            example_lines.append("```")
+        except usaddress.RepeatedLabelError as exc:
+            example_lines.append("```python")
+            example_lines.append(">>> import usaddress")
+            example_lines.append(f'>>> usaddress.parse("{address}")')
+            example_lines.append("# Raises RepeatedLabelError with current model")
+            example_lines.append(f"# parsed_string: {list(exc.parsed_string)[:4]}...")
+            example_lines.append("```")
+
+    examples = "\n".join(example_lines) if example_lines else "_See training data for examples._"
+
+    test_data_line = f"`measure_performance/test_data/{test_xml.name}`" if test_xml else "_N/A_"
+
+    return f"""## Overview
+
+{description}
+
+## Problem
+
+Using `usaddress ({usaddress_version})`, the following address patterns are parsed incorrectly:
+
+{examples}
+
+## Training data
+
+- Training: `training/{training_xml.name}`
+- Test: {test_data_line}
+
+## Testing
+
+```bash
+pip install -e ".[dev]"
+parserator train training/{training_xml.name} usaddress
+pytest
+```
+"""
+
+
+def _stage_fork(name: str, manifest: dict) -> None:
+    """Show instructions for pushing training data to our fork."""
+    if not FORK_REPO:
+        print(
+            "FORK_REPO is not configured in scripts/model/contribute.py.\n"
+            "Steps to set up:\n"
+            "  1. Fork datamade/usaddress on GitHub\n"
+            "  2. Set FORK_REPO = '<your-org>/usaddress' in this script\n"
+            "  3. Clone the fork and add the training XML files\n"
+            "  4. Re-run this command",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    custom_files = [
+        f.split(":", 1)[1] for f in manifest.get("training_files", []) if f.startswith("custom:")
+    ]
+    if not custom_files:
+        print("Error: no custom training files in manifest", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\nFiles to push to fork {FORK_REPO}:")
+    for fname in custom_files:
+        training_path = DATA_DIR / fname
+        if training_path.exists():
+            print(f"  training/{fname}")
+        test_path = TEST_CASES_DIR / fname  # same name, different dir
+        if test_path.exists():
+            print(f"  measure_performance/test_data/{fname}  (from test_cases/{fname})")
+
+    print(
+        "\nThis requires a local clone of the fork. "
+        "Copy the files above into the fork's training/ and "
+        "measure_performance/test_data/ directories, then push."
+    )
+
+
+def _stage_upstream(name: str, manifest: dict) -> None:
+    """Assemble and open an upstream PR to datamade/usaddress."""
+    if not FORK_REPO:
+        print("Error: FORK_REPO not configured. Run --stage fork first.", file=sys.stderr)
+        sys.exit(1)
+
+    custom_files = [
+        f.split(":", 1)[1] for f in manifest.get("training_files", []) if f.startswith("custom:")
+    ]
+    if not custom_files:
+        print("Error: no custom training files in manifest", file=sys.stderr)
+        sys.exit(1)
+
+    training_xml = DATA_DIR / custom_files[0]
+    test_xml_path = TEST_CASES_DIR / custom_files[0]
+    test_xml = test_xml_path if test_xml_path.exists() else None
+
+    pr_title = manifest["description"]
+    if len(pr_title) > 70:  # noqa: PLR2004
+        pr_title = pr_title[:67] + "..."
+
+    pr_body = _generate_pr_body(manifest, training_xml, test_xml)
+
+    print("=" * 60)
+    print(f"PR Title: {pr_title}")
+    print("=" * 60)
+    print(pr_body)
+    print(f"Target: {FORK_REPO} → {UPSTREAM_REPO}")
+    print("=" * 60)
+    print(
+        "\nThis will open a PR from your fork to datamade/usaddress.\n"
+        "Only proceed when you are confident the training data is correct and complete.\n"
+    )
+    print("Open PR? [y/N] ", end="")
+    choice = input().strip().lower()
+    if choice != "y":
+        print("Aborted.")
+        sys.exit(0)
+
+    print(
+        "\nPR creation requires the training data to already be pushed to your fork.\n"
+        "Run --stage fork first, push the files, then re-run --stage upstream."
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Contribute training data upstream")
+    parser.add_argument("--name", required=True, help="Training run name (matches manifest ID)")
+    parser.add_argument(
+        "--stage",
+        required=True,
+        choices=["fork", "upstream"],
+        help="fork: push to our fork | upstream: open PR to datamade/usaddress",
+    )
+    args = parser.parse_args()
+
+    manifest = _find_manifest(args.name)
+    if not manifest:
+        print(f"Error: no manifest found matching '{args.name}'", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Using manifest: {manifest['id']}")
+    print(f"Description: {manifest['description']}")
+
+    if args.stage == "fork":
+        _stage_fork(args.name, manifest)
+    else:
+        _stage_upstream(args.name, manifest)
+
+
+if __name__ == "__main__":
+    main()
