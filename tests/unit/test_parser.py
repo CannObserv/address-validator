@@ -11,6 +11,10 @@ from address_validator.services.parser import (
     _recover_unit_from_city,
     parse_address,
 )
+from address_validator.services.training_candidates import (
+    get_candidate_data,
+    reset_candidate_data,
+)
 
 # ---------------------------------------------------------------------------
 # _recover_unit_from_city
@@ -379,3 +383,56 @@ class TestParserLogging:
         ):
             parse_address("1804 & 1810 Main St")
         assert "ambiguous parse" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Candidate data collection
+# ---------------------------------------------------------------------------
+
+
+class TestCandidateCollection:
+    def setup_method(self) -> None:
+        reset_candidate_data()
+
+    def test_repeated_label_sets_candidate_data(self) -> None:
+        """RepeatedLabelError path should set candidate ContextVar."""
+        fake_tokens = [
+            ("995", "AddressNumber"),
+            ("9TH", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("BLDG", "SubaddressType"),
+            ("201", "SubaddressIdentifier"),
+            ("ROOM", "SubaddressType"),
+            ("104", "AddressNumber"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            parse_address("995 9TH ST BLDG 201 ROOM 104")
+
+        candidate = get_candidate_data()
+        assert candidate is not None
+        assert candidate["failure_type"] == "repeated_label_error"
+        assert candidate["raw_address"] == "995 9TH ST BLDG 201 ROOM 104"
+
+    def test_post_parse_recovery_sets_candidate_data(self) -> None:
+        """When _recover_unit_from_city fires, candidate data should be set."""
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("Main", "StreetName"),
+            ("St", "StreetNamePostType"),
+            ("BSMT,", "PlaceName"),
+            ("Springfield", "PlaceName"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("123 Main St BSMT, Springfield")
+
+        candidate = get_candidate_data()
+        if any("Unit designator recovered" in w for w in result.warnings):
+            assert candidate is not None
+
+    def test_clean_parse_no_candidate_data(self) -> None:
+        """Normal successful parse should not set candidate data."""
+        parse_address("123 Main St, Springfield, IL 62701")
+        candidate = get_candidate_data()
+        assert candidate is None

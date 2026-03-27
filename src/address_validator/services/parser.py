@@ -6,6 +6,7 @@ import re
 import usaddress
 
 from address_validator.models import ComponentSet, ParseResponseV1
+from address_validator.services.training_candidates import set_candidate_data
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from address_validator.usps_data.states import STATE_MAP
@@ -413,6 +414,13 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         _recover_unit_from_city(component_values, warnings)
         _recover_identifier_fragment_from_city(component_values, warnings)
 
+        set_candidate_data(
+            raw_address=raw,
+            failure_type="repeated_label_error",
+            parsed_tokens=list(exc.parsed_string),
+            recovered_components=component_values,
+        )
+
         logger.debug("parsed address type=Ambiguous country=%s", country)
         return ParseResponseV1(
             input=raw,
@@ -431,6 +439,16 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
 
     _recover_unit_from_city(component_values, warnings)
     _recover_identifier_fragment_from_city(component_values, warnings)
+
+    if any(
+        "Unit designator recovered" in w or "identifier fragment" in w.lower() for w in warnings
+    ):
+        set_candidate_data(
+            raw_address=raw,
+            failure_type="post_parse_recovery",
+            parsed_tokens=[(v, k) for k, v in tagged.items()],
+            recovered_components=component_values,
+        )
 
     return ParseResponseV1(
         input=raw,
