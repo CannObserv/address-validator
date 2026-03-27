@@ -72,3 +72,9 @@ class TestNullProvider:
     async def test_country_passed_through(self, provider: NullProvider) -> None:
         result = await provider.validate(_make_std(country="US"))
         assert result.country == "US"
+
+    @pytest.mark.asyncio
+    async def test_validate_accepts_raw_input_kwarg(self, provider: NullProvider) -> None:
+        """NullProvider.validate must accept raw_input without raising."""
+        result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
+        assert result.validation.status == "unavailable"

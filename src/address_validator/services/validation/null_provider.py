@@ -15,7 +15,9 @@ class NullProvider:
     validation is not yet required.
     """
 
-    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+    async def validate(
+        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+    ) -> ValidateResponseV1:
         logger.debug("NullProvider: returning unavailable for country=%s", std.country)
         return ValidateResponseV1(
             country=std.country,

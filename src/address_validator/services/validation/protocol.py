@@ -18,6 +18,8 @@ class ValidationProvider(Protocol):
     :class:`~services.validation.google_provider.GoogleProvider`.
     """
 
-    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+    async def validate(
+        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+    ) -> ValidateResponseV1:
         """Validate the standardised address *std* and return an authoritative response."""
         ...

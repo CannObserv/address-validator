@@ -35,7 +35,9 @@ class USPSProvider:
         """Expose the client for quota state inspection."""
         return self._client
 
-    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+    async def validate(
+        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+    ) -> ValidateResponseV1:
         logger.debug("USPSProvider.validate: calling USPS API, country=%s", std.country)
         raw = await self._client.validate_address(
             street_address=std.address_line_1,
