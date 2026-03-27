@@ -26,6 +26,7 @@ audit_log = sa.Table(
     sa.Column("validation_status", sa.Text(), nullable=True),
     sa.Column("cache_hit", sa.Boolean(), nullable=True),
     sa.Column("error_detail", sa.Text(), nullable=True),
+    sa.Column("pattern_key", sa.Text(), nullable=True),
 )
 
 audit_daily_stats = sa.Table(
@@ -96,6 +97,7 @@ query_patterns = sa.Table(
         nullable=False,
     ),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("raw_input", sa.Text(), nullable=True),
 )
 
 # Shared query constants
