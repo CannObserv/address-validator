@@ -1,0 +1,3 @@
+# Model binaries are only committed when explicitly deployed and reviewed
+*.crfsuite
+!.gitignore
