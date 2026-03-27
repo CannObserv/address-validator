@@ -19,6 +19,9 @@ import os
 import sys
 from pathlib import Path
 
+# Ensure the src/ layout is importable when run directly
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 
