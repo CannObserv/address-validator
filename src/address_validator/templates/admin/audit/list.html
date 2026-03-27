@@ -67,12 +67,12 @@
 {% if total_pages > 1 %}
 <nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input }}{% endif %}"
+    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">&laquo; Prev</a>
     {% endif %}
     <span class="text-gray-500 dark:text-gray-400">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input }}{% endif %}"
+    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Next &raquo;</a>
     {% endif %}
 </nav>
