@@ -91,6 +91,12 @@ _UNIT_SLOT_PAIRS = (
     ("subaddress_type", "subaddress_identifier"),
 )
 
+# Keys that represent unit-type fields (occupancy or subaddress type).
+_UNIT_TYPE_KEYS: frozenset[str] = frozenset({"subaddress_type", "occupancy_type"})
+
+# Keys that signal the end of the street portion of an address.
+_POST_STREET_KEYS: frozenset[str] = frozenset({"city", "state", "zip_code"})
+
 
 def _next_free_unit_slot(
     components: dict[str, str],
@@ -116,6 +122,108 @@ def _try_extract_designator(segment: str) -> tuple[str, str] | None:
         return None
     identifier = parts[1] if len(parts) > 1 else ""
     return parts[0], identifier
+
+
+def _emit_token(
+    component_values: dict[str, str],
+    key: str,
+    token: str,
+    separator_before: bool,
+) -> str | None:
+    """Write *token* into *component_values* under *key*; return a dual-range
+    string when a hyphen-joined range address is detected, else ``None``."""
+    if key in component_values:
+        if key == "address_number" and separator_before:
+            merged = f"{component_values[key]}-{token}"
+            component_values[key] = merged
+            return merged
+        component_values[key] += f" {token}"
+    else:
+        component_values[key] = token
+    return None
+
+
+def _collect_ambiguous_components(
+    parsed_string: list[tuple[str, str]],
+    warnings: list[str],
+) -> dict[str, str]:
+    """Build a component dict from a usaddress ``RepeatedLabelError`` token list.
+
+    Handles two special cases beyond plain concatenation:
+
+    - **Dual/range addresses** (``"1804 & 1810 Main St"``): an
+      ``IntersectionSeparator`` immediately after an ``AddressNumber`` signals
+      that the second number is a range partner, not a new address.  The two
+      numbers are joined with a hyphen per USPS Pub 28 §232.
+
+    - **Multiple secondary-unit designators** (``"BLDG 201 ROOM 104 T"``):
+      when a repeated unit-type label carries a known ``UNIT_MAP`` designator,
+      it is routed to the next free slot instead of being concatenated.
+      Subsequent mislabelled tokens (``AddressNumber``, ``StreetName``, …) are
+      redirected into that slot's identifier until a city/state/zip token
+      appears.
+    """
+    component_values: dict[str, str] = {}
+    prev_key: str | None = None
+    separator_before: bool = False
+    dual_range: str | None = None
+    redirect_id_key: str | None = None
+
+    for token, label in parsed_string:
+        key = TAG_NAMES.get(label, label)
+
+        # Stop redirecting once we reach city/state/zip tokens.
+        if key in _POST_STREET_KEYS:
+            redirect_id_key = None
+
+        # Track whether an IntersectionSeparator appeared right before a
+        # repeated AddressNumber — that signals a dual/range address
+        # ("1804 & 1810"), not a true intersection.
+        if key == "intersection_separator":  # noqa: SIM102
+            if prev_key == "address_number":
+                separator_before = True
+                prev_key = key
+                continue  # don't emit the separator yet
+            # True intersection separator — emit normally.
+
+        # Repeated unit-type label whose token is a known designator →
+        # route to the next free slot instead of concatenating.
+        if (
+            key in _UNIT_TYPE_KEYS
+            and key in component_values
+            and token.upper().replace(".", "").strip(",;") in UNIT_MAP
+        ):
+            slot = _next_free_unit_slot(component_values)
+            if slot:
+                component_values[slot[0]] = token
+                redirect_id_key = slot[1]
+                prev_key = key
+                separator_before = False
+                continue
+
+        # While redirecting, mislabelled tokens after a second designator
+        # are really the identifier for that designator.
+        if redirect_id_key is not None and key not in _POST_STREET_KEYS:
+            clean = token.strip(",;")
+            if clean:
+                existing = component_values.get(redirect_id_key)
+                component_values[redirect_id_key] = f"{existing} {clean}" if existing else clean
+            prev_key = key
+            separator_before = False
+            continue
+
+        # Normal token: concatenate into existing field or create new.
+        # Dual-range address numbers are joined with a hyphen (Pub 28 §232).
+        dual_range = _emit_token(component_values, key, token, separator_before) or dual_range
+        separator_before = False
+        prev_key = key
+
+    if dual_range is not None:
+        warnings.append(f"Ambiguous parse: repeated address numbers joined as range '{dual_range}'")
+    else:
+        warnings.append("Ambiguous parse: repeated labels detected; parse may be inaccurate.")
+
+    return component_values
 
 
 def _warn_unit_recovered(warnings: list[str] | None, designator: str) -> None:
@@ -299,45 +407,9 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         tagged, addr_type = usaddress.tag(cleaned)
     except usaddress.RepeatedLabelError as exc:
         logger.warning("ambiguous parse: repeated labels in input")
-        # Fallback: return the raw token pairs when tagging is ambiguous.
-        component_values: dict[str, str] = {}
-        prev_key: str | None = None
-        separator_before: bool = False
-        dual_range: str | None = None
-        for token, label in exc.parsed_string:
-            key = TAG_NAMES.get(label, label)
-
-            # Track whether an IntersectionSeparator appeared right
-            # before a repeated AddressNumber — that signals a dual/
-            # range address ("1804 & 1810"), not a true intersection.
-            if key == "intersection_separator":  # noqa: SIM102
-                if prev_key == "address_number":
-                    separator_before = True
-                    prev_key = key
-                    continue  # don't emit the separator yet
-                # True intersection separator — emit normally.
-
-            if key in component_values:
-                if key == "address_number" and separator_before:
-                    # Dual address: join with hyphen (USPS Pub 28 §232).
-                    merged = f"{component_values[key]}-{token}"
-                    component_values[key] = merged
-                    dual_range = merged
-                else:
-                    component_values[key] += f" {token}"
-            else:
-                component_values[key] = token
-
-            separator_before = False
-            prev_key = key
-
-        if dual_range is not None:
-            warnings.append(
-                f"Ambiguous parse: repeated address numbers joined as range '{dual_range}'"
-            )
-        else:
-            warnings.append("Ambiguous parse: repeated labels detected; parse may be inaccurate.")
-
+        component_values: dict[str, str] = _collect_ambiguous_components(
+            exc.parsed_string, warnings
+        )
         _recover_unit_from_city(component_values, warnings)
         _recover_identifier_fragment_from_city(component_values, warnings)
 

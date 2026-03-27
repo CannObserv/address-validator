@@ -215,6 +215,42 @@ class TestRepeatedLabelFallback:
         if result.type == "Ambiguous":
             assert len(result.warnings) > 0
 
+    def test_multi_unit_designator_slotted_not_concatenated(self) -> None:
+        """GH-72: BLDG 201 ROOM 104 T should populate both unit slots,
+        not concatenate repeated SubaddressType/AddressNumber labels."""
+        # Simulate exact usaddress output for this address.
+        fake_tokens = [
+            ("995", "AddressNumber"),
+            ("9TH", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("BLDG", "SubaddressType"),
+            ("201", "SubaddressIdentifier"),
+            ("ROOM", "SubaddressType"),
+            ("104", "AddressNumber"),
+            ("T,", "StreetName"),
+            ("SAN", "PlaceName"),
+            ("FRANCISCO,", "PlaceName"),
+            ("CA", "StateName"),
+            ("94130-2107", "ZipCode"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = parse_address("995 9TH ST BLDG 201 ROOM 104 T, SAN FRANCISCO, CA 94130-2107")
+        vals = result.components.values
+        # Primary street fields should not be contaminated.
+        assert vals.get("address_number") == "995"
+        assert vals.get("street_name") == "9TH"
+        assert vals.get("street_name_post_type") == "ST"
+        # First unit lands in subaddress (raw usaddress label);
+        # second is routed to the free occupancy slot.
+        # The standardizer reorders for correct USPS line assembly.
+        assert vals.get("subaddress_type") == "BLDG"
+        assert vals.get("subaddress_identifier") == "201"
+        assert vals.get("occupancy_type") == "ROOM"
+        assert vals.get("occupancy_identifier") == "104 T"
+        # City should be clean.
+        assert "SAN FRANCISCO" in vals.get("city", "")
+
 
 # ---------------------------------------------------------------------------
 # ZIP normalisation
