@@ -102,3 +102,34 @@ query_patterns = sa.Table(
 
 # Shared query constants
 ERROR_STATUS_MIN = 400
+
+# ---------------------------------------------------------------------------
+# Model training candidate collection (migration 008)
+# ---------------------------------------------------------------------------
+
+model_training_candidates = sa.Table(
+    "model_training_candidates",
+    metadata,
+    sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
+    sa.Column("raw_address", sa.Text(), nullable=False),
+    sa.Column("failure_type", sa.Text(), nullable=False),
+    sa.Column("parsed_tokens", JSONB(), nullable=False),
+    sa.Column("recovered_components", JSONB(), nullable=True),
+    sa.Column(
+        "created_at",
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+    ),
+    sa.Column(
+        "status",
+        sa.Text(),
+        sa.CheckConstraint(
+            "status IN ('new', 'reviewed', 'labeled', 'rejected')",
+            name="ck_model_training_candidates_status",
+        ),
+        nullable=False,
+        server_default=sa.text("'new'"),
+    ),
+    sa.Column("notes", sa.Text(), nullable=True),
+)
