@@ -15,6 +15,7 @@ from address_validator.models import (
 )
 from address_validator.services.audit import (
     get_audit_cache_hit,
+    get_audit_pattern_key,
     get_audit_provider,
     get_audit_validation_status,
     reset_audit_context,
@@ -131,3 +132,43 @@ async def test_cache_provider_sets_audit_context_on_miss(db: AsyncEngine) -> Non
     assert get_audit_validation_status() == "confirmed"
     assert get_audit_cache_hit() is False
     reset_audit_context()
+
+
+def test_pattern_key_defaults_to_none() -> None:
+    reset_audit_context()
+    assert get_audit_pattern_key() is None
+
+
+def test_set_audit_context_sets_pattern_key() -> None:
+    set_audit_context(pattern_key="abc123def456")
+    assert get_audit_pattern_key() == "abc123def456"
+    reset_audit_context()
+
+
+def test_reset_clears_pattern_key() -> None:
+    set_audit_context(pattern_key="abc123def456")
+    reset_audit_context()
+    assert get_audit_pattern_key() is None
+
+
+@pytest.mark.asyncio
+async def test_write_audit_row_stores_pattern_key(db: AsyncEngine) -> None:
+    await write_audit_row(
+        db,
+        timestamp=datetime.now(UTC),
+        request_id="01TESTULID",
+        client_ip="127.0.0.1",
+        method="POST",
+        endpoint="/api/v1/validate",
+        status_code=200,
+        latency_ms=10,
+        provider="usps",
+        validation_status="confirmed",
+        cache_hit=True,
+        error_detail=None,
+        pattern_key="deadbeef1234",
+    )
+    async with db.connect() as conn:
+        result = await conn.execute(text("SELECT pattern_key FROM audit_log"))
+        row = result.fetchone()
+    assert row.pattern_key == "deadbeef1234"

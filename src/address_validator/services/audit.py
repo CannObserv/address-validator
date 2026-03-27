@@ -26,6 +26,7 @@ _audit_validation_status: ContextVar[str | None] = ContextVar(
     "audit_validation_status", default=None
 )
 _audit_cache_hit: ContextVar[bool | None] = ContextVar("audit_cache_hit", default=None)
+_audit_pattern_key: ContextVar[str | None] = ContextVar("audit_pattern_key", default=None)
 
 
 def get_audit_provider() -> str | None:
@@ -40,6 +41,10 @@ def get_audit_cache_hit() -> bool | None:
     return _audit_cache_hit.get()
 
 
+def get_audit_pattern_key() -> str | None:
+    return _audit_pattern_key.get()
+
+
 def reset_audit_context() -> None:
     """Reset all audit ContextVars to their defaults (None).
 
@@ -49,6 +54,7 @@ def reset_audit_context() -> None:
     _audit_provider.set(None)
     _audit_validation_status.set(None)
     _audit_cache_hit.set(None)
+    _audit_pattern_key.set(None)
 
 
 def set_audit_context(
@@ -56,6 +62,7 @@ def set_audit_context(
     provider: str | None = None,
     validation_status: str | None = None,
     cache_hit: bool | None = None,
+    pattern_key: str | None = None,
 ) -> None:
     """Set audit ContextVars for the current request."""
     if provider is not None:
@@ -64,6 +71,8 @@ def set_audit_context(
         _audit_validation_status.set(validation_status)
     if cache_hit is not None:
         _audit_cache_hit.set(cache_hit)
+    if pattern_key is not None:
+        _audit_pattern_key.set(pattern_key)
 
 
 async def write_audit_row(
@@ -80,6 +89,7 @@ async def write_audit_row(
     validation_status: str | None,
     cache_hit: bool | None,
     error_detail: str | None,
+    pattern_key: str | None = None,
 ) -> None:
     """Insert a single audit_log row. Logs and swallows all errors (fail-open)."""
     try:
@@ -97,6 +107,7 @@ async def write_audit_row(
                     validation_status=validation_status,
                     cache_hit=cache_hit,
                     error_detail=error_detail,
+                    pattern_key=pattern_key,
                 )
             )
     except Exception:
