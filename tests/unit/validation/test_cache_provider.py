@@ -20,6 +20,7 @@ from address_validator.services.validation.cache_provider import (
     CachingProvider,
     _make_canonical_key,
     _make_pattern_key,
+    _store,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -600,6 +601,26 @@ class TestRawInput:
 
         row = await _fetch_one(db, query_patterns)
         assert row["raw_input"] is None
+
+    async def test_raw_input_backfilled_when_initially_null(self, db: AsyncEngine) -> None:
+        """If raw_input is NULL on first store, a later call with raw_input fills it in."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        # First call — no raw_input (NULL stored)
+        await provider.validate(std, raw_input=None)
+
+        # Second call — same std, now with raw_input
+        # Need a fresh inner since the cache will HIT on second call via CachingProvider
+        # Instead, call _store directly with the same pattern_key
+        pattern_key = _make_pattern_key(std)
+        canonical_key = _make_canonical_key(response)
+        await _store(db, pattern_key, canonical_key, response, raw_input="456 Elm Ave")
+
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row["raw_input"] == "456 Elm Ave"
 
 
 class TestPatternKeyContextVar:

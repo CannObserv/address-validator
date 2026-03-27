@@ -14,7 +14,7 @@ Store algorithm
 1. Skip entirely when ``result.validation.status == "unavailable"``
 2. Hash the provider-returned address fields → ``canonical_key``
 3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at and validated_at)
-4. INSERT INTO query_patterns … ON CONFLICT DO NOTHING
+4. INSERT INTO query_patterns … ON CONFLICT: back-fill raw_input if NULL
 
 The parse → standardise pipeline already normalises casing, abbreviations, and
 whitespace before this module is called, so ``pattern_key`` naturally collapses
@@ -27,7 +27,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import RowMapping, delete, select, update
+from sqlalchemy import RowMapping, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -246,16 +246,21 @@ async def _store(
             ),
         )
 
+        qp_insert = pg_insert(query_patterns).values(
+            pattern_key=pattern_key,
+            canonical_key=canonical_key,
+            created_at=now,
+            raw_input=raw_input,
+        )
         await conn.execute(
-            pg_insert(query_patterns)
-            .values(
-                pattern_key=pattern_key,
-                canonical_key=canonical_key,
-                created_at=now,
-                raw_input=raw_input,
-            )
-            .on_conflict_do_nothing(
+            qp_insert.on_conflict_do_update(
                 index_elements=[query_patterns.c.pattern_key],
+                set_={
+                    "raw_input": func.coalesce(
+                        query_patterns.c.raw_input,
+                        qp_insert.excluded.raw_input,
+                    )
+                },
             ),
         )
 
