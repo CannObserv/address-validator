@@ -15,6 +15,7 @@ from address_validator.models import (
     ValidateResponseV1,
     ValidationResult,
 )
+from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
 from address_validator.services.validation.cache_provider import (
     CachingProvider,
     _make_canonical_key,
@@ -150,7 +151,7 @@ class TestCacheMiss:
 
         result = await provider.validate(std)
 
-        inner.validate.assert_awaited_once_with(std)
+        inner.validate.assert_awaited_once_with(std, raw_input=None)
         assert result.validation.status == "confirmed"
 
     async def test_miss_stores_pattern(self, db: AsyncEngine) -> None:
@@ -572,3 +573,93 @@ class TestValidateInfoLog:
             "status=unavailable" in r.message and "cache_hit=false" in r.message
             for r in caplog.records
         )
+
+
+class TestRawInput:
+    async def test_raw_input_stored_on_cache_miss(self, db: AsyncEngine) -> None:
+        """raw_input is written to query_patterns on the first (miss) call."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std, raw_input="123 Main St, Springfield IL 62701")
+
+        pattern_key = _make_pattern_key(std)
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row is not None
+        assert row["raw_input"] == "123 Main St, Springfield IL 62701"
+
+    async def test_raw_input_none_stored_when_not_provided(self, db: AsyncEngine) -> None:
+        """raw_input is NULL when not supplied (e.g. called without the kwarg)."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        await provider.validate(_make_std())
+
+        row = await _fetch_one(db, query_patterns)
+        assert row["raw_input"] is None
+
+
+class TestPatternKeyContextVar:
+    async def test_pattern_key_set_on_cache_miss(self, db: AsyncEngine) -> None:
+        """pattern_key ContextVar is set after a successful cache store."""
+        reset_audit_context()
+
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+
+        expected = _make_pattern_key(std)
+        assert get_audit_pattern_key() == expected
+        reset_audit_context()
+
+    async def test_pattern_key_set_on_cache_hit(self, db: AsyncEngine) -> None:
+        """pattern_key ContextVar is set on a cache hit."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        reset_audit_context()
+
+        await provider.validate(std)  # hit
+
+        expected = _make_pattern_key(std)
+        assert get_audit_pattern_key() == expected
+        reset_audit_context()
+
+    async def test_pattern_key_not_set_on_store_failure(self, db: AsyncEngine) -> None:
+        """pattern_key ContextVar is NOT set when _store raises (fail-open)."""
+        reset_audit_context()
+
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        with patch(
+            "address_validator.services.validation.cache_provider._store",
+            side_effect=RuntimeError("disk full"),
+        ):
+            await provider.validate(_make_std())
+
+        assert get_audit_pattern_key() is None
+        reset_audit_context()
+
+    async def test_pattern_key_not_set_for_unavailable(self, db: AsyncEngine) -> None:
+        """pattern_key is not set when status is unavailable (nothing stored)."""
+        reset_audit_context()
+
+        response = _make_unavailable_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        await provider.validate(_make_std())
+
+        assert get_audit_pattern_key() is None
+        reset_audit_context()

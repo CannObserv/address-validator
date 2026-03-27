@@ -210,6 +210,8 @@ async def _store(
     pattern_key: str,
     canonical_key: str,
     result: ValidateResponseV1,
+    *,
+    raw_input: str | None,
 ) -> None:
     now = _now_utc()
     components_json = result.components.model_dump(mode="python") if result.components else None
@@ -250,6 +252,7 @@ async def _store(
                 pattern_key=pattern_key,
                 canonical_key=canonical_key,
                 created_at=now,
+                raw_input=raw_input,
             )
             .on_conflict_do_nothing(
                 index_elements=[query_patterns.c.pattern_key],
@@ -296,7 +299,9 @@ class CachingProvider:
         self._get_engine = get_engine
         self._ttl_days = ttl_days
 
-    async def validate(self, std: StandardizeResponseV1) -> ValidateResponseV1:
+    async def validate(
+        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+    ) -> ValidateResponseV1:
         """Check the cache; delegate to inner provider on miss; store the result.
 
         Fail-open: any database error during lookup or store is logged as a
@@ -317,6 +322,7 @@ class CachingProvider:
                 provider=cached.validation.provider,
                 validation_status=cached.validation.status,
                 cache_hit=True,
+                pattern_key=pattern_key,
             )
             logger.info(
                 "validate: provider=%s status=%s cache_hit=true",
@@ -325,7 +331,7 @@ class CachingProvider:
             )
             return cached
 
-        result: ValidateResponseV1 = await self._inner.validate(std)
+        result: ValidateResponseV1 = await self._inner.validate(std, raw_input=raw_input)
 
         set_audit_context(
             provider=result.validation.provider,
@@ -349,7 +355,8 @@ class CachingProvider:
         if engine is not None:
             try:
                 canonical_key = _make_canonical_key(result)
-                await _store(engine, pattern_key, canonical_key, result)
+                await _store(engine, pattern_key, canonical_key, result, raw_input=raw_input)
+                set_audit_context(pattern_key=pattern_key)
             except Exception:
                 logger.warning("cache_store: storage error — result not cached", exc_info=True)
 
