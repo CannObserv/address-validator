@@ -29,6 +29,12 @@
                class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100"
                placeholder="400" min="100" max="599">
     </div>
+    <div>
+        <label for="raw_input" class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Raw Input</label>
+        <input type="text" name="raw_input" id="raw_input" value="{{ filters.raw_input or '' }}"
+               class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100"
+               placeholder="address substring…">
+    </div>
     <button type="submit"
             class="bg-co-purple text-white px-4 py-1 rounded text-sm font-medium hover:bg-co-purple-700 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100 focus:ring-offset-1 dark:ring-offset-gray-800 min-h-[32px]">
         Filter
@@ -49,6 +55,7 @@
                 <th class="px-3 py-2 text-right">Latency</th>
                 <th class="px-3 py-2">Provider</th>
                 <th class="px-3 py-2">Cache</th>
+                <th class="px-3 py-2">Raw Input</th>
             </tr>
         </thead>
         <tbody id="audit-rows">
@@ -60,12 +67,12 @@
 {% if total_pages > 1 %}
 <nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}"
+    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">&laquo; Prev</a>
     {% endif %}
     <span class="text-gray-500 dark:text-gray-400">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}"
+    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Next &raquo;</a>
     {% endif %}
 </nav>

@@ -22,6 +22,7 @@ async def audit_list(
     client_ip: str | None = Query(None),
     endpoint: str | None = Query(None),
     status_min: int | None = Query(None, ge=100, le=599),
+    raw_input: str | None = Query(None),
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     rows, total = await get_audit_rows(
@@ -31,12 +32,17 @@ async def audit_list(
         endpoint=endpoint,
         client_ip=client_ip,
         status_min=status_min,
+        raw_input=raw_input,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
-    filters = {"client_ip": client_ip, "endpoint": endpoint, "status_min": status_min}
+    filters = {
+        "client_ip": client_ip,
+        "endpoint": endpoint,
+        "status_min": status_min,
+        "raw_input": raw_input,
+    }
 
-    # HTMX partial — return just the rows (skip for boosted nav)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             "admin/audit/_rows.html",

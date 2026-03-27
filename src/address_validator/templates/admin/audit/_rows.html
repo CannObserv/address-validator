@@ -22,7 +22,14 @@
             <span class="text-gray-400 dark:text-gray-500">MISS</span>
         {% endif %}
     </td>
+    <td class="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-xs">
+        {% if row["raw_input"] %}
+            <span title="{{ row['raw_input'] }}" class="block truncate text-xs font-mono">{{ row["raw_input"] }}</span>
+        {% else %}
+            <span class="text-gray-400 dark:text-gray-600">—</span>
+        {% endif %}
+    </td>
 </tr>
 {% else %}
-<tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No audit log entries found.</td></tr>
+<tr><td colspan="9" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No audit log entries found.</td></tr>
 {% endfor %}
