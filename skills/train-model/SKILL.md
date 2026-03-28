@@ -100,6 +100,12 @@ The script is interactive — for each address it shows model labels vs Claude l
 
 **After labeling:** Show the output XML path. Confirm it looks correct.
 
+**Document labeling rationale:** Write `training/data/<pattern-name>.rationale.md` documenting:
+- What standard/source governs label selection (FGDC Address Standard, upstream training data, USPS Pub 28, etc.)
+- For each label assignment pattern, cite the basis (e.g., "BLDG→SubaddressType: 12/12 in upstream labeled.xml")
+- Flag any decisions that extend beyond existing precedent (e.g., novel designator combos not in upstream data)
+- This file is archived with the manifest via `--rationale` and is essential for upstream contribution (Step 6)
+
 **If no DB candidates:** Prompt the operator to create a manual CSV:
 ```
 Tip: if you have no DB candidates, create training/candidates.csv manually:
@@ -119,7 +125,8 @@ raw_address
 ```bash
 uv run python scripts/model/train.py \
   --name <pattern-name> \
-  --description "<description>"
+  --description "<description>" \
+  --rationale training/data/<pattern-name>.rationale.md
 ```
 
 **Verify success:** Check exit code. If non-zero, show the error and ask the operator how to proceed (retry, skip, or abort).

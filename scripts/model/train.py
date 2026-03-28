@@ -32,6 +32,7 @@ def _find_upstream_training_files() -> list[Path]:
     pkg_dir = Path(usaddress.__file__).parent
     # Check common locations for training data
     candidates = [
+        TRAINING_DIR / "upstream",  # local copy of upstream training data
         pkg_dir.parent / "training",  # pip install -e / source layout
         pkg_dir / "training",
     ]
@@ -43,7 +44,8 @@ def _find_upstream_training_files() -> list[Path]:
 
     print(
         "Warning: could not find upstream training data. "
-        "You may need to clone the usaddress repo or install from source.",
+        "Download it with: curl -sL https://raw.githubusercontent.com/datamade/usaddress/"
+        "master/training/labeled.xml -o training/upstream/labeled.xml --create-dirs",
         file=sys.stderr,
     )
     return []
@@ -60,10 +62,11 @@ def _build_manifest(
     training_files: list[tuple[str, str]],
     test_files: list[str],
     output_model: str,
+    rationale: str | None = None,
 ) -> dict:
     """Build a training manifest dict."""
     version = getattr(usaddress, "__version__", "unknown")
-    return {
+    manifest: dict = {
         "id": f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{name}",
         "description": description,
         "usaddress_version": version,
@@ -74,15 +77,22 @@ def _build_manifest(
         "deployed": False,
         "upstream_pr": None,
     }
+    if rationale:
+        manifest["rationale"] = rationale
+    return manifest
 
 
-def main() -> None:  # noqa: PLR0915
+def main() -> None:  # noqa: PLR0912 PLR0915
     parser = argparse.ArgumentParser(description="Train custom usaddress model")
     parser.add_argument("--name", required=True, help="Short name for this training run")
     parser.add_argument("--description", required=True, help="What this training addresses")
     parser.add_argument("--custom-only", action="store_true", help="Train on custom data only")
     parser.add_argument(
         "--files", nargs="*", help="Specific custom XML files (default: all in training/data/)"
+    )
+    parser.add_argument(
+        "--rationale",
+        help="Path to a rationale markdown file documenting label selection basis",
     )
     args = parser.parse_args()
 
@@ -152,6 +162,16 @@ def main() -> None:  # noqa: PLR0915
         shutil.copy2(backup_path, current_model)
         print("Restored original bundled model.")
 
+    # Read rationale if provided
+    rationale_text = None
+    if args.rationale:
+        rationale_path = Path(args.rationale)
+        if rationale_path.exists():
+            rationale_text = rationale_path.read_text().strip()
+            print(f"Included rationale from {rationale_path}")
+        else:
+            print(f"Warning: rationale file not found: {rationale_path}", file=sys.stderr)
+
     # Write manifest
     manifest = _build_manifest(
         name=args.name,
@@ -159,6 +179,7 @@ def main() -> None:  # noqa: PLR0915
         training_files=training_file_entries,
         test_files=test_files,
         output_model=output_name,
+        rationale=rationale_text,
     )
     manifest_path = MANIFESTS_DIR / f"{manifest['id']}.json"
     with manifest_path.open("w") as f:
