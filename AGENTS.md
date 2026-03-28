@@ -157,6 +157,7 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 
 | File/Module | Risk |
 |---|---|
+| `src/address_validator/routers/v1/parse.py`, `standardize.py` | Route handlers MUST be `async def` — sync `def` routes run in a threadpool via `run_in_threadpool()`, which copies the contextvars context; ContextVar writes (e.g. `set_candidate_data`) inside the copy are invisible to the outer ASGI audit middleware. Changing these back to `def` silently breaks training candidate collection. |
 | `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect all parsing |
 | `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect component assignment |
 | `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
