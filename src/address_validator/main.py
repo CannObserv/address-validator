@@ -59,10 +59,15 @@ def _load_custom_model() -> None:
         )
         return
 
-    tagger = pycrfsuite.Tagger()
-    tagger.open(str(path))
-    usaddress.TAGGER = tagger
-    logging.getLogger(__name__).info("loaded custom usaddress model: %s", path)
+    try:
+        tagger = pycrfsuite.Tagger()
+        tagger.open(str(path))
+        usaddress.TAGGER = tagger
+        logging.getLogger(__name__).info("loaded custom usaddress model: %s", path)
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "CUSTOM_MODEL_PATH=%s failed to load, using bundled model", path, exc_info=True
+        )
 
 
 _DESCRIPTION = """

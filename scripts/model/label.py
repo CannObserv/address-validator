@@ -81,8 +81,25 @@ Important:
             text = text[4:]
         text = text.strip()
 
-    pairs = json.loads(text)
-    return [(token, label) for token, label in pairs]
+    try:
+        pairs = json.loads(text)
+        labels = [(token, label) for token, label in pairs]
+    except (json.JSONDecodeError, ValueError, TypeError) as exc:
+        print(
+            f"Warning: Claude response parse failed ({exc}), using model labels.",
+            file=sys.stderr,
+        )
+        return _label_with_model(address)
+
+    invalid = [lab for _, lab in labels if lab not in VALID_TAGS]
+    if invalid:
+        print(
+            f"Warning: Claude returned invalid labels {invalid}, using model labels.",
+            file=sys.stderr,
+        )
+        return _label_with_model(address)
+
+    return labels
 
 
 def _format_diff(

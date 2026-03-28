@@ -1,6 +1,7 @@
 """Unit tests for custom usaddress model loading."""
 
 import os
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -30,6 +31,21 @@ class TestLoadCustomModel:
                 _load_custom_model()
             assert usaddress.TAGGER is original_tagger
             assert "not found" in caplog.text
+        finally:
+            usaddress.TAGGER = original_tagger
+
+    def test_falls_back_on_corrupt_model(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A path that exists but isn't a valid CRF model logs a warning and keeps bundled model."""
+        bad_model = tmp_path / "bad.crfsuite"
+        bad_model.write_bytes(b"not a crfsuite model")
+        original_tagger = usaddress.TAGGER
+        try:
+            with mock.patch.dict(os.environ, {"CUSTOM_MODEL_PATH": str(bad_model)}):
+                _load_custom_model()
+            assert usaddress.TAGGER is original_tagger
+            assert "failed to load" in caplog.text
         finally:
             usaddress.TAGGER = original_tagger
 

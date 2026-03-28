@@ -70,6 +70,11 @@ def main() -> None:
     parser.add_argument("--model", required=True, help="Path to .crfsuite model to deploy")
     parser.add_argument("--restart", action="store_true", help="Restart the service after deploy")
     parser.add_argument("--smoke-test", action="store_true", help="Run health check after restart")
+    parser.add_argument(
+        "--health-url",
+        default="http://localhost:8000/api/v1/health",
+        help="Health check URL for --smoke-test (default: http://localhost:8000/api/v1/health)",
+    )
     args = parser.parse_args()
 
     model_path = Path(args.model)
@@ -110,9 +115,7 @@ def main() -> None:
             time.sleep(2)
             print("\nRunning smoke test...")
             try:
-                with urllib.request.urlopen(
-                    "http://localhost:8000/api/v1/health", timeout=5
-                ) as resp:
+                with urllib.request.urlopen(args.health_url, timeout=5) as resp:  # noqa: S310
                     body = json.loads(resp.read())
                 print(f"Health check: {body}")
                 if body.get("status") != "ok":

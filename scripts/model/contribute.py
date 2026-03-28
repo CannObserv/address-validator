@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -142,8 +143,8 @@ def _stage_fork(name: str, manifest: dict) -> None:
     )
 
 
-def _stage_upstream(name: str, manifest: dict) -> None:
-    """Assemble and open an upstream PR to datamade/usaddress."""
+def _stage_upstream(name: str, manifest: dict, branch: str = "main") -> None:
+    """Display the upstream PR body and either open it via gh or print manual instructions."""
     if not FORK_REPO:
         print("Error: FORK_REPO not configured. Run --stage fork first.", file=sys.stderr)
         sys.exit(1)
@@ -165,6 +166,8 @@ def _stage_upstream(name: str, manifest: dict) -> None:
 
     pr_body = _generate_pr_body(manifest, training_xml, test_xml)
 
+    fork_org = FORK_REPO.split("/", maxsplit=1)[0]
+
     print("=" * 60)
     print(f"PR Title: {pr_title}")
     print("=" * 60)
@@ -172,19 +175,48 @@ def _stage_upstream(name: str, manifest: dict) -> None:
     print(f"Target: {FORK_REPO} → {UPSTREAM_REPO}")
     print("=" * 60)
     print(
-        "\nThis will open a PR from your fork to datamade/usaddress.\n"
-        "Only proceed when you are confident the training data is correct and complete.\n"
+        f"\nFork branch: {fork_org}:{branch}\n"
+        "Only proceed when training data is correct, complete, and pushed to your fork.\n"
+        "  [o] Open PR now via gh cli  (requires fork branch already pushed)\n"
+        "  [i] Show manual instructions\n"
+        "  [n] Abort\n"
     )
-    print("Open PR? [y/N] ", end="")
+    print("Choice [o/i/n]: ", end="")
     choice = input().strip().lower()
-    if choice != "y":
+
+    if choice in {"n", ""}:
         print("Aborted.")
         sys.exit(0)
-
-    print(
-        "\nPR creation requires the training data to already be pushed to your fork.\n"
-        "Run --stage fork first, push the files, then re-run --stage upstream."
-    )
+    elif choice == "i":
+        print("\nManual steps to open the PR:")
+        print(f"  1. Ensure your fork branch is pushed: git push {fork_org} {branch}")
+        print(f"  2. gh pr create --repo {UPSTREAM_REPO} \\")
+        print(f"       --head {fork_org}:{branch} \\")
+        print(f'       --title "{pr_title}" \\')
+        print("       --body $'<paste body above>'")
+    elif choice == "o":
+        result = subprocess.run(  # noqa: S603
+            [  # noqa: S607
+                "gh",
+                "pr",
+                "create",
+                "--repo",
+                UPSTREAM_REPO,
+                "--head",
+                f"{fork_org}:{branch}",
+                "--title",
+                pr_title,
+                "--body",
+                pr_body,
+            ],
+            check=False,
+        )
+        if result.returncode != 0:
+            print("Error: gh pr create failed. Check output above.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print(f"Unknown choice '{choice}'. Aborted.")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -195,6 +227,11 @@ def main() -> None:
         required=True,
         choices=["fork", "upstream"],
         help="fork: push to our fork | upstream: open PR to datamade/usaddress",
+    )
+    parser.add_argument(
+        "--branch",
+        default="main",
+        help="Branch in the fork to use as PR head (default: main)",
     )
     args = parser.parse_args()
 
@@ -209,7 +246,7 @@ def main() -> None:
     if args.stage == "fork":
         _stage_fork(args.name, manifest)
     else:
-        _stage_upstream(args.name, manifest)
+        _stage_upstream(args.name, manifest, branch=args.branch)
 
 
 if __name__ == "__main__":

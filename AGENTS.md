@@ -37,10 +37,11 @@ HTTP request
      ├─ providers.py          GET /admin/providers/{name}
      └─ queries.py            SQLAlchemy Core query helpers for dashboard views
 
-db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats)
+db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates)
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
+services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
@@ -52,6 +53,9 @@ tests/js/           Vitest + jsdom tests for admin JS (npm test)
 package.json        Node dev-only deps (vitest, jsdom); type: "module"
 vitest.config.js    Vitest config — jsdom environment, tests/js/ scope
 static/admin/images/ Cannabis Observer brand SVGs
+
+scripts/model/       Training pipeline scripts (identify, label, train, test_model, deploy, contribute)
+skills/train-model/  /train-model skill — interactive 6-step pipeline orchestration
 ```
 
 See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance standards
@@ -101,6 +105,7 @@ Env vars in `/etc/address-validator/env`:
 | `AUDIT_RETENTION_DAYS` | non-negative int | `90` |
 | `AUDIT_ARCHIVE_BUCKET` | GCS bucket name | — (required for archival) |
 | `AUDIT_ARCHIVE_PREFIX` | string | `audit/` |
+| `CUSTOM_MODEL_PATH` | absolute path to `.crfsuite` model file | — (unset = bundled usaddress model) |
 
 See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 
@@ -172,10 +177,12 @@ export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
 | `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
 | `src/address_validator/middleware/audit.py` | Pure ASGI middleware; runs on every API request; reads engine from `scope["app"].state.engine` (set during lifespan); `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must run inside request_id middleware); ContextVars set by the validation pipeline are read after `self.app()` returns — this only works because pure ASGI runs in one asyncio task (BaseHTTPMiddleware broke this); `_check_validate_invariants` overrides `error_detail` to `"audit_invariant_violated"` when `/api/v1/validate` + 2xx has NULL audit fields — changes to invariant logic silently affect audit row content |
 | `src/address_validator/middleware/api_version.py` | Pure ASGI middleware; appends `API-Version: 1` header to `/api/v1/` responses; no state or ContextVars |
-| `src/address_validator/db/tables.py` | SQLAlchemy Core Table definitions (audit + cache) and shared constants — column changes here affect `services/audit.py`, `services/validation/cache_provider.py`, `routers/admin/queries.py`, and `scripts/archive_audit.py`; `validated_addresses` has CHECK constraint on `status` and JSONB columns (`components_json`, `warnings_json`); must stay in sync with Alembic migrations |
+| `src/address_validator/db/tables.py` | SQLAlchemy Core Table definitions (audit + cache + training candidates) and shared constants — column changes here affect `services/audit.py`, `services/validation/cache_provider.py`, `routers/admin/queries.py`, `scripts/archive_audit.py`, and `scripts/model/identify.py`; `validated_addresses` has CHECK constraint on `status` and JSONB columns (`components_json`, `warnings_json`); `model_training_candidates` has CHECK constraint on `status` and JSONB columns (`parsed_tokens`, `recovered_components`); must stay in sync with Alembic migrations |
 | `src/address_validator/routers/admin/deps.py` | `AdminContext` composite DI — `get_admin_context` is the single entry point for all admin routes; `AdminAuthRequired` and `DatabaseUnavailable` exceptions are caught by app-level handlers in `main.py`; removing or weakening auth check here silently drops auth for all admin views |
 | `src/address_validator/routers/admin/queries.py` | SQLAlchemy Core query composition; `_ARCHIVED_DATE_GUARD` scalar subquery and `_from_archived` helper are shared by multiple functions — changes affect all archived-data queries |
 | `src/address_validator/services/audit.py` | ContextVar reset in middleware is load-bearing; `except Exception` in `write_audit_row` is intentional fail-open; four ContextVars: `_audit_provider`, `_audit_validation_status`, `_audit_cache_hit`, `_audit_pattern_key` — all reset together by `reset_audit_context()`; `set_audit_context(pattern_key=...)` uses an `if not None` guard (calling it with `None` is a no-op, not a clear) |
+| `src/address_validator/services/training_candidates.py` | ContextVar reset in middleware is load-bearing (must be called at request start alongside `reset_audit_context()`); `except Exception` in `write_training_candidate` is intentional fail-open — do not narrow; `_candidate_data` ContextVar holds a dict or None; only the last `set_candidate_data()` call per request wins (post-parse overwrite is intentional) |
+| `src/address_validator/main.py` `_load_custom_model` | Swaps `usaddress.TAGGER` at boot if `CUSTOM_MODEL_PATH` env var is set; falls back silently to bundled model on missing path or failed load — changes to fallback behavior affect parse quality for all requests without surfacing a 5xx |
 | `scripts/archive_audit.py` | Deletes audit_log rows after archival — verify GCS upload succeeded before deletion; `ON CONFLICT DO NOTHING` in aggregation is load-bearing for idempotency |
 
 ## Commit convention
