@@ -130,9 +130,9 @@ def _stage_fork(name: str, manifest: dict, session_dir: Path) -> None:
         training_path = session_dir / fname
         if training_path.exists():
             print(f"  training/{fname}")
-        test_path = session_dir / "test-data.xml"
-        if test_path.exists():
-            print(f"  measure_performance/test_data/{fname}")
+    test_path = session_dir / "test-data.xml"
+    if test_path.exists():
+        print("  measure_performance/test_data/test-data.xml")
 
     print(
         "\nThis requires a local clone of the fork. "

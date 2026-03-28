@@ -3,7 +3,7 @@
   "description": "Multi-unit designator handling \u2014 BLDG + APT/STE/UNIT/ROOM patterns (issue #72)",
   "usaddress_version": "unknown",
   "training_files": [
-    "upstream:../upstream/labeled.xml",
+    "upstream:labeled.xml",
     "custom:training-data.xml"
   ],
   "test_files": [

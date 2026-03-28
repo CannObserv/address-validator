@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -144,8 +145,7 @@ async def _show_ambiguous(dsn: str, since: datetime, until: datetime | None, lim
     try:
         from address_validator.db.tables import model_training_candidates  # noqa: PLC0415
 
-        # Join audit_log with training candidates on timestamp proximity
-        # Simpler: just show training candidates created in the period
+        # Show training candidates created in the period
         query = (
             sa.select(
                 model_training_candidates.c.id,
@@ -177,7 +177,7 @@ async def _show_ambiguous(dsn: str, since: datetime, until: datetime | None, lim
         await engine.dispose()
 
 
-async def _generate_report(dsn: str, since: datetime, until: datetime | None, out: str) -> None:
+async def _generate_report(dsn: str, since: datetime, until: datetime | None, out: str) -> None:  # noqa: PLR0915
     """Generate a performance.md report."""
     engine = create_async_engine(dsn)
     try:
@@ -303,6 +303,16 @@ async def _generate_report(dsn: str, since: datetime, until: datetime | None, ou
         Path(out).write_text(report)
         print(f"Wrote performance report to {out}")
         print(f"  {total} requests, {clean_pct:.1f}% clean parse rate")
+
+        # Update manifest if it exists in the same directory
+        manifest_path = Path(out).parent / "manifest.json"
+        if manifest_path.exists():
+            with manifest_path.open() as mf:
+                manifest_data = json.load(mf)
+            manifest_data["performance_file"] = Path(out).name
+            with manifest_path.open("w") as mf:
+                json.dump(manifest_data, mf, indent=2)
+            print(f"Updated manifest: performance_file={Path(out).name}")
     finally:
         await engine.dispose()
 
