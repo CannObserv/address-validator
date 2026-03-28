@@ -1,5 +1,5 @@
 # Built model files (reconstructible from manifests + training data)
 models/
 
-# Local candidate export cache
+# Local candidate export cache (session-specific copies are committed)
 candidates.jsonl

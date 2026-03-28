@@ -22,9 +22,8 @@ import usaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TRAINING_DIR = PROJECT_ROOT / "training"
-DATA_DIR = TRAINING_DIR / "data"
+SESSIONS_DIR = TRAINING_DIR / "sessions"
 MODELS_DIR = TRAINING_DIR / "models"
-MANIFESTS_DIR = TRAINING_DIR / "manifests"
 
 
 def _find_upstream_training_files() -> list[Path]:
@@ -51,35 +50,40 @@ def _find_upstream_training_files() -> list[Path]:
     return []
 
 
-def _find_custom_training_files() -> list[Path]:
-    """Find all XML training files in our training/data/ directory."""
-    return sorted(DATA_DIR.glob("*.xml"))
+def _find_custom_training_files(session_dir: Path) -> list[Path]:
+    """Find training XML files in a session directory."""
+    xmls = sorted(session_dir.glob("training-data*.xml"))
+    if not xmls:
+        # Fallback: any XML in the session dir
+        xmls = sorted(session_dir.glob("*.xml"))
+    return xmls
 
 
 def _build_manifest(
     name: str,
     description: str,
+    session_dir: str,
     training_files: list[tuple[str, str]],
     test_files: list[str],
     output_model: str,
-    rationale: str | None = None,
+    rationale_file: str | None = None,
 ) -> dict:
     """Build a training manifest dict."""
     version = getattr(usaddress, "__version__", "unknown")
-    manifest: dict = {
+    return {
         "id": f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{name}",
         "description": description,
         "usaddress_version": version,
+        "session_dir": session_dir,
         "training_files": [f"{src}:{path}" for src, path in training_files],
         "test_files": test_files,
         "created_at": datetime.now(UTC).isoformat(),
         "output_model": output_model,
         "deployed": False,
         "upstream_pr": None,
+        "rationale_file": rationale_file,
+        "performance_file": None,
     }
-    if rationale:
-        manifest["rationale"] = rationale
-    return manifest
 
 
 def main() -> None:  # noqa: PLR0912 PLR0915
@@ -88,16 +92,24 @@ def main() -> None:  # noqa: PLR0912 PLR0915
     parser.add_argument("--description", required=True, help="What this training addresses")
     parser.add_argument("--custom-only", action="store_true", help="Train on custom data only")
     parser.add_argument(
-        "--files", nargs="*", help="Specific custom XML files (default: all in training/data/)"
+        "--session-dir",
+        help="Session dir with training data (default: auto-created)",
     )
     parser.add_argument(
-        "--rationale",
-        help="Path to a rationale markdown file documenting label selection basis",
+        "--files",
+        nargs="*",
+        help="Specific custom XML files (overrides session dir search)",
     )
     args = parser.parse_args()
 
+    # Determine session directory
+    if args.session_dir:
+        session_dir = Path(args.session_dir)
+    else:
+        ts = datetime.now(UTC).strftime("%Y_%m_%d-%H_%M")
+        session_dir = SESSIONS_DIR / f"{ts}-{args.name.replace(' ', '_')}"
+    session_dir.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    MANIFESTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Collect training files
     training_file_entries: list[tuple[str, str]] = []
@@ -109,21 +121,25 @@ def main() -> None:  # noqa: PLR0912 PLR0915
             training_file_entries.append(("upstream", str(f.name)))
             training_paths.append(f)
 
-    custom_files = [Path(f) for f in args.files] if args.files else _find_custom_training_files()
+    if args.files:
+        custom_files = [Path(f) for f in args.files]
+    else:
+        custom_files = _find_custom_training_files(session_dir)
     if not custom_files:
-        print("Error: no custom training files found in training/data/", file=sys.stderr)
+        print(f"Error: no training XML found in {session_dir}", file=sys.stderr)
         sys.exit(1)
 
     for f in custom_files:
         training_file_entries.append(("custom", str(f.name)))
         training_paths.append(f)
 
+    print(f"Session: {session_dir}")
     print(f"Training with {len(training_paths)} files:")
     for src, name in training_file_entries:
         print(f"  [{src}] {name}")
 
-    # Find test files
-    test_files = sorted(str(f.name) for f in (TRAINING_DIR / "test_cases").glob("*.csv"))
+    # Find test files in session dir
+    test_files = sorted(str(f.name) for f in session_dir.glob("test-cases*.csv"))
 
     # Backup current model
     current_model = Path(usaddress.MODEL_PATH)
@@ -162,26 +178,24 @@ def main() -> None:  # noqa: PLR0912 PLR0915
         shutil.copy2(backup_path, current_model)
         print("Restored original bundled model.")
 
-    # Read rationale if provided
-    rationale_text = None
-    if args.rationale:
-        rationale_path = Path(args.rationale)
-        if rationale_path.exists():
-            rationale_text = rationale_path.read_text().strip()
-            print(f"Included rationale from {rationale_path}")
-        else:
-            print(f"Warning: rationale file not found: {rationale_path}", file=sys.stderr)
+    # Check for rationale file in session dir
+    rationale_file = None
+    rationale_path = session_dir / "rationale.md"
+    if rationale_path.exists():
+        rationale_file = "rationale.md"
+        print(f"Found rationale at {rationale_path}")
 
-    # Write manifest
+    # Write manifest to session dir
     manifest = _build_manifest(
         name=args.name,
         description=args.description,
+        session_dir=str(session_dir),
         training_files=training_file_entries,
         test_files=test_files,
         output_model=output_name,
-        rationale=rationale_text,
+        rationale_file=rationale_file,
     )
-    manifest_path = MANIFESTS_DIR / f"{manifest['id']}.json"
+    manifest_path = session_dir / "manifest.json"
     with manifest_path.open("w") as f:
         json.dump(manifest, f, indent=2)
     print(f"Wrote manifest to {manifest_path}")

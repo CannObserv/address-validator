@@ -21,22 +21,20 @@ from pathlib import Path
 import usaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = PROJECT_ROOT / "training" / "data"
-TEST_CASES_DIR = PROJECT_ROOT / "training" / "test_cases"
-MANIFESTS_DIR = PROJECT_ROOT / "training" / "manifests"
+SESSIONS_DIR = PROJECT_ROOT / "training" / "sessions"
 
 # Our fork — update when fork is created
 FORK_REPO = ""  # e.g. "CannObserv/usaddress"
 UPSTREAM_REPO = "datamade/usaddress"
 
 
-def _find_manifest(name: str) -> dict | None:
+def _find_manifest(name: str) -> tuple[dict, Path] | None:
     """Find a manifest by name (matches anywhere in the manifest ID)."""
-    for manifest_file in sorted(MANIFESTS_DIR.glob("*.json"), reverse=True):
+    for manifest_file in sorted(SESSIONS_DIR.rglob("manifest.json"), reverse=True):
         with manifest_file.open() as f:
             manifest = json.load(f)
         if name in manifest.get("id", ""):
-            return manifest
+            return manifest, manifest_file.parent
     return None
 
 
@@ -106,7 +104,7 @@ pytest
 """
 
 
-def _stage_fork(name: str, manifest: dict) -> None:
+def _stage_fork(name: str, manifest: dict, session_dir: Path) -> None:
     """Show instructions for pushing training data to our fork."""
     if not FORK_REPO:
         print(
@@ -129,12 +127,12 @@ def _stage_fork(name: str, manifest: dict) -> None:
 
     print(f"\nFiles to push to fork {FORK_REPO}:")
     for fname in custom_files:
-        training_path = DATA_DIR / fname
+        training_path = session_dir / fname
         if training_path.exists():
             print(f"  training/{fname}")
-        test_path = TEST_CASES_DIR / fname  # same name, different dir
+        test_path = session_dir / "test-data.xml"
         if test_path.exists():
-            print(f"  measure_performance/test_data/{fname}  (from test_cases/{fname})")
+            print(f"  measure_performance/test_data/{fname}")
 
     print(
         "\nThis requires a local clone of the fork. "
@@ -143,7 +141,7 @@ def _stage_fork(name: str, manifest: dict) -> None:
     )
 
 
-def _stage_upstream(name: str, manifest: dict, branch: str = "main") -> None:
+def _stage_upstream(name: str, manifest: dict, session_dir: Path, branch: str = "main") -> None:
     """Display the upstream PR body and either open it via gh or print manual instructions."""
     if not FORK_REPO:
         print("Error: FORK_REPO not configured. Run --stage fork first.", file=sys.stderr)
@@ -156,8 +154,8 @@ def _stage_upstream(name: str, manifest: dict, branch: str = "main") -> None:
         print("Error: no custom training files in manifest", file=sys.stderr)
         sys.exit(1)
 
-    training_xml = DATA_DIR / custom_files[0]
-    test_xml_path = TEST_CASES_DIR / custom_files[0]
+    training_xml = session_dir / custom_files[0]
+    test_xml_path = session_dir / "test-data.xml"
     test_xml = test_xml_path if test_xml_path.exists() else None
 
     pr_title = manifest["description"]
@@ -235,18 +233,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    manifest = _find_manifest(args.name)
-    if not manifest:
+    result = _find_manifest(args.name)
+    if not result:
         print(f"Error: no manifest found matching '{args.name}'", file=sys.stderr)
         sys.exit(1)
 
+    manifest, session_dir = result
     print(f"Using manifest: {manifest['id']}")
+    print(f"Session: {session_dir}")
     print(f"Description: {manifest['description']}")
 
     if args.stage == "fork":
-        _stage_fork(args.name, manifest)
+        _stage_fork(args.name, manifest, session_dir)
     else:
-        _stage_upstream(args.name, manifest, branch=args.branch)
+        _stage_upstream(args.name, manifest, session_dir, branch=args.branch)
 
 
 if __name__ == "__main__":

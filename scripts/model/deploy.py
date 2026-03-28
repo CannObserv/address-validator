@@ -26,7 +26,7 @@ import usaddress
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPLOY_DIR = PROJECT_ROOT / "src" / "address_validator" / "custom_model"
 DEPLOY_PATH = DEPLOY_DIR / "usaddr-custom.crfsuite"
-MANIFESTS_DIR = PROJECT_ROOT / "training" / "manifests"
+SESSIONS_DIR = PROJECT_ROOT / "training" / "sessions"
 
 
 def _validate_model(model_path: Path) -> bool:
@@ -53,14 +53,14 @@ def _validate_model(model_path: Path) -> bool:
 
 def _update_manifest_deployed(model_name: str) -> None:
     """Mark the corresponding manifest as deployed."""
-    for manifest_file in sorted(MANIFESTS_DIR.glob("*.json")):
+    for manifest_file in sorted(SESSIONS_DIR.rglob("manifest.json")):
         with manifest_file.open() as f:
             manifest = json.load(f)
         if manifest.get("output_model") == model_name:
             manifest["deployed"] = True
             with manifest_file.open("w") as f:
                 json.dump(manifest, f, indent=2)
-            print(f"Updated manifest {manifest_file.name}: deployed=true")
+            print(f"Updated manifest {manifest_file}: deployed=true")
             return
     print(f"Warning: no manifest found for model '{model_name}'")
 

@@ -1,0 +1,19 @@
+{
+  "id": "2026-03-28-multi-unit",
+  "description": "Multi-unit designator handling \u2014 BLDG + APT/STE/UNIT/ROOM patterns (issue #72)",
+  "usaddress_version": "unknown",
+  "training_files": [
+    "upstream:../upstream/labeled.xml",
+    "custom:training-data.xml"
+  ],
+  "test_files": [
+    "test-cases.csv"
+  ],
+  "created_at": "2026-03-28T20:09:04.375357+00:00",
+  "output_model": "usaddr-multi-unit.crfsuite",
+  "deployed": true,
+  "upstream_pr": null,
+  "session_dir": "training/sessions/2026_03_28-multi_unit",
+  "rationale_file": "rationale.md",
+  "performance_file": null
+}

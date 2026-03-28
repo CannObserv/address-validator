@@ -26,7 +26,6 @@ import pycrfsuite
 import usaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-TEST_CASES_DIR = PROJECT_ROOT / "training" / "test_cases"
 
 
 def _load_tagger(model_path: str) -> pycrfsuite.Tagger:
@@ -116,7 +115,7 @@ def main() -> None:  # noqa: PLR0912 PLR0915
     parser = argparse.ArgumentParser(description="Test a trained usaddress model")
     parser.add_argument("--model", required=True, help="Path to the .crfsuite model to test")
     parser.add_argument("--compare-manifest", help="Manifest of old model to compare against")
-    parser.add_argument("--test-dir", default=str(TEST_CASES_DIR), help="Directory with test CSVs")
+    parser.add_argument("--test-dir", required=True, help="Session dir or folder with test CSVs")
     parser.add_argument(
         "--run-pytest", action="store_true", help="Also run the project pytest suite"
     )
