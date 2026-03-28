@@ -24,7 +24,7 @@ router = APIRouter(
         422: {"model": ErrorResponse},
     },
 )
-def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
+async def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
     check_country(req.country)
 
     upstream_warnings: list[str] = []

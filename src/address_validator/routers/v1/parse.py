@@ -24,7 +24,7 @@ router = APIRouter(
         422: {"model": ErrorResponse},
     },
 )
-def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
+async def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
     check_country(req.country)
 
     raw = req.address.strip()
