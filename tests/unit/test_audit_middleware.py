@@ -195,6 +195,30 @@ def test_invariants_no_override_when_fields_present() -> None:
     assert kwargs["error_detail"] is None
 
 
+def test_audit_row_receives_parse_type() -> None:
+    """parse_type ContextVar set during the endpoint must appear in the audit row."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v1/fake")
+    async def _fake_endpoint() -> dict[str, str]:
+        set_audit_context(parse_type="Street Address")
+        return {"ok": "true"}
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini)
+        tc.get("/api/v1/fake")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["parse_type"] == "Street Address", (
+        f"parse_type should be 'Street Address', got {kwargs.get('parse_type')!r}"
+    )
+
+
 def test_audit_row_receives_pattern_key() -> None:
     """pattern_key ContextVar set during the endpoint must appear in the audit row."""
     mini = FastAPI()

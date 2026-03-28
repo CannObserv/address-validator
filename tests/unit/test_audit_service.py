@@ -15,6 +15,7 @@ from address_validator.models import (
 )
 from address_validator.services.audit import (
     get_audit_cache_hit,
+    get_audit_parse_type,
     get_audit_pattern_key,
     get_audit_provider,
     get_audit_validation_status,
@@ -172,3 +173,43 @@ async def test_write_audit_row_stores_pattern_key(db: AsyncEngine) -> None:
         result = await conn.execute(text("SELECT pattern_key FROM audit_log"))
         row = result.fetchone()
     assert row.pattern_key == "deadbeef1234"
+
+
+def test_parse_type_defaults_to_none() -> None:
+    reset_audit_context()
+    assert get_audit_parse_type() is None
+
+
+def test_set_audit_context_sets_parse_type() -> None:
+    set_audit_context(parse_type="Street Address")
+    assert get_audit_parse_type() == "Street Address"
+    reset_audit_context()
+
+
+def test_reset_clears_parse_type() -> None:
+    set_audit_context(parse_type="Intersection")
+    reset_audit_context()
+    assert get_audit_parse_type() is None
+
+
+@pytest.mark.asyncio
+async def test_write_audit_row_stores_parse_type(db: AsyncEngine) -> None:
+    await write_audit_row(
+        db,
+        timestamp=datetime.now(UTC),
+        request_id="01TESTULID",
+        client_ip="127.0.0.1",
+        method="POST",
+        endpoint="/api/v1/parse",
+        status_code=200,
+        latency_ms=10,
+        provider=None,
+        validation_status=None,
+        cache_hit=None,
+        error_detail=None,
+        parse_type="Street Address",
+    )
+    async with db.connect() as conn:
+        result = await conn.execute(text("SELECT parse_type FROM audit_log"))
+        row = result.fetchone()
+    assert row.parse_type == "Street Address"

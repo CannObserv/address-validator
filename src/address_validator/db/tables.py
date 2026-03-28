@@ -27,6 +27,7 @@ audit_log = sa.Table(
     sa.Column("cache_hit", sa.Boolean(), nullable=True),
     sa.Column("error_detail", sa.Text(), nullable=True),
     sa.Column("pattern_key", sa.Text(), nullable=True),
+    sa.Column("parse_type", sa.Text(), nullable=True),
 )
 
 audit_daily_stats = sa.Table(

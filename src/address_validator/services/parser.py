@@ -6,6 +6,7 @@ import re
 import usaddress
 
 from address_validator.models import ComponentSet, ParseResponseV1
+from address_validator.services.audit import set_audit_context
 from address_validator.services.training_candidates import set_candidate_data
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -422,6 +423,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         )
 
         logger.debug("parsed address type=Ambiguous country=%s", country)
+        set_audit_context(parse_type="Ambiguous")
         return ParseResponseV1(
             input=raw,
             country=country,
@@ -450,6 +452,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             recovered_components=component_values,
         )
 
+    set_audit_context(parse_type=addr_type)
     return ParseResponseV1(
         input=raw,
         country=country,
