@@ -162,8 +162,11 @@ uv run python scripts/model/test_model.py \
 uv run python scripts/model/deploy.py \
   --model training/models/usaddr-<name>.crfsuite \
   --restart \
-  --smoke-test
+  --smoke-test \
+  --health-url http://localhost:8000/api/v1/health
 ```
+
+`--health-url` defaults to `http://localhost:8000/api/v1/health`; override if the service is on a different port.
 
 **Remind operator:**
 ```
@@ -192,12 +195,14 @@ uv run python scripts/model/contribute.py --name <pattern-name> --stage fork
 ```
 
 **6b: Upstream PR** (gated — only when confident):
-```
-Open a PR to datamade/usaddress? Only proceed when training data is correct and complete. [y/N]
-```
+
+Ask operator which fork branch the training data was pushed to (default: `main`).
+
 ```bash
-uv run python scripts/model/contribute.py --name <pattern-name> --stage upstream
+uv run python scripts/model/contribute.py --name <pattern-name> --stage upstream --branch <branch>
 ```
+
+The script presents three choices: `[o]` open PR via `gh`, `[i]` show manual instructions, `[n]` abort.
 
 ---
 
