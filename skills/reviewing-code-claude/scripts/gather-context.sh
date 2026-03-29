@@ -17,6 +17,11 @@ fi
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$PROJECT_ROOT"
 
+# Load env vars (needed for pytest in worktrees)
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs) 2>/dev/null || true
+fi
+
 echo "=== Project root ==="
 echo "$PROJECT_ROOT"
 
