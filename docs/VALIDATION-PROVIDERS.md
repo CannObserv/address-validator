@@ -12,7 +12,7 @@
 
 ## Configuring providers
 
-Set `VALIDATION_PROVIDER` in `/etc/address-validator/env`:
+Set `VALIDATION_PROVIDER` in `/etc/address-validator/.env`:
 
 ```
 # Single provider

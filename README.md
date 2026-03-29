@@ -201,7 +201,7 @@ uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
 
 A systemd unit file (`address-validator.service`) is included for
 persistent deployment.  The API key is stored in
-`/etc/address-validator/env` and loaded via `EnvironmentFile=`.
+`/etc/address-validator/.env` and loaded via `EnvironmentFile=`.
 
 ## Project Structure
 

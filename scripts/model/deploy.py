@@ -96,7 +96,7 @@ def main() -> None:
 
     # Show next steps
     print("\n--- Next steps ---")
-    print(f"1. Ensure CUSTOM_MODEL_PATH={DEPLOY_PATH} in /etc/address-validator/env")
+    print(f"1. Ensure CUSTOM_MODEL_PATH={DEPLOY_PATH} in /etc/address-validator/.env")
 
     if args.restart:
         print("\nRestarting address-validator service...")

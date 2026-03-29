@@ -80,7 +80,7 @@ Always confirm before starting any execution.
 
 **Setup:** Load DB credentials:
 ```bash
-source /etc/address-validator/env 2>/dev/null || true
+source /etc/address-validator/.env 2>/dev/null || true
 ```
 
 **Show summary:**
@@ -269,7 +269,7 @@ Resume this step with /train-model --step observe when you have sufficient data.
 
 **Check current metrics:**
 ```bash
-source /etc/address-validator/env
+source /etc/address-validator/.env
 uv run python scripts/model/performance.py summary --since <deploy-date>
 ```
 
