@@ -6,7 +6,8 @@ After=network.target
 Type=simple
 User=exedev
 WorkingDirectory=/home/exedev/address-validator
-EnvironmentFile=/etc/address-validator/env
+EnvironmentFile=/etc/address-validator/.env
+EnvironmentFile=-/home/exedev/address-validator/.env
 # Validation provider config (optional — defaults to none/unavailable):
 #   VALIDATION_PROVIDER=usps
 #   USPS_CONSUMER_KEY=<key from developer.usps.com>
