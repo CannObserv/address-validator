@@ -75,7 +75,7 @@ See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance s
 ## Authentication
 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
-- Key at `/etc/address-validator/env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
+- Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`
 - `GET /api/v1/health` returns `{"status": "ok"|"degraded", "api_version": "1", "database": "ok"|"error"|"unconfigured"}`; HTTP 503 when `status == "degraded"` (DB unreachable); `database == "unconfigured"` when no DSN is configured
 - Tests: `conftest.py` sets `API_KEY` via `os.environ.setdefault` — value is read by the lifespan startup hook when `TestClient` first starts the app
@@ -88,7 +88,7 @@ No PII at INFO+. Address content never in log messages at INFO or above. See `do
 
 ## Validation provider
 
-Env vars in `/etc/address-validator/env`:
+Env vars in `/etc/address-validator/.env`:
 
 | Variable | Values | Default |
 |---|---|---|
@@ -114,14 +114,14 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 ## Deployment
 
 - systemd unit: `/etc/systemd/system/address-validator.service` (repo copy is canonical)
-- Env file: `/etc/address-validator/env`
+- Env file: `/etc/address-validator/.env`
 - Restart: `sudo systemctl restart address-validator`
 - Logs: `journalctl -u address-validator -f`
 - Re-install unit: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
 - Pre-commit: `uv run pre-commit install` (ruff + Tailwind CSS build)
-- Backfill audit log: `source /etc/address-validator/env && uv run python scripts/backfill_audit_log.py`
-- Archive audit log: `source /etc/address-validator/env && uv run python scripts/archive_audit.py`
-- Backfill rollups: `source /etc/address-validator/env && uv run python scripts/archive_audit.py --backfill`
+- Backfill audit log: `source /etc/address-validator/.env && uv run python scripts/backfill_audit_log.py`
+- Archive audit log: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py`
+- Backfill rollups: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py --backfill`
 - Install timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
 
 ## Testing and linting
@@ -149,10 +149,10 @@ See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
 ## GitHub CLI
 
-PAT in `env` (project root) as `GITHUB_TOKEN`:
+PAT in `.env` (project root) as `GH_TOKEN`:
 
 ```bash
-export GH_TOKEN=$(grep GITHUB_TOKEN env | cut -d= -f2)
+export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
 ```
 
 ## Sensitive areas
