@@ -124,6 +124,34 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Backfill rollups: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py --backfill`
 - Install timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
 
+## Infrastructure
+
+Single-VM dev+prod model ([exe.dev](https://exe.dev)):
+- Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
+- Port 8001 = dev server (active git worktree, `--reload`)
+- exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
+- All development work happens on git worktrees — never modify the main worktree directly
+- Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
+
+## Server lifecycle
+
+| After… | Do this |
+|---|---|
+| Code change (no env/service) | `sudo systemctl restart address-validator` |
+| Env var change | Edit `/etc/address-validator/.env`, then restart |
+| Service unit change | `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
+| New worktree created | Kill any dev server on 8001 (`lsof -ti:8001 \| xargs kill 2>/dev/null`), then start from new worktree with `--reload` |
+| Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
+| Worktree finished | Kill dev server on 8001, delete worktree |
+| Stale process suspected | `ps aux \| grep uvicorn` — kill anything not PID from `systemctl show address-validator -p MainPID` |
+
+## Environment
+
+| File | Contents | Loaded by |
+|---|---|---|
+| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) | systemd (required) |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`) | systemd (optional with `-` prefix), manual `export` |
+
 ## Testing and linting
 
 ```
