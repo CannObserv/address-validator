@@ -128,6 +128,16 @@ def test_audit_htmx_nonboosted_returns_partial(client: TestClient, admin_headers
     assert "<nav" not in response.text
 
 
+def test_audit_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    response = client.get("/admin/audit/", headers=admin_headers)
+    html = response.text
+    # Find the Clear link — it should target body, not inherit #audit-rows from the form
+    assert 'hx-target="body"' in html
+    # Verify the form still targets the partial swap container
+    assert 'hx-target="#audit-rows"' in html
+
+
 def test_endpoint_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
     """In-page HTMX request to /admin/endpoints/parse returns rows partial."""
     headers = {**admin_headers, "HX-Request": "true"}
