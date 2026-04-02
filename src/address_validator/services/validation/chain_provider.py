@@ -17,12 +17,6 @@ from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 
-_RECOVERABLE_ERRORS = (
-    ProviderRateLimitedError,
-    ProviderAtCapacityError,
-    ProviderBadRequestError,
-)
-
 
 class ChainProvider:
     """Tries each provider in order, falling back on recoverable errors.

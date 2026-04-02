@@ -86,6 +86,8 @@ router = APIRouter(
         "- `N` — address not found\n\n"
         "When no validation provider is configured, `validation.status` is "
         "`unavailable` and all other result fields are `null`.\n\n"
+        "When the validation provider rejects the input as malformed, "
+        "`validation.status` is `error`.\n\n"
         "HTTP 429 is returned when all configured providers are currently "
         "rate-limited and no further fallbacks are available. "
         "The response includes a `Retry-After` header indicating the "
