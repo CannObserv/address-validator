@@ -13,6 +13,8 @@
     <script type="module" src="/static/admin/js/theme.js"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
+{#- Shared button classes — single source of truth for filter forms -#}
+{% set clear_btn_cls = "px-3 py-1 rounded text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100 focus:ring-offset-1 dark:ring-offset-gray-800 no-underline min-h-[32px] inline-flex items-center" %}
 {#- Nav items — single source of truth for both mobile and desktop nav -#}
 {% set nav_items = [
     ('dashboard', '/admin/', 'Dashboard', none),

@@ -138,6 +138,22 @@ def test_audit_clear_link_overrides_hx_target(client: TestClient, admin_headers:
     assert 'hx-target="#audit-rows"' in html
 
 
+def test_endpoint_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    html = response.text
+    assert 'hx-target="body"' in html
+    assert 'hx-target="#audit-rows"' in html
+
+
+def test_provider_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    html = response.text
+    assert 'hx-target="body"' in html
+    assert 'hx-target="#audit-rows"' in html
+
+
 def test_endpoint_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
     """In-page HTMX request to /admin/endpoints/parse returns rows partial."""
     headers = {**admin_headers, "HX-Request": "true"}

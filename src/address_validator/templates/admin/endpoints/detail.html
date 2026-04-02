@@ -57,7 +57,8 @@
         Filter
     </button>
     <a href="/admin/endpoints/{{ endpoint_name }}"
-       class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline self-center">Clear</a>
+       hx-target="body"
+       class="{{ clear_btn_cls }}">Clear</a>
 </form>
 
 <div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
