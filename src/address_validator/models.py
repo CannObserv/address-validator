@@ -187,6 +187,7 @@ class ValidationResult(BaseModel):
     * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
     * ``not_confirmed``               — DPV code N: address not found in USPS database.
     * ``unavailable``                 — provider not configured or unreachable.
+    * ``error``                       — provider rejected the input as malformed.
     """
 
     status: Literal[
@@ -195,6 +196,7 @@ class ValidationResult(BaseModel):
         "confirmed_bad_secondary",
         "not_confirmed",
         "unavailable",
+        "error",
     ]
     dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
         default=None,

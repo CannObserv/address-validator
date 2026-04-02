@@ -10,6 +10,7 @@ import logging
 from address_validator.models import StandardizeResponseV1, ValidateResponseV1
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
+    ProviderBadRequestError,
     ProviderRateLimitedError,
 )
 from address_validator.services.validation.protocol import ValidationProvider
@@ -46,15 +47,26 @@ class ChainProvider:
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
-        last_exc: ProviderRateLimitedError | ProviderAtCapacityError | None = None
+        _RecoverableError = (
+            ProviderRateLimitedError,
+            ProviderAtCapacityError,
+            ProviderBadRequestError,
+        )
+        last_exc: (
+            ProviderRateLimitedError | ProviderAtCapacityError | ProviderBadRequestError | None
+        ) = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
                 return await provider.validate(std, raw_input=raw_input)
-            except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
+            except _RecoverableError as exc:
                 last_exc = exc
                 logger.warning(
-                    "ChainProvider: %s at capacity or rate-limited, trying next provider", name
+                    "ChainProvider: %s unavailable (%s), trying next provider",
+                    name,
+                    type(exc).__name__,
                 )
+        if isinstance(last_exc, ProviderBadRequestError):
+            raise ProviderBadRequestError("all", detail=last_exc.detail)
         retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
         raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)

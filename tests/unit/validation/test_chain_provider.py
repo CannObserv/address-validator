@@ -13,6 +13,7 @@ from address_validator.models import (
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
+    ProviderBadRequestError,
     ProviderRateLimitedError,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -164,6 +165,30 @@ class TestChainProvider:
         with pytest.raises(ProviderRateLimitedError) as exc_info:
             await chain.validate(std_address)  # type: ignore[arg-type]
         assert exc_info.value.retry_after_seconds == 3.0
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_second_on_bad_request(self, std_address: object) -> None:
+        primary = AsyncMock()
+        primary.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", detail="400"))
+        secondary = _mock_provider(_GOOGLE_CONFIRMED)
+        chain = ChainProvider(providers=[primary, secondary])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+        assert result.validation.provider == "google"
+        primary.validate.assert_awaited_once()
+        secondary.validate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_bad_request_when_all_providers_reject(self, std_address: object) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", detail="400"))
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(side_effect=ProviderBadRequestError("google", detail="400"))
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderBadRequestError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
     async def test_raw_input_threaded_to_provider(self, std_address) -> None:

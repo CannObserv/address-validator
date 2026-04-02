@@ -10,6 +10,7 @@ import pytest
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
+    ProviderBadRequestError,
     ProviderRateLimitedError,
 )
 from address_validator.services.validation.usps_client import USPSClient, USPSToken
@@ -180,6 +181,45 @@ class TestUSPSClient:
 
         with pytest.raises(httpx.HTTPStatusError):
             await client.validate_address("999 Fake St", "Nowhere", "IL")
+
+    @pytest.mark.asyncio
+    async def test_400_raises_provider_bad_request_error(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 400
+        bad_resp.text = "Invalid address"
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "400 Bad Request", request=MagicMock(), response=bad_resp
+        )
+        mock_http.get.return_value = bad_resp
+
+        with pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("", "Nowhere", "IL")
+        assert exc_info.value.provider == "usps"
+
+    @pytest.mark.asyncio
+    async def test_zip_plus4_stripped_to_zip5(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address("123 Main St", "Springfield", "IL", zip_code="62701-1234")
+
+        _, kwargs = mock_http.get.call_args
+        assert kwargs["params"]["ZIPCode"] == "62701"
+
+    @pytest.mark.asyncio
+    async def test_zip5_passed_unchanged(self, client: USPSClient, mock_http: AsyncMock) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address("123 Main St", "Springfield", "IL", zip_code="62701")
+
+        _, kwargs = mock_http.get.call_args
+        assert kwargs["params"]["ZIPCode"] == "62701"
 
     @pytest.mark.asyncio
     async def test_429_raises_provider_rate_limited_error_after_retries(

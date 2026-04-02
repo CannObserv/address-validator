@@ -24,7 +24,13 @@ from address_validator.services.validation._rate_limit import (
     QuotaGuard,
     _parse_retry_after,
 )
-from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import (
+    ProviderBadRequestError,
+    ProviderRateLimitedError,
+)
+
+_HTTP_BAD_REQUEST = 400
+_ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +137,10 @@ class USPSClient:
         ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
         ``city``, ``region``, ``postal_code``, ``vacant``.
 
-        Raises :class:`httpx.HTTPStatusError` on non-429 non-2xx responses.
+        Raises :class:`~services.validation.errors.ProviderBadRequestError`
+        when the USPS API returns HTTP 400 (malformed input).
+
+        Raises :class:`httpx.HTTPStatusError` on other non-429 non-2xx responses.
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if city:
@@ -139,7 +148,10 @@ class USPSClient:
         if state:
             params["state"] = state
         if zip_code:
-            params["ZIPCode"] = zip_code
+            # USPS v3 API rejects ZIP+4 in the ZIPCode param — strip to 5 digits.
+            params["ZIPCode"] = (
+                zip_code[:_ZIP5_LENGTH] if len(zip_code) > _ZIP5_LENGTH else zip_code
+            )
 
         for attempt in range(_RETRY_MAX + 1):
             await self._rate_limiter.acquire()
@@ -152,6 +164,12 @@ class USPSClient:
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == _HTTP_BAD_REQUEST:
+                    logger.warning(
+                        "USPSClient: 400 Bad Request from USPS API: %s",
+                        exc.response.text[:200] if hasattr(exc.response, "text") else str(exc),
+                    )
+                    raise ProviderBadRequestError("usps", detail=str(exc)) from exc
                 if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
                     if attempt < _RETRY_MAX:
                         delay = _parse_retry_after(exc.response, attempt)

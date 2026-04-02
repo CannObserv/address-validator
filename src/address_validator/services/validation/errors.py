@@ -26,6 +26,28 @@ class ProviderRateLimitedError(Exception):
         super().__init__(f"Provider '{provider}' rate-limited after retries")
 
 
+class ProviderBadRequestError(Exception):
+    """Raised when the upstream provider rejects the request as invalid (HTTP 400).
+
+    This typically means the address data is malformed or missing required
+    fields (e.g. empty street address).  The chain provider catches this to
+    try the next provider, and the router returns a degraded validation
+    result rather than HTTP 500.
+
+    Parameters
+    ----------
+    provider:
+        Short name of the provider (e.g. ``"usps"``, ``"google"``).
+    detail:
+        Optional detail string from the upstream error.
+    """
+
+    def __init__(self, provider: str, detail: str = "") -> None:
+        self.provider = provider
+        self.detail = detail
+        super().__init__(f"Provider '{provider}' rejected request: {detail}")
+
+
 class ProviderAtCapacityError(Exception):
     """Raised by :class:`~services.validation._rate_limit.QuotaGuard` when a
     request cannot be dispatched within the configured latency budget, or when

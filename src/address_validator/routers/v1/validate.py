@@ -38,11 +38,20 @@ import math
 from fastapi import APIRouter, Depends, Request
 
 from address_validator.auth import require_api_key
-from address_validator.models import ErrorResponse, ValidateRequestV1, ValidateResponseV1
+from address_validator.models import (
+    ErrorResponse,
+    ValidateRequestV1,
+    ValidateResponseV1,
+    ValidationResult,
+)
 from address_validator.routers.v1.core import APIError, check_country
+from address_validator.services.audit import set_audit_context
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
-from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import (
+    ProviderBadRequestError,
+    ProviderRateLimitedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +113,14 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std, raw_input=raw_input)
+    except ProviderBadRequestError as exc:
+        logger.warning("Validation provider rejected request: %s", exc)
+        set_audit_context(provider=exc.provider, validation_status="error", cache_hit=False)
+        result = ValidateResponseV1(
+            country=std.country,
+            validation=ValidationResult(status="error", provider=exc.provider),
+            warnings=["Validation provider rejected the address as malformed"],
+        )
     except ProviderRateLimitedError as exc:
         raise APIError(
             status_code=429,
