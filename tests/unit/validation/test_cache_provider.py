@@ -655,8 +655,13 @@ class TestPatternKeyContextVar:
         assert get_audit_pattern_key() == expected
         reset_audit_context()
 
-    async def test_pattern_key_not_set_on_store_failure(self, db: AsyncEngine) -> None:
-        """pattern_key ContextVar is NOT set when _store raises (fail-open)."""
+    async def test_pattern_key_set_even_on_store_failure(self, db: AsyncEngine) -> None:
+        """pattern_key ContextVar is set even when _store raises (fail-open).
+
+        The pattern_key is a deterministic hash of the standardized input and
+        is computed before the store attempt.  The audit row should always
+        carry it so the query_patterns join works for cache-miss rows too.
+        """
         reset_audit_context()
 
         response = _make_confirmed_response()
@@ -669,11 +674,15 @@ class TestPatternKeyContextVar:
         ):
             await provider.validate(_make_std())
 
-        assert get_audit_pattern_key() is None
+        assert get_audit_pattern_key() is not None
         reset_audit_context()
 
-    async def test_pattern_key_not_set_for_unavailable(self, db: AsyncEngine) -> None:
-        """pattern_key is not set when status is unavailable (nothing stored)."""
+    async def test_pattern_key_set_for_unavailable(self, db: AsyncEngine) -> None:
+        """pattern_key is set even when status is unavailable (no cache store).
+
+        The pattern_key identifies the input query, not the outcome — the
+        audit row should carry it regardless of validation status.
+        """
         reset_audit_context()
 
         response = _make_unavailable_response()
@@ -682,5 +691,5 @@ class TestPatternKeyContextVar:
 
         await provider.validate(_make_std())
 
-        assert get_audit_pattern_key() is None
+        assert get_audit_pattern_key() is not None
         reset_audit_context()

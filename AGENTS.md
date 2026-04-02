@@ -46,7 +46,7 @@ usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
-templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers)
+templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)
 tests/js/           Vitest + jsdom tests for admin JS (npm test)
@@ -54,6 +54,7 @@ package.json        Node dev-only deps (vitest, jsdom); type: "module"
 vitest.config.js    Vitest config — jsdom environment, tests/js/ scope
 static/admin/images/ Cannabis Observer brand SVGs
 
+scripts/backfill_pattern_key.py  One-time backfill: populate NULL pattern_key on audit_log validate rows
 scripts/model/       Training pipeline scripts (identify, label, train, test_model, deploy, performance, contribute)
 skills/train-model/  /train-model skill — interactive 7-step pipeline orchestration
 training/sessions/   Per-session training artifacts (timestamped dirs)
@@ -122,6 +123,7 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Backfill audit log: `source /etc/address-validator/.env && uv run python scripts/backfill_audit_log.py`
 - Archive audit log: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py`
 - Backfill rollups: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py --backfill`
+- Backfill pattern_key: `source /etc/address-validator/.env && uv run python scripts/backfill_pattern_key.py` (dry-run; add `--apply`)
 - Install timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
 
 ## Infrastructure
@@ -199,7 +201,7 @@ export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
 | `src/address_validator/services/validation/config.py` | `validate_config()` is called from the lifespan startup hook and raises `ValueError` on misconfiguration; pydantic-settings validators enforce business rules — changes affect all env-var parsing |
 | `src/address_validator/services/validation/registry.py` | `ProviderRegistry` owns provider lifecycle — `_build_google_provider` mixes credential resolution, quota discovery, monitoring, and reconciliation wiring; `get_quota_info()` reads quota state via public `provider.client.quota_guard` API; instance stored on `app.state.registry` |
 | `src/address_validator/db/engine.py` | `AsyncEngine` singleton; `init_engine()` (lifespan) creates engine + runs Alembic; `get_engine()` is sync, raises pre-init — schema changes go through `alembic/versions/` |
-| `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type; queries use Core Table expressions from `db/tables.py`; JSONB columns require `model_dump()`/`model_validate()` (not JSON string variants); `set_audit_context(pattern_key=...)` must stay inside the `try` block after `_store()` — moving it outside would set the ContextVar even on store failure; `query_patterns` INSERT uses `on_conflict_do_update` with `coalesce` to back-fill `raw_input` when NULL, never overwriting a non-NULL value |
+| `src/address_validator/services/validation/cache_provider.py` | Key hash changes (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries; `validated_at` is the TTL anchor — a schema or backfill change to this column silently breaks expiry for all rows; `except Exception` blocks in `validate()` are intentional fail-open behavior — do not narrow to a specific exception type; queries use Core Table expressions from `db/tables.py`; JSONB columns require `model_dump()`/`model_validate()` (not JSON string variants); `set_audit_context(pattern_key=...)` is set unconditionally on the cache-miss path (alongside provider, validation_status, cache_hit) before `_store()` runs — `pattern_key` identifies the input query, not the store outcome, so the audit row always carries it and the `query_patterns` outer join works for cache-miss rows; `query_patterns` INSERT uses `on_conflict_do_update` with `coalesce` to back-fill `raw_input` when NULL, never overwriting a non-NULL value |
 | `src/address_validator/services/validation/chain_provider.py` | Catches `ProviderRateLimitedError`, `ProviderAtCapacityError`, and `ProviderBadRequestError` — other exceptions propagate immediately without trying further providers; when all providers fail, transient errors (rate-limited/at-capacity) take precedence over bad-request so callers can retry; only raises `ProviderBadRequestError("all")` when *every* provider rejected the input |
 | `src/address_validator/services/validation/_rate_limit.py` | `QuotaGuard` and `QuotaWindow` — `acquire()` holds the single lock across all windows; changes to the refill/consume logic affect every provider; `FixedResetQuotaWindow` is Google-specific — daily window resets at midnight PT (not rolling 86400 s); `adjust_tokens()` is called by quota reconciliation — only adjusts downward; `get_daily_quota_state()` assumes daily window is at index 1 (`_DAILY_WINDOW_INDEX`) — must stay in sync with window construction order in `registry._build_usps_provider` / `_build_google_provider` |
 | `src/address_validator/services/validation/gcp_auth.py` | ADC credentials and project ID resolution; `get_credentials()` called at provider construction and during startup validation — credential errors surface as `ValueError` at boot |

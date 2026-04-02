@@ -342,6 +342,7 @@ class CachingProvider:
             provider=result.validation.provider,
             validation_status=result.validation.status,
             cache_hit=False,
+            pattern_key=pattern_key,
         )
 
         logger.info(
@@ -361,7 +362,6 @@ class CachingProvider:
             try:
                 canonical_key = _make_canonical_key(result)
                 await _store(engine, pattern_key, canonical_key, result, raw_input=raw_input)
-                set_audit_context(pattern_key=pattern_key)
             except Exception:
                 logger.warning("cache_store: storage error — result not cached", exc_info=True)
 
