@@ -165,11 +165,8 @@ class USPSClient:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == _HTTP_BAD_REQUEST:
-                    logger.warning(
-                        "USPSClient: 400 Bad Request from USPS API: %s",
-                        exc.response.text[:200] if hasattr(exc.response, "text") else str(exc),
-                    )
-                    raise ProviderBadRequestError("usps", detail=str(exc)) from exc
+                    logger.warning("USPSClient: 400 Bad Request from USPS API")
+                    raise ProviderBadRequestError("usps", detail="HTTP 400") from exc
                 if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
                     if attempt < _RETRY_MAX:
                         delay = _parse_retry_after(exc.response, attempt)

@@ -114,7 +114,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
     try:
         result = await provider.validate(std, raw_input=raw_input)
     except ProviderBadRequestError as exc:
-        logger.warning("Validation provider rejected request: %s", exc)
+        logger.warning("Validation provider %s rejected request", exc.provider)
         set_audit_context(provider=exc.provider, validation_status="error", cache_hit=False)
         result = ValidateResponseV1(
             country=std.country,

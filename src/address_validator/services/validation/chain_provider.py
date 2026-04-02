@@ -1,4 +1,4 @@
-"""ChainProvider — tries providers in order, falling back on rate-limit errors.
+"""ChainProvider — tries providers in order, falling back on recoverable errors.
 
 Constructed by :class:`~services.validation.registry.ProviderRegistry` when
 ``VALIDATION_PROVIDER`` contains more than one comma-separated value.
@@ -17,20 +17,33 @@ from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 
+_RECOVERABLE_ERRORS = (
+    ProviderRateLimitedError,
+    ProviderAtCapacityError,
+    ProviderBadRequestError,
+)
+
 
 class ChainProvider:
-    """Tries each provider in order, falling back on rate-limit or capacity errors.
+    """Tries each provider in order, falling back on recoverable errors.
 
-    On :class:`~services.validation.errors.ProviderRateLimitedError` or
-    :class:`~services.validation.errors.ProviderAtCapacityError` from the
-    current provider, the next provider in the chain is tried.  If all
-    providers raise :class:`~services.validation.errors.ProviderRateLimitedError`
-    or :class:`~services.validation.errors.ProviderAtCapacityError`,
-    a final :class:`~services.validation.errors.ProviderRateLimitedError` with
-    ``provider="all"`` is raised for the router to translate to HTTP 503.
+    On :class:`~services.validation.errors.ProviderRateLimitedError`,
+    :class:`~services.validation.errors.ProviderAtCapacityError`, or
+    :class:`~services.validation.errors.ProviderBadRequestError` from the
+    current provider, the next provider in the chain is tried.
 
-    Any non-rate-limit, non-capacity exception (network error, unexpected 5xx,
-    etc.) is re-raised immediately without trying further providers.
+    When all providers fail:
+
+    * If **any** provider raised a transient error (rate-limited / at-capacity),
+      a :class:`~services.validation.errors.ProviderRateLimitedError` with
+      ``provider="all"`` is raised — the caller should retry later.
+    * If **every** provider raised
+      :class:`~services.validation.errors.ProviderBadRequestError`, a
+      ``ProviderBadRequestError("all")`` is raised — the input itself is
+      the problem, not transient capacity.
+
+    Any other exception (network error, unexpected 5xx, etc.) is re-raised
+    immediately without trying further providers.
 
     Parameters
     ----------
@@ -47,26 +60,31 @@ class ChainProvider:
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
-        _RecoverableError = (
-            ProviderRateLimitedError,
-            ProviderAtCapacityError,
-            ProviderBadRequestError,
-        )
-        last_exc: (
-            ProviderRateLimitedError | ProviderAtCapacityError | ProviderBadRequestError | None
-        ) = None
+        last_transient: ProviderRateLimitedError | ProviderAtCapacityError | None = None
+        last_bad_request: ProviderBadRequestError | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
                 return await provider.validate(std, raw_input=raw_input)
-            except _RecoverableError as exc:
-                last_exc = exc
+            except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
+                last_transient = exc
                 logger.warning(
                     "ChainProvider: %s unavailable (%s), trying next provider",
                     name,
                     type(exc).__name__,
                 )
-        if isinstance(last_exc, ProviderBadRequestError):
-            raise ProviderBadRequestError("all", detail=last_exc.detail)
-        retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
-        raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)
+            except ProviderBadRequestError as exc:
+                last_bad_request = exc
+                logger.warning(
+                    "ChainProvider: %s unavailable (%s), trying next provider",
+                    name,
+                    type(exc).__name__,
+                )
+        # Prefer transient error — caller can retry when capacity clears.
+        if last_transient is not None:
+            raise ProviderRateLimitedError(
+                "all", retry_after_seconds=last_transient.retry_after_seconds
+            )
+        if last_bad_request is not None:
+            raise ProviderBadRequestError("all", detail=last_bad_request.detail)
+        raise ProviderRateLimitedError("all", retry_after_seconds=0.0)

@@ -191,6 +191,42 @@ class TestChainProvider:
         assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
+    async def test_rate_limited_then_bad_request_raises_rate_limited(
+        self, std_address: object
+    ) -> None:
+        """Transient errors take precedence — caller can retry when capacity clears."""
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("usps", retry_after_seconds=2.0)
+        )
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(side_effect=ProviderBadRequestError("google", detail="400"))
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds == 2.0
+
+    @pytest.mark.asyncio
+    async def test_bad_request_then_rate_limited_raises_rate_limited(
+        self, std_address: object
+    ) -> None:
+        """Even if bad-request came first, transient error wins."""
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", detail="400"))
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(
+            side_effect=ProviderRateLimitedError("google", retry_after_seconds=5.0)
+        )
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds == 5.0
+
+    @pytest.mark.asyncio
     async def test_raw_input_threaded_to_provider(self, std_address) -> None:
         """ChainProvider must forward raw_input to each sub-provider."""
         provider = _mock_provider(_CONFIRMED)
