@@ -363,3 +363,62 @@ async def test_get_audit_rows_includes_raw_input_column(db: AsyncEngine) -> None
     await _seed_rows(db)
     rows, _ = await get_audit_rows(db)
     assert all("raw_input" in r for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_by_status_codes_single(db: AsyncEngine) -> None:
+    await _seed_rows(db)
+    rows, total = await get_audit_rows(db, status_codes=[400])
+    # seed has: parse/400, favicon/404 — testing exact 400 only
+    assert total == 1
+    assert rows[0]["status_code"] == 400
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_by_status_codes_multiple(db: AsyncEngine) -> None:
+    """Multiple status_codes = OR: returns rows matching any of the given codes."""
+    await _seed_rows(db)
+    rows, total = await get_audit_rows(db, status_codes=[400, 404])
+    assert total == 2
+    assert {r["status_code"] for r in rows} == {400, 404}
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_by_validation_statuses_single(db: AsyncEngine) -> None:
+    await _seed_rows(db)
+    rows, total = await get_audit_rows(db, validation_statuses=["confirmed"])
+    assert total == 2
+    assert all(r["validation_status"] == "confirmed" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_by_validation_statuses_multiple(db: AsyncEngine) -> None:
+    """Multiple validation_statuses = OR behavior."""
+    # seed_rows only has 'confirmed'; add a not_confirmed row
+    await _seed_rows(db)
+    async with db.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO audit_log (timestamp, client_ip, method, endpoint,
+                    status_code, provider, validation_status, cache_hit)
+                VALUES (:ts, '1.2.3.4', 'POST', '/api/v1/validate',
+                    200, 'usps', 'not_confirmed', false)
+            """),
+            {"ts": datetime.now(UTC)},
+        )
+    rows, total = await get_audit_rows(db, validation_statuses=["confirmed", "not_confirmed"])
+    assert total == 3  # 2 confirmed from seed + 1 not_confirmed
+    statuses = {r["validation_status"] for r in rows}
+    assert statuses == {"confirmed", "not_confirmed"}
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_status_codes_and_validation_statuses_combined(
+    db: AsyncEngine,
+) -> None:
+    """status_codes AND validation_statuses filters combine as AND across categories."""
+    await _seed_rows(db)
+    # seed has 2 validate/200/usps/confirmed rows — filter to both confirmed AND 200
+    rows, total = await get_audit_rows(db, status_codes=[200], validation_statuses=["confirmed"])
+    assert total == 2
+    assert all(r["status_code"] == 200 and r["validation_status"] == "confirmed" for r in rows)

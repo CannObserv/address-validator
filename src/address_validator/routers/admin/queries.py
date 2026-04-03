@@ -212,6 +212,8 @@ async def get_audit_rows(
     provider: str | None = None,
     client_ip: str | None = None,
     status_min: int | None = None,
+    status_codes: list[int] | None = None,
+    validation_statuses: list[str] | None = None,
     raw_input: str | None = None,
 ) -> tuple[list[dict], int]:
     """Fetch paginated, filtered audit_log rows. Returns (rows, total_count)."""
@@ -225,6 +227,10 @@ async def get_audit_rows(
         conditions.append(audit_log.c.client_ip == client_ip)
     if status_min:
         conditions.append(audit_log.c.status_code >= status_min)
+    if status_codes:
+        conditions.append(audit_log.c.status_code.in_(status_codes))
+    if validation_statuses:
+        conditions.append(audit_log.c.validation_status.in_(validation_statuses))
     if raw_input:
         conditions.append(query_patterns.c.raw_input.ilike(f"%{raw_input}%"))
 
