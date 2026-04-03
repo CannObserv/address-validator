@@ -1,6 +1,7 @@
 """Per-provider detail view."""
 
 import math
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -22,6 +23,8 @@ async def provider_detail(
     name: str,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
+    status_code: Annotated[list[int] | None, Query()] = None,
+    validation_status: Annotated[list[str] | None, Query()] = None,
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     if name not in _VALID_PROVIDERS:
@@ -34,10 +37,16 @@ async def provider_detail(
         per_page=_PER_PAGE,
         provider=name,
         client_ip=client_ip,
+        status_codes=status_code or None,
+        validation_statuses=validation_status or None,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
-    filters = {"client_ip": client_ip}
+    filters = {
+        "client_ip": client_ip,
+        "status_codes": status_code or [],
+        "validation_statuses": validation_status or [],
+    }
 
     # Find quota for this provider
     quota = None

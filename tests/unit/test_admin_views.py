@@ -222,3 +222,30 @@ def test_admin_dashboard_has_sparklines(client: TestClient, admin_headers: dict)
     assert html.count('role="img"') == 5
     # Spot-check a specific sparkline label.
     assert "All requests over 30 days" in html
+
+
+def test_endpoint_detail_accepts_status_code_param(client: TestClient, admin_headers: dict) -> None:
+    """status_code query params are accepted without 422."""
+    response = client.get(
+        "/admin/endpoints/parse?status_code=400&status_code=500",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+
+
+def test_provider_detail_accepts_status_code_param(client: TestClient, admin_headers: dict) -> None:
+    response = client.get(
+        "/admin/providers/usps?status_code=200",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200
+
+
+def test_provider_detail_accepts_validation_status_param(
+    client: TestClient, admin_headers: dict
+) -> None:
+    response = client.get(
+        "/admin/providers/usps?validation_status=confirmed&validation_status=not_confirmed",
+        headers=admin_headers,
+    )
+    assert response.status_code == 200

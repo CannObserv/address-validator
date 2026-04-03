@@ -1,6 +1,7 @@
 """Per-endpoint detail view."""
 
 import math
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -22,6 +23,7 @@ async def endpoint_detail(
     name: str,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
+    status_code: Annotated[list[int] | None, Query()] = None,
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     if name not in _VALID_ENDPOINTS:
@@ -34,10 +36,11 @@ async def endpoint_detail(
         per_page=_PER_PAGE,
         endpoint=name,
         client_ip=client_ip,
+        status_codes=status_code or None,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
-    filters = {"client_ip": client_ip}
+    filters = {"client_ip": client_ip, "status_codes": status_code or []}
 
     # HTMX partial — return just the rows (skip for boosted nav)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
