@@ -133,7 +133,7 @@ becomes visible on focus. Uses the `.skip-to-content` utility class from `input.
   - Toggle managed by `static/admin/js/nav.js`
   - Escape key closes drawer and returns focus to toggle button
   - `aria-expanded` tracks open/close state
-- **Desktop (≥ md)**: persistent left sidebar (256px / `w-56`)
+- **Desktop (≥ md)**: persistent left sidebar (192px / `w-48 shrink-0`)
 
 ### Tables
 

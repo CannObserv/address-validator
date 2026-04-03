@@ -84,7 +84,7 @@
     </header>
     <div class="flex flex-col md:flex-row">
         {# Desktop sidebar nav — hidden on mobile (hamburger replaces it) #}
-        <nav class="hidden md:block w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 md:min-h-[calc(100vh-var(--header-h,57px))]"
+        <nav class="hidden md:block w-48 shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 md:min-h-[calc(100vh-var(--header-h,57px))]"
              aria-label="Admin navigation">
             <ul class="p-4 flex flex-col gap-1">
                 {% set _current_group = namespace(value=none) %}

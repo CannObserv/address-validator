@@ -193,6 +193,13 @@ def test_admin_dashboard_has_brand_elements(client: TestClient, admin_headers: d
     assert "Address Validator" in html
 
 
+def test_admin_sidebar_nav_width(client: TestClient, admin_headers: dict) -> None:
+    """Sidebar nav uses w-48 shrink-0 for consistent width across all pages."""
+    response = client.get("/admin/", headers=admin_headers)
+    html = response.text
+    assert '<nav class="hidden md:block w-48 shrink-0' in html
+
+
 def test_admin_dashboard_has_dark_mode_toggle(client: TestClient, admin_headers: dict) -> None:
     """Dashboard contains a dark mode toggle button."""
     response = client.get("/admin/", headers=admin_headers)
