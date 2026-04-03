@@ -422,3 +422,19 @@ async def test_get_audit_rows_status_codes_and_validation_statuses_combined(
     rows, total = await get_audit_rows(db, status_codes=[200], validation_statuses=["confirmed"])
     assert total == 2
     assert all(r["status_code"] == 200 and r["validation_status"] == "confirmed" for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_empty_status_codes_returns_all(db: AsyncEngine) -> None:
+    """Empty status_codes list applies no filter — returns all rows."""
+    await _seed_rows(db)
+    _rows, total = await get_audit_rows(db, status_codes=[])
+    assert total == 6  # all seed rows
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_empty_validation_statuses_returns_all(db: AsyncEngine) -> None:
+    """Empty validation_statuses list applies no filter — returns all rows."""
+    await _seed_rows(db)
+    _rows, total = await get_audit_rows(db, validation_statuses=[])
+    assert total == 6  # all seed rows
