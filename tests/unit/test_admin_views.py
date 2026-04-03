@@ -279,3 +279,51 @@ def test_provider_detail_forwards_validation_statuses_to_query(
     assert response.status_code == 200
     call_kwargs = mock_rows.call_args.kwargs
     assert call_kwargs["validation_statuses"] == ["confirmed"]
+
+
+def test_endpoint_detail_has_all_time_card(client: TestClient, admin_headers: dict) -> None:
+    """Endpoint detail page has a Requests (All Time) card."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Requests (All Time)" in response.text
+
+
+def test_endpoint_detail_no_status_code_pills_section(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Old Status Codes pills section is gone."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    assert "<h2" not in response.text or "Status Codes" not in response.text
+
+
+def test_endpoint_detail_has_filter_toggle_section(client: TestClient, admin_headers: dict) -> None:
+    """Filter bar renders (even if empty when no status codes exist in dataset)."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    # The form with hx-target=#audit-rows is present
+    assert 'hx-target="#audit-rows"' in response.text
+
+
+def test_endpoint_detail_filter_toggles_with_status_codes(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Filter toggles render pills for each status code in stats.status_codes_all."""
+    with patch(
+        "address_validator.routers.admin.endpoints.get_endpoint_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "status_codes_all": {200: 10, 422: 2, 500: 1},
+            "status_codes_24h": {200: 3},
+            "status_codes_7d": {200: 7, 422: 1},
+        },
+    ):
+        response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    html = response.text
+    # Three toggle pills for the three distinct codes
+    assert 'value="200"' in html
+    assert 'value="422"' in html
+    assert 'value="500"' in html
+    # No counts in the pills (just the code)
+    assert "200: " not in html  # old pills format gone
