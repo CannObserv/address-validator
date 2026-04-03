@@ -327,3 +327,40 @@ def test_endpoint_detail_filter_toggles_with_status_codes(
     assert 'value="500"' in html
     # No counts in the pills (just the code)
     assert "200: " not in html  # old pills format gone
+
+
+def test_provider_detail_no_validation_statuses_pills_section(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Old Validation Statuses pills section is gone."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Validation Statuses" not in response.text
+
+
+def test_provider_detail_filter_toggles_with_codes_and_statuses(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Provider detail renders status code and validation status toggle pills."""
+    with patch(
+        "address_validator.routers.admin.providers.get_provider_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "total": 100,
+            "last_24h": 10,
+            "cache_hit_rate": 80.0,
+            "status_codes_all": {200: 90, 422: 5, 500: 5},
+            "status_codes_24h": {200: 10},
+            "validation_statuses_all": {"confirmed": 85, "not_confirmed": 5},
+            "validation_statuses_24h": {"confirmed": 9, "not_confirmed": 1},
+        },
+    ):
+        response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    html = response.text
+    assert 'value="200"' in html
+    assert 'value="422"' in html
+    assert 'value="confirmed"' in html
+    assert 'value="not_confirmed"' in html
+    # No old pill format with counts
+    assert "confirmed: " not in html
