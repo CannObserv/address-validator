@@ -445,6 +445,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).scalar()
 
+        # Validation status distributions — live all-time (no archive column)
         status_rows = (
             await conn.execute(
                 _from_live(
@@ -460,12 +461,81 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).fetchall()
 
+        # Status code distributions (live only, 24h)
+        live_status_24h_rows = (
+            await conn.execute(
+                select(
+                    audit_log.c.status_code,
+                    sa.cast(func.count(), sa.Integer).label("cnt"),
+                )
+                .where(
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.timestamp >= tb["last_24h"],
+                )
+                .group_by(audit_log.c.status_code)
+            )
+        ).fetchall()
+
+        # Status code distributions (live + archived, all-time)
+        live_status_all = (
+            select(
+                audit_log.c.status_code,
+                sa.cast(func.count(), sa.Integer).label("cnt"),
+            )
+            .where(audit_log.c.provider == provider_name)
+            .group_by(audit_log.c.status_code)
+        )
+        archived_status_all = (
+            select(
+                audit_daily_stats.c.status_code,
+                sa.cast(func.sum(audit_daily_stats.c.request_count), sa.Integer).label("cnt"),
+            )
+            .where(
+                audit_daily_stats.c.provider == provider_name,
+                _ARCHIVED_DATE_GUARD,
+            )
+            .group_by(audit_daily_stats.c.status_code)
+        )
+        combined_status = union_all(live_status_all, archived_status_all).subquery(
+            "combined_status"
+        )
+        status_all_rows = (
+            await conn.execute(
+                select(
+                    combined_status.c.status_code,
+                    sa.cast(func.sum(combined_status.c.cnt), sa.Integer).label("count"),
+                )
+                .group_by(combined_status.c.status_code)
+                .order_by(combined_status.c.status_code)
+            )
+        ).fetchall()
+
+        # Validation status distributions (live only, 24h)
+        vs_24h_rows = (
+            await conn.execute(
+                _from_live(
+                    [
+                        audit_log.c.validation_status,
+                        func.count().label("count"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.validation_status.isnot(None),
+                    audit_log.c.timestamp >= tb["last_24h"],
+                )
+                .group_by(audit_log.c.validation_status)
+                .order_by(func.count().desc())
+            )
+        ).fetchall()
+
     cache_hit_rate = (row.cache_hits / row.cache_total * 100) if row.cache_total > 0 else None
     return {
         "total": row.total + archived_total,
         "last_24h": row.last_24h,
         "cache_hit_rate": cache_hit_rate,
-        "validation_statuses": {r.validation_status: r.count for r in status_rows},
+        "status_codes_24h": {r.status_code: r.cnt for r in live_status_24h_rows},
+        "status_codes_all": {r.status_code: r.count for r in status_all_rows},
+        "validation_statuses_all": {r.validation_status: r.count for r in status_rows},
+        "validation_statuses_24h": {r.validation_status: r.count for r in vs_24h_rows},
     }
 
 

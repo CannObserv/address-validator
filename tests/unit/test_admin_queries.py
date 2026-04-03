@@ -156,7 +156,7 @@ async def test_get_provider_stats(db: AsyncEngine) -> None:
     stats = await get_provider_stats(db, "usps")
     assert stats["total"] == 2
     assert stats["last_24h"] == 2
-    assert "confirmed" in stats["validation_statuses"]
+    assert "confirmed" in stats["validation_statuses_all"]
 
 
 @pytest.mark.asyncio
@@ -438,6 +438,42 @@ async def test_get_audit_rows_empty_validation_statuses_returns_all(db: AsyncEng
     await _seed_rows(db)
     _rows, total = await get_audit_rows(db, validation_statuses=[])
     assert total == 6  # all seed rows
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_has_per_window_breakdowns(db: AsyncEngine) -> None:
+    """get_provider_stats returns status_codes_24h/all and validation_statuses_24h/all."""
+    await _seed_rows(db)
+    stats = await get_provider_stats(db, "usps")
+    # seed has 2 validate/200/usps/confirmed rows
+    assert "status_codes_all" in stats
+    assert "status_codes_24h" in stats
+    assert "validation_statuses_all" in stats
+    assert "validation_statuses_24h" in stats
+    assert stats["status_codes_all"][200] == 2
+    assert stats["status_codes_24h"][200] == 2
+    assert stats["validation_statuses_all"]["confirmed"] == 2
+    assert stats["validation_statuses_24h"]["confirmed"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_validation_statuses_key_removed(db: AsyncEngine) -> None:
+    """Old 'validation_statuses' key is gone — callers must use validation_statuses_all."""
+    await _seed_rows(db)
+    stats = await get_provider_stats(db, "usps")
+    assert "validation_statuses" not in stats
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_status_codes_all_includes_archived(db: AsyncEngine) -> None:
+    """status_codes_all merges live + archived; status_codes_24h is live only."""
+    await _seed_rows(db)
+    await _seed_stats_rows(db)  # adds archived validate/200/usps x50
+    stats = await get_provider_stats(db, "usps")
+    assert stats["status_codes_all"][200] == 52  # 2 live + 50 archived
+    assert stats["status_codes_24h"][200] == 2  # live only
+    # validation_statuses only from live data (no archive column)
+    assert stats["validation_statuses_all"]["confirmed"] == 2
 
 
 @pytest.mark.asyncio
