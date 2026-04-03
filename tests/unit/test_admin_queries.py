@@ -147,7 +147,7 @@ async def test_get_endpoint_stats(db: AsyncEngine) -> None:
     stats = await get_endpoint_stats(db, "parse")
     assert stats["total"] == 2
     assert stats["last_24h"] == 2
-    assert 400 in stats["status_codes"]
+    assert 400 in stats["status_codes_all"]
 
 
 @pytest.mark.asyncio
@@ -251,7 +251,7 @@ async def test_endpoint_stats_includes_archived(db: AsyncEngine) -> None:
     assert stats["last_24h"] == 2  # Only live
 
     # Status codes should include archived
-    assert stats["status_codes"][200] == 52
+    assert stats["status_codes_all"][200] == 52
 
 
 @pytest.mark.asyncio
@@ -438,3 +438,37 @@ async def test_get_audit_rows_empty_validation_statuses_returns_all(db: AsyncEng
     await _seed_rows(db)
     _rows, total = await get_audit_rows(db, validation_statuses=[])
     assert total == 6  # all seed rows
+
+
+@pytest.mark.asyncio
+async def test_get_endpoint_stats_has_per_window_status_codes(db: AsyncEngine) -> None:
+    """get_endpoint_stats returns status_codes_24h, status_codes_7d, status_codes_all."""
+    await _seed_rows(db)
+    stats = await get_endpoint_stats(db, "parse")
+    # parse has: 1x 200, 1x 400
+    assert "status_codes_all" in stats
+    assert "status_codes_24h" in stats
+    assert "status_codes_7d" in stats
+    assert stats["status_codes_all"][400] == 1
+    assert stats["status_codes_all"][200] == 1
+    assert stats["status_codes_24h"][400] == 1
+    assert stats["status_codes_7d"][400] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_endpoint_stats_status_codes_key_removed(db: AsyncEngine) -> None:
+    """Old 'status_codes' key is gone — callers must use status_codes_all."""
+    await _seed_rows(db)
+    stats = await get_endpoint_stats(db, "parse")
+    assert "status_codes" not in stats
+
+
+@pytest.mark.asyncio
+async def test_get_endpoint_stats_all_time_includes_archived(db: AsyncEngine) -> None:
+    """status_codes_all merges live + archived; 24h/7d are live only."""
+    await _seed_rows(db)
+    await _seed_stats_rows(db)  # adds archived parse/400 x10
+    stats = await get_endpoint_stats(db, "parse")
+    assert stats["status_codes_all"][400] == 11  # 1 live + 10 archived
+    assert stats["status_codes_24h"][400] == 1  # live only
+    assert stats["status_codes_7d"][400] == 1  # live only

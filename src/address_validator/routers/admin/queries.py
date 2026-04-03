@@ -355,6 +355,35 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
             )
         ).fetchall()
 
+        # Per-window status code distributions (live only)
+        live_status_24h_rows = (
+            await conn.execute(
+                select(
+                    audit_log.c.status_code,
+                    sa.cast(func.count(), sa.Integer).label("cnt"),
+                )
+                .where(
+                    audit_log.c.endpoint == endpoint_path,
+                    audit_log.c.timestamp >= tb["last_24h"],
+                )
+                .group_by(audit_log.c.status_code)
+            )
+        ).fetchall()
+
+        live_status_7d_rows = (
+            await conn.execute(
+                select(
+                    audit_log.c.status_code,
+                    sa.cast(func.count(), sa.Integer).label("cnt"),
+                )
+                .where(
+                    audit_log.c.endpoint == endpoint_path,
+                    audit_log.c.timestamp >= tb["last_7d"],
+                )
+                .group_by(audit_log.c.status_code)
+            )
+        ).fetchall()
+
     total = row.total + archived.total
     errors = row.errors + archived.errors
     error_rate = (errors / total * 100) if total > 0 else None
@@ -364,7 +393,9 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
         "last_7d": row.last_7d,
         "error_rate": error_rate,
         "avg_latency_ms": round(row.avg_latency) if row.avg_latency else None,
-        "status_codes": {r.status_code: r.count for r in status_rows},
+        "status_codes_all": {r.status_code: r.count for r in status_rows},
+        "status_codes_24h": {r.status_code: r.cnt for r in live_status_24h_rows},
+        "status_codes_7d": {r.status_code: r.cnt for r in live_status_7d_rows},
     }
 
 
