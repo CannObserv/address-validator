@@ -453,6 +453,8 @@ async def test_get_endpoint_stats_has_per_window_status_codes(db: AsyncEngine) -
     assert stats["status_codes_all"][200] == 1
     assert stats["status_codes_24h"][400] == 1
     assert stats["status_codes_7d"][400] == 1
+    assert stats["status_codes_24h"][200] == 1
+    assert stats["status_codes_7d"][200] == 1
 
 
 @pytest.mark.asyncio
@@ -472,3 +474,5 @@ async def test_get_endpoint_stats_all_time_includes_archived(db: AsyncEngine) ->
     assert stats["status_codes_all"][400] == 11  # 1 live + 10 archived
     assert stats["status_codes_24h"][400] == 1  # live only
     assert stats["status_codes_7d"][400] == 1  # live only
+    assert stats["status_codes_24h"][200] == 1
+    assert stats["status_codes_7d"][200] == 1
