@@ -362,5 +362,7 @@ def test_provider_detail_filter_toggles_with_codes_and_statuses(
     assert 'value="422"' in html
     assert 'value="confirmed"' in html
     assert 'value="not_confirmed"' in html
-    # No old pill format with counts
-    assert "confirmed: " not in html
+    # Toggle pills show only the name — no count in the pill itself
+    # (Card breakdowns DO show counts, but those are outside the filter form)
+    assert 'value="confirmed"' in html
+    assert 'value="not_confirmed"' in html

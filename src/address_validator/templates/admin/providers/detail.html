@@ -15,6 +15,13 @@
             {% endfor %}
         </p>
         {% endif %}
+        {% if stats.get("validation_statuses_24h") %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for vs, cnt in stats.validation_statuses_24h.items() %}
+            <span class="{% if vs in ('confirmed', 'confirmed_missing_secondary') %}text-green-700 dark:text-green-400{% elif vs == 'confirmed_bad_secondary' %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
     </div>
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (All Time)</p>
@@ -23,6 +30,13 @@
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
             {% for code, cnt in stats.status_codes_all.items() if code != 200 %}
             <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if stats.get("validation_statuses_all") %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for vs, cnt in stats.validation_statuses_all.items() %}
+            <span class="{% if vs in ('confirmed', 'confirmed_missing_secondary') %}text-green-700 dark:text-green-400{% elif vs == 'confirmed_bad_secondary' %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
             {% endfor %}
         </p>
         {% endif %}
