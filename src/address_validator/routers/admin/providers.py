@@ -37,8 +37,8 @@ async def provider_detail(
         per_page=_PER_PAGE,
         provider=name,
         client_ip=client_ip,
-        status_codes=status_code or None,
-        validation_statuses=validation_status or None,
+        status_codes=status_code,
+        validation_statuses=validation_status,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))

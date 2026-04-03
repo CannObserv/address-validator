@@ -36,7 +36,7 @@ async def endpoint_detail(
         per_page=_PER_PAGE,
         endpoint=name,
         client_ip=client_ip,
-        status_codes=status_code or None,
+        status_codes=status_code,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))

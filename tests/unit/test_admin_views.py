@@ -1,6 +1,6 @@
 """Integration tests for admin dashboard views."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -249,3 +249,33 @@ def test_provider_detail_accepts_validation_status_param(
         headers=admin_headers,
     )
     assert response.status_code == 200
+
+
+def test_endpoint_detail_forwards_status_codes_to_query(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """status_code params are forwarded to get_audit_rows as status_codes kwarg."""
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.endpoints.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/endpoints/parse?status_code=400&status_code=500",
+            headers=admin_headers,
+        )
+    assert response.status_code == 200
+    call_kwargs = mock_rows.call_args.kwargs
+    assert call_kwargs["status_codes"] == [400, 500]
+
+
+def test_provider_detail_forwards_validation_statuses_to_query(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """validation_status params are forwarded to get_audit_rows as validation_statuses kwarg."""
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.providers.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/providers/usps?validation_status=confirmed",
+            headers=admin_headers,
+        )
+    assert response.status_code == 200
+    call_kwargs = mock_rows.call_args.kwargs
+    assert call_kwargs["validation_statuses"] == ["confirmed"]
