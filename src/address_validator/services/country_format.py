@@ -13,7 +13,10 @@ from address_validator.models import (
     CountrySubdivision,
 )
 
-# Format string token → i18naddress field key
+# Format string token → i18naddress field key.
+# Only the four tokens that map to our response field keys are included.
+# %D (dependent locality / sub-district) is intentionally excluded — it
+# does not have a corresponding key in our address model.
 _FORMAT_TOKENS: dict[str, str] = {
     "%A": "street_address",
     "%C": "city",
@@ -88,7 +91,11 @@ def get_country_format(country_code: str) -> CountryFormatResponse | None:
 
 
 def _parse_format_order(address_format: str) -> list[str]:
-    """Return lib field keys in the order they appear in *address_format*."""
+    """Return lib field keys in the order they appear in *address_format*.
+
+    Uses ``str.index()`` which returns the first occurrence; i18naddress
+    format strings do not contain duplicate tokens in practice.
+    """
     positions: list[tuple[int, str]] = []
     for token, lib_key in _FORMAT_TOKENS.items():
         if token in address_format:
