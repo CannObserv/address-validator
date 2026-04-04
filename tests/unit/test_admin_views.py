@@ -1,5 +1,6 @@
 """Integration tests for admin dashboard views."""
 
+import re
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -294,7 +295,7 @@ def test_endpoint_detail_no_status_code_pills_section(
     """Old Status Codes pills section is gone."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert response.status_code == 200
-    assert "<h2" not in response.text or "Status Codes" not in response.text
+    assert "Status Codes" not in response.text
 
 
 def test_endpoint_detail_has_filter_toggle_section(client: TestClient, admin_headers: dict) -> None:
@@ -367,3 +368,55 @@ def test_provider_detail_filter_toggles_with_codes_and_statuses(
     assert html.count("confirmed: 85") == 1  # only in the all-time card, not in toggle
     assert html.count("not_confirmed: 5") == 1  # same — card only
     assert html.count("422: 5") == 1  # status code card only
+
+
+def test_endpoint_detail_active_status_code_filter_marks_pill_checked(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """When status_code param is active, the matching toggle pill renders as checked."""
+    with patch(
+        "address_validator.routers.admin.endpoints.get_endpoint_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "status_codes_all": {200: 10, 422: 2},
+            "status_codes_24h": {},
+            "status_codes_7d": {},
+        },
+    ):
+        response = client.get("/admin/endpoints/parse?status_code=422", headers=admin_headers)
+    assert response.status_code == 200
+    html = response.text
+    # 422 input: value="422" followed by whitespace then "checked" (the attribute).
+    assert re.search(r'value="422"\s+checked', html)
+    # 200 input: value="200" NOT immediately followed by checked.
+    assert not re.search(r'value="200"\s+checked', html)
+
+
+def test_provider_detail_active_filters_mark_pills_checked(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Active status_code and validation_status params render their pills as checked."""
+    with patch(
+        "address_validator.routers.admin.providers.get_provider_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "total": 100,
+            "last_24h": 10,
+            "cache_hit_rate": 80.0,
+            "status_codes_all": {200: 90, 500: 5},
+            "status_codes_24h": {},
+            "validation_statuses_all": {"confirmed": 85, "not_confirmed": 5},
+            "validation_statuses_24h": {},
+        },
+    ):
+        response = client.get(
+            "/admin/providers/usps?status_code=500&validation_status=confirmed",
+            headers=admin_headers,
+        )
+    assert response.status_code == 200
+    html = response.text
+    # Active filters render as checked; inactive ones do not.
+    assert re.search(r'value="500"\s+checked', html)
+    assert not re.search(r'value="200"\s+checked', html)
+    assert re.search(r'value="confirmed"\s+checked', html)
+    assert not re.search(r'value="not_confirmed"\s+checked', html)

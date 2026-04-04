@@ -8,9 +8,10 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 24 Hours)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_24h | default(0) }}</p>
-        {% if stats.get("status_codes_24h") %}
+        {% set non_200_24h = stats.get("status_codes_24h", {}) | dictsort | selectattr("0", "ne", 200) | list %}
+        {% if non_200_24h %}
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
-            {% for code, cnt in stats.status_codes_24h.items() if code != 200 %}
+            {% for code, cnt in non_200_24h %}
             <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
             {% endfor %}
         </p>
@@ -19,9 +20,10 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 7 Days)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_7d | default(0) }}</p>
-        {% if stats.get("status_codes_7d") %}
+        {% set non_200_7d = stats.get("status_codes_7d", {}) | dictsort | selectattr("0", "ne", 200) | list %}
+        {% if non_200_7d %}
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
-            {% for code, cnt in stats.status_codes_7d.items() if code != 200 %}
+            {% for code, cnt in non_200_7d %}
             <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
             {% endfor %}
         </p>
@@ -30,9 +32,10 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (All Time)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.total | default(0) }}</p>
-        {% if stats.get("status_codes_all") %}
+        {% set non_200_all = stats.get("status_codes_all", {}) | dictsort | selectattr("0", "ne", 200) | list %}
+        {% if non_200_all %}
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
-            {% for code, cnt in stats.status_codes_all.items() if code != 200 %}
+            {% for code, cnt in non_200_all %}
             <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
             {% endfor %}
         </p>
