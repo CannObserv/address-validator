@@ -125,10 +125,10 @@
 
     {# Validation status toggles — canonical order: confirmed → missing_secondary → bad_secondary → not_confirmed #}
     {% if stats.get("validation_statuses_all") %}
-    {% set _vs_order = ['confirmed', 'confirmed_missing_secondary', 'confirmed_bad_secondary', 'not_confirmed'] %}
+    {% set vs_order = ['confirmed', 'confirmed_missing_secondary', 'confirmed_bad_secondary', 'not_confirmed'] %}
     <div class="flex flex-wrap items-center gap-2">
         <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Result:</span>
-        {% for vs in _vs_order %}
+        {% for vs in vs_order %}
         {% if vs in stats.validation_statuses_all %}
         <label class="cursor-pointer">
             <input type="checkbox" name="validation_status" value="{{ vs }}"

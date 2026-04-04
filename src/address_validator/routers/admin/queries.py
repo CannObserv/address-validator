@@ -474,23 +474,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).scalar()
 
-        # Validation status distributions — live all-time (no archive column)
-        status_rows = (
-            await conn.execute(
-                _from_live(
-                    [
-                        audit_log.c.validation_status,
-                        func.count().label("count"),
-                    ],
-                    audit_log.c.provider == provider_name,
-                    audit_log.c.validation_status.isnot(None),
-                )
-                .group_by(audit_log.c.validation_status)
-                .order_by(func.count().desc())
-            )
-        ).fetchall()
-
-        # Status code distributions (live only, 24h)
+        # Status code distributions (live only, 24h + 7d)
         live_status_24h_rows = (
             await conn.execute(
                 select(
@@ -516,22 +500,6 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
                     audit_log.c.timestamp >= tb["last_7d"],
                 )
                 .group_by(audit_log.c.status_code)
-            )
-        ).fetchall()
-
-        vs_7d_rows = (
-            await conn.execute(
-                _from_live(
-                    [
-                        audit_log.c.validation_status,
-                        func.count().label("count"),
-                    ],
-                    audit_log.c.provider == provider_name,
-                    audit_log.c.validation_status.isnot(None),
-                    audit_log.c.timestamp >= tb["last_7d"],
-                )
-                .group_by(audit_log.c.validation_status)
-                .order_by(func.count().desc())
             )
         ).fetchall()
 
@@ -569,7 +537,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).fetchall()
 
-        # Validation status distributions (live only, 24h)
+        # Validation status distributions — live only (no archive column), 24h + 7d + all-time
         vs_24h_rows = (
             await conn.execute(
                 _from_live(
@@ -580,9 +548,34 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
                     audit_log.c.provider == provider_name,
                     audit_log.c.validation_status.isnot(None),
                     audit_log.c.timestamp >= tb["last_24h"],
-                )
-                .group_by(audit_log.c.validation_status)
-                .order_by(func.count().desc())
+                ).group_by(audit_log.c.validation_status)
+            )
+        ).fetchall()
+
+        vs_7d_rows = (
+            await conn.execute(
+                _from_live(
+                    [
+                        audit_log.c.validation_status,
+                        func.count().label("count"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.validation_status.isnot(None),
+                    audit_log.c.timestamp >= tb["last_7d"],
+                ).group_by(audit_log.c.validation_status)
+            )
+        ).fetchall()
+
+        status_rows = (
+            await conn.execute(
+                _from_live(
+                    [
+                        audit_log.c.validation_status,
+                        func.count().label("count"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.validation_status.isnot(None),
+                ).group_by(audit_log.c.validation_status)
             )
         ).fetchall()
 
