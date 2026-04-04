@@ -584,3 +584,22 @@ def test_provider_table_heading_is_requests(client: TestClient, admin_headers: d
     response = client.get("/admin/providers/usps", headers=admin_headers)
     assert "Recent Requests" not in response.text
     assert "Requests" in response.text
+
+
+def test_endpoint_detail_card_order_all_time_before_7d_before_24h(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Endpoint card order: All Time appears before 7 Days, which appears before 24 Hours."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    html = response.text
+    all_time_pos = html.index("Requests (All Time)")
+    seven_day_pos = html.index("Requests (Last 7 Days)")
+    twenty_four_pos = html.index("Requests (Last 24 Hours)")
+    assert all_time_pos < seven_day_pos < twenty_four_pos
+
+
+def test_endpoint_table_heading_is_requests(client: TestClient, admin_headers: dict) -> None:
+    """Endpoint detail table heading is 'Requests', not 'Recent Requests'."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert "Recent Requests" not in response.text
+    assert "Requests" in response.text
