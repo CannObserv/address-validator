@@ -5,7 +5,7 @@ Maps ``google-i18n-address`` (i18naddress) ``ValidationRules`` to
 ``GET /api/v1/countries/{code}/format`` route.
 """
 
-from i18naddress import get_validation_rules
+from i18naddress import ValidationRules, get_validation_rules
 
 from address_validator.models import (
     CountryFieldDefinition,
@@ -97,9 +97,9 @@ def _parse_format_order(address_format: str) -> list[str]:
     return [lib_key for _, lib_key in positions]
 
 
-def _build_field(lib_key: str, rules: object) -> CountryFieldDefinition | None:
+def _build_field(lib_key: str, rules: ValidationRules) -> CountryFieldDefinition | None:
     """Return a :class:`CountryFieldDefinition` for *lib_key*, or ``None``."""
-    required = lib_key in rules.required_fields  # type: ignore[union-attr]
+    required = lib_key in rules.required_fields
 
     if lib_key == "street_address":
         return CountryFieldDefinition(
@@ -109,18 +109,18 @@ def _build_field(lib_key: str, rules: object) -> CountryFieldDefinition | None:
         )
 
     if lib_key == "city":
-        label = _CITY_TYPE_LABELS.get(rules.city_type or "", "City")  # type: ignore[union-attr]
+        label = _CITY_TYPE_LABELS.get(rules.city_type or "", "City")
         return CountryFieldDefinition(key="city", label=label, required=required)
 
     if lib_key == "country_area":
-        label = _AREA_TYPE_LABELS.get(rules.country_area_type or "", "Region")  # type: ignore[union-attr]
-        choices = rules.country_area_choices  # type: ignore[union-attr]
+        label = _AREA_TYPE_LABELS.get(rules.country_area_type or "", "Region")
+        choices = rules.country_area_choices
         options = _deduplicate_choices(choices) if choices else None
         return CountryFieldDefinition(key="region", label=label, required=required, options=options)
 
     if lib_key == "postal_code":
-        label = _POSTAL_TYPE_LABELS.get(rules.postal_code_type or "", "Postal code")  # type: ignore[union-attr]
-        matchers = rules.postal_code_matchers  # type: ignore[union-attr]
+        label = _POSTAL_TYPE_LABELS.get(rules.postal_code_type or "", "Postal code")
+        matchers = rules.postal_code_matchers
         pattern = matchers[0].pattern if matchers else None
         return CountryFieldDefinition(
             key="postal_code", label=label, required=required, pattern=pattern
