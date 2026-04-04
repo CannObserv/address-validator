@@ -3,27 +3,8 @@
 {% block content %}
 <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">{{ provider_name | upper }} Provider</h1>
 
-{# ── Stats cards ─────────────────────────────────────────────────── #}
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 24 Hours)</p>
-        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_24h | default(0) }}</p>
-        {% set non_200_24h = stats.get("status_codes_24h", {}) | dictsort | selectattr("0", "ne", 200) | list %}
-        {% if non_200_24h %}
-        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
-            {% for code, cnt in non_200_24h %}
-            <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
-            {% endfor %}
-        </p>
-        {% endif %}
-        {% if stats.get("validation_statuses_24h") %}
-        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
-            {% for vs, cnt in stats.validation_statuses_24h.items() %}
-            <span class="{% if vs in ('confirmed', 'confirmed_missing_secondary') %}text-green-700 dark:text-green-400{% elif vs == 'confirmed_bad_secondary' %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
-            {% endfor %}
-        </p>
-        {% endif %}
-    </div>
+{# ── Row 1: Request cards (All Time · 7 Days · 24 Hours) ─────────── #}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (All Time)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.total | default(0) }}</p>
@@ -38,11 +19,53 @@
         {% if stats.get("validation_statuses_all") %}
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
             {% for vs, cnt in stats.validation_statuses_all.items() %}
-            <span class="{% if vs in ('confirmed', 'confirmed_missing_secondary') %}text-green-700 dark:text-green-400{% elif vs == 'confirmed_bad_secondary' %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            <span class="{% if vs == 'confirmed' %}text-green-700 dark:text-green-400{% elif vs in ('confirmed_missing_secondary', 'confirmed_bad_secondary') %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
             {% endfor %}
         </p>
         {% endif %}
     </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 7 Days)</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_7d | default(0) }}</p>
+        {% set non_200_7d = stats.get("status_codes_7d", {}) | dictsort | selectattr("0", "ne", 200) | list %}
+        {% if non_200_7d %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for code, cnt in non_200_7d %}
+            <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if stats.get("validation_statuses_7d") %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for vs, cnt in stats.validation_statuses_7d.items() %}
+            <span class="{% if vs == 'confirmed' %}text-green-700 dark:text-green-400{% elif vs in ('confirmed_missing_secondary', 'confirmed_bad_secondary') %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+    </div>
+    <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 24 Hours)</p>
+        <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_24h | default(0) }}</p>
+        {% set non_200_24h = stats.get("status_codes_24h", {}) | dictsort | selectattr("0", "ne", 200) | list %}
+        {% if non_200_24h %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for code, cnt in non_200_24h %}
+            <span class="{% if code < 400 %}text-green-700 dark:text-green-400{% elif code < 500 %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}">{{ code }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if stats.get("validation_statuses_24h") %}
+        <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">
+            {% for vs, cnt in stats.validation_statuses_24h.items() %}
+            <span class="{% if vs == 'confirmed' %}text-green-700 dark:text-green-400{% elif vs in ('confirmed_missing_secondary', 'confirmed_bad_secondary') %}text-yellow-600 dark:text-yellow-400{% elif vs == 'not_confirmed' %}text-red-600 dark:text-red-400{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ vs }}: {{ cnt }}</span>{% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Row 2: Metric cards (Cache Hit Rate · Daily Quota) ───────────── #}
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Cache Hit Rate (Last 7 Days)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -71,8 +94,8 @@
     {% endif %}
 </div>
 
-{# ── Recent Requests + filters ────────────────────────────────────── #}
-<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Recent Requests</h2>
+{# ── Requests + filters ───────────────────────────────────────────── #}
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Requests</h2>
 
 <form class="flex flex-col gap-3 mb-4"
       hx-get="/admin/providers/{{ provider_name }}"
@@ -100,24 +123,27 @@
     </div>
     {% endif %}
 
-    {# Validation status toggles #}
+    {# Validation status toggles — canonical order: confirmed → missing_secondary → bad_secondary → not_confirmed #}
     {% if stats.get("validation_statuses_all") %}
+    {% set _vs_order = ['confirmed', 'confirmed_missing_secondary', 'confirmed_bad_secondary', 'not_confirmed'] %}
     <div class="flex flex-wrap items-center gap-2">
         <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Result:</span>
-        {% for vs in stats.validation_statuses_all %}
+        {% for vs in _vs_order %}
+        {% if vs in stats.validation_statuses_all %}
         <label class="cursor-pointer">
             <input type="checkbox" name="validation_status" value="{{ vs }}"
                    {% if vs in filters.validation_statuses %}checked{% endif %}
                    class="sr-only peer">
             <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium
                 peer-checked:ring-2 peer-checked:ring-offset-1 dark:peer-checked:ring-offset-gray-800
-                {% if vs in ('confirmed', 'confirmed_missing_secondary') %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 peer-checked:ring-green-600 dark:peer-checked:ring-green-400
-                {% elif vs == 'confirmed_bad_secondary' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 peer-checked:ring-yellow-600 dark:peer-checked:ring-yellow-400
+                {% if vs == 'confirmed' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300 peer-checked:ring-green-600 dark:peer-checked:ring-green-400
+                {% elif vs in ('confirmed_missing_secondary', 'confirmed_bad_secondary') %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300 peer-checked:ring-yellow-600 dark:peer-checked:ring-yellow-400
                 {% elif vs == 'not_confirmed' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300 peer-checked:ring-red-600 dark:peer-checked:ring-red-400
                 {% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 peer-checked:ring-gray-500{% endif %}">
                 {{ vs }}
             </span>
         </label>
+        {% endif %}
         {% endfor %}
     </div>
     {% endif %}

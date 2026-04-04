@@ -496,3 +496,91 @@ def test_provider_detail_active_filters_mark_pills_checked(
     assert not re.search(r'value="200"[^>]*checked', html)
     assert re.search(r'value="confirmed"[^>]*checked', html)
     assert not re.search(r'value="not_confirmed"[^>]*checked', html)
+
+
+def test_provider_detail_has_7d_requests_card(client: TestClient, admin_headers: dict) -> None:
+    """Provider detail page has a Requests (Last 7 Days) card."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Requests (Last 7 Days)" in response.text
+
+
+def test_provider_detail_card_order_all_time_before_7d_before_24h(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Card order: All Time appears before 7 Days, which appears before 24 Hours."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    html = response.text
+    all_time_pos = html.index("Requests (All Time)")
+    seven_day_pos = html.index("Requests (Last 7 Days)")
+    twenty_four_pos = html.index("Requests (Last 24 Hours)")
+    assert all_time_pos < seven_day_pos < twenty_four_pos
+
+
+def test_provider_confirmed_missing_secondary_is_yellow(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """confirmed_missing_secondary renders with yellow classes, not green, in pills."""
+    with patch(
+        "address_validator.routers.admin.providers.get_provider_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "total": 10,
+            "last_24h": 5,
+            "last_7d": 8,
+            "cache_hit_rate": None,
+            "status_codes_all": {200: 10},
+            "status_codes_24h": {},
+            "status_codes_7d": {},
+            "validation_statuses_all": {"confirmed_missing_secondary": 3},
+            "validation_statuses_24h": {},
+            "validation_statuses_7d": {},
+        },
+    ):
+        response = client.get("/admin/providers/usps", headers=admin_headers)
+    html = response.text
+    pill_match = re.search(
+        r'value="confirmed_missing_secondary".*?<span class="([^"]*)"',
+        html,
+        re.DOTALL,
+    )
+    assert pill_match, "pill for confirmed_missing_secondary not found"
+    pill_classes = pill_match.group(1)
+    assert "yellow" in pill_classes, f"expected yellow in pill classes, got: {pill_classes}"
+    assert "green" not in pill_classes, f"green should not appear in pill, got: {pill_classes}"
+
+
+def test_provider_not_confirmed_pill_is_last(client: TestClient, admin_headers: dict) -> None:
+    """not_confirmed filter pill appears after confirmed_bad_secondary in DOM order."""
+    with patch(
+        "address_validator.routers.admin.providers.get_provider_stats",
+        new_callable=AsyncMock,
+        return_value={
+            "total": 10,
+            "last_24h": 5,
+            "last_7d": 8,
+            "cache_hit_rate": None,
+            "status_codes_all": {},
+            "status_codes_24h": {},
+            "status_codes_7d": {},
+            "validation_statuses_all": {
+                "not_confirmed": 1,
+                "confirmed_bad_secondary": 2,
+                "confirmed": 5,
+            },
+            "validation_statuses_24h": {},
+            "validation_statuses_7d": {},
+        },
+    ):
+        response = client.get("/admin/providers/usps", headers=admin_headers)
+    html = response.text
+    bad_secondary_pos = html.index('value="confirmed_bad_secondary"')
+    not_confirmed_pos = html.index('value="not_confirmed"')
+    assert bad_secondary_pos < not_confirmed_pos
+
+
+def test_provider_table_heading_is_requests(client: TestClient, admin_headers: dict) -> None:
+    """Provider detail table heading is 'Requests', not 'Recent Requests'."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert "Recent Requests" not in response.text
+    assert "Requests" in response.text
