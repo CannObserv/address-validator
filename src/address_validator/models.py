@@ -263,3 +263,45 @@ class StandardizeResponseV1(BaseModel):
     components: ComponentSet
     warnings: list[str] = Field(default_factory=list)
     api_version: Literal["1"] = "1"
+
+
+# ---------------------------------------------------------------------------
+# Response models — v1 countries
+# ---------------------------------------------------------------------------
+
+
+class CountrySubdivision(BaseModel):
+    """A country subdivision (province, state, etc.) with code and display label."""
+
+    code: str
+    label: str
+
+
+class CountryFieldDefinition(BaseModel):
+    """Definition of a single address field for a given country.
+
+    ``options`` is present for ``region`` fields when the country has a fixed
+    list of subdivisions (e.g. US states, Canadian provinces).
+
+    ``pattern`` is a postal code regex hint for ``postal_code`` fields when
+    the country defines one; absent otherwise.
+    """
+
+    key: str
+    label: str
+    required: bool
+    options: list[CountrySubdivision] | None = None
+    pattern: str | None = None
+
+
+class CountryFormatResponse(BaseModel):
+    """Response body for GET /api/v1/countries/{code}/format.
+
+    ``fields`` lists only the address fields used in this country, in the
+    order they appear on a typical address form.  Fields absent from the
+    array should be hidden in the UI.
+    """
+
+    country: str
+    fields: list[CountryFieldDefinition]
+    api_version: Literal["1"] = "1"

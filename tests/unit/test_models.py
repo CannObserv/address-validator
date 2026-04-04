@@ -3,7 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from address_validator.models import StandardizeRequestV1, ValidateRequestV1
+from address_validator.models import (
+    CountryFieldDefinition,
+    CountryFormatResponse,
+    CountrySubdivision,
+    StandardizeRequestV1,
+    ValidateRequestV1,
+)
 
 
 class TestStandardizeRequestV1Model:
@@ -52,3 +58,25 @@ class TestValidateRequestV1Model:
     def test_country_defaults_to_us(self) -> None:
         req = ValidateRequestV1(address="123 Main St")
         assert req.country == "US"
+
+
+def test_country_format_models_exist() -> None:
+    sub = CountrySubdivision(code="AB", label="Alberta")
+    assert sub.code == "AB"
+    assert sub.label == "Alberta"
+
+    field = CountryFieldDefinition(key="region", label="Province", required=True)
+    assert field.options is None
+    assert field.pattern is None
+
+    field_with_opts = CountryFieldDefinition(
+        key="region",
+        label="Province",
+        required=True,
+        options=[sub],
+    )
+    assert len(field_with_opts.options) == 1
+
+    resp = CountryFormatResponse(country="CA", fields=[field])
+    assert resp.country == "CA"
+    assert len(resp.fields) == 1
