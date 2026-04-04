@@ -442,23 +442,41 @@ def test_provider_result_column_shows_symbol_and_sronly_text(
     assert "&#10003;" in html
 
 
-def test_provider_result_column_colspan_ten_on_empty(
+def test_provider_result_column_colspan_nine_on_empty(
     client: TestClient, admin_headers: dict
 ) -> None:
-    """Empty-state row in provider table uses colspan=10 (includes Result column)."""
+    """Empty-state row in provider table uses colspan=9 (Result present, Provider absent)."""
     response = client.get("/admin/providers/usps", headers=admin_headers)
     assert response.status_code == 200
-    assert 'colspan="10"' in response.text
+    assert 'colspan="9"' in response.text
+    assert 'colspan="10"' not in response.text
 
 
 def test_endpoint_result_column_colspan_nine_on_empty(
     client: TestClient, admin_headers: dict
 ) -> None:
-    """Empty-state row in endpoint table uses colspan=9 (no Result column)."""
+    """Empty-state row in endpoint table uses colspan=9 (Provider present, Result absent)."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert response.status_code == 200
     assert 'colspan="9"' in response.text
     assert 'colspan="10"' not in response.text
+
+
+def test_provider_table_has_no_provider_column_header(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Provider detail does not show Provider column (view is scoped to one provider)."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    # The word "provider" may appear in the heading; check for the th specifically
+    assert not re.search(r"<th[^>]*>\s*Provider\s*</th>", response.text, re.IGNORECASE)
+
+
+def test_endpoint_table_has_provider_column_header(client: TestClient, admin_headers: dict) -> None:
+    """Endpoint detail page shows Provider column."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    assert re.search(r"<th[^>]*>\s*Provider\s*</th>", response.text, re.IGNORECASE)
 
 
 def test_audit_list_has_no_result_column_header(client: TestClient, admin_headers: dict) -> None:

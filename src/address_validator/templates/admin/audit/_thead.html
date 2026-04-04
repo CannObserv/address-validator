@@ -5,7 +5,7 @@
     <th class="px-3 py-2">Endpoint</th>
     <th class="px-3 py-2">Status</th>
     <th class="px-3 py-2 text-right">Latency</th>
-    <th class="px-3 py-2">Provider</th>
+    {% if show_provider %}<th class="px-3 py-2">Provider</th>{% endif %}
     <th class="px-3 py-2">Cache</th>
     {% if show_result %}<th class="px-3 py-2">Result</th>{% endif %}
     <th class="px-3 py-2">Raw Input</th>

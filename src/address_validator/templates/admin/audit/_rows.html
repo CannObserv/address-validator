@@ -14,7 +14,7 @@
         {% endif %}
     </td>
     <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300 text-right">{% if row["latency_ms"] is not none %}{{ row["latency_ms"] }}ms{% endif %}</td>
-    <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{{ row["provider"] or '' }}</td>
+    {% if show_provider %}<td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{{ row["provider"] or '' }}</td>{% endif %}
     <td class="px-3 py-2 whitespace-nowrap">
         {% if row["cache_hit"] is true %}
             <span class="text-green-600 dark:text-green-400 font-medium">HIT</span>
@@ -45,5 +45,5 @@
     </td>
 </tr>
 {% else %}
-<tr><td colspan="{{ 10 if show_result else 9 }}" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No audit log entries found.</td></tr>
+<tr><td colspan="{{ 8 + (show_provider | int) + (show_result | int) }}" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No audit log entries found.</td></tr>
 {% endfor %}
