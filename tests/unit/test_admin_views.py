@@ -461,6 +461,13 @@ def test_endpoint_result_column_colspan_nine_on_empty(
     assert 'colspan="10"' not in response.text
 
 
+def test_audit_list_has_no_result_column_header(client: TestClient, admin_headers: dict) -> None:
+    """Audit list page does not show the Result column (show_result=False)."""
+    response = client.get("/admin/audit/", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Result" not in response.text
+
+
 def test_provider_detail_active_filters_mark_pills_checked(
     client: TestClient, admin_headers: dict
 ) -> None:
