@@ -8,6 +8,7 @@
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Requests (Last 24 Hours)</p>
         <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ stats.last_24h | default(0) }}</p>
+        {# dictsort → (code, cnt) tuples; selectattr("0",...) filters on the first element (code) #}
         {% set non_200_24h = stats.get("status_codes_24h", {}) | dictsort | selectattr("0", "ne", 200) | list %}
         {% if non_200_24h %}
         <p class="text-xs mt-1 text-gray-500 dark:text-gray-400">

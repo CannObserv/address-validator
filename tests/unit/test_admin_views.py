@@ -386,10 +386,9 @@ def test_endpoint_detail_active_status_code_filter_marks_pill_checked(
         response = client.get("/admin/endpoints/parse?status_code=422", headers=admin_headers)
     assert response.status_code == 200
     html = response.text
-    # 422 input: value="422" followed by whitespace then "checked" (the attribute).
-    assert re.search(r'value="422"\s+checked', html)
-    # 200 input: value="200" NOT immediately followed by checked.
-    assert not re.search(r'value="200"\s+checked', html)
+    # value="N" then anything-except-> then "checked" — robust to attribute reordering.
+    assert re.search(r'value="422"[^>]*checked', html)
+    assert not re.search(r'value="200"[^>]*checked', html)
 
 
 def test_provider_detail_active_filters_mark_pills_checked(
@@ -415,8 +414,8 @@ def test_provider_detail_active_filters_mark_pills_checked(
         )
     assert response.status_code == 200
     html = response.text
-    # Active filters render as checked; inactive ones do not.
-    assert re.search(r'value="500"\s+checked', html)
-    assert not re.search(r'value="200"\s+checked', html)
-    assert re.search(r'value="confirmed"\s+checked', html)
-    assert not re.search(r'value="not_confirmed"\s+checked', html)
+    # value="N" then anything-except-> then "checked" — robust to attribute reordering.
+    assert re.search(r'value="500"[^>]*checked', html)
+    assert not re.search(r'value="200"[^>]*checked', html)
+    assert re.search(r'value="confirmed"[^>]*checked', html)
+    assert not re.search(r'value="not_confirmed"[^>]*checked', html)
