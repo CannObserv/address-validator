@@ -18,10 +18,13 @@ from address_validator.models import (
 from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
 from address_validator.services.validation.cache_provider import (
     CachingProvider,
+    _lookup,
     _make_canonical_key,
     _make_pattern_key,
+    _register_query_pattern,
     _store,
 )
+from address_validator.services.validation.errors import ProviderRateLimitedError
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 # ---------------------------------------------------------------------------
@@ -389,6 +392,37 @@ class TestFailOpen:
 
         assert await _count_rows(db, "validated_addresses") == 0
 
+    async def test_lookup_null_canonical_key_is_a_miss(self, db: AsyncEngine) -> None:
+        """_lookup treats a NULL canonical_key row as a cache miss, not an orphan.
+
+        _register_query_pattern creates rows with canonical_key=NULL before the
+        inner provider is called.  _lookup must not misidentify these as orphaned
+        rows and must return None (miss) without deleting the row.
+        """
+        std = _make_std()
+        pattern_key = _make_pattern_key(std)
+        await _register_query_pattern(db, pattern_key, raw_input="123 Main St")
+
+        result = await _lookup(db, pattern_key, ttl_days=30)
+
+        assert result is None
+
+    async def test_lookup_null_canonical_key_does_not_delete_row(self, db: AsyncEngine) -> None:
+        """A NULL canonical_key row is preserved across a _lookup call.
+
+        The row must survive so that _store() can back-fill canonical_key when
+        the provider later succeeds, and so the admin audit view keeps raw_input.
+        """
+        std = _make_std()
+        pattern_key = _make_pattern_key(std)
+        await _register_query_pattern(db, pattern_key, raw_input="123 Main St")
+
+        await _lookup(db, pattern_key, ttl_days=30)
+
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row is not None
+        assert row["raw_input"] == "123 Main St"
+
     async def test_lookup_internal_error_fails_open(self, db: AsyncEngine) -> None:
         """A _lookup exception (e.g. corrupt row) fails open — inner provider is called."""
         inner = _make_provider(_make_confirmed_response())
@@ -602,6 +636,60 @@ class TestRawInput:
         row = await _fetch_one(db, query_patterns)
         assert row["raw_input"] is None
 
+    async def test_raw_input_registered_on_rate_limit(self, db: AsyncEngine) -> None:
+        """raw_input is written to query_patterns even when inner raises ProviderRateLimitedError.
+
+        The query_patterns row is created eagerly before the inner provider is
+        called, so rate-limited audit rows can join to find the raw input.
+        canonical_key is NULL at this stage — _store fills it in on success.
+        """
+        inner = AsyncMock()
+        inner.validate = AsyncMock(side_effect=ProviderRateLimitedError("usps"))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        with pytest.raises(ProviderRateLimitedError):
+            await provider.validate(std, raw_input="123 Main St, Springfield IL 62701")
+
+        pattern_key = _make_pattern_key(std)
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row is not None
+        assert row["raw_input"] == "123 Main St, Springfield IL 62701"
+        assert row["canonical_key"] is None
+
+    async def test_canonical_key_backfilled_on_subsequent_success(self, db: AsyncEngine) -> None:
+        """After a rate-limited registration, a successful validate fills in canonical_key.
+
+        The first request is rate-limited — query_patterns row exists with
+        canonical_key=NULL.  The second request succeeds; _store must update
+        canonical_key via ON CONFLICT so the cache is fully usable afterwards.
+        """
+        response = _make_confirmed_response()
+        std = _make_std()
+
+        # First call: rate-limited — registers pattern with NULL canonical_key
+        inner_rl = AsyncMock()
+        inner_rl.validate = AsyncMock(side_effect=ProviderRateLimitedError("usps"))
+        provider_rl = CachingProvider(inner=inner_rl, get_engine=MagicMock(return_value=db))
+        with pytest.raises(ProviderRateLimitedError):
+            await provider_rl.validate(std, raw_input="123 Main St")
+
+        # Verify the partial row exists with NULL canonical_key before the success
+        pattern_key = _make_pattern_key(std)
+        partial = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert partial is not None, "rate-limited call should register a query_patterns row"
+        assert partial["canonical_key"] is None
+
+        # Second call: success — should back-fill canonical_key
+        inner_ok = _make_provider(response)
+        provider_ok = CachingProvider(inner=inner_ok, get_engine=MagicMock(return_value=db))
+        await provider_ok.validate(std, raw_input="123 Main St")
+
+        pattern_key = _make_pattern_key(std)
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row["canonical_key"] == _make_canonical_key(response)
+        assert row["raw_input"] == "123 Main St"
+
     async def test_raw_input_backfilled_when_initially_null(self, db: AsyncEngine) -> None:
         """If raw_input is NULL on first store, a later call with raw_input fills it in."""
         response = _make_confirmed_response()
@@ -692,4 +780,23 @@ class TestPatternKeyContextVar:
         await provider.validate(_make_std())
 
         assert get_audit_pattern_key() is not None
+        reset_audit_context()
+
+    async def test_pattern_key_set_on_rate_limit(self, db: AsyncEngine) -> None:
+        """pattern_key ContextVar is set even when inner raises ProviderRateLimitedError.
+
+        The exception propagates (callers must handle it) but the audit row
+        must carry the pattern_key so the query_patterns join works for 429 rows.
+        """
+        reset_audit_context()
+
+        inner = AsyncMock()
+        inner.validate = AsyncMock(side_effect=ProviderRateLimitedError("usps"))
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        with pytest.raises(ProviderRateLimitedError):
+            await provider.validate(std)
+
+        assert get_audit_pattern_key() == _make_pattern_key(std)
         reset_audit_context()

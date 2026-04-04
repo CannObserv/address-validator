@@ -95,7 +95,7 @@ query_patterns = sa.Table(
             "validated_addresses.canonical_key",
             name="fk_query_patterns_canonical_key",
         ),
-        nullable=False,
+        nullable=True,
     ),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("raw_input", sa.Text(), nullable=True),
