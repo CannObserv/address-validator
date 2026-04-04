@@ -19,6 +19,7 @@ dependencies = [
     { name = "google-cloud-monitoring" },
     { name = "google-cloud-quotas" },
     { name = "google-cloud-storage" },
+    { name = "google-i18n-address" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pyarrow" },
@@ -51,6 +52,7 @@ requires-dist = [
     { name = "google-cloud-monitoring", specifier = ">=2.0,<3" },
     { name = "google-cloud-quotas", specifier = ">=0.5,<1" },
     { name = "google-cloud-storage", specifier = ">=3.1,<4" },
+    { name = "google-i18n-address", specifier = ">=3.1.1,<4" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pyarrow", specifier = ">=19.0,<20" },
@@ -640,6 +642,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/56/15/c25671c7aad70f8179d858c55a6ae8404902abe0cdcf32a29d581792b491/google_crc32c-1.8.0-cp314-cp314-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:b0d1a7afc6e8e4635564ba8aa5c0548e3173e41b6384d7711a9123165f582de2", size = 33381, upload-time = "2025-12-16T00:40:26.268Z" },
     { url = "https://files.pythonhosted.org/packages/42/fa/f50f51260d7b0ef5d4898af122d8a7ec5a84e2984f676f746445f783705f/google_crc32c-1.8.0-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:8b3f68782f3cbd1bce027e48768293072813469af6a61a86f6bb4977a4380f21", size = 33734, upload-time = "2025-12-16T00:40:27.028Z" },
     { url = "https://files.pythonhosted.org/packages/08/a5/7b059810934a09fb3ccb657e0843813c1fee1183d3bc2c8041800374aa2c/google_crc32c-1.8.0-cp314-cp314-win_amd64.whl", hash = "sha256:d511b3153e7011a27ab6ee6bb3a5404a55b994dc1a7322c0b87b29606d9790e2", size = 34878, upload-time = "2025-12-16T00:35:23.142Z" },
+]
+
+[[package]]
+name = "google-i18n-address"
+version = "3.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fe/52/d00c490e19a727ee67e97ff04fd2ed7003088b0e28f40604784c97c4c946/google_i18n_address-3.1.1.tar.gz", hash = "sha256:c9ea70e35cb312948651fbbbe4ad4ba97781e129096502fab6ed4e94f629ab0e", size = 721615, upload-time = "2024-09-04T08:53:07.683Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/75/c4dadb4845c8c930b94c8ff9d2dfa9855c0a005366af539fee8095e30765/google_i18n_address-3.1.1-py2.py3-none-any.whl", hash = "sha256:f66f4fd2b75d1cd371fc0a7678a1d656da4aa3b32932279e78dd6cae776fc23d", size = 772645, upload-time = "2024-09-04T08:53:05.506Z" },
 ]
 
 [[package]]

@@ -1,6 +1,7 @@
 """Shared pytest fixtures for the address-validator test suite."""
 
 import os
+from collections.abc import Generator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,13 +19,20 @@ def api_key() -> str:
 
 
 @pytest.fixture(scope="session")
-def client(api_key: str) -> TestClient:
+def client(api_key: str) -> Generator[TestClient, None, None]:
     """A synchronous HTTPX test client wired to the FastAPI app.
 
     Session-scoped so the app (and its import-time side-effects) is only
     initialised once per test run.
+
+    Uses the context-manager form so Starlette's lifespan hook runs during
+    ``__enter__``, setting ``app.state.api_key`` before any test makes a
+    request.  Without this, tests that run in isolation (e.g. via
+    ``pytest -k``) receive a 503 instead of the expected response because
+    the auth middleware finds ``app.state.api_key is None``.
     """
-    return TestClient(app, headers={"X-API-Key": api_key})
+    with TestClient(app, headers={"X-API-Key": api_key}) as c:
+        yield c
 
 
 @pytest.fixture()

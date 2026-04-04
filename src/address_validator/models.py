@@ -273,8 +273,8 @@ class StandardizeResponseV1(BaseModel):
 class CountrySubdivision(BaseModel):
     """A country subdivision (province, state, etc.) with code and display label."""
 
-    code: str
-    label: str
+    code: str = Field(..., description="Machine-readable subdivision code (e.g. 'CA', 'ON').")
+    label: str = Field(..., description="Human-readable subdivision name (e.g. 'Ontario').")
 
 
 class CountryFieldDefinition(BaseModel):
@@ -287,11 +287,32 @@ class CountryFieldDefinition(BaseModel):
     the country defines one; absent otherwise.
     """
 
-    key: str
-    label: str
-    required: bool
-    options: list[CountrySubdivision] | None = None
-    pattern: str | None = None
+    key: str = Field(
+        ...,
+        description=(
+            "Geography-neutral field identifier. "
+            "One of: 'address_line_1', 'address_line_2', 'city', 'region', 'postal_code'."
+        ),
+    )
+    label: str = Field(
+        ...,
+        description="Localised display label for this field (e.g. 'ZIP code', 'Prefecture').",
+    )
+    required: bool = Field(..., description="Whether this field is required for a valid address.")
+    options: list[CountrySubdivision] | None = Field(
+        default=None,
+        description=(
+            "Fixed list of valid subdivisions for 'region' fields. "
+            "Absent when the country does not have a fixed subdivision list."
+        ),
+    )
+    pattern: str | None = Field(
+        default=None,
+        description=(
+            "Postal code regex pattern for 'postal_code' fields. "
+            "Absent when the country does not define one."
+        ),
+    )
 
 
 class CountryFormatResponse(BaseModel):
@@ -302,6 +323,12 @@ class CountryFormatResponse(BaseModel):
     array should be hidden in the UI.
     """
 
-    country: str
-    fields: list[CountryFieldDefinition]
+    country: str = Field(..., description="ISO 3166-1 alpha-2 country code (uppercased).")
+    fields: list[CountryFieldDefinition] = Field(
+        ...,
+        description=(
+            "Address fields for this country, in form display order. "
+            "Fields absent from this list should be hidden in the UI."
+        ),
+    )
     api_version: Literal["1"] = "1"

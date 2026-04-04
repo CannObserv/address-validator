@@ -18,7 +18,7 @@ HTTP request
  └─ routers/v1/               thin handlers, validation, error handling
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
-     └─ validate         →   parse → standardize → services/validation/
+     ├─ validate         →   parse → standardize → services/validation/
                                  config.py         pydantic-settings models (USPSConfig, GoogleConfig, ValidationConfig) + validate_config()
                                  registry.py       ProviderRegistry class — provider lifecycle, quota info, no globals
                                  null_provider.py  default no-op
@@ -26,6 +26,7 @@ HTTP request
                                  google_provider.py  ADC; lat/lng; DPV → status
                                  chain_provider.py   ordered fallback across providers
                                  _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
+     └─ countries        →   services/country_format.py  i18naddress → CountryFormatResponse; label lookup tables
  └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
      ├─ router.py             top-level /admin router
      ├─ deps.py               AdminUser from exe.dev proxy headers
@@ -40,6 +41,7 @@ HTTP request
 db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates)
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
+services/country_format.py  maps i18naddress ValidationRules → CountryFormatResponse; GET /api/v1/countries/{code}/format
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)

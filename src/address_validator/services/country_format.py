@@ -25,6 +25,9 @@ _FORMAT_TOKENS: dict[str, str] = {
 }
 
 # i18naddress country_area_type → display label
+# "canton", "oblys", and "region" are forward-compat entries — they are not
+# present in any country's data in the current i18naddress release but are
+# documented in the upstream spec as valid values.
 _AREA_TYPE_LABELS: dict[str, str] = {
     "area": "Area",
     "canton": "Canton",
