@@ -46,7 +46,7 @@ async def endpoint_detail(
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             "admin/audit/_rows.html",
-            {"request": request, "rows": rows},
+            {"request": request, "rows": rows, "show_result": False},
         )
 
     return templates.TemplateResponse(
@@ -62,5 +62,6 @@ async def endpoint_detail(
             "page": page,
             "total_pages": total_pages,
             "filters": filters,
+            "show_result": False,
         },
     )

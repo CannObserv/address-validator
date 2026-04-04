@@ -391,6 +391,76 @@ def test_endpoint_detail_active_status_code_filter_marks_pill_checked(
     assert not re.search(r'value="200"[^>]*checked', html)
 
 
+def test_provider_table_has_result_column_header(client: TestClient, admin_headers: dict) -> None:
+    """Provider detail page has a Result column in the audit table header."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Result" in response.text
+
+
+def test_endpoint_table_has_no_result_column_header(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Endpoint detail page does NOT have a Result column in the audit table header."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    assert "Result" not in response.text
+
+
+def test_provider_result_column_shows_symbol_and_sronly_text(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Provider audit rows show a shape symbol and sr-only text for validation_status."""
+    mock_rows = AsyncMock(
+        return_value=(
+            [
+                {
+                    "timestamp": None,
+                    "client_ip": "1.2.3.4",
+                    "method": "POST",
+                    "endpoint": "/api/v1/validate",
+                    "status_code": 200,
+                    "latency_ms": 50,
+                    "provider": "usps",
+                    "validation_status": "confirmed",
+                    "cache_hit": True,
+                    "error_detail": None,
+                    "raw_input": None,
+                }
+            ],
+            1,
+        )
+    )
+    with patch("address_validator.routers.admin.providers.get_audit_rows", mock_rows):
+        response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    html = response.text
+    # sr-only text present
+    assert 'class="sr-only"' in html
+    assert "confirmed" in html
+    # Green checkmark symbol for "confirmed"
+    assert "&#10003;" in html
+
+
+def test_provider_result_column_colspan_ten_on_empty(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Empty-state row in provider table uses colspan=10 (includes Result column)."""
+    response = client.get("/admin/providers/usps", headers=admin_headers)
+    assert response.status_code == 200
+    assert 'colspan="10"' in response.text
+
+
+def test_endpoint_result_column_colspan_nine_on_empty(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Empty-state row in endpoint table uses colspan=9 (no Result column)."""
+    response = client.get("/admin/endpoints/parse", headers=admin_headers)
+    assert response.status_code == 200
+    assert 'colspan="9"' in response.text
+    assert 'colspan="10"' not in response.text
+
+
 def test_provider_detail_active_filters_mark_pills_checked(
     client: TestClient, admin_headers: dict
 ) -> None:
