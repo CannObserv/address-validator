@@ -512,3 +512,53 @@ async def test_get_endpoint_stats_all_time_includes_archived(db: AsyncEngine) ->
     assert stats["status_codes_7d"][400] == 1  # live only
     assert stats["status_codes_24h"][200] == 1
     assert stats["status_codes_7d"][200] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_has_last_7d(db: AsyncEngine) -> None:
+    """get_provider_stats returns a last_7d request count."""
+    await _seed_rows(db)
+    stats = await get_provider_stats(db, "usps")
+    assert "last_7d" in stats
+    assert stats["last_7d"] == 2  # 2 usps rows seeded
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_has_status_codes_7d(db: AsyncEngine) -> None:
+    """get_provider_stats returns status_codes_7d (live only, 7-day window)."""
+    await _seed_rows(db)
+    stats = await get_provider_stats(db, "usps")
+    assert "status_codes_7d" in stats
+    assert stats["status_codes_7d"][200] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_has_validation_statuses_7d(db: AsyncEngine) -> None:
+    """get_provider_stats returns validation_statuses_7d (live only, 7-day window)."""
+    await _seed_rows(db)
+    stats = await get_provider_stats(db, "usps")
+    assert "validation_statuses_7d" in stats
+    assert stats["validation_statuses_7d"]["confirmed"] == 2
+
+
+@pytest.mark.asyncio
+async def test_get_provider_stats_validation_statuses_canonical_order(
+    db: AsyncEngine,
+) -> None:
+    """validation_statuses_all keys appear in canonical order regardless of DB order."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        for vs in ("not_confirmed", "confirmed_missing_secondary", "confirmed"):
+            await conn.execute(
+                text("""
+                    INSERT INTO audit_log (timestamp, client_ip, method, endpoint,
+                        status_code, provider, validation_status, cache_hit)
+                    VALUES (:ts, '1.2.3.4', 'POST', '/api/v1/validate',
+                        200, 'usps', :vs, false)
+                """),
+                {"ts": now, "vs": vs},
+            )
+    stats = await get_provider_stats(db, "usps")
+    keys = list(stats["validation_statuses_all"].keys())
+    assert keys.index("confirmed") < keys.index("confirmed_missing_secondary")
+    assert keys.index("confirmed_missing_secondary") < keys.index("not_confirmed")

@@ -29,6 +29,32 @@ if TYPE_CHECKING:
 _API_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
 _API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
 
+# ---------------------------------------------------------------------------
+# Validation status helpers
+# ---------------------------------------------------------------------------
+
+_VS_CANONICAL_ORDER = (
+    "confirmed",
+    "confirmed_missing_secondary",
+    "confirmed_bad_secondary",
+    "not_confirmed",
+)
+
+
+def _sort_validation_statuses(vs_dict: dict) -> dict:
+    """Return vs_dict with keys in canonical display order.
+
+    Unknown statuses sort after the known four, alphabetically among themselves.
+    """
+    priority = {vs: i for i, vs in enumerate(_VS_CANONICAL_ORDER)}
+    return dict(
+        sorted(
+            vs_dict.items(),
+            key=lambda kv: (priority.get(kv[0], len(_VS_CANONICAL_ORDER)), kv[0]),
+        )
+    )
+
+
 # Date guard: restrict audit_daily_stats to dates before the earliest live row,
 # avoiding double-counting when --backfill has populated rollups for recent dates.
 _ARCHIVED_DATE_GUARD = (
@@ -418,6 +444,9 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
                         .filter(audit_log.c.timestamp >= tb["last_24h"])
                         .label("last_24h"),
                         func.count()
+                        .filter(audit_log.c.timestamp >= tb["last_7d"])
+                        .label("last_7d"),
+                        func.count()
                         .filter(
                             audit_log.c.cache_hit.is_(True),
                             audit_log.c.timestamp >= tb["last_7d"],
@@ -476,6 +505,36 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).fetchall()
 
+        live_status_7d_rows = (
+            await conn.execute(
+                select(
+                    audit_log.c.status_code,
+                    sa.cast(func.count(), sa.Integer).label("cnt"),
+                )
+                .where(
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.timestamp >= tb["last_7d"],
+                )
+                .group_by(audit_log.c.status_code)
+            )
+        ).fetchall()
+
+        vs_7d_rows = (
+            await conn.execute(
+                _from_live(
+                    [
+                        audit_log.c.validation_status,
+                        func.count().label("count"),
+                    ],
+                    audit_log.c.provider == provider_name,
+                    audit_log.c.validation_status.isnot(None),
+                    audit_log.c.timestamp >= tb["last_7d"],
+                )
+                .group_by(audit_log.c.validation_status)
+                .order_by(func.count().desc())
+            )
+        ).fetchall()
+
         # Status code distributions (live + archived, all-time)
         live_status_all = (
             select(
@@ -531,11 +590,20 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
     return {
         "total": row.total + archived_total,
         "last_24h": row.last_24h,
+        "last_7d": row.last_7d,
         "cache_hit_rate": cache_hit_rate,
         "status_codes_24h": {r.status_code: r.cnt for r in live_status_24h_rows},
+        "status_codes_7d": {r.status_code: r.cnt for r in live_status_7d_rows},
         "status_codes_all": {r.status_code: r.count for r in status_all_rows},
-        "validation_statuses_all": {r.validation_status: r.count for r in status_rows},
-        "validation_statuses_24h": {r.validation_status: r.count for r in vs_24h_rows},
+        "validation_statuses_all": _sort_validation_statuses(
+            {r.validation_status: r.count for r in status_rows}
+        ),
+        "validation_statuses_24h": _sort_validation_statuses(
+            {r.validation_status: r.count for r in vs_24h_rows}
+        ),
+        "validation_statuses_7d": _sort_validation_statuses(
+            {r.validation_status: r.count for r in vs_7d_rows}
+        ),
     }
 
 
