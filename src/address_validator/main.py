@@ -24,6 +24,7 @@ from address_validator.routers.admin._config import get_css_version
 from address_validator.routers.admin._config import templates as admin_templates
 from address_validator.routers.admin.deps import AdminAuthRequired, DatabaseUnavailable
 from address_validator.routers.admin.router import admin_router
+from address_validator.routers.v1 import countries as v1_countries
 from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
@@ -238,6 +239,7 @@ app.include_router(v1_health.router)
 app.include_router(v1_parse.router)
 app.include_router(v1_standardize.router)
 app.include_router(v1_validate.router)
+app.include_router(v1_countries.router)
 
 # Admin dashboard
 app.include_router(admin_router)
