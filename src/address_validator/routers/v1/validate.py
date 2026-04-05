@@ -39,7 +39,9 @@ from fastapi import APIRouter, Depends, Request
 
 from address_validator.auth import require_api_key
 from address_validator.models import (
+    ComponentSet,
     ErrorResponse,
+    StandardizeResponseV1,
     ValidateRequestV1,
     ValidateResponseV1,
     ValidationResult,
@@ -48,12 +50,41 @@ from address_validator.routers.v1.core import APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
+from address_validator.services.validation._helpers import _build_validated_string
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
+from address_validator.services.validation.google_provider import GoogleProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeResponseV1:
+    """Build a passthrough StandardizeResponseV1 from raw components for non-US addresses.
+
+    Skips the USPS Pub 28 pipeline entirely.  Components are used verbatim.
+    The ``components.spec`` is ``"raw"`` to indicate no standardization was applied.
+    """
+    address_line_1 = components.get("address_line_1", "")
+    address_line_2 = components.get("address_line_2", "")
+    city = components.get("city", "")
+    region = components.get("region", "")
+    postal_code = components.get("postal_code", "")
+    standardized = _build_validated_string(
+        address_line_1, address_line_2, city, region, postal_code
+    )
+    return StandardizeResponseV1(
+        address_line_1=address_line_1,
+        address_line_2=address_line_2,
+        city=city,
+        region=region,
+        postal_code=postal_code,
+        country=country,
+        standardized=standardized,
+        components=ComponentSet(spec="raw", spec_version="1", values=components),
+    )
+
 
 router = APIRouter(
     prefix="/api/v1",
@@ -95,23 +126,46 @@ router = APIRouter(
     ),
 )
 async def validate_address_v1(req: ValidateRequestV1, request: Request) -> ValidateResponseV1:
-    check_country(req.country)
-
-    upstream_warnings: list[str] = []
-
-    if req.components:
-        comps = req.components
+    if req.country != "US":
+        if not req.components:
+            raise APIError(
+                status_code=422,
+                error="country_not_supported",
+                message=(
+                    "Raw address strings are only supported for US. "
+                    "Supply pre-parsed 'components' for non-US addresses."
+                ),
+            )
+        provider = request.app.state.registry.get_provider()
+        # Note: ChainProvider is not a GoogleProvider instance; usps,google chains 422 for non-US.
+        if not isinstance(provider, GoogleProvider):
+            raise APIError(
+                status_code=422,
+                error="country_not_supported",
+                message=(
+                    "Non-US address validation requires the Google provider. "
+                    "Set VALIDATION_PROVIDER=google to enable it."
+                ),
+            )
+        std = _build_non_us_std(req.components, req.country)
         raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     else:
-        # model_validator guarantees address is non-blank when components is absent
-        parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
-        comps = parse_result.components.values
-        upstream_warnings = parse_result.warnings
-        raw_input = req.address
+        check_country(req.country)
 
-    std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+        upstream_warnings: list[str] = []
 
-    provider = request.app.state.registry.get_provider()
+        if req.components:
+            comps = req.components
+            raw_input = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
+        else:
+            # model_validator guarantees address is non-blank when components is absent
+            parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
+            comps = parse_result.components.values
+            upstream_warnings = parse_result.warnings
+            raw_input = req.address
+
+        std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+        provider = request.app.state.registry.get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std, raw_input=raw_input)

@@ -13,6 +13,7 @@ from address_validator.models import (
     ValidationResult,
 )
 from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.google_provider import GoogleProvider
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -249,6 +250,129 @@ def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:
     provider = AsyncMock()
     provider.validate = AsyncMock(return_value=response)
     return provider
+
+
+def _make_google_provider(response: ValidateResponseV1) -> AsyncMock:
+    """Return a GoogleProvider-typed mock whose validate() coroutine returns *response*."""
+    provider = AsyncMock(spec=GoogleProvider)
+    provider.validate = AsyncMock(return_value=response)
+    return provider
+
+
+# -- Non-US tests ----------------------------------------------------------
+
+
+class TestValidateNonUS:
+    def test_non_us_raw_string_returns_422(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/validate",
+            json={"address": "10 Downing St, London SW1A 2AA", "country": "GB"},
+        )
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["error"] == "country_not_supported"
+
+    def test_non_us_raw_string_error_message_mentions_components(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/validate",
+            json={"address": "10 Downing St, London SW1A 2AA", "country": "GB"},
+        )
+        assert "components" in resp.json()["message"].lower()
+
+    def test_non_us_components_calls_provider(self, client: TestClient) -> None:
+        provider = _make_google_provider(
+            ValidateResponseV1(
+                country="GB",
+                validation=ValidationResult(status="unavailable"),
+            )
+        )
+        with _mock_registry_with(provider):
+            resp = client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {
+                        "address_line_1": "10 Downing St",
+                        "city": "London",
+                        "postal_code": "SW1A 2AA",
+                    },
+                    "country": "GB",
+                },
+            )
+        assert resp.status_code == 200
+        provider.validate.assert_awaited_once()
+
+    def test_non_us_components_provider_receives_correct_country(self, client: TestClient) -> None:
+        provider = _make_google_provider(
+            ValidateResponseV1(
+                country="GB",
+                validation=ValidationResult(status="unavailable"),
+            )
+        )
+        with _mock_registry_with(provider):
+            client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {
+                        "address_line_1": "10 Downing St",
+                        "city": "London",
+                        "postal_code": "SW1A 2AA",
+                    },
+                    "country": "GB",
+                },
+            )
+        std_arg = provider.validate.call_args[0][0]
+        assert std_arg.country == "GB"
+
+    def test_non_us_components_skips_usps_standardize(self, client: TestClient) -> None:
+        # The provider should receive the raw component values, not USPS-munged ones
+        provider = _make_google_provider(
+            ValidateResponseV1(
+                country="GB",
+                validation=ValidationResult(status="unavailable"),
+            )
+        )
+        with _mock_registry_with(provider):
+            client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {
+                        "address_line_1": "10 Downing St",
+                        "city": "London",
+                        "postal_code": "SW1A 2AA",
+                    },
+                    "country": "GB",
+                },
+            )
+        std_arg = provider.validate.call_args[0][0]
+        # city should be exactly as supplied — not USPS-uppercased/truncated
+        assert std_arg.city == "London"
+        assert std_arg.address_line_1 == "10 Downing St"
+
+    def test_non_us_components_no_google_provider_returns_422(self, client: TestClient) -> None:
+        # A non-Google provider must 422 for non-US addresses
+        non_google_provider = _make_null_provider(NULL_RESPONSE)
+        with _mock_registry_with(non_google_provider):
+            resp = client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {
+                        "address_line_1": "10 Downing St",
+                        "city": "London",
+                        "postal_code": "SW1A 2AA",
+                    },
+                    "country": "GB",
+                },
+            )
+        assert resp.status_code == 422
+        assert resp.json()["error"] == "country_not_supported"
+
+    def test_us_requests_still_work(self, client: TestClient) -> None:
+        with _mock_registry_with(_make_null_provider(NULL_RESPONSE)):
+            resp = client.post(
+                "/api/v1/validate",
+                json={"address": "123 Main St, Springfield, IL 62701"},
+            )
+        assert resp.status_code == 200
 
 
 class TestValidationResult:
