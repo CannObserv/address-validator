@@ -92,7 +92,7 @@ class GoogleClient:
         zip_code: str | None = None,
         country: str = "US",
     ) -> dict[str, Any]:
-        """Validate a single US address via the Google Address Validation API.
+        """Validate a single address via the Google Address Validation API.
 
         Retries up to :data:`~services.validation._rate_limit._RETRY_MAX` times
         on HTTP 429, honouring the ``Retry-After`` header when present and
@@ -101,11 +101,14 @@ class GoogleClient:
         retries are exhausted.
 
         Returns a normalised dict with keys:
-        ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
+        ``status``, ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
         ``city``, ``region``, ``postal_code``, ``vacant``,
         ``latitude``, ``longitude``,
         ``has_inferred_components``, ``has_replaced_components``,
         ``has_unconfirmed_components``.
+
+        ``status`` is always present.  ``dpv_match_code`` is ``None`` for
+        non-US addresses (USPS-specific field).
 
         Raises :class:`httpx.HTTPStatusError` on non-429 non-2xx responses.
         """
@@ -114,6 +117,19 @@ class GoogleClient:
         if city_state_zip:
             address_lines.append(city_state_zip)
 
+        if country == "US":
+            payload: dict[str, Any] = {
+                "address": {"addressLines": address_lines},
+                "enableUspsCass": True,
+            }
+        else:
+            payload = {
+                "address": {
+                    "addressLines": address_lines,
+                    "regionCode": country,
+                },
+            }
+
         for attempt in range(_RETRY_MAX + 1):
             await self._rate_limiter.acquire()
             logger.debug(
@@ -121,18 +137,6 @@ class GoogleClient:
                 len(address_lines),
                 country,
             )
-            if country == "US":
-                payload: dict[str, Any] = {
-                    "address": {"addressLines": address_lines},
-                    "enableUspsCass": True,
-                }
-            else:
-                payload = {
-                    "address": {
-                        "addressLines": address_lines,
-                        "regionCode": country,
-                    },
-                }
             resp = await self._http.post(
                 _VALIDATE_URL,
                 headers=await self._get_auth_headers(),
