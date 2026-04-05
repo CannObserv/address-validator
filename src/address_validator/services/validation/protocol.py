@@ -18,6 +18,9 @@ class ValidationProvider(Protocol):
     :class:`~services.validation.google_provider.GoogleProvider`.
     """
 
+    supports_non_us: bool
+    """True if this provider can validate non-US addresses."""
+
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:

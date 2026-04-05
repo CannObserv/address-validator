@@ -146,6 +146,20 @@ async def _fetch_one(engine: AsyncEngine, table, *where):
 # ---------------------------------------------------------------------------
 
 
+class TestSupportsNonUs:
+    def test_delegates_to_inner_true(self) -> None:
+        inner = AsyncMock()
+        inner.supports_non_us = True
+        provider = CachingProvider(inner=inner, get_engine=MagicMock())
+        assert provider.supports_non_us is True
+
+    def test_delegates_to_inner_false(self) -> None:
+        inner = AsyncMock()
+        inner.supports_non_us = False
+        provider = CachingProvider(inner=inner, get_engine=MagicMock())
+        assert provider.supports_non_us is False
+
+
 class TestCacheMiss:
     async def test_cache_miss_calls_inner(self, db: AsyncEngine) -> None:
         response = _make_confirmed_response()

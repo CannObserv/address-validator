@@ -15,6 +15,8 @@ class NullProvider:
     validation is not yet required.
     """
 
+    supports_non_us = False
+
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:

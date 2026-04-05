@@ -37,6 +37,8 @@ class GoogleProvider:
     instantiate directly in application code.
     """
 
+    supports_non_us = True
+
     def __init__(self, client: GoogleClient) -> None:
         self._client = client
 

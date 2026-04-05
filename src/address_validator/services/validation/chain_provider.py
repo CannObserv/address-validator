@@ -51,6 +51,11 @@ class ChainProvider:
             raise ValueError("ChainProvider requires at least one provider")
         self._providers = providers
 
+    @property
+    def supports_non_us(self) -> bool:
+        """True if any provider in the chain supports non-US address validation."""
+        return any(p.supports_non_us for p in self._providers)
+
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
