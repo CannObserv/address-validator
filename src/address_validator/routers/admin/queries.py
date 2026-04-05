@@ -17,6 +17,7 @@ from address_validator.db.tables import (
     audit_log,
     query_patterns,
 )
+from address_validator.routers.admin._config import VS_META
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement, Select
@@ -33,18 +34,13 @@ _API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
 # Validation status helpers
 # ---------------------------------------------------------------------------
 
-_VS_CANONICAL_ORDER = (
-    "confirmed",
-    "confirmed_missing_secondary",
-    "confirmed_bad_secondary",
-    "not_confirmed",
-)
+_VS_CANONICAL_ORDER = tuple(VS_META.keys())
 
 
 def _sort_validation_statuses(vs_dict: dict) -> dict:
     """Return vs_dict with keys in canonical display order.
 
-    Unknown statuses sort after the known four, alphabetically among themselves.
+    Unknown statuses sort after the known statuses, alphabetically among themselves.
     """
     priority = {vs: i for i, vs in enumerate(_VS_CANONICAL_ORDER)}
     return dict(

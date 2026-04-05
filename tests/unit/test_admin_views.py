@@ -363,10 +363,9 @@ def test_provider_detail_filter_toggles_with_codes_and_statuses(
     assert 'value="422"' in html
     assert 'value="confirmed"' in html
     assert 'value="not_confirmed"' in html
-    # Toggle pills render the name/code only — no ": count" appended.
-    # Cards DO show "confirmed: 85" once; toggle pills must not add a second copy.
-    assert html.count("confirmed: 85") == 1  # only in the all-time card, not in toggle
-    assert html.count("not_confirmed: 5") == 1  # same — card only
+    # Cards show human labels (e.g. "Confirmed: 85"); pills show "✓ Confirmed".
+    assert html.count("Confirmed: 85") == 1  # only in the all-time card
+    assert html.count("Not Confirmed: 5") == 1  # same — card only
     assert html.count("422: 5") == 1  # status code card only
 
 
@@ -435,11 +434,13 @@ def test_provider_result_column_shows_symbol_and_sronly_text(
         response = client.get("/admin/providers/usps", headers=admin_headers)
     assert response.status_code == 200
     html = response.text
-    # sr-only text present
+    # sr-only label text present
     assert 'class="sr-only"' in html
-    assert "confirmed" in html
-    # Green checkmark symbol for "confirmed"
-    assert "&#10003;" in html
+    assert "Confirmed" in html
+    # Green checkmark symbol via vs_meta
+    assert "\u2713" in html
+    # Title tooltip with human label
+    assert 'title="Confirmed"' in html
 
 
 def test_provider_result_column_colspan_nine_on_empty(

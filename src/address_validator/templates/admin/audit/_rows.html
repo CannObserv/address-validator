@@ -6,11 +6,11 @@
     <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">{{ row["endpoint"] or '' }}</td>
     <td class="px-3 py-2 whitespace-nowrap">
         {% if row["status_code"] and row["status_code"] < 400 %}
-            <span class="inline-flex items-center gap-1 text-green-700 dark:text-green-400">&#10003; {{ row["status_code"] }}</span>
+            <span class="inline-flex items-center gap-1 text-green-700 dark:text-green-400">✓ {{ row["status_code"] }}</span>
         {% elif row["status_code"] and row["status_code"] < 500 %}
-            <span class="inline-flex items-center gap-1 text-yellow-600 dark:text-yellow-400">&#9650; {{ row["status_code"] }}</span>
+            <span class="inline-flex items-center gap-1 text-yellow-600 dark:text-yellow-400">▲ {{ row["status_code"] }}</span>
         {% elif row["status_code"] %}
-            <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">&#10005; {{ row["status_code"] }}</span>
+            <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">✗ {{ row["status_code"] }}</span>
         {% endif %}
     </td>
     <td class="px-3 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300 text-right">{% if row["latency_ms"] is not none %}{{ row["latency_ms"] }}ms{% endif %}</td>
@@ -23,14 +23,13 @@
         {% endif %}
     </td>
     {% if show_result %}
-    <td class="px-3 py-2 whitespace-nowrap">
+    <td class="px-3 py-2 whitespace-nowrap text-center">
         {% set vs = row.get("validation_status") %}
-        {% if vs == "confirmed" %}
-            <span class="inline-flex items-center gap-1 text-green-700 dark:text-green-400">&#10003;<span class="sr-only">{{ vs }}</span></span>
-        {% elif vs in ("confirmed_missing_secondary", "confirmed_bad_secondary") %}
-            <span class="inline-flex items-center gap-1 text-yellow-600 dark:text-yellow-400">&#9650;<span class="sr-only">{{ vs }}</span></span>
-        {% elif vs == "not_confirmed" %}
-            <span class="inline-flex items-center gap-1 text-red-600 dark:text-red-400">&#10005;<span class="sr-only">{{ vs }}</span></span>
+        {% set meta = vs_meta.get(vs) if vs else none %}
+        {% if meta %}
+            {% set c = meta.color %}
+            <span class="inline-flex items-center gap-1 {% if c == 'green' %}text-green-700 dark:text-green-400{% elif c == 'yellow' %}text-yellow-600 dark:text-yellow-400{% else %}text-red-600 dark:text-red-400{% endif %}"
+                  title="{{ meta.label }}">{{ meta.symbol }}<span class="sr-only">{{ meta.label }}</span></span>
         {% else %}
             <span class="text-gray-400 dark:text-gray-500">—</span>
         {% endif %}
