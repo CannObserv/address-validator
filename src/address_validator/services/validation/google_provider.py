@@ -8,7 +8,7 @@ from address_validator.models import (
     ValidateResponseV1,
     ValidationResult,
 )
-from address_validator.services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
+from address_validator.services.validation._helpers import _build_validated_string
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -20,7 +20,7 @@ _WARNING_UNCONFIRMED = "One or more address components are unconfirmed"
 
 
 class GoogleProvider:
-    """Validates US addresses against the Google Address Validation API.
+    """Validates addresses against the Google Address Validation API.
 
     Receives a fully normalised :class:`~models.StandardizeResponseV1` from the
     router (the result of the parse → standardize pipeline).  The
@@ -52,10 +52,11 @@ class GoogleProvider:
             city=std.city,
             state=std.region,
             zip_code=std.postal_code,
+            country=std.country,
         )
 
+        status = raw["status"]
         dpv = raw.get("dpv_match_code")
-        status = _DPV_TO_STATUS[dpv] if dpv is not None else "unavailable"
 
         address_line_1 = raw.get("address_line_1") or None
         address_line_2 = raw.get("address_line_2") or None
@@ -82,9 +83,16 @@ class GoogleProvider:
                 }.items()
                 if v
             }
+            # US results follow USPS Pub 28; non-US results are raw Google components.
+            if std.country == "US":
+                comp_spec = USPS_PUB28_SPEC
+                comp_spec_version = USPS_PUB28_SPEC_VERSION
+            else:
+                comp_spec = "raw"
+                comp_spec_version = "1"
             components = ComponentSet(
-                spec=USPS_PUB28_SPEC,
-                spec_version=USPS_PUB28_SPEC_VERSION,
+                spec=comp_spec,
+                spec_version=comp_spec_version,
                 values=comp_values,
             )
             validated = _build_validated_string(

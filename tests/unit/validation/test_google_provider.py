@@ -12,6 +12,7 @@ from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VE
 # Flat dicts matching GoogleClient._map_response output
 CLIENT_RESULT_Y = {
     "dpv_match_code": "Y",
+    "status": "confirmed",
     "address_line_1": "123 MAIN ST",
     "address_line_2": "",
     "city": "SPRINGFIELD",
@@ -27,6 +28,7 @@ CLIENT_RESULT_Y = {
 
 CLIENT_RESULT_N = {
     "dpv_match_code": "N",
+    "status": "not_confirmed",
     "address_line_1": "",
     "address_line_2": "",
     "city": "",
@@ -96,7 +98,11 @@ class TestGoogleProvider:
     async def test_dpv_s_sets_confirmed_missing_secondary(
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
-        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "S"}
+        mock_client.validate_address.return_value = {
+            **CLIENT_RESULT_Y,
+            "dpv_match_code": "S",
+            "status": "confirmed_missing_secondary",
+        }
         result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed_missing_secondary"
 
@@ -104,7 +110,11 @@ class TestGoogleProvider:
     async def test_dpv_d_sets_confirmed_bad_secondary(
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
-        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "D"}
+        mock_client.validate_address.return_value = {
+            **CLIENT_RESULT_Y,
+            "dpv_match_code": "D",
+            "status": "confirmed_bad_secondary",
+        }
         result = await provider.validate(_make_std(address_line_1="123 MAIN ST APT 999"))
         assert result.validation.status == "confirmed_bad_secondary"
 
@@ -232,6 +242,7 @@ class TestGoogleProvider:
             city="SPRINGFIELD",
             state="IL",
             zip_code="62701",
+            country="US",
         )
 
     @pytest.mark.asyncio
@@ -250,3 +261,104 @@ class TestGoogleProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
         assert result.validation.status == "confirmed"
+
+
+CLIENT_RESULT_INTERNATIONAL_CONFIRMED = {
+    "dpv_match_code": None,
+    "status": "confirmed",
+    "address_line_1": "10 Downing St",
+    "address_line_2": "",
+    "city": "London",
+    "region": "",
+    "postal_code": "SW1A 2AA",
+    "vacant": None,
+    "latitude": 51.5033,
+    "longitude": -0.1276,
+    "has_inferred_components": False,
+    "has_replaced_components": False,
+    "has_unconfirmed_components": False,
+}
+
+CLIENT_RESULT_INTERNATIONAL_NOT_FOUND = {
+    "dpv_match_code": None,
+    "status": "not_found",
+    "address_line_1": "",
+    "address_line_2": "",
+    "city": "",
+    "region": "",
+    "postal_code": "",
+    "vacant": None,
+    "latitude": None,
+    "longitude": None,
+    "has_inferred_components": False,
+    "has_replaced_components": False,
+    "has_unconfirmed_components": False,
+}
+
+
+def _make_gb_std(
+    address_line_1: str = "10 Downing St",
+    city: str = "London",
+    postal_code: str = "SW1A 2AA",
+    country: str = "GB",
+) -> StandardizeResponseV1:
+    return StandardizeResponseV1(
+        address_line_1=address_line_1,
+        address_line_2="",
+        city=city,
+        region="",
+        postal_code=postal_code,
+        country=country,
+        standardized=f"{address_line_1}  {city} {postal_code}",
+        components=ComponentSet(
+            spec="raw",
+            spec_version="1",
+            values={"address_line_1": address_line_1, "city": city, "postal_code": postal_code},
+        ),
+    )
+
+
+class TestGoogleProviderNonUS:
+    @pytest.mark.asyncio
+    async def test_non_us_confirmed(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_INTERNATIONAL_CONFIRMED)
+        provider = GoogleProvider(client)
+        result = await provider.validate(_make_gb_std())
+        assert result.validation.status == "confirmed"
+        assert result.country == "GB"
+
+    @pytest.mark.asyncio
+    async def test_non_us_not_found(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_INTERNATIONAL_NOT_FOUND)
+        provider = GoogleProvider(client)
+        result = await provider.validate(_make_gb_std())
+        assert result.validation.status == "not_found"
+
+    @pytest.mark.asyncio
+    async def test_non_us_passes_country_to_client(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_INTERNATIONAL_CONFIRMED)
+        provider = GoogleProvider(client)
+        await provider.validate(_make_gb_std(country="GB"))
+        client.validate_address.assert_awaited_once()
+        call_kwargs = client.validate_address.call_args[1]
+        assert call_kwargs["country"] == "GB"
+
+    @pytest.mark.asyncio
+    async def test_non_us_no_dpv_match_code_in_result(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_INTERNATIONAL_CONFIRMED)
+        provider = GoogleProvider(client)
+        result = await provider.validate(_make_gb_std())
+        assert result.validation.dpv_match_code is None
+
+    @pytest.mark.asyncio
+    async def test_non_us_components_spec_is_raw(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_INTERNATIONAL_CONFIRMED)
+        provider = GoogleProvider(client)
+        result = await provider.validate(_make_gb_std())
+        assert result.components is not None
+        assert result.components.spec == "raw"

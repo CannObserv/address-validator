@@ -186,6 +186,7 @@ class ValidationResult(BaseModel):
     * ``confirmed_missing_secondary`` — DPV code S: building confirmed, unit missing.
     * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
     * ``not_confirmed``               — DPV code N: address not found in USPS database.
+    * ``not_found``                   — non-US: address could not be geocoded or verified.
     * ``invalid``                     — non-US: address is geocodable but incomplete.
     * ``unavailable``                 — provider not configured or unreachable.
     * ``error``                       — provider rejected the input as malformed.
@@ -196,6 +197,7 @@ class ValidationResult(BaseModel):
         "confirmed_missing_secondary",
         "confirmed_bad_secondary",
         "not_confirmed",
+        "not_found",
         "invalid",
         "unavailable",
         "error",
