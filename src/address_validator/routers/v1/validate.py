@@ -38,6 +38,7 @@ import math
 from fastapi import APIRouter, Depends, Request
 
 from address_validator.auth import require_api_key
+from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
     ErrorResponse,
@@ -50,7 +51,6 @@ from address_validator.routers.v1.core import APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
-from address_validator.services.validation._helpers import _build_validated_string
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
@@ -71,9 +71,7 @@ def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeRe
     city = components.get("city", "")
     region = components.get("region", "")
     postal_code = components.get("postal_code", "")
-    standardized = _build_validated_string(
-        address_line_1, address_line_2, city, region, postal_code
-    )
+    standardized = build_validated_string(address_line_1, address_line_2, city, region, postal_code)
     return StandardizeResponseV1(
         address_line_1=address_line_1,
         address_line_2=address_line_2,

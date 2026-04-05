@@ -41,6 +41,7 @@ HTTP request
 db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates)
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
+core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
 services/country_format.py  maps i18naddress ValidationRules → CountryFormatResponse; GET /api/v1/countries/{code}/format
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)

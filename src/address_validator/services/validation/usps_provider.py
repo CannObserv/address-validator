@@ -2,13 +2,14 @@
 
 import logging
 
+from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
     StandardizeResponseV1,
     ValidateResponseV1,
     ValidationResult,
 )
-from address_validator.services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
+from address_validator.services.validation._helpers import _DPV_TO_STATUS
 from address_validator.services.validation.usps_client import USPSClient
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -77,7 +78,7 @@ class USPSProvider:
                 spec_version=USPS_PUB28_SPEC_VERSION,
                 values=comp_values,
             )
-            validated = _build_validated_string(
+            validated = build_validated_string(
                 address_line_1, address_line_2, city, region, postal_code
             )
 
