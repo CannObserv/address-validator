@@ -61,7 +61,7 @@ validated_addresses = sa.Table(
         sa.CheckConstraint(
             "status IN ("
             "'confirmed', 'confirmed_missing_secondary', 'confirmed_bad_secondary',"
-            " 'not_confirmed', 'unavailable')",
+            " 'not_confirmed', 'not_found', 'invalid', 'unavailable')",
             name="ck_validated_addresses_status",
         ),
         nullable=False,
