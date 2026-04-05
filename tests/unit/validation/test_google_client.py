@@ -358,3 +358,162 @@ class TestGoogleClientValidateAddress:
             await client.validate_address("123 Main St")
 
         mock_http.post.assert_not_called()
+
+
+# -- Non-US response mapping -----------------------------------------------
+
+GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED = {
+    "result": {
+        "verdict": {
+            "inputGranularity": "PREMISE",
+            "validationGranularity": "PREMISE",
+            "geocodeGranularity": "PREMISE",
+            "addressComplete": True,
+            "hasUnconfirmedComponents": False,
+            "hasInferredComponents": False,
+            "hasReplacedComponents": False,
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "GB",
+                "postalCode": "SW1A 2AA",
+                "administrativeArea": "",
+                "locality": "London",
+                "addressLines": ["10 Downing St"],
+            }
+        },
+        "geocode": {
+            "location": {"latitude": 51.5033, "longitude": -0.1276},
+        },
+    }
+}
+
+GOOGLE_RESPONSE_INTERNATIONAL_INCOMPLETE = {
+    "result": {
+        "verdict": {
+            "validationGranularity": "ROUTE",
+            "addressComplete": False,
+            "hasUnconfirmedComponents": False,
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "GB",
+                "postalCode": "",
+                "administrativeArea": "",
+                "locality": "London",
+                "addressLines": ["Downing St"],
+            }
+        },
+        "geocode": {"location": {"latitude": 51.5, "longitude": -0.1}},
+    }
+}
+
+GOOGLE_RESPONSE_INTERNATIONAL_NOT_FOUND = {
+    "result": {
+        "verdict": {
+            "validationGranularity": "OTHER",
+            "addressComplete": False,
+        },
+        "address": {"postalAddress": {}},
+        "geocode": {},
+    }
+}
+
+GOOGLE_RESPONSE_INTERNATIONAL_UNCONFIRMED = {
+    "result": {
+        "verdict": {
+            "validationGranularity": "PREMISE",
+            "addressComplete": True,
+            "hasUnconfirmedComponents": True,
+            "hasInferredComponents": False,
+            "hasReplacedComponents": False,
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "GB",
+                "postalCode": "SW1A 2AA",
+                "locality": "London",
+                "addressLines": ["10 Downing St"],
+            }
+        },
+        "geocode": {"location": {"latitude": 51.5033, "longitude": -0.1276}},
+    }
+}
+
+
+class TestMapResponseInternational:
+    def test_confirmed_address(self) -> None:
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
+        assert result["status"] == "confirmed"
+        assert result["address_line_1"] == "10 Downing St"
+        assert result["city"] == "London"
+        assert result["postal_code"] == "SW1A 2AA"
+        assert result["dpv_match_code"] is None
+        assert result["latitude"] == pytest.approx(51.5033)
+        assert result["longitude"] == pytest.approx(-0.1276)
+
+    def test_incomplete_address_returns_invalid(self) -> None:
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_INCOMPLETE)
+        assert result["status"] == "invalid"
+
+    def test_not_found_returns_not_found(self) -> None:
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_NOT_FOUND)
+        assert result["status"] == "not_found"
+
+    def test_confirmed_with_unconfirmed_components(self) -> None:
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_UNCONFIRMED)
+        assert result["status"] == "confirmed"
+        assert result["has_unconfirmed_components"] is True
+
+    def test_multiple_address_lines(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {"addressComplete": True, "validationGranularity": "PREMISE"},
+                "address": {
+                    "postalAddress": {
+                        "addressLines": ["Flat 1", "10 Downing St"],
+                        "locality": "London",
+                        "postalCode": "SW1A 2AA",
+                    }
+                },
+                "geocode": {},
+            }
+        }
+        result = GoogleClient._map_response_international(raw)
+        assert result["address_line_1"] == "Flat 1"
+        assert result["address_line_2"] == "10 Downing St"
+
+    def test_empty_address_lines(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {"addressComplete": False, "validationGranularity": "OTHER"},
+                "address": {"postalAddress": {}},
+                "geocode": {},
+            }
+        }
+        result = GoogleClient._map_response_international(raw)
+        assert result["address_line_1"] == ""
+        assert result["address_line_2"] == ""
+
+
+class TestMapResponseUsHasStatusKey:
+    """_map_response (US path) must include 'status' so GoogleProvider can read it uniformly."""
+
+    def test_confirmed_y_has_status(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_Y)
+        assert result["status"] == "confirmed"
+
+    def test_not_confirmed_n_has_status(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
+        assert result["status"] == "not_confirmed"
+
+    def test_no_dpv_has_unavailable_status(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {},
+                "geocode": {},
+                "uspsData": {"standardizedAddress": {}},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "unavailable"
