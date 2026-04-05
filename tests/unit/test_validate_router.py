@@ -249,6 +249,7 @@ def _make_null_provider(response: ValidateResponseV1) -> AsyncMock:
     """Return a mock provider whose validate() coroutine returns *response*."""
     provider = AsyncMock()
     provider.validate = AsyncMock(return_value=response)
+    provider.supports_non_us = False
     return provider
 
 
@@ -256,6 +257,14 @@ def _make_google_provider(response: ValidateResponseV1) -> AsyncMock:
     """Return a GoogleProvider-typed mock whose validate() coroutine returns *response*."""
     provider = AsyncMock(spec=GoogleProvider)
     provider.validate = AsyncMock(return_value=response)
+    return provider
+
+
+def _make_chain_like_provider(response: ValidateResponseV1) -> AsyncMock:
+    """Return a non-GoogleProvider mock with supports_non_us=True (simulates usps,google chain)."""
+    provider = AsyncMock()
+    provider.validate = AsyncMock(return_value=response)
+    provider.supports_non_us = True
     return provider
 
 
@@ -376,6 +385,25 @@ class TestValidateNonUS:
             )
         assert resp.status_code == 422
         assert resp.json()["error"] == "country_not_supported"
+
+    def test_non_us_chain_provider_with_google_succeeds(self, client: TestClient) -> None:
+        # A chain-like provider (e.g. usps,google) that supports_non_us=True must not 422
+        provider = _make_chain_like_provider(
+            ValidateResponseV1(
+                country="DE",
+                validation=ValidationResult(status="confirmed"),
+            )
+        )
+        with _mock_registry_with(provider):
+            resp = client.post(
+                "/api/v1/validate",
+                json={
+                    "components": {"address_line_1": "Unter den Linden 1", "city": "Berlin"},
+                    "country": "DE",
+                },
+            )
+        assert resp.status_code == 200
+        assert resp.json()["validation"]["status"] == "confirmed"
 
     def test_us_requests_still_work(self, client: TestClient) -> None:
         with _mock_registry_with(_make_null_provider(NULL_RESPONSE)):

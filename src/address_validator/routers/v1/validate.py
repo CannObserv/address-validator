@@ -28,7 +28,8 @@ Warnings from the parse or standardize step are merged into the
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
 (see :mod:`services.validation.config`).  When no provider is configured
 the endpoint returns HTTP 200 with ``validation.status='unavailable'``.
-Non-US validation requires ``VALIDATION_PROVIDER=google``.
+Non-US validation requires a provider with ``supports_non_us=True`` —
+``VALIDATION_PROVIDER=google`` or any chain containing a Google provider (e.g. ``usps,google``).
 """
 
 import json
@@ -55,7 +56,6 @@ from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
-from address_validator.services.validation.google_provider import GoogleProvider
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,8 @@ router = APIRouter(
         "When both are supplied, `components` takes precedence.\n\n"
         "**Non-US addresses** must supply pre-parsed `components` "
         "(raw strings → 422 `country_not_supported`). "
-        "Requires `VALIDATION_PROVIDER=google`.\n\n"
+        "Requires `VALIDATION_PROVIDER=google` or a chain containing Google"
+        " (e.g. `usps,google`).\n\n"
         "**US DPV match codes** (in `validation.dpv_match_code`):\n"
         "- `Y` — confirmed delivery point\n"
         "- `S` — building confirmed, secondary address (apt/unit) missing\n"
@@ -148,14 +149,13 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
                 ),
             )
         provider = request.app.state.registry.get_provider()
-        # Note: ChainProvider is not a GoogleProvider instance; usps,google chains 422 for non-US.
-        if not isinstance(provider, GoogleProvider):
+        if not provider.supports_non_us:
             raise APIError(
                 status_code=422,
                 error="country_not_supported",
                 message=(
                     "Non-US address validation requires the Google provider. "
-                    "Set VALIDATION_PROVIDER=google to enable it."
+                    "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
                 ),
             )
         std = _build_non_us_std(req.components, req.country)
