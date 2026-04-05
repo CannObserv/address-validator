@@ -28,6 +28,8 @@ class USPSProvider:
     instantiate directly in application code.
     """
 
+    supports_non_us = False
+
     def __init__(self, client: USPSClient) -> None:
         self._client = client
 

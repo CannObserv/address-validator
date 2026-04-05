@@ -262,6 +262,9 @@ class TestGoogleProvider:
         result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
         assert result.validation.status == "confirmed"
 
+    def test_supports_non_us_is_true(self, provider: GoogleProvider) -> None:
+        assert provider.supports_non_us is True
+
 
 CLIENT_RESULT_INTERNATIONAL_CONFIRMED = {
     "dpv_match_code": None,

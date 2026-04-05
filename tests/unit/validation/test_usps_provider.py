@@ -204,3 +204,6 @@ class TestUSPSProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
         assert result.validation.status == "confirmed"
+
+    def test_supports_non_us_is_false(self, provider: USPSProvider) -> None:
+        assert provider.supports_non_us is False

@@ -78,3 +78,6 @@ class TestNullProvider:
         """NullProvider.validate must accept raw_input without raising."""
         result = await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
         assert result.validation.status == "unavailable"
+
+    def test_supports_non_us_is_false(self, provider: NullProvider) -> None:
+        assert provider.supports_non_us is False
