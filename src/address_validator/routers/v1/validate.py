@@ -1,34 +1,34 @@
 """v1 validate endpoint.
 
-POST /api/v1/validate — parses and standardizes the input address, then
-confirms it represents a real deliverable location by delegating to the
-configured :class:`~services.validation.protocol.ValidationProvider`.
+POST /api/v1/validate — parses, standardizes, and validates an address
+against an authoritative source.
 
 Input pipeline
 --------------
-Both input modes run through the same parse → standardize pipeline before
-the provider is called.  This guarantees that providers always receive
-clean, USPS-formatted components regardless of how the caller supplied the
-address.
+**US addresses** run through the full parse → standardize pipeline before
+the provider is called.  Providers always receive clean, USPS-formatted
+components.
 
-* **Raw address string** (``address`` field): the string is parsed by
-  :func:`~services.parser.parse_address` and then standardized by
-  :func:`~services.standardizer.standardize`.
-* **Pre-parsed components** (``components`` field): the dict is passed
-  directly to :func:`~services.standardizer.standardize`, skipping the
-  parse step.
+* **Raw address string** (``address`` field): parsed by
+  :func:`~services.parser.parse_address` then standardized.
+* **Pre-parsed components** (``components`` field): passed directly to
+  :func:`~services.standardizer.standardize`, skipping the parse step.
 
-When both fields are supplied, ``components`` takes precedence and
-``address`` is ignored.
+**Non-US addresses** must supply pre-parsed ``components``.  The USPS
+pipeline is bypassed entirely; components are passed verbatim to the
+Google provider.  Non-US raw address strings are rejected with 422
+``country_not_supported``.
 
-Warnings emitted by the parse or standardize step are merged into the
-``warnings`` list of the final response alongside any warnings from the
-provider itself.
+When both ``address`` and ``components`` are supplied, ``components``
+takes precedence and ``address`` is ignored.
+
+Warnings from the parse or standardize step are merged into the
+``warnings`` list of the final response alongside any provider warnings.
 
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
 (see :mod:`services.validation.config`).  When no provider is configured
-the endpoint still returns HTTP 200 with ``validation.status='unavailable'``
-so upstream callers degrade gracefully.
+the endpoint returns HTTP 200 with ``validation.status='unavailable'``.
+Non-US validation requires ``VALIDATION_PROVIDER=google``.
 """
 
 import json
@@ -104,17 +104,24 @@ router = APIRouter(
     },
     summary="Validate an address against an authoritative source",
     description=(
-        "Parses, standardizes, and then confirms that an address represents a "
-        "real USPS deliverable location.\n\n"
-        "**Input modes** (both run through parse → standardize before validation):\n"
+        "Parses and validates an address against an authoritative source.\n\n"
+        "**US addresses** run through the full parse → standardize pipeline "
+        "before validation. Both input modes are supported:\n"
         "- `address` — raw address string; parsed then standardized automatically.\n"
         "- `components` — pre-parsed component dict; standardized only (parse skipped).\n"
         "When both are supplied, `components` takes precedence.\n\n"
-        "**DPV match codes**\n"
+        "**Non-US addresses** must supply pre-parsed `components` "
+        "(raw strings → 422 `country_not_supported`). "
+        "Requires `VALIDATION_PROVIDER=google`.\n\n"
+        "**US DPV match codes** (in `validation.dpv_match_code`):\n"
         "- `Y` — confirmed delivery point\n"
         "- `S` — building confirmed, secondary address (apt/unit) missing\n"
         "- `D` — building confirmed, secondary address not recognised\n"
         "- `N` — address not found\n\n"
+        "**Non-US validation statuses** (no DPV codes):\n"
+        "- `confirmed` — address complete and geocoded\n"
+        "- `invalid` — geocodable but incomplete (e.g. missing street number)\n"
+        "- `not_found` — address could not be geocoded or verified\n\n"
         "When no validation provider is configured, `validation.status` is "
         "`unavailable` and all other result fields are `null`.\n\n"
         "When the validation provider rejects the input as malformed, "
