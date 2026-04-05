@@ -365,6 +365,11 @@ class CachingProvider:
         self._get_engine = get_engine
         self._ttl_days = ttl_days
 
+    @property
+    def supports_non_us(self) -> bool:
+        """Delegate to the inner provider."""
+        return self._inner.supports_non_us
+
     async def validate(
         self, std: StandardizeResponseV1, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
