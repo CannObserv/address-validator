@@ -249,6 +249,30 @@ class TestChainProvider:
 
         second.validate.assert_awaited_once_with(std_address, raw_input="456 Elm Ave")
 
+    def test_supports_non_us_false_when_all_providers_false(self) -> None:
+        p1 = AsyncMock()
+        p1.supports_non_us = False
+        p2 = AsyncMock()
+        p2.supports_non_us = False
+        chain = ChainProvider(providers=[p1, p2])
+        assert chain.supports_non_us is False
+
+    def test_supports_non_us_true_when_any_provider_true(self) -> None:
+        p1 = AsyncMock()
+        p1.supports_non_us = False
+        p2 = AsyncMock()
+        p2.supports_non_us = True
+        chain = ChainProvider(providers=[p1, p2])
+        assert chain.supports_non_us is True
+
+    def test_supports_non_us_true_when_all_providers_true(self) -> None:
+        p1 = AsyncMock()
+        p1.supports_non_us = True
+        p2 = AsyncMock()
+        p2.supports_non_us = True
+        chain = ChainProvider(providers=[p1, p2])
+        assert chain.supports_non_us is True
+
 
 @pytest.fixture()
 def std_address():
