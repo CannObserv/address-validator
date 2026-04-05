@@ -257,6 +257,7 @@ def _make_google_provider(response: ValidateResponseV1) -> AsyncMock:
     """Return a GoogleProvider-typed mock whose validate() coroutine returns *response*."""
     provider = AsyncMock(spec=GoogleProvider)
     provider.validate = AsyncMock(return_value=response)
+    provider.supports_non_us = True
     return provider
 
 
