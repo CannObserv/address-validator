@@ -263,6 +263,17 @@ def _make_google_provider(response: ValidateResponseV1) -> AsyncMock:
 
 
 class TestValidateNonUS:
+    def test_invalid_country_code_returns_422(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/validate",
+            json={
+                "components": {"address_line_1": "1 Main St", "city": "Testville"},
+                "country": "XX",
+            },
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"] == "invalid_country_code"
+
     def test_non_us_raw_string_returns_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",

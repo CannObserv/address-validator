@@ -47,7 +47,7 @@ from address_validator.models import (
     ValidateResponseV1,
     ValidationResult,
 )
-from address_validator.routers.v1.core import APIError, check_country
+from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
@@ -132,6 +132,12 @@ router = APIRouter(
 )
 async def validate_address_v1(req: ValidateRequestV1, request: Request) -> ValidateResponseV1:
     if req.country != "US":
+        if req.country not in VALID_ISO2:
+            raise APIError(
+                status_code=422,
+                error="invalid_country_code",
+                message=f"'{req.country}' is not a valid ISO 3166-1 alpha-2 country code.",
+            )
         if not req.components:
             raise APIError(
                 status_code=422,

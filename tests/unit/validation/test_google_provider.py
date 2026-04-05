@@ -362,3 +362,13 @@ class TestGoogleProviderNonUS:
         result = await provider.validate(_make_gb_std())
         assert result.components is not None
         assert result.components.spec == "raw"
+
+    @pytest.mark.asyncio
+    async def test_non_us_invalid_status(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(
+            return_value={**CLIENT_RESULT_INTERNATIONAL_NOT_FOUND, "status": "invalid"}
+        )
+        provider = GoogleProvider(client)
+        result = await provider.validate(_make_gb_std())
+        assert result.validation.status == "invalid"

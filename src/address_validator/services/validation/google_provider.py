@@ -23,13 +23,15 @@ class GoogleProvider:
     """Validates addresses against the Google Address Validation API.
 
     Receives a fully normalised :class:`~models.StandardizeResponseV1` from the
-    router (the result of the parse → standardize pipeline).  The
-    ``address_line_1`` field carries the standardized street line sent to the
-    Google API.
+    router.  The ``address_line_1`` field carries the street line sent to the API.
 
-    Uses ``enableUspsCass: true`` to obtain USPS CASS-certified DPV codes,
-    making this a full drop-in replacement for :class:`USPSProvider` that
+    **US addresses** use ``enableUspsCass: true`` for USPS CASS-certified DPV
+    codes, making this a drop-in replacement for :class:`USPSProvider` that
     additionally returns geocoordinates.
+
+    **Non-US addresses** send ``regionCode`` without CASS.
+    ``validationGranularity`` and ``addressComplete`` from the verdict are mapped
+    to ``confirmed`` / ``invalid`` / ``not_found``.
 
     Constructed by :class:`~services.validation.registry.ProviderRegistry`; do not
     instantiate directly in application code.
