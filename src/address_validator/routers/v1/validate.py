@@ -28,8 +28,8 @@ Warnings from the parse or standardize step are merged into the
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
 (see :mod:`services.validation.config`).  When no provider is configured
 the endpoint returns HTTP 200 with ``validation.status='unavailable'``.
-Non-US validation requires a provider with ``supports_non_us=True`` —
-``VALIDATION_PROVIDER=google`` or any chain containing a Google provider (e.g. ``usps,google``).
+Non-US validation requires ``VALIDATION_PROVIDER=google`` or any chain
+containing a Google provider (e.g. ``usps,google``).
 """
 
 import json
