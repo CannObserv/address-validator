@@ -67,3 +67,17 @@ def translate_components(values: dict[str, str], profile: str) -> dict[str, str]
     if not mapping:
         return values
     return {mapping.get(k, k): v for k, v in values.items()}
+
+
+def translate_components_to_iso(values: dict[str, str], profile: str) -> dict[str, str]:
+    """Return *values* with keys translated from *profile* vocabulary to ISO 19160-4.
+
+    This is the inverse of :func:`translate_components`.  Unknown keys pass
+    through unchanged.  Unknown *profile* strings are treated as the identity
+    transform (already ISO 19160-4).
+    """
+    mapping = _PROFILES.get(profile, {})
+    if not mapping:
+        return values
+    reverse = {v: k for k, v in mapping.items()}
+    return {reverse.get(k, k): v for k, v in values.items()}

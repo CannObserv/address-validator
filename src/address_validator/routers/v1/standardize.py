@@ -3,8 +3,17 @@
 from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
-from address_validator.models import ErrorResponse, StandardizeRequestV1, StandardizeResponseV1
+from address_validator.models import (
+    ComponentSet,
+    ErrorResponse,
+    StandardizeRequestV1,
+    StandardizeResponseV1,
+)
 from address_validator.routers.v1.core import check_country
+from address_validator.services.component_profiles import (
+    translate_components,
+    translate_components_to_iso,
+)
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 
@@ -30,11 +39,27 @@ async def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeRespon
     upstream_warnings: list[str] = []
 
     if req.components:
-        comps = req.components
+        comps = translate_components_to_iso(req.components, "usps-pub28")
     else:
         # model_validator guarantees address is non-blank when components is absent
         parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 
-    return standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+    result = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+    translated = translate_components(result.components.values, "usps-pub28")
+    return StandardizeResponseV1(
+        address_line_1=result.address_line_1,
+        address_line_2=result.address_line_2,
+        city=result.city,
+        region=result.region,
+        postal_code=result.postal_code,
+        country=result.country,
+        standardized=result.standardized,
+        components=ComponentSet(
+            spec=result.components.spec,
+            spec_version=result.components.spec_version,
+            values=translated,
+        ),
+        warnings=result.warnings,
+    )

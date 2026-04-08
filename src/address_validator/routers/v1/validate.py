@@ -50,6 +50,7 @@ from address_validator.models import (
 )
 from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
 from address_validator.services.audit import set_audit_context
+from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import (
@@ -166,7 +167,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
         upstream_warnings: list[str] = []
 
         if req.components:
-            comps = req.components
+            comps = translate_components_to_iso(req.components, "usps-pub28")
             raw_input = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
         else:
             # model_validator guarantees address is non-blank when components is absent

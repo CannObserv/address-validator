@@ -3,8 +3,9 @@
 from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
-from address_validator.models import ErrorResponse, ParseRequestV1, ParseResponseV1
+from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV1
 from address_validator.routers.v1.core import APIError, check_country
+from address_validator.services.component_profiles import translate_components
 from address_validator.services.parser import parse_address
 
 router = APIRouter(
@@ -35,4 +36,16 @@ async def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
             message="address is required and must not be blank.",
         )
 
-    return parse_address(raw, country=req.country)
+    result = parse_address(raw, country=req.country)
+    translated = translate_components(result.components.values, "usps-pub28")
+    return ParseResponseV1(
+        input=result.input,
+        country=result.country,
+        components=ComponentSet(
+            spec=result.components.spec,
+            spec_version=result.components.spec_version,
+            values=translated,
+        ),
+        type=result.type,
+        warnings=result.warnings,
+    )
