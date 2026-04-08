@@ -79,13 +79,13 @@ def _street_parts(
     ``"second_"`` the intersection's second-street keys are used.
     """
     keys = (
-        f"{prefix}street_name_pre_directional",
-        f"{prefix}street_name_pre_modifier",
-        f"{prefix}street_name_pre_type",
-        f"{prefix}street_name",
-        f"{prefix}street_name_post_type",
-        f"{prefix}street_name_post_directional",
-        f"{prefix}street_name_post_modifier",
+        f"{prefix}thoroughfare_pre_direction",
+        f"{prefix}thoroughfare_pre_modifier",
+        f"{prefix}thoroughfare_leading_type",
+        f"{prefix}thoroughfare_name",
+        f"{prefix}thoroughfare_trailing_type",
+        f"{prefix}thoroughfare_post_direction",
+        f"{prefix}thoroughfare_post_modifier",
     )
     return [std[k] for k in keys if std.get(k)]
 
@@ -96,33 +96,33 @@ def _standardize_street_fields(
     prefix: str = "",
 ) -> None:
     """Populate *std* with standardised street fields for a given *prefix*."""
-    v = _get(components, f"{prefix}street_name_pre_directional")
+    v = _get(components, f"{prefix}thoroughfare_pre_direction")
     if v:
-        std[f"{prefix}street_name_pre_directional"] = _lookup(v, DIRECTIONAL_MAP)
+        std[f"{prefix}thoroughfare_pre_direction"] = _lookup(v, DIRECTIONAL_MAP)
 
-    v = _get(components, f"{prefix}street_name_pre_modifier")
+    v = _get(components, f"{prefix}thoroughfare_pre_modifier")
     if v:
-        std[f"{prefix}street_name_pre_modifier"] = v
+        std[f"{prefix}thoroughfare_pre_modifier"] = v
 
-    v = _get(components, f"{prefix}street_name_pre_type")
+    v = _get(components, f"{prefix}thoroughfare_leading_type")
     if v:
-        std[f"{prefix}street_name_pre_type"] = _lookup(v, SUFFIX_MAP)
+        std[f"{prefix}thoroughfare_leading_type"] = _lookup(v, SUFFIX_MAP)
 
-    v = _get(components, f"{prefix}street_name")
+    v = _get(components, f"{prefix}thoroughfare_name")
     if v:
-        std[f"{prefix}street_name"] = v
+        std[f"{prefix}thoroughfare_name"] = v
 
-    v = _get(components, f"{prefix}street_name_post_type")
+    v = _get(components, f"{prefix}thoroughfare_trailing_type")
     if v:
-        std[f"{prefix}street_name_post_type"] = _lookup(v, SUFFIX_MAP)
+        std[f"{prefix}thoroughfare_trailing_type"] = _lookup(v, SUFFIX_MAP)
 
-    v = _get(components, f"{prefix}street_name_post_directional")
+    v = _get(components, f"{prefix}thoroughfare_post_direction")
     if v:
-        std[f"{prefix}street_name_post_directional"] = _lookup(v, DIRECTIONAL_MAP)
+        std[f"{prefix}thoroughfare_post_direction"] = _lookup(v, DIRECTIONAL_MAP)
 
-    v = _get(components, f"{prefix}street_name_post_modifier")
+    v = _get(components, f"{prefix}thoroughfare_post_modifier")
     if v:
-        std[f"{prefix}street_name_post_modifier"] = v
+        std[f"{prefix}thoroughfare_post_modifier"] = v
 
 
 def standardize(
@@ -157,15 +157,15 @@ def _resolve_unit_slots(components: dict[str, str]) -> _UnitSlots:
     4. Promote subaddress → occupancy when the occupancy slot is empty.
     5. Default missing designator to ``"#"`` per USPS Pub 28.
     """
-    unit_type = _get(components, "occupancy_type")
+    unit_type = _get(components, "sub_premise_type")
     if unit_type:
         unit_type = _lookup(unit_type, UNIT_MAP)
-    unit_id = _get(components, "occupancy_identifier")
+    unit_id = _get(components, "sub_premise_number")
 
-    sub_type = _get(components, "subaddress_type")
+    sub_type = _get(components, "dependent_sub_premise_type")
     if sub_type:
         sub_type = _lookup(sub_type, UNIT_MAP)
-    sub_id = _get(components, "subaddress_identifier")
+    sub_id = _get(components, "dependent_sub_premise_number")
 
     # When neither occupancy nor subaddress was parsed, usaddress may
     # have tagged the unit info as LandmarkName or BuildingName (e.g.
@@ -173,7 +173,7 @@ def _resolve_unit_slots(components: dict[str, str]) -> _UnitSlots:
     # known unit designator.  If the leading word isn't a recognised
     # designator the field is left unhandled — we don't guess.
     if not unit_type and not unit_id and not sub_type and not sub_id:
-        for fallback_key in ("building_name", "landmark_name"):
+        for fallback_key in ("premise_name", "landmark"):
             fb = _get(components, fallback_key)
             if fb:
                 parts = fb.split(None, 1)
@@ -230,7 +230,7 @@ def _assemble_lines(
     # --- address line 1 ---
     number_parts: list[str] = [
         std[k]
-        for k in ("address_number_prefix", "address_number", "address_number_suffix")
+        for k in ("premise_number_prefix", "premise_number", "premise_number_suffix")
         if std.get(k)
     ]
     first_street = _street_parts(std)
@@ -250,9 +250,9 @@ def _assemble_lines(
     line2 = " ".join(p for p in (sub_type, sub_id, unit_type, unit_id) if p)
 
     # --- last line ---
-    city = std.get("city", "")
-    state = std.get("state", "")
-    zip_code = std.get("zip_code", "")
+    city = std.get("locality", "")
+    state = std.get("administrative_area", "")
+    zip_code = std.get("postcode", "")
 
     if city and state:
         city_state = f"{city}, {state}"
@@ -277,15 +277,15 @@ def _standardize(
     std: dict[str, str] = {}
 
     # --- primary number ---
-    v = _get(components, "address_number")
+    v = _get(components, "premise_number")
     if v:
-        std["address_number"] = v
-    v = _get(components, "address_number_prefix")
+        std["premise_number"] = v
+    v = _get(components, "premise_number_prefix")
     if v:
-        std["address_number_prefix"] = v
-    v = _get(components, "address_number_suffix")
+        std["premise_number_prefix"] = v
+    v = _get(components, "premise_number_suffix")
     if v:
-        std["address_number_suffix"] = v
+        std["premise_number_suffix"] = v
 
     # --- primary street ---
     _standardize_street_fields(components, std)
@@ -296,28 +296,28 @@ def _standardize(
     # --- secondary / occupancy ---
     unit_type, unit_id, sub_type, sub_id = _resolve_unit_slots(components)
     if unit_type:
-        std["occupancy_type"] = unit_type
+        std["sub_premise_type"] = unit_type
     if unit_id:
-        std["occupancy_identifier"] = unit_id
+        std["sub_premise_number"] = unit_id
     if sub_type:
-        std["subaddress_type"] = sub_type
+        std["dependent_sub_premise_type"] = sub_type
     if sub_id:
-        std["subaddress_identifier"] = sub_id
+        std["dependent_sub_premise_number"] = sub_id
 
     # --- city ---
-    v = _get(components, "city")
+    v = _get(components, "locality")
     if v:
-        std["city"] = v
+        std["locality"] = v
 
     # --- state ---
-    v = _get(components, "state")
+    v = _get(components, "administrative_area")
     if v:
-        std["state"] = _lookup(v, STATE_MAP)
+        std["administrative_area"] = _lookup(v, STATE_MAP)
 
     # --- ZIP ---
-    v = _get(components, "zip_code")
+    v = _get(components, "postcode")
     if v:
-        std["zip_code"] = _std_zip(v)
+        std["postcode"] = _std_zip(v)
 
     # --- PO Box ---
     v = _get(components, "usps_box_type")
@@ -330,9 +330,9 @@ def _standardize(
     # --- assemble output lines ---
     line1, line2, last_line = _assemble_lines(std, unit_type, unit_id, sub_type, sub_id)
 
-    city = std.get("city", "")
-    state = std.get("state", "")
-    zip_code = std.get("zip_code", "")
+    city = std.get("locality", "")
+    state = std.get("administrative_area", "")
+    zip_code = std.get("postcode", "")
 
     full_parts = [p for p in (line1, line2, last_line) if p]
     standardized = "  ".join(full_parts) if full_parts else ""

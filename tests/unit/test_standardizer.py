@@ -101,12 +101,12 @@ class TestGet:
 class TestStandardize:
     def test_basic_address(self) -> None:
         comps = {
-            "address_number": "123",
-            "street_name": "MAIN",
-            "street_name_post_type": "STREET",
-            "city": "SPRINGFIELD",
-            "state": "IL",
-            "zip_code": "62701",
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "STREET",
+            "locality": "SPRINGFIELD",
+            "administrative_area": "IL",
+            "postcode": "62701",
         }
         result = standardize(comps)
         assert result.address_line_1 == "123 MAIN ST"
@@ -116,51 +116,51 @@ class TestStandardize:
 
     def test_directional_abbreviated(self) -> None:
         comps = {
-            "address_number": "100",
-            "street_name_pre_directional": "NORTH",
-            "street_name": "OAK",
-            "street_name_post_type": "AVE",
+            "premise_number": "100",
+            "thoroughfare_pre_direction": "NORTH",
+            "thoroughfare_name": "OAK",
+            "thoroughfare_trailing_type": "AVE",
         }
         result = standardize(comps)
         assert "N" in result.address_line_1
         assert "NORTH" not in result.address_line_1
 
     def test_state_abbreviated(self) -> None:
-        comps = {"city": "OLYMPIA", "state": "WASHINGTON", "zip_code": "98501"}
+        comps = {"locality": "OLYMPIA", "administrative_area": "WASHINGTON", "postcode": "98501"}
         result = standardize(comps)
         assert result.region == "WA"
 
     def test_zip_nine_digit_formatted(self) -> None:
-        comps = {"zip_code": "981011234"}
+        comps = {"postcode": "981011234"}
         result = standardize(comps)
         assert result.postal_code == "98101-1234"
 
     def test_unit_without_designator_gets_hash(self) -> None:
         comps = {
-            "address_number": "10",
-            "street_name": "ELM",
-            "occupancy_identifier": "4B",
+            "premise_number": "10",
+            "thoroughfare_name": "ELM",
+            "sub_premise_number": "4B",
         }
         result = standardize(comps)
         assert result.address_line_2 == "# 4B"
 
     def test_suite_in_line_2(self) -> None:
         comps = {
-            "address_number": "10",
-            "street_name": "ELM",
-            "occupancy_type": "SUITE",
-            "occupancy_identifier": "300",
+            "premise_number": "10",
+            "thoroughfare_name": "ELM",
+            "sub_premise_type": "SUITE",
+            "sub_premise_number": "300",
         }
         result = standardize(comps)
         assert result.address_line_2 == "STE 300"
 
     def test_building_name_recovery(self) -> None:
-        """BLD C in building_name should be recovered as BLDG C."""
+        """BLD C in premise_name should be recovered as BLDG C."""
         comps = {
-            "address_number": "1",
-            "street_name": "CAMPUS",
-            "street_name_post_type": "DR",
-            "building_name": "BLD C",
+            "premise_number": "1",
+            "thoroughfare_name": "CAMPUS",
+            "thoroughfare_trailing_type": "DR",
+            "premise_name": "BLD C",
         }
         result = standardize(comps)
         assert "BLDG" in result.address_line_2
@@ -169,12 +169,12 @@ class TestStandardize:
     def test_both_occupancy_and_subaddress_in_line2(self) -> None:
         """STE 300 and SMP 2 should both appear on line 2."""
         comps = {
-            "address_number": "100",
-            "street_name": "MAIN",
-            "occupancy_type": "STE",
-            "occupancy_identifier": "300",
-            "subaddress_type": "SMP",
-            "subaddress_identifier": "2",
+            "premise_number": "100",
+            "thoroughfare_name": "MAIN",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "300",
+            "dependent_sub_premise_type": "SMP",
+            "dependent_sub_premise_number": "2",
         }
         result = standardize(comps)
         assert "STE" in result.address_line_2
@@ -184,12 +184,12 @@ class TestStandardize:
 
     def test_standardized_two_space_separator(self) -> None:
         comps = {
-            "address_number": "123",
-            "street_name": "MAIN",
-            "street_name_post_type": "ST",
-            "city": "SPRINGFIELD",
-            "state": "IL",
-            "zip_code": "62701",
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "locality": "SPRINGFIELD",
+            "administrative_area": "IL",
+            "postcode": "62701",
         }
         result = standardize(comps)
         # Non-empty parts should be joined with two spaces.
@@ -197,20 +197,20 @@ class TestStandardize:
 
     def test_intersection_assembly(self) -> None:
         comps = {
-            "street_name": "FIRST",
-            "street_name_post_type": "ST",
-            "second_street_name": "SECOND",
-            "second_street_name_post_type": "AVE",
+            "thoroughfare_name": "FIRST",
+            "thoroughfare_trailing_type": "ST",
+            "second_thoroughfare_name": "SECOND",
+            "second_thoroughfare_trailing_type": "AVE",
         }
         result = standardize(comps)
         assert "&" in result.address_line_1
 
     def test_designator_word_extracted_from_identifier(self) -> None:
-        """'NO. 16' in occupancy_identifier should become type='#', id='16'."""
+        """'NO. 16' in sub_premise_number should become type='#', id='16'."""
         comps = {
-            "address_number": "5",
-            "street_name": "ELM",
-            "occupancy_identifier": "NO. 16",
+            "premise_number": "5",
+            "thoroughfare_name": "ELM",
+            "sub_premise_number": "NO. 16",
         }
         result = standardize(comps)
         assert "16" in result.address_line_2
@@ -220,23 +220,23 @@ class TestStandardize:
         assert result.country == "US"
 
     def test_components_have_spec(self) -> None:
-        result = standardize({"address_number": "1", "street_name": "A"})
+        result = standardize({"premise_number": "1", "thoroughfare_name": "A"})
         assert result.components.spec == "usps-pub28"
 
     def test_no_warnings_on_clean_input(self) -> None:
         comps = {
-            "address_number": "123",
-            "street_name": "MAIN",
-            "street_name_post_type": "STREET",
-            "city": "SPRINGFIELD",
-            "state": "IL",
-            "zip_code": "62701",
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "STREET",
+            "locality": "SPRINGFIELD",
+            "administrative_area": "IL",
+            "postcode": "62701",
         }
         result = standardize(comps)
         assert result.warnings == []
 
     def test_upstream_warnings_propagated(self) -> None:
-        comps = {"address_number": "1", "street_name": "ELM"}
+        comps = {"premise_number": "1", "thoroughfare_name": "ELM"}
         result = standardize(comps, upstream_warnings=["Parenthesized text removed: '(FOO)'"])
         assert "Parenthesized text removed: '(FOO)'" in result.warnings
 
@@ -253,7 +253,11 @@ class TestStandardize:
 
 class TestStandardizerLogging:
     def test_debug_emitted_on_standardize(self, caplog: pytest.LogCaptureFixture) -> None:
-        components = {"address_number": "123", "street_name": "MAIN", "city": "SPRINGFIELD"}
+        components = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "locality": "SPRINGFIELD",
+        }
         with caplog.at_level(logging.DEBUG, logger="address_validator.services.standardizer"):
             standardize(components)
         assert "standardizing components" in caplog.text
