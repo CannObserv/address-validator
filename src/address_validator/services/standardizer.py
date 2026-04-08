@@ -240,8 +240,9 @@ def _assemble_lines(
         line1 = " ".join([*number_parts, *first_street, "&", *second_street])
     elif first_street or number_parts:
         line1 = " ".join([*number_parts, *first_street])
-    elif std.get("usps_box_type") or std.get("usps_box_id"):
-        line1 = " ".join(p for p in (std.get("usps_box_type", ""), std.get("usps_box_id", "")) if p)
+    elif std.get("general_delivery_type") or std.get("general_delivery"):
+        gd_parts = (std.get("general_delivery_type", ""), std.get("general_delivery", ""))
+        line1 = " ".join(p for p in gd_parts if p)
     else:
         line1 = ""
 
@@ -319,13 +320,16 @@ def _standardize(
     if v:
         std["postcode"] = _std_zip(v)
 
-    # --- PO Box ---
-    v = _get(components, "usps_box_type")
-    if v:
-        std["usps_box_type"] = v
-    v = _get(components, "usps_box_id")
-    if v:
-        std["usps_box_id"] = v
+    # --- PO Box / General Delivery ---
+    for gd_key in (
+        "general_delivery_type",
+        "general_delivery",
+        "general_delivery_group_type",
+        "general_delivery_group",
+    ):
+        v = _get(components, gd_key)
+        if v:
+            std[gd_key] = v
 
     # --- assemble output lines ---
     line1, line2, last_line = _assemble_lines(std, unit_type, unit_id, sub_type, sub_id)

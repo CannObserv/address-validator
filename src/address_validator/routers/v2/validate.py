@@ -218,7 +218,7 @@ async def validate_address_v2(
         upstream_warnings: list[str] = []
 
         if req.components:
-            comps = translate_components_to_iso(req.components, "usps-pub28")
+            comps = translate_components_to_iso(req.components, component_profile)
             raw_input = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
         else:
             # model_validator guarantees address is non-blank when components is absent

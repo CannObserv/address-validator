@@ -1,6 +1,6 @@
 """v2 standardize endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
 from address_validator.models import (
@@ -37,7 +37,6 @@ _COMPONENT_PROFILE_DESCRIPTION = (
 )
 async def standardize_address_v2(
     req: StandardizeRequestV1,
-    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=_COMPONENT_PROFILE_DESCRIPTION,
@@ -67,6 +66,12 @@ async def standardize_address_v2(
 
     result = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
     translated = translate_components(result.components.values, component_profile)
+    if component_profile == "usps-pub28":
+        spec = result.components.spec
+        spec_version = result.components.spec_version
+    else:
+        spec = "iso-19160-4"
+        spec_version = "2020"
     return StandardizeResponseV2(
         address_line_1=result.address_line_1,
         address_line_2=result.address_line_2,
@@ -76,8 +81,8 @@ async def standardize_address_v2(
         country=result.country,
         standardized=result.standardized,
         components=ComponentSet(
-            spec=result.components.spec,
-            spec_version=result.components.spec_version,
+            spec=spec,
+            spec_version=spec_version,
             values=translated,
         ),
         warnings=result.warnings,

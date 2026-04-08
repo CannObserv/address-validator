@@ -1,6 +1,6 @@
 """v2 parse endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV2
@@ -35,7 +35,6 @@ _COMPONENT_PROFILE_DESCRIPTION = (
 )
 async def parse(
     req: ParseRequestV1,
-    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=_COMPONENT_PROFILE_DESCRIPTION,
@@ -58,12 +57,18 @@ async def parse(
         upstream_warnings=result.warnings,
     )
     translated = translate_components(std.components.values, component_profile)
+    if component_profile == "usps-pub28":
+        spec = std.components.spec
+        spec_version = std.components.spec_version
+    else:
+        spec = "iso-19160-4"
+        spec_version = "2020"
     return ParseResponseV2(
         input=result.input,
         country=result.country,
         components=ComponentSet(
-            spec=std.components.spec,
-            spec_version=std.components.spec_version,
+            spec=spec,
+            spec_version=spec_version,
             values=translated,
         ),
         type=result.type,

@@ -166,6 +166,23 @@ class TestStandardize:
         assert "BLDG" in result.address_line_2
         assert "C" in result.address_line_2
 
+    def test_po_box_address_line1(self) -> None:
+        """general_delivery_type/general_delivery produce PO BOX line 1."""
+        comps = {
+            "general_delivery_type": "PO BOX",
+            "general_delivery": "42",
+            "locality": "SMALLTOWN",
+            "administrative_area": "TX",
+            "postcode": "79901",
+        }
+        result = standardize(comps)
+        assert result.address_line_1 == "PO BOX 42"
+        assert result.city == "SMALLTOWN"
+        assert result.region == "TX"
+        assert result.postal_code == "79901"
+        assert "general_delivery_type" in result.components.values
+        assert "general_delivery" in result.components.values
+
     def test_both_occupancy_and_subaddress_in_line2(self) -> None:
         """STE 300 and SMP 2 should both appear on line 2."""
         comps = {
