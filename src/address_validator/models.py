@@ -336,3 +336,64 @@ class CountryFormatResponse(BaseModel):
         ),
     )
     api_version: Literal["1"] = "1"
+
+
+# ---------------------------------------------------------------------------
+# Response models — v2
+# ---------------------------------------------------------------------------
+
+
+class ParseResponseV2(BaseModel):
+    """Response body for POST /api/v2/parse."""
+
+    input: str
+    country: str
+    components: ComponentSet
+    type: str
+    warnings: list[str] = Field(default_factory=list)
+    api_version: Literal["2"] = "2"
+
+
+class StandardizeResponseV2(BaseModel):
+    """Response body for POST /api/v2/standardize."""
+
+    address_line_1: str
+    address_line_2: str
+    city: str
+    region: str
+    postal_code: str
+    country: str
+    standardized: str
+    components: ComponentSet
+    warnings: list[str] = Field(default_factory=list)
+    api_version: Literal["2"] = "2"
+
+
+class ValidateResponseV2(BaseModel):
+    """Response body for POST /api/v2/validate."""
+
+    address_line_1: str = ""
+    address_line_2: str = ""
+    city: str = ""
+    region: str = ""
+    postal_code: str = ""
+    country: str
+    validated: str | None = None
+    validation: ValidationResult
+    components: ComponentSet | None = None
+    warnings: list[str] = Field(default_factory=list)
+    api_version: Literal["2"] = "2"
+
+
+class CountryFormatResponseV2(BaseModel):
+    """Response body for GET /api/v2/countries/{code}/format."""
+
+    country: str = Field(..., description="ISO 3166-1 alpha-2 country code (uppercased).")
+    fields: list[CountryFieldDefinition] = Field(
+        ...,
+        description=(
+            "Address fields for this country, in form display order. "
+            "Fields absent from this list should be hidden in the UI."
+        ),
+    )
+    api_version: Literal["2"] = "2"
