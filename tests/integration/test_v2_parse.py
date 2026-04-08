@@ -1,0 +1,56 @@
+"""Integration tests for POST /api/v2/parse."""
+
+
+class TestV2ParseISO:
+    def test_returns_iso_keys_by_default(self, client) -> None:
+        response = client.post(
+            "/api/v2/parse",
+            json={"address": "123 Main St, Seattle, WA 98101"},
+        )
+        assert response.status_code == 200
+        values = response.json()["components"]["values"]
+        assert values["premise_number"] == "123"
+        assert values["thoroughfare_name"] == "MAIN"
+        assert values["thoroughfare_trailing_type"] == "ST"
+        assert values["locality"] == "SEATTLE"
+        assert values["administrative_area"] == "WA"
+        assert values["postcode"] == "98101"
+        assert "address_number" not in values
+        assert "street_name" not in values
+
+    def test_api_version_in_body(self, client) -> None:
+        response = client.post(
+            "/api/v2/parse",
+            json={"address": "123 Main St"},
+        )
+        assert response.json()["api_version"] == "2"
+
+    def test_component_profile_usps_pub28_restores_v1_keys(self, client) -> None:
+        response = client.post(
+            "/api/v2/parse?component_profile=usps-pub28",
+            json={"address": "123 Main St, Seattle, WA 98101"},
+        )
+        assert response.status_code == 200
+        values = response.json()["components"]["values"]
+        assert values["address_number"] == "123"
+        assert values["street_name"] == "MAIN"
+        assert values["city"] == "SEATTLE"
+        assert values["state"] == "WA"
+        assert values["zip_code"] == "98101"
+
+    def test_invalid_component_profile_returns_422(self, client) -> None:
+        response = client.post(
+            "/api/v2/parse?component_profile=bad-profile",
+            json={"address": "123 Main St"},
+        )
+        assert response.status_code == 422
+        assert response.json()["error"] == "invalid_component_profile"
+
+    def test_canada_not_yet_supported_via_parse(self, client) -> None:
+        # CA is not in SUPPORTED_COUNTRIES for v2 parse until Plan 2.
+        # Adjust or remove this test in Plan 2 when CA is enabled.
+        response = client.post(
+            "/api/v2/parse",
+            json={"address": "350 rue des Lilas, Quebec QC G1L 1B6", "country": "CA"},
+        )
+        assert response.status_code == 422
