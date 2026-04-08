@@ -30,6 +30,7 @@ from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
+from address_validator.routers.v2 import countries as v2_countries
 from address_validator.routers.v2 import parse as v2_parse
 from address_validator.routers.v2 import standardize as v2_standardize
 from address_validator.routers.v2 import validate as v2_validate
@@ -248,6 +249,7 @@ app.include_router(v1_countries.router)
 app.include_router(v2_parse.router)
 app.include_router(v2_standardize.router)
 app.include_router(v2_validate.router)
+app.include_router(v2_countries.router)
 
 # Admin dashboard
 app.include_router(admin_router)
