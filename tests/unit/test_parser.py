@@ -23,41 +23,41 @@ from address_validator.services.training_candidates import (
 
 class TestRecoverUnitFromCity:
     def test_basement_extracted(self) -> None:
-        c: dict[str, str] = {"city": "BASEMENT, FREELAND"}
+        c: dict[str, str] = {"locality": "BASEMENT, FREELAND"}
         _recover_unit_from_city(c)
-        assert c["occupancy_type"] == "BASEMENT"
-        assert c["city"] == "FREELAND"
+        assert c["sub_premise_type"] == "BASEMENT"
+        assert c["locality"] == "FREELAND"
 
     def test_multiple_designators_extracted(self) -> None:
         """LOWR is a no-id designator and is extracted; UNIT requires an id
-        so 'UNIT SEATTLE' is left in city (UNIT KEY WEST etc. are real cities).
+        so 'UNIT SEATTLE' is left in locality (UNIT KEY WEST etc. are real cities).
         The AGENTS.md example uses a pre-populated occupancy slot so UNIT
         gets stripped — covered by test_all_slots_full_orphan_stripped.
         """
-        c: dict[str, str] = {"city": "LOWR LEVEL, UNIT SEATTLE"}
+        c: dict[str, str] = {"locality": "LOWR LEVEL, UNIT SEATTLE"}
         _recover_unit_from_city(c)
         # LOWR LEVEL is peeled off; UNIT SEATTLE remains (UNIT needs an id).
-        assert c["occupancy_type"] == "LOWR"
-        assert c["city"] == "UNIT SEATTLE"
+        assert c["sub_premise_type"] == "LOWR"
+        assert c["locality"] == "UNIT SEATTLE"
 
     def test_single_wayfinding_word_dropped(self) -> None:
         """Non-vocabulary single words before a comma are dropped as wayfinding."""
-        c: dict[str, str] = {"city": "YARD, SPOKANE"}
+        c: dict[str, str] = {"locality": "YARD, SPOKANE"}
         _recover_unit_from_city(c)
-        assert c["city"] == "SPOKANE"
-        assert "occupancy_type" not in c
+        assert c["locality"] == "SPOKANE"
+        assert "sub_premise_type" not in c
 
     def test_real_city_name_untouched(self) -> None:
-        c: dict[str, str] = {"city": "KEY WEST"}
+        c: dict[str, str] = {"locality": "KEY WEST"}
         _recover_unit_from_city(c)
-        assert c["city"] == "KEY WEST"
+        assert c["locality"] == "KEY WEST"
 
     def test_bare_no_id_designator_extracted(self) -> None:
-        """LOWR at the start of city (no comma) is moved to occupancy."""
-        c: dict[str, str] = {"city": "LOWR SEATTLE"}
+        """LOWR at the start of locality (no comma) is moved to sub_premise_type."""
+        c: dict[str, str] = {"locality": "LOWR SEATTLE"}
         _recover_unit_from_city(c)
-        assert c["occupancy_type"] == "LOWR"
-        assert c["city"] == "SEATTLE"
+        assert c["sub_premise_type"] == "LOWR"
+        assert c["locality"] == "SEATTLE"
 
     def test_no_city_is_noop(self) -> None:
         c: dict[str, str] = {}
@@ -67,38 +67,38 @@ class TestRecoverUnitFromCity:
     def test_all_slots_full_orphan_stripped(self) -> None:
         """When both unit slots are taken, a leftover designator word is dropped."""
         c: dict[str, str] = {
-            "city": "LOWR SEATTLE",
-            "occupancy_type": "STE",
-            "occupancy_identifier": "100",
-            "subaddress_type": "BLDG",
-            "subaddress_identifier": "A",
+            "locality": "LOWR SEATTLE",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "100",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "A",
         }
         _recover_unit_from_city(c)
-        assert c["city"] == "SEATTLE"
+        assert c["locality"] == "SEATTLE"
 
 
 class TestRecoverIdentifierFragmentFromCity:
     def test_stray_letter_moved_to_identifier(self) -> None:
-        c: dict[str, str] = {"city": "K WALLA WALLA", "occupancy_identifier": "120"}
+        c: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
         _recover_identifier_fragment_from_city(c)
-        assert c["occupancy_identifier"] == "120 K"
-        assert c["city"] == "WALLA WALLA"
+        assert c["sub_premise_number"] == "120 K"
+        assert c["locality"] == "WALLA WALLA"
 
     def test_no_identifier_present_noop(self) -> None:
-        c: dict[str, str] = {"city": "K WALLA WALLA"}
+        c: dict[str, str] = {"locality": "K WALLA WALLA"}
         _recover_identifier_fragment_from_city(c)
-        # No identifier field → city is left unchanged.
-        assert c["city"] == "K WALLA WALLA"
+        # No identifier field → locality is left unchanged.
+        assert c["locality"] == "K WALLA WALLA"
 
     def test_multi_char_city_prefix_untouched(self) -> None:
-        c: dict[str, str] = {"city": "ST PAUL", "occupancy_identifier": "5"}
+        c: dict[str, str] = {"locality": "ST PAUL", "sub_premise_number": "5"}
         _recover_identifier_fragment_from_city(c)
-        assert c["city"] == "ST PAUL"
+        assert c["locality"] == "ST PAUL"
 
     def test_short_city_noop(self) -> None:
-        c: dict[str, str] = {"city": "LA", "occupancy_identifier": "1"}
+        c: dict[str, str] = {"locality": "LA", "sub_premise_number": "1"}
         _recover_identifier_fragment_from_city(c)
-        assert c["city"] == "LA"
+        assert c["locality"] == "LA"
 
 
 # ---------------------------------------------------------------------------
@@ -110,11 +110,11 @@ class TestParseAddress:
     def test_basic_street_address(self) -> None:
         result = parse_address("123 Main St, Springfield, IL 62701")
         v = result.components.values
-        assert v["address_number"] == "123"
-        assert v["street_name"] == "Main"
-        assert v["city"] == "Springfield"
-        assert v["state"] == "IL"
-        assert v["zip_code"] == "62701"
+        assert v["premise_number"] == "123"
+        assert v["thoroughfare_name"] == "Main"
+        assert v["locality"] == "Springfield"
+        assert v["administrative_area"] == "IL"
+        assert v["postcode"] == "62701"
 
     def test_country_propagated(self) -> None:
         result = parse_address("123 Main St", country="US")
@@ -128,8 +128,8 @@ class TestParseAddress:
     def test_parenthesized_wayfinding_stripped(self) -> None:
         result = parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
         v = result.components.values
-        assert v["address_number"] == "123"
-        assert v["city"] == "Springfield"
+        assert v["premise_number"] == "123"
+        assert v["locality"] == "Springfield"
 
     def test_unmatched_paren_stripped(self) -> None:
         result = parse_address("123 Main) St, Springfield, IL")
@@ -139,7 +139,7 @@ class TestParseAddress:
     def test_intersection_parsed(self) -> None:
         result = parse_address("1st St & 2nd Ave, Seattle, WA")
         v = result.components.values
-        assert "second_street_name" in v
+        assert "second_thoroughfare_name" in v
 
     def test_dual_address_numbers_joined(self) -> None:
         """The RLE fallback joins dual AddressNumber tokens with a hyphen.
@@ -174,7 +174,7 @@ class TestParseAddress:
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
             result = parse_address("1804 & 1810 Main St")
 
-        assert result.components.values["address_number"] == "1804-1810"
+        assert result.components.values["premise_number"] == "1804-1810"
         assert result.type == "Ambiguous"
 
     def test_no_warnings_on_clean_address(self) -> None:
@@ -242,18 +242,18 @@ class TestRepeatedLabelFallback:
             result = parse_address("995 9TH ST BLDG 201 ROOM 104 T, SAN FRANCISCO, CA 94130-2107")
         vals = result.components.values
         # Primary street fields should not be contaminated.
-        assert vals.get("address_number") == "995"
-        assert vals.get("street_name") == "9TH"
-        assert vals.get("street_name_post_type") == "ST"
-        # First unit lands in subaddress (raw usaddress label);
-        # second is routed to the free occupancy slot.
+        assert vals.get("premise_number") == "995"
+        assert vals.get("thoroughfare_name") == "9TH"
+        assert vals.get("thoroughfare_trailing_type") == "ST"
+        # First unit lands in dependent_sub_premise (raw usaddress label);
+        # second is routed to the free sub_premise slot.
         # The standardizer reorders for correct USPS line assembly.
-        assert vals.get("subaddress_type") == "BLDG"
-        assert vals.get("subaddress_identifier") == "201"
-        assert vals.get("occupancy_type") == "ROOM"
-        assert vals.get("occupancy_identifier") == "104 T"
-        # City should be clean.
-        assert "SAN FRANCISCO" in vals.get("city", "")
+        assert vals.get("dependent_sub_premise_type") == "BLDG"
+        assert vals.get("dependent_sub_premise_number") == "201"
+        assert vals.get("sub_premise_type") == "ROOM"
+        assert vals.get("sub_premise_number") == "104 T"
+        # Locality should be clean.
+        assert "SAN FRANCISCO" in vals.get("locality", "")
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +272,7 @@ class TestZipNormalization:
     )
     def test_zip_parsed(self, raw: str, expected_zip: str) -> None:
         result = parse_address(raw)
-        assert result.components.values.get("zip_code", "").startswith(expected_zip[:5])
+        assert result.components.values.get("postcode", "").startswith(expected_zip[:5])
 
 
 # ---------------------------------------------------------------------------
@@ -341,11 +341,11 @@ class TestParseWarnings:
 
     def test_identifier_fragment_recovered_from_city_warning(self) -> None:
         """When _recover_identifier_fragment_from_city fires, a warning is appended."""
-        comps: dict[str, str] = {"city": "K WALLA WALLA", "occupancy_identifier": "120"}
+        comps: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
         warnings: list[str] = []
         _recover_identifier_fragment_from_city(comps, warnings)
-        assert comps["occupancy_identifier"] == "120 K"
-        assert comps["city"] == "WALLA WALLA"
+        assert comps["sub_premise_number"] == "120 K"
+        assert comps["locality"] == "WALLA WALLA"
         assert any("identifier fragment" in w.lower() for w in warnings)
 
 

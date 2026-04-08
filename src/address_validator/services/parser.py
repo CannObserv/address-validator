@@ -49,55 +49,55 @@ _NO_ID_DESIGNATORS: set[str] = {
 
 # Map usaddress tag names to friendlier keys.
 TAG_NAMES: dict[str, str] = {
-    "AddressNumber": "address_number",
-    "AddressNumberPrefix": "address_number_prefix",
-    "AddressNumberSuffix": "address_number_suffix",
-    "StreetNamePreDirectional": "street_name_pre_directional",
-    "StreetNamePreModifier": "street_name_pre_modifier",
-    "StreetNamePreType": "street_name_pre_type",
-    "StreetName": "street_name",
-    "StreetNamePostDirectional": "street_name_post_directional",
-    "StreetNamePostModifier": "street_name_post_modifier",
-    "StreetNamePostType": "street_name_post_type",
-    "SubaddressType": "subaddress_type",
-    "SubaddressIdentifier": "subaddress_identifier",
-    "OccupancyType": "occupancy_type",
-    "OccupancyIdentifier": "occupancy_identifier",
-    "PlaceName": "city",
-    "StateName": "state",
-    "ZipCode": "zip_code",
-    "USPSBoxType": "usps_box_type",
-    "USPSBoxID": "usps_box_id",
-    "USPSBoxGroupType": "usps_box_group_type",
-    "USPSBoxGroupID": "usps_box_group_id",
-    "BuildingName": "building_name",
-    "Recipient": "recipient",
+    "AddressNumber": "premise_number",
+    "AddressNumberPrefix": "premise_number_prefix",
+    "AddressNumberSuffix": "premise_number_suffix",
+    "StreetNamePreDirectional": "thoroughfare_pre_direction",
+    "StreetNamePreModifier": "thoroughfare_pre_modifier",
+    "StreetNamePreType": "thoroughfare_leading_type",
+    "StreetName": "thoroughfare_name",
+    "StreetNamePostDirectional": "thoroughfare_post_direction",
+    "StreetNamePostModifier": "thoroughfare_post_modifier",
+    "StreetNamePostType": "thoroughfare_trailing_type",
+    "SubaddressType": "dependent_sub_premise_type",
+    "SubaddressIdentifier": "dependent_sub_premise_number",
+    "OccupancyType": "sub_premise_type",
+    "OccupancyIdentifier": "sub_premise_number",
+    "PlaceName": "locality",
+    "StateName": "administrative_area",
+    "ZipCode": "postcode",
+    "USPSBoxType": "general_delivery_type",
+    "USPSBoxID": "general_delivery",
+    "USPSBoxGroupType": "general_delivery_group_type",
+    "USPSBoxGroupID": "general_delivery_group",
+    "BuildingName": "premise_name",
+    "Recipient": "addressee",
     "NotAddress": "not_address",
     "IntersectionSeparator": "intersection_separator",
-    "LandmarkName": "landmark_name",
+    "LandmarkName": "landmark",
     "CornerOf": "corner_of",
     # Second street (intersections)
-    "SecondStreetName": "second_street_name",
-    "SecondStreetNamePreDirectional": "second_street_name_pre_directional",
-    "SecondStreetNamePreModifier": "second_street_name_pre_modifier",
-    "SecondStreetNamePreType": "second_street_name_pre_type",
-    "SecondStreetNamePostDirectional": "second_street_name_post_directional",
-    "SecondStreetNamePostModifier": "second_street_name_post_modifier",
-    "SecondStreetNamePostType": "second_street_name_post_type",
+    "SecondStreetName": "second_thoroughfare_name",
+    "SecondStreetNamePreDirectional": "second_thoroughfare_pre_direction",
+    "SecondStreetNamePreModifier": "second_thoroughfare_pre_modifier",
+    "SecondStreetNamePreType": "second_thoroughfare_leading_type",
+    "SecondStreetNamePostDirectional": "second_thoroughfare_post_direction",
+    "SecondStreetNamePostModifier": "second_thoroughfare_post_modifier",
+    "SecondStreetNamePostType": "second_thoroughfare_trailing_type",
 }
 
 
-# Designator slots in priority order: occupancy first, then subaddress.
+# Designator slots in priority order: primary unit first, then sub-unit.
 _UNIT_SLOT_PAIRS = (
-    ("occupancy_type", "occupancy_identifier"),
-    ("subaddress_type", "subaddress_identifier"),
+    ("sub_premise_type", "sub_premise_number"),
+    ("dependent_sub_premise_type", "dependent_sub_premise_number"),
 )
 
-# Keys that represent unit-type fields (occupancy or subaddress type).
-_UNIT_TYPE_KEYS: frozenset[str] = frozenset({"subaddress_type", "occupancy_type"})
+# Keys that represent unit-type fields (primary or sub-unit type).
+_UNIT_TYPE_KEYS: frozenset[str] = frozenset({"sub_premise_type", "dependent_sub_premise_type"})
 
 # Keys that signal the end of the street portion of an address.
-_POST_STREET_KEYS: frozenset[str] = frozenset({"city", "state", "zip_code"})
+_POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area", "postcode"})
 
 
 def _next_free_unit_slot(
@@ -135,7 +135,7 @@ def _emit_token(
     """Write *token* into *component_values* under *key*; return a dual-range
     string when a hyphen-joined range address is detected, else ``None``."""
     if key in component_values:
-        if key == "address_number" and separator_before:
+        if key == "premise_number" and separator_before:
             merged = f"{component_values[key]}-{token}"
             component_values[key] = merged
             return merged
@@ -182,7 +182,7 @@ def _collect_ambiguous_components(
         # repeated AddressNumber — that signals a dual/range address
         # ("1804 & 1810"), not a true intersection.
         if key == "intersection_separator":  # noqa: SIM102
-            if prev_key == "address_number":
+            if prev_key == "premise_number":
                 separator_before = True
                 prev_key = key
                 continue  # don't emit the separator yet
@@ -244,7 +244,7 @@ def _recover_unit_phase1(
 ) -> None:
     """Phase 1: peel comma-separated leading unit designators from city."""
     while True:
-        city = components.get("city", "")
+        city = components.get("locality", "")
         if not city or "," not in city:
             break
 
@@ -262,7 +262,7 @@ def _recover_unit_phase1(
                 components[slot[0]] = desig_type
                 if desig_id:
                     components[slot[1]] = desig_id
-            components["city"] = after
+            components["locality"] = after
             _warn_unit_recovered(warnings, desig_type)
             continue
 
@@ -272,7 +272,7 @@ def _recover_unit_phase1(
         # be a real multi-word city name prefix.
         word = before.upper().replace(".", "")
         if " " not in before and word not in _ADDRESS_VOCABULARY:
-            components["city"] = after
+            components["locality"] = after
             continue
 
         break
@@ -289,7 +289,7 @@ def _recover_unit_phase2(
     an identifier, so a bare "KEY WEST" is almost certainly a city.
     When all unit slots are full, orphaned designator words are dropped.
     """
-    city = components.get("city", "")
+    city = components.get("locality", "")
     if not city or " " not in city:
         return
 
@@ -304,11 +304,11 @@ def _recover_unit_phase2(
     if word in _NO_ID_DESIGNATORS:
         if slot:
             components[slot[0]] = first
-        components["city"] = rest
+        components["locality"] = rest
         _warn_unit_recovered(warnings, first)
     elif word in UNIT_MAP and slot is None:
         # All slots full — just strip the orphaned designator word.
-        components["city"] = rest
+        components["locality"] = rest
         _warn_unit_recovered(warnings, first)
 
 
@@ -341,7 +341,7 @@ def _recover_identifier_fragment_from_city(
     subaddress identifier already exists, move that letter back onto the
     identifier.
     """
-    city = components.get("city", "")
+    city = components.get("locality", "")
     if not city or len(city) < _MIN_CITY_LEN:
         return
 
@@ -362,10 +362,10 @@ def _recover_identifier_fragment_from_city(
         return
 
     # Append to whichever identifier field is present.
-    for key in ("occupancy_identifier", "subaddress_identifier"):
+    for key in ("sub_premise_number", "dependent_sub_premise_number"):
         if components.get(key):
             components[key] += f" {fragment}"
-            components["city"] = rest
+            components["locality"] = rest
             if warnings is not None:
                 warnings.append("Unit identifier fragment recovered from city field")
             return
