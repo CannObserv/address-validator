@@ -42,12 +42,12 @@ def _make_std(
     country: str = "US",
 ) -> StandardizeResponseV1:
     values = {
-        "address_number": address_number,
-        "street_name": street_name,
-        "street_name_post_type": street_type,
-        "city": city,
-        "state": region,
-        "zip_code": postal_code,
+        "premise_number": address_number,
+        "thoroughfare_name": street_name,
+        "thoroughfare_trailing_type": street_type,
+        "locality": city,
+        "administrative_area": region,
+        "postcode": postal_code,
     }
     return StandardizeResponseV1(
         address_line_1=f"{address_number} {street_name} {street_type}",
@@ -80,7 +80,7 @@ def _make_confirmed_response(country: str = "US") -> ValidateResponseV1:
         components=ComponentSet(
             spec=USPS_PUB28_SPEC,
             spec_version=USPS_PUB28_SPEC_VERSION,
-            values={"address_number": "123", "street_name": "MAIN"},
+            values={"premise_number": "123", "thoroughfare_name": "MAIN"},
         ),
         validation=ValidationResult(
             status="confirmed",
@@ -242,7 +242,7 @@ class TestCacheHit:
 
         std1 = _make_std(street_name="MAIN")
 
-        # std2 has extra zip_code component — different pattern_key, same canonical result
+        # std2 has extra postcode component — different pattern_key, same canonical result
         std2 = StandardizeResponseV1(
             address_line_1="123 MAIN ST",
             address_line_2="",
@@ -254,7 +254,7 @@ class TestCacheHit:
             components=ComponentSet(
                 spec=USPS_PUB28_SPEC,
                 spec_version=USPS_PUB28_SPEC_VERSION,
-                values={"address_number": "123", "street_name": "MAIN", "zip_code": "62701"},
+                values={"premise_number": "123", "thoroughfare_name": "MAIN", "postcode": "62701"},
             ),
             warnings=[],
         )

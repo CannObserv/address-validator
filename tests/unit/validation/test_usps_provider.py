@@ -49,7 +49,7 @@ def _make_std(
         components=ComponentSet(
             spec=USPS_PUB28_SPEC,
             spec_version=USPS_PUB28_SPEC_VERSION,
-            values={"address_number": "123", "street_name": "MAIN"},
+            values={"premise_number": "123", "thoroughfare_name": "MAIN"},
         ),
         warnings=[],
     )
