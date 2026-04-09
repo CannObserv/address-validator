@@ -12,10 +12,10 @@ FastAPI service — parses and standardizes US physical addresses per USPS Publi
 # All source modules live under src/address_validator/
 
 HTTP request
- └─ middleware/api_version.py appends API-Version header on /api/v1/ responses
+ └─ middleware/api_version.py appends API-Version: 1 or 2 header on /api/v1/ and /api/v2/ responses
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
  └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
- └─ routers/v1/               thin handlers, validation, error handling
+ └─ routers/v1/               thin handlers, validation, error handling; USPS Pub 28 key vocabulary
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/
      ├─ validate         →   parse → standardize → services/validation/
@@ -27,6 +27,11 @@ HTTP request
                                  chain_provider.py   ordered fallback across providers
                                  _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
      └─ countries        →   services/country_format.py  i18naddress → CountryFormatResponse; label lookup tables
+ └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
+     ├─ parse            →   same pipeline as v1; component_profile controls output key vocabulary
+     ├─ standardize      →   ISO keys in/out by default; no input translation needed for iso-19160-4 clients
+     ├─ validate         →   same providers as v1; _v1_to_v2() drops lat/lng, uses "" not None for address fields
+     └─ countries        →   same service as v1 (CountryFormatResponseV2 adds api_version field)
  └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
      ├─ router.py             top-level /admin router
      ├─ deps.py               AdminUser from exe.dev proxy headers
@@ -42,6 +47,7 @@ db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_st
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
+services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
 services/country_format.py  maps i18naddress ValidationRules → CountryFormatResponse; GET /api/v1/countries/{code}/format
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
@@ -212,7 +218,7 @@ export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
 | `src/address_validator/services/validation/gcp_quota_sync.py` | Quota discovery (Cloud Quotas API), usage monitoring (Cloud Monitoring API), and reconciliation loop; `reconcile_once()` only adjusts tokens downward — never grants above current window level; `run_reconciliation_loop()` runs as background asyncio task, cancelled on shutdown |
 | `src/address_validator/middleware/request_id.py` | Pure ASGI middleware; runs on every request — `_request_id_var` ContextVar scoped per asyncio task; `reset(token)` in `finally` is load-bearing; must be outermost relative to audit so `get_request_id()` is set when the audit row is written |
 | `src/address_validator/logging_filter.py` | Installed on root logger at import time in `main.py`; `addFilter` is idempotent only for the same instance — importing `main` twice would add a second filter |
-| `src/address_validator/middleware/audit.py` | Pure ASGI middleware; runs on every API request; reads engine from `scope["app"].state.engine` (set during lifespan); `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must run inside request_id middleware); ContextVars set by the validation pipeline are read after `self.app()` returns — this only works because pure ASGI runs in one asyncio task (BaseHTTPMiddleware broke this); `_check_validate_invariants` overrides `error_detail` to `"audit_invariant_violated"` when `/api/v1/validate` + 2xx has NULL audit fields — changes to invariant logic silently affect audit row content |
+| `src/address_validator/middleware/audit.py` | Pure ASGI middleware; runs on every API request; reads engine from `scope["app"].state.engine` (set during lifespan); `_background_tasks` set prevents GC of fire-and-forget writes; middleware ordering is load-bearing (must run inside request_id middleware); ContextVars set by the validation pipeline are read after `self.app()` returns — this only works because pure ASGI runs in one asyncio task (BaseHTTPMiddleware broke this); `_check_validate_invariants` overrides `error_detail` to `"audit_invariant_violated"` when `/api/v1/validate` or `/api/v2/validate` + 2xx has NULL audit fields — covers both versions via `_VALIDATE_ENDPOINTS` frozenset; changes to invariant logic silently affect audit row content |
 | `src/address_validator/middleware/api_version.py` | Pure ASGI middleware; appends `API-Version: 1` header to `/api/v1/` responses; no state or ContextVars |
 | `src/address_validator/db/tables.py` | SQLAlchemy Core Table definitions (audit + cache + training candidates) and shared constants — column changes here affect `services/audit.py`, `services/validation/cache_provider.py`, `routers/admin/queries.py`, `scripts/archive_audit.py`, and `scripts/model/identify.py`; `validated_addresses` has CHECK constraint on `status` and JSONB columns (`components_json`, `warnings_json`); `model_training_candidates` has CHECK constraint on `status` and JSONB columns (`parsed_tokens`, `recovered_components`); must stay in sync with Alembic migrations |
 | `src/address_validator/routers/admin/deps.py` | `AdminContext` composite DI — `get_admin_context` is the single entry point for all admin routes; `AdminAuthRequired` and `DatabaseUnavailable` exceptions are caught by app-level handlers in `main.py`; removing or weakening auth check here silently drops auth for all admin views |

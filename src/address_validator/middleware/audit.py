@@ -75,7 +75,7 @@ def _error_detail_from_status(status_code: int) -> str | None:
     return phrases.get(status_code, f"http_{status_code}")
 
 
-_VALIDATE_ENDPOINT = "/api/v1/validate"
+_VALIDATE_ENDPOINTS = frozenset({"/api/v1/validate", "/api/v2/validate"})
 _2XX_MIN = 200
 _2XX_MAX = 300
 
@@ -90,9 +90,9 @@ def _check_validate_invariants(
     """Check that a successful /validate audit row has all expected fields.
 
     Returns True when invariants hold, False when violated (and logs WARNING).
-    Only applies to /api/v1/validate with 2xx status codes.
+    Applies to /api/v1/validate and /api/v2/validate with 2xx status codes.
     """
-    if endpoint != _VALIDATE_ENDPOINT:
+    if endpoint not in _VALIDATE_ENDPOINTS:
         return True
     if not (_2XX_MIN <= status_code < _2XX_MAX):
         return True

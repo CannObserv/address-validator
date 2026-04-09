@@ -21,7 +21,10 @@ router = APIRouter(
 )
 
 _COMPONENT_PROFILE_DESCRIPTION = (
-    "Component key vocabulary. `iso-19160-4` (default) or `usps-pub28` for v1 compat."
+    "Component key vocabulary. "
+    "`iso-19160-4` (default): ISO 19160-4 element names. "
+    "`usps-pub28`: USPS Publication 28 snake_case names (v1 backward compat). "
+    "`canada-post`: reserved; currently identical to `iso-19160-4`."
 )
 
 
