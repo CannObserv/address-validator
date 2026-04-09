@@ -46,6 +46,11 @@ class TestV2ParseISO:
         assert response.status_code == 422
         assert response.json()["error"] == "invalid_component_profile"
 
+    def test_blank_address_returns_400(self, client) -> None:
+        response = client.post("/api/v2/parse", json={"address": "   "})
+        assert response.status_code == 400
+        assert response.json()["error"] == "address_required"
+
     def test_canada_not_yet_supported_via_parse(self, client) -> None:
         # CA is not in SUPPORTED_COUNTRIES for v2 parse until Plan 2.
         # Adjust or remove this test in Plan 2 when CA is enabled.

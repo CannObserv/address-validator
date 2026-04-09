@@ -14,6 +14,7 @@ from address_validator.models import (
 )
 from address_validator.services.validation.errors import ProviderRateLimitedError
 from address_validator.services.validation.google_provider import GoogleProvider
+from address_validator.usps_data.spec import USPS_PUB28_SPEC_VERSION
 
 NULL_RESPONSE = ValidateResponseV1(
     country="US",
@@ -457,7 +458,7 @@ class TestValidateResponseV1Shape:
             validated="123 MAIN ST  SPRINGFIELD, IL 62701-1234",
             components=ComponentSet(
                 spec="usps-pub28",
-                spec_version="unknown",
+                spec_version=USPS_PUB28_SPEC_VERSION,
                 values={
                     "address_line_1": "123 MAIN ST",
                     "city": "SPRINGFIELD",

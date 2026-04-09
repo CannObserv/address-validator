@@ -24,6 +24,7 @@ from address_validator.services.audit import (
     write_audit_row,
 )
 from address_validator.services.validation.cache_provider import CachingProvider
+from address_validator.usps_data.spec import USPS_PUB28_SPEC_VERSION
 
 
 def test_context_vars_default_to_none() -> None:
@@ -122,7 +123,7 @@ async def test_cache_provider_sets_audit_context_on_miss(db: AsyncEngine) -> Non
         standardized="123 MAIN ST  ANYTOWN WA 98101",
         components=ComponentSet(
             spec="usps-pub28",
-            spec_version="unknown",
+            spec_version=USPS_PUB28_SPEC_VERSION,
             values={"PlaceName": "ANYTOWN", "StateName": "WA", "ZipCode": "98101"},
         ),
         warnings=[],

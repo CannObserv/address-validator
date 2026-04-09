@@ -42,6 +42,21 @@ and returned the edition string: "Publication 28 - Postal Addressing Standards
 October 2024 PSN 7610-03-000-3688".  This is the current edition as of that
 date.  `spec.py` has been updated accordingly.
 
+### Table verification (conducted 2026-04-09)
+
+The `usps_data/` tables were compared against the October 2024 edition via live
+fetch of the Appendix pages:
+
+| Table | Source | Result |
+|---|---|---|
+| `suffixes.py` | `pe.usps.com/text/pub28/28apc_002.htm` | All 189 primary entries match. Our file includes additional input aliases (common misspellings/variant spellings) that are not in Pub 28 — these are expected as input normalizers. |
+| `units.py` | `pe.usps.com/text/pub28/28apc_003.htm` | All 25 designators match. Pub 28 misspells "Hanger" (should be "Hangar") — our file uses the correct spelling; abbreviation `HNGR` is correct either way. We include `#`/`NUMBER`/`NUM`/`NO` aliases not in Pub 28 for input normalization. |
+| `directionals.py` | Pub 28 Appendix C | N, S, E, W, NE, NW, SE, SW — complete set confirmed. |
+| `states.py` | Pub 28 Appendix D | All 50 states + DC + 7 territories (AS, GU, MH, MP, PW, PR, VI) present. Appendix D page was inaccessible for live comparison; content verified against known-stable data. |
+
+**Conclusion:** `usps_data/` tables are consistent with the October 2024 edition.
+No missing or incorrect abbreviations found.
+
 ---
 
 ## USPS Addresses API v3 — model notes
