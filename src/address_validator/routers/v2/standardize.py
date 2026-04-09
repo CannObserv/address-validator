@@ -63,7 +63,7 @@ async def standardize_address_v2(
         comps = req.components
     else:
         # model_validator guarantees address is non-blank when components is absent
-        parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
+        parse_result = await parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 

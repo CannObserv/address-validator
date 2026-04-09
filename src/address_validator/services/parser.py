@@ -7,6 +7,10 @@ import usaddress
 
 from address_validator.models import ComponentSet, ParseResponseV1
 from address_validator.services.audit import set_audit_context
+from address_validator.services.libpostal_client import (
+    LibpostalClient,
+    LibpostalUnavailableError,
+)
 from address_validator.services.training_candidates import set_candidate_data
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -371,13 +375,36 @@ def _recover_identifier_fragment_from_city(
             return
 
 
-def parse_address(raw: str, country: str = "US") -> ParseResponseV1:
-    """Parse *raw* address string into labelled components (v1).
+async def parse_address(
+    raw: str,
+    country: str = "US",
+    libpostal_client: LibpostalClient | None = None,
+) -> ParseResponseV1:
+    """Parse *raw* address string into labelled components.
 
-    Returns a :class:`ParseResponseV1`.  Pass ``legacy=True`` via the
-    thin wrapper :func:`parse_address_legacy` when the deprecated route
-    needs the old response shape.
+    For ``country="CA"``, delegates to the libpostal sidecar via
+    *libpostal_client*.  Raises ``LibpostalUnavailableError`` (→ 503)
+    when the client is None or unreachable.
+
+    For ``country="US"``, uses the existing usaddress path unchanged.
+    The *libpostal_client* parameter is ignored for US addresses.
     """
+    if country == "CA":
+        if libpostal_client is None:
+            raise LibpostalUnavailableError("No libpostal client configured")
+        set_audit_context(parse_type="libpostal")
+        components = await libpostal_client.parse(raw)
+        return ParseResponseV1(
+            input=raw,
+            country=country,
+            components=ComponentSet(
+                spec="raw",
+                spec_version="1",
+                values=components,
+            ),
+            type="Street Address",
+            warnings=[],
+        )
     return _parse(raw, country)
 
 

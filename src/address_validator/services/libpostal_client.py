@@ -101,6 +101,10 @@ class LibpostalClient:
         except httpx.HTTPStatusError as exc:
             logger.warning("libpostal sidecar returned %s", exc.response.status_code)
             raise LibpostalUnavailableError(str(exc)) from exc
+        except RuntimeError as exc:
+            # httpx raises RuntimeError when the client is closed (e.g. during shutdown)
+            logger.warning("libpostal client not usable: %s", exc)
+            raise LibpostalUnavailableError(str(exc)) from exc
 
         return _map_tags(response.json())
 

@@ -171,7 +171,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
             raw_input = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
         else:
             # model_validator guarantees address is non-blank when components is absent
-            parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
+            parse_result = await parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
             comps = parse_result.components.values
             upstream_warnings = parse_result.warnings
             raw_input = req.address

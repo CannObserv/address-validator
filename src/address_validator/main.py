@@ -34,6 +34,7 @@ from address_validator.routers.v2 import countries as v2_countries
 from address_validator.routers.v2 import parse as v2_parse
 from address_validator.routers.v2 import standardize as v2_standardize
 from address_validator.routers.v2 import validate as v2_validate
+from address_validator.services.libpostal_client import LibpostalClient
 from address_validator.services.validation.config import ValidationConfig, validate_config
 from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
 from address_validator.services.validation.registry import ProviderRegistry
@@ -42,6 +43,8 @@ _THIS_DIR = Path(__file__).resolve().parent  # src/address_validator/
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logging.getLogger().addFilter(RequestIdFilter())
+
+logger = logging.getLogger(__name__)
 
 
 def _load_custom_model() -> None:
@@ -113,6 +116,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except RuntimeError:
         app.state.engine = None
 
+    libpostal_url = os.getenv("LIBPOSTAL_URL", "http://localhost:4400")
+    libpostal_client = LibpostalClient(base_url=libpostal_url)
+    if await libpostal_client.health_check():
+        logger.info("libpostal sidecar reachable at %s", libpostal_url)
+    else:
+        logger.warning(
+            "libpostal sidecar not reachable at %s — CA parsing will return 503",
+            libpostal_url,
+        )
+    app.state.libpostal_client = libpostal_client
+
     config = validate_config()
     if config is None:
         config = ValidationConfig()
@@ -140,6 +154,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await reconciliation_task
 
     await registry.close()
+    await libpostal_client.aclose()
     await db_engine.close_engine()
 
 

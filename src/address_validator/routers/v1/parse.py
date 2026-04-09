@@ -36,7 +36,7 @@ async def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
             message="address is required and must not be blank.",
         )
 
-    result = parse_address(raw, country=req.country)
+    result = await parse_address(raw, country=req.country)
     translated = translate_components(result.components.values, "usps-pub28")
     return ParseResponseV1(
         input=result.input,

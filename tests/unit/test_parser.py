@@ -22,13 +22,13 @@ from address_validator.services.training_candidates import (
 
 
 class TestRecoverUnitFromCity:
-    def test_basement_extracted(self) -> None:
+    async def test_basement_extracted(self) -> None:
         c: dict[str, str] = {"locality": "BASEMENT, FREELAND"}
         _recover_unit_from_city(c)
         assert c["sub_premise_type"] == "BASEMENT"
         assert c["locality"] == "FREELAND"
 
-    def test_multiple_designators_extracted(self) -> None:
+    async def test_multiple_designators_extracted(self) -> None:
         """LOWR is a no-id designator and is extracted; UNIT requires an id
         so 'UNIT SEATTLE' is left in locality (UNIT KEY WEST etc. are real cities).
         The AGENTS.md example uses a pre-populated occupancy slot so UNIT
@@ -40,31 +40,31 @@ class TestRecoverUnitFromCity:
         assert c["sub_premise_type"] == "LOWR"
         assert c["locality"] == "UNIT SEATTLE"
 
-    def test_single_wayfinding_word_dropped(self) -> None:
+    async def test_single_wayfinding_word_dropped(self) -> None:
         """Non-vocabulary single words before a comma are dropped as wayfinding."""
         c: dict[str, str] = {"locality": "YARD, SPOKANE"}
         _recover_unit_from_city(c)
         assert c["locality"] == "SPOKANE"
         assert "sub_premise_type" not in c
 
-    def test_real_city_name_untouched(self) -> None:
+    async def test_real_city_name_untouched(self) -> None:
         c: dict[str, str] = {"locality": "KEY WEST"}
         _recover_unit_from_city(c)
         assert c["locality"] == "KEY WEST"
 
-    def test_bare_no_id_designator_extracted(self) -> None:
+    async def test_bare_no_id_designator_extracted(self) -> None:
         """LOWR at the start of locality (no comma) is moved to sub_premise_type."""
         c: dict[str, str] = {"locality": "LOWR SEATTLE"}
         _recover_unit_from_city(c)
         assert c["sub_premise_type"] == "LOWR"
         assert c["locality"] == "SEATTLE"
 
-    def test_no_city_is_noop(self) -> None:
+    async def test_no_city_is_noop(self) -> None:
         c: dict[str, str] = {}
         _recover_unit_from_city(c)  # must not raise
         assert c == {}
 
-    def test_all_slots_full_orphan_stripped(self) -> None:
+    async def test_all_slots_full_orphan_stripped(self) -> None:
         """When both unit slots are taken, a leftover designator word is dropped."""
         c: dict[str, str] = {
             "locality": "LOWR SEATTLE",
@@ -78,24 +78,24 @@ class TestRecoverUnitFromCity:
 
 
 class TestRecoverIdentifierFragmentFromCity:
-    def test_stray_letter_moved_to_identifier(self) -> None:
+    async def test_stray_letter_moved_to_identifier(self) -> None:
         c: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
         _recover_identifier_fragment_from_city(c)
         assert c["sub_premise_number"] == "120 K"
         assert c["locality"] == "WALLA WALLA"
 
-    def test_no_identifier_present_noop(self) -> None:
+    async def test_no_identifier_present_noop(self) -> None:
         c: dict[str, str] = {"locality": "K WALLA WALLA"}
         _recover_identifier_fragment_from_city(c)
         # No identifier field → locality is left unchanged.
         assert c["locality"] == "K WALLA WALLA"
 
-    def test_multi_char_city_prefix_untouched(self) -> None:
+    async def test_multi_char_city_prefix_untouched(self) -> None:
         c: dict[str, str] = {"locality": "ST PAUL", "sub_premise_number": "5"}
         _recover_identifier_fragment_from_city(c)
         assert c["locality"] == "ST PAUL"
 
-    def test_short_city_noop(self) -> None:
+    async def test_short_city_noop(self) -> None:
         c: dict[str, str] = {"locality": "LA", "sub_premise_number": "1"}
         _recover_identifier_fragment_from_city(c)
         assert c["locality"] == "LA"
@@ -107,8 +107,8 @@ class TestRecoverIdentifierFragmentFromCity:
 
 
 class TestParseAddress:
-    def test_basic_street_address(self) -> None:
-        result = parse_address("123 Main St, Springfield, IL 62701")
+    async def test_basic_street_address(self) -> None:
+        result = await parse_address("123 Main St, Springfield, IL 62701")
         v = result.components.values
         assert v["premise_number"] == "123"
         assert v["thoroughfare_name"] == "Main"
@@ -116,32 +116,32 @@ class TestParseAddress:
         assert v["administrative_area"] == "IL"
         assert v["postcode"] == "62701"
 
-    def test_country_propagated(self) -> None:
-        result = parse_address("123 Main St", country="US")
+    async def test_country_propagated(self) -> None:
+        result = await parse_address("123 Main St", country="US")
         assert result.country == "US"
 
-    def test_input_preserved(self) -> None:
+    async def test_input_preserved(self) -> None:
         raw = "123 Main St, Springfield, IL 62701"
-        result = parse_address(raw)
+        result = await parse_address(raw)
         assert result.input == raw
 
-    def test_parenthesized_wayfinding_stripped(self) -> None:
-        result = parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
+    async def test_parenthesized_wayfinding_stripped(self) -> None:
+        result = await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
         v = result.components.values
         assert v["premise_number"] == "123"
         assert v["locality"] == "Springfield"
 
-    def test_unmatched_paren_stripped(self) -> None:
-        result = parse_address("123 Main) St, Springfield, IL")
+    async def test_unmatched_paren_stripped(self) -> None:
+        result = await parse_address("123 Main) St, Springfield, IL")
         assert "(" not in str(result.components.values)
         assert ")" not in str(result.components.values)
 
-    def test_intersection_parsed(self) -> None:
-        result = parse_address("1st St & 2nd Ave, Seattle, WA")
+    async def test_intersection_parsed(self) -> None:
+        result = await parse_address("1st St & 2nd Ave, Seattle, WA")
         v = result.components.values
         assert "second_thoroughfare_name" in v
 
-    def test_dual_address_numbers_joined(self) -> None:
+    async def test_dual_address_numbers_joined(self) -> None:
         """The RLE fallback joins dual AddressNumber tokens with a hyphen.
 
         usaddress raises RepeatedLabelError when it emits the same label
@@ -155,7 +155,7 @@ class TestParseAddress:
         is not exercised here.
         """
 
-    def test_dual_address_rle_token_logic(self) -> None:
+    async def test_dual_address_rle_token_logic(self) -> None:
         """Unit-test the RLE hyphen-join logic by calling _parse directly
         via a fabricated RepeatedLabelError scenario.
 
@@ -172,29 +172,29 @@ class TestParseAddress:
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
 
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("1804 & 1810 Main St")
+            result = await parse_address("1804 & 1810 Main St")
 
         assert result.components.values["premise_number"] == "1804-1810"
         assert result.type == "Ambiguous"
 
-    def test_no_warnings_on_clean_address(self) -> None:
-        result = parse_address("456 Oak Ave, Portland, OR 97201")
+    async def test_no_warnings_on_clean_address(self) -> None:
+        result = await parse_address("456 Oak Ave, Portland, OR 97201")
         assert result.warnings == []
 
-    def test_components_have_spec(self) -> None:
-        result = parse_address("123 Main St")
+    async def test_components_have_spec(self) -> None:
+        result = await parse_address("123 Main St")
         assert result.components.spec == "usps-pub28"
         assert result.components.spec_version != ""
 
-    def test_input_too_long_rejected_by_model(self) -> None:
+    async def test_input_too_long_rejected_by_model(self) -> None:
         """Pydantic enforces max_length=1000 on ParseRequestV1, not parse_address().
 
-        parse_address() itself accepts any string; length gating is the
+        await parse_address() itself accepts any string; length gating is the
         router's responsibility.  This test documents that contract.
         """
         long_input = "A" * 1001
         # parse_address should not raise; it's the model that enforces length.
-        result = parse_address(long_input)
+        result = await parse_address(long_input)
         assert result is not None
 
 
@@ -204,22 +204,22 @@ class TestParseAddress:
 
 
 class TestRepeatedLabelFallback:
-    def test_ambiguous_type_on_repeated_label(self) -> None:
+    async def test_ambiguous_type_on_repeated_label(self) -> None:
         """usaddress raises RepeatedLabelError for some tricky inputs;
         the parser should fall back gracefully with type='Ambiguous'.
         """
         # This specific string reliably triggers RepeatedLabelError in usaddress.
-        result = parse_address("123 Main St Rear 456 Oak Ave")
+        result = await parse_address("123 Main St Rear 456 Oak Ave")
         # Either it parsed normally or hit the fallback — both are acceptable;
         # the important thing is no exception is raised.
         assert result.type in {"Street Address", "Intersection", "Ambiguous"}
 
-    def test_warnings_set_on_fallback(self) -> None:
-        result = parse_address("123 Main St Rear 456 Oak Ave")
+    async def test_warnings_set_on_fallback(self) -> None:
+        result = await parse_address("123 Main St Rear 456 Oak Ave")
         if result.type == "Ambiguous":
             assert len(result.warnings) > 0
 
-    def test_multi_unit_designator_slotted_not_concatenated(self) -> None:
+    async def test_multi_unit_designator_slotted_not_concatenated(self) -> None:
         """GH-72: BLDG 201 ROOM 104 T should populate both unit slots,
         not concatenate repeated SubaddressType/AddressNumber labels."""
         # Simulate exact usaddress output for this address.
@@ -239,7 +239,9 @@ class TestRepeatedLabelFallback:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("995 9TH ST BLDG 201 ROOM 104 T, SAN FRANCISCO, CA 94130-2107")
+            result = await parse_address(
+                "995 9TH ST BLDG 201 ROOM 104 T, SAN FRANCISCO, CA 94130-2107"
+            )
         vals = result.components.values
         # Primary street fields should not be contaminated.
         assert vals.get("premise_number") == "995"
@@ -270,8 +272,8 @@ class TestZipNormalization:
             ("123 Main St, City, WA 981011234", "98101"),
         ],
     )
-    def test_zip_parsed(self, raw: str, expected_zip: str) -> None:
-        result = parse_address(raw)
+    async def test_zip_parsed(self, raw: str, expected_zip: str) -> None:
+        result = await parse_address(raw)
         assert result.components.values.get("postcode", "").startswith(expected_zip[:5])
 
 
@@ -286,16 +288,16 @@ class TestZipNormalization:
 
 
 class TestParseWarnings:
-    def test_parenthesized_text_warning(self) -> None:
-        result = parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
+    async def test_parenthesized_text_warning(self) -> None:
+        result = await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
         assert any("Parenthesized text removed" in w for w in result.warnings)
         assert any("UPPER LEVEL" in w for w in result.warnings)
 
-    def test_no_paren_warning_on_clean_address(self) -> None:
-        result = parse_address("123 Main St, Springfield, IL 62701")
+    async def test_no_paren_warning_on_clean_address(self) -> None:
+        result = await parse_address("123 Main St, Springfield, IL 62701")
         assert not any("Parenthesized" in w for w in result.warnings)
 
-    def test_dual_address_merge_warning(self) -> None:
+    async def test_dual_address_merge_warning(self) -> None:
         fake_tokens = [
             ("1804", "AddressNumber"),
             ("&", "IntersectionSeparator"),
@@ -305,10 +307,10 @@ class TestParseWarnings:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("1804 & 1810 Main St")
+            result = await parse_address("1804 & 1810 Main St")
         assert any("1804-1810" in w for w in result.warnings)
 
-    def test_ambiguous_parse_warning_general(self) -> None:
+    async def test_ambiguous_parse_warning_general(self) -> None:
         """Repeated labels without an IntersectionSeparator produce the
         generic ambiguous-parse warning, not the range-join warning.
         """
@@ -318,11 +320,11 @@ class TestParseWarnings:
             "AddressNumber",
         )
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("123 Main 456")
+            result = await parse_address("123 Main 456")
         assert any("Ambiguous parse" in w for w in result.warnings)
         assert not any("joined as range" in w for w in result.warnings)
 
-    def test_unit_recovered_from_city_warning(self) -> None:
+    async def test_unit_recovered_from_city_warning(self) -> None:
         """When _recover_unit_from_city fires, a warning is appended."""
         # usaddress tags 'BSMT' into city for some inputs; simulate via
         # a mock so we can control the component dict precisely.
@@ -335,11 +337,11 @@ class TestParseWarnings:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("123 Main St BSMT, Springfield")
+            result = await parse_address("123 Main St BSMT, Springfield")
         # BSMT should have been recovered and a warning emitted.
         assert any("Unit designator recovered" in w for w in result.warnings)
 
-    def test_identifier_fragment_recovered_from_city_warning(self) -> None:
+    async def test_identifier_fragment_recovered_from_city_warning(self) -> None:
         """When _recover_identifier_fragment_from_city fires, a warning is appended."""
         comps: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
         warnings: list[str] = []
@@ -350,13 +352,15 @@ class TestParseWarnings:
 
 
 class TestParserLogging:
-    def test_debug_emitted_on_successful_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_debug_emitted_on_successful_parse(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         with caplog.at_level(logging.DEBUG, logger="address_validator.services.parser"):
-            parse_address("123 Main St, Springfield, IL 62701")
+            await parse_address("123 Main St, Springfield, IL 62701")
         assert "parsed address" in caplog.text
         assert "Street Address" in caplog.text
 
-    def test_debug_emitted_on_ambiguous_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_debug_emitted_on_ambiguous_parse(self, caplog: pytest.LogCaptureFixture) -> None:
         # Force a RepeatedLabelError by mocking usaddress.tag.
         exc = usaddress.RepeatedLabelError(
             "1804 & 1810 Main St",
@@ -367,11 +371,13 @@ class TestParserLogging:
             mock.patch("usaddress.tag", side_effect=exc),
             caplog.at_level(logging.DEBUG, logger="address_validator.services.parser"),
         ):
-            result = parse_address("1804 & 1810 Main St")
+            result = await parse_address("1804 & 1810 Main St")
         assert result.type == "Ambiguous"
         assert "parsed address type=Ambiguous" in caplog.text
 
-    def test_warning_emitted_on_ambiguous_parse(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_warning_emitted_on_ambiguous_parse(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         exc = usaddress.RepeatedLabelError(
             "1804 & 1810 Main St",
             [("1804", "AddressNumber"), ("Main", "StreetName"), ("1810", "AddressNumber")],
@@ -381,7 +387,7 @@ class TestParserLogging:
             mock.patch("usaddress.tag", side_effect=exc),
             caplog.at_level(logging.WARNING, logger="address_validator.services.parser"),
         ):
-            parse_address("1804 & 1810 Main St")
+            await parse_address("1804 & 1810 Main St")
         assert "ambiguous parse" in caplog.text
 
 
@@ -394,7 +400,7 @@ class TestCandidateCollection:
     def setup_method(self) -> None:
         reset_candidate_data()
 
-    def test_repeated_label_sets_candidate_data(self) -> None:
+    async def test_repeated_label_sets_candidate_data(self) -> None:
         """RepeatedLabelError path should set candidate ContextVar."""
         fake_tokens = [
             ("995", "AddressNumber"),
@@ -407,14 +413,14 @@ class TestCandidateCollection:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            parse_address("995 9TH ST BLDG 201 ROOM 104")
+            await parse_address("995 9TH ST BLDG 201 ROOM 104")
 
         candidate = get_candidate_data()
         assert candidate is not None
         assert candidate["failure_type"] == "repeated_label_error"
         assert candidate["raw_address"] == "995 9TH ST BLDG 201 ROOM 104"
 
-    def test_post_parse_recovery_sets_candidate_data(self) -> None:
+    async def test_post_parse_recovery_sets_candidate_data(self) -> None:
         """When _recover_unit_from_city fires, candidate data should be set."""
         fake_tokens = [
             ("123", "AddressNumber"),
@@ -425,14 +431,14 @@ class TestCandidateCollection:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = parse_address("123 Main St BSMT, Springfield")
+            result = await parse_address("123 Main St BSMT, Springfield")
 
         candidate = get_candidate_data()
         if any("Unit designator recovered" in w for w in result.warnings):
             assert candidate is not None
 
-    def test_clean_parse_no_candidate_data(self) -> None:
+    async def test_clean_parse_no_candidate_data(self) -> None:
         """Normal successful parse should not set candidate data."""
-        parse_address("123 Main St, Springfield, IL 62701")
+        await parse_address("123 Main St, Springfield, IL 62701")
         candidate = get_candidate_data()
         assert candidate is None

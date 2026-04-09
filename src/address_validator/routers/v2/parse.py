@@ -1,11 +1,12 @@
 """v2 parse endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from address_validator.auth import require_api_key
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV2
-from address_validator.routers.v1.core import APIError, check_country
+from address_validator.routers.v1.core import APIError, check_country_v2
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
+from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 
 router = APIRouter(
@@ -35,6 +36,7 @@ _COMPONENT_PROFILE_DESCRIPTION = (
 )
 async def parse(
     req: ParseRequestV1,
+    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=_COMPONENT_PROFILE_DESCRIPTION,
@@ -49,7 +51,7 @@ async def parse(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    check_country(req.country)
+    check_country_v2(req.country)
     raw = req.address.strip()
     if not raw:
         raise APIError(
@@ -57,7 +59,18 @@ async def parse(
             error="address_required",
             message="address is required and must not be blank.",
         )
-    result = parse_address(raw, country=req.country)
+    libpostal_client = getattr(request.app.state, "libpostal_client", None)
+    try:
+        result = await parse_address(raw, country=req.country, libpostal_client=libpostal_client)
+    except LibpostalUnavailableError as exc:
+        raise APIError(
+            status_code=503,
+            error="parsing_unavailable",
+            message=(
+                "Address parsing for CA is currently unavailable. "
+                "Try again shortly or provide pre-parsed components via /validate."
+            ),
+        ) from exc
     translated = translate_components(result.components.values, component_profile)
     if component_profile == "usps-pub28":
         spec = result.components.spec

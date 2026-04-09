@@ -50,12 +50,3 @@ class TestV2ParseISO:
         response = client.post("/api/v2/parse", json={"address": "   "})
         assert response.status_code == 400
         assert response.json()["error"] == "address_required"
-
-    def test_canada_not_yet_supported_via_parse(self, client) -> None:
-        # CA is not in SUPPORTED_COUNTRIES for v2 parse until Plan 2.
-        # Adjust or remove this test in Plan 2 when CA is enabled.
-        response = client.post(
-            "/api/v2/parse",
-            json={"address": "350 rue des Lilas, Quebec QC G1L 1B6", "country": "CA"},
-        )
-        assert response.status_code == 422
