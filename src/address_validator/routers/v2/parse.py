@@ -26,6 +26,7 @@ _COMPONENT_PROFILE_DESCRIPTION = (
     "/parse",
     response_model=ParseResponseV2,
     responses={
+        400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
@@ -49,7 +50,14 @@ async def parse(
             ),
         )
     check_country(req.country)
-    result = parse_address(req.address.strip(), country=req.country)
+    raw = req.address.strip()
+    if not raw:
+        raise APIError(
+            status_code=400,
+            error="address_required",
+            message="address is required and must not be blank.",
+        )
+    result = parse_address(raw, country=req.country)
     translated = translate_components(result.components.values, component_profile)
     if component_profile == "usps-pub28":
         spec = result.components.spec

@@ -145,6 +145,16 @@ def test_invariants_skip_non_validate_endpoint() -> None:
     assert _check_validate_invariants("/api/v1/parse", 200, None, None, None) is True
 
 
+def test_invariants_apply_to_v2_validate() -> None:
+    """v2/validate 2xx with all fields present passes."""
+    assert _check_validate_invariants("/api/v2/validate", 200, "google", "confirmed", False) is True
+
+
+def test_invariants_fail_on_v2_validate_null_fields() -> None:
+    """v2/validate 2xx with NULL audit fields fails."""
+    assert _check_validate_invariants("/api/v2/validate", 200, None, None, None) is False
+
+
 def test_invariants_violation_sets_error_detail(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

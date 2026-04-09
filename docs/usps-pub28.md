@@ -35,18 +35,12 @@ Attempts to determine the exact edition:
 
 ### Current `spec_version` value
 
-`usps_data/spec.py` sets `USPS_PUB28_SPEC_VERSION = "unknown"`.  This should
-be updated once the exact edition is confirmed.  Candidate approach:
+`usps_data/spec.py` sets `USPS_PUB28_SPEC_VERSION = "2024-10"`.
 
-- Download the Pub 28 PDF directly and check its front matter for an edition
-  date (e.g., "July 2024" or "November 2022").
-- Compare the suffix, directional, and unit-designator tables in the PDF
-  against the current `usps_data/` contents.
-- Update `USPS_PUB28_SPEC_VERSION` to the edition date string
-  (e.g., `"2024-07"`) and update this document.
-
-See GitHub issue #2 (Epic: Internationalize API surface) which originally
-tracked this as a deferred item.
+**Resolved 2026-04-09** — `pe.usps.com/text/pub28/welcome.htm` was accessible
+and returned the edition string: "Publication 28 - Postal Addressing Standards
+October 2024 PSN 7610-03-000-3688".  This is the current edition as of that
+date.  `spec.py` has been updated accordingly.
 
 ---
 
