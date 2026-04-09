@@ -1,6 +1,7 @@
 [Unit]
 Description=Address Validator (FastAPI)
-After=network.target
+After=network.target libpostal.service postgresql.service
+Wants=libpostal.service
 
 [Service]
 Type=simple

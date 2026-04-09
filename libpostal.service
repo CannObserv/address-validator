@@ -1,0 +1,25 @@
+[Unit]
+Description=libpostal address parsing service (pelias/libpostal-service)
+Documentation=https://github.com/pelias/libpostal-service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+RestartSec=5
+
+# Remove any stale container from a previous run before starting.
+ExecStartPre=-/usr/bin/docker stop libpostal
+ExecStartPre=-/usr/bin/docker rm libpostal
+
+ExecStart=/usr/bin/docker run \
+    --rm \
+    --name libpostal \
+    -p 127.0.0.1:4400:4400 \
+    --memory=2.5g \
+    pelias/libpostal-service
+
+ExecStop=/usr/bin/docker stop libpostal
+
+[Install]
+WantedBy=multi-user.target
