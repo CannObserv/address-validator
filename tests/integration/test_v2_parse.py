@@ -10,9 +10,9 @@ class TestV2ParseISO:
         assert response.status_code == 200
         values = response.json()["components"]["values"]
         assert values["premise_number"] == "123"
-        assert values["thoroughfare_name"] == "MAIN"
-        assert values["thoroughfare_trailing_type"] == "ST"
-        assert values["locality"] == "SEATTLE"
+        assert values["thoroughfare_name"] == "Main"
+        assert values["thoroughfare_trailing_type"] == "St"
+        assert values["locality"] == "Seattle"
         assert values["administrative_area"] == "WA"
         assert values["postcode"] == "98101"
         assert "address_number" not in values
@@ -33,8 +33,8 @@ class TestV2ParseISO:
         assert response.status_code == 200
         values = response.json()["components"]["values"]
         assert values["address_number"] == "123"
-        assert values["street_name"] == "MAIN"
-        assert values["city"] == "SEATTLE"
+        assert values["street_name"] == "Main"
+        assert values["city"] == "Seattle"
         assert values["state"] == "WA"
         assert values["zip_code"] == "98101"
 

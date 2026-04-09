@@ -7,7 +7,6 @@ from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1
 from address_validator.routers.v1.core import APIError, check_country
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
 from address_validator.services.parser import parse_address
-from address_validator.services.standardizer import standardize
 
 router = APIRouter(
     prefix="/api/v2",
@@ -51,15 +50,10 @@ async def parse(
         )
     check_country(req.country)
     result = parse_address(req.address.strip(), country=req.country)
-    std = standardize(
-        result.components.values,
-        country=result.country,
-        upstream_warnings=result.warnings,
-    )
-    translated = translate_components(std.components.values, component_profile)
+    translated = translate_components(result.components.values, component_profile)
     if component_profile == "usps-pub28":
-        spec = std.components.spec
-        spec_version = std.components.spec_version
+        spec = result.components.spec
+        spec_version = result.components.spec_version
     else:
         spec = "iso-19160-4"
         spec_version = "2020"
@@ -72,5 +66,5 @@ async def parse(
             values=translated,
         ),
         type=result.type,
-        warnings=std.warnings,
+        warnings=result.warnings,
     )
