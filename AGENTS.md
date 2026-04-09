@@ -4,7 +4,7 @@
 
 ## What this project is
 
-FastAPI service — parses and standardizes US physical addresses per USPS Publication 28. systemd+uvicorn on port 8000.
+FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpostal sidecar) addresses. systemd+uvicorn on port 8000. libpostal sidecar on port 4400 (pelias/libpostal-service Docker, libpostal.service).
 
 ## Architecture
 
@@ -28,7 +28,7 @@ HTTP request
                                  _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
      └─ countries        →   services/country_format.py  i18naddress → CountryFormatResponse; label lookup tables
  └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
-     ├─ parse            →   same pipeline as v1; component_profile controls output key vocabulary
+     ├─ parse            →   US: usaddress pipeline; CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
      ├─ standardize      →   ISO keys in/out by default; no input translation needed for iso-19160-4 clients
      ├─ validate         →   same providers as v1; _v1_to_v2() drops lat/lng, uses "" not None for address fields
      └─ countries        →   same service as v1 (CountryFormatResponseV2 adds api_version field)
@@ -48,12 +48,15 @@ db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close
 models.py           API contract source of truth
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
+services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
+services/street_splitter.py  bilingual street component splitter; decomposes libpostal road token into thoroughfare ISO elements; English trailing-type + French leading-type + CA directionals
+canada_post_data/directionals.py  bilingual EN/FR directional lookup (CA_DIRECTIONAL_MAP) for Canadian addresses; used by street_splitter
 services/country_format.py  maps i18naddress ValidationRules → CountryFormatResponse; GET /api/v1/countries/{code}/format
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
-routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES, APIError, check_country()
+routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES (US only), SUPPORTED_COUNTRIES_V2 (US+CA), APIError, check_country(), check_country_v2()
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
@@ -199,8 +202,9 @@ export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
 | File/Module | Risk |
 |---|---|
 | `src/address_validator/routers/v1/parse.py`, `standardize.py` | Route handlers MUST be `async def` — sync `def` routes run in a threadpool via `run_in_threadpool()`, which copies the contextvars context; ContextVar writes (e.g. `set_candidate_data`) inside the copy are invisible to the outer ASGI audit middleware. Changing these back to `def` silently breaks training candidate collection. |
-| `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect all parsing |
-| `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect component assignment |
+| `src/address_validator/services/parser.py` | `parse_address()` is now `async` — dispatches to libpostal for CA, usaddress for US; `_parse()` remains sync; all callers must `await parse_address()` |
+| `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect US parsing |
+| `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect US component assignment |
 | `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
 | `src/address_validator/services/standardizer.py` `_get()` | Every component value flows through this; changes cascade everywhere |
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
@@ -225,6 +229,7 @@ export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
 | `src/address_validator/routers/admin/queries.py` | SQLAlchemy Core query composition; `_ARCHIVED_DATE_GUARD` scalar subquery and `_from_archived` helper are shared by multiple functions — changes affect all archived-data queries; `_VS_CANONICAL_ORDER` defines the display order for validation statuses and must stay in sync with `VS_META` in `routers/admin/_config.py` — `VS_META` is the single source of truth for status labels/symbols/colors; templates derive `vs_order` from `vs_meta.keys()` |
 | `src/address_validator/services/audit.py` | ContextVar reset in middleware is load-bearing; `except Exception` in `write_audit_row` is intentional fail-open; five ContextVars: `_audit_provider`, `_audit_validation_status`, `_audit_cache_hit`, `_audit_pattern_key`, `_audit_parse_type` — all reset together by `reset_audit_context()`; `set_audit_context(parse_type=...)` is set by the parser for every parse request; `set_audit_context(pattern_key=...)` uses an `if not None` guard (calling it with `None` is a no-op, not a clear) |
 | `src/address_validator/services/training_candidates.py` | ContextVar reset in middleware is load-bearing (must be called at request start alongside `reset_audit_context()`); `except Exception` in `write_training_candidate` is intentional fail-open — do not narrow; `_candidate_data` ContextVar holds a dict or None; only the last `set_candidate_data()` call per request wins (post-parse overwrite is intentional) |
+| `src/address_validator/services/libpostal_client.py` | `RuntimeError` is caught alongside httpx errors to handle closed-client state (e.g. during test teardown when multiple `TestClient` instances share `app.state`); `aclose()` must be called in lifespan shutdown; `health_check()` is non-fatal — returns False if sidecar is down; CA parse returns 503 when sidecar is unreachable |
 | `src/address_validator/main.py` `_load_custom_model` | Swaps `usaddress.TAGGER` at boot if `CUSTOM_MODEL_PATH` env var is set; falls back silently to bundled model on missing path or failed load — changes to fallback behavior affect parse quality for all requests without surfacing a 5xx |
 | `scripts/archive_audit.py` | Deletes audit_log rows after archival — verify GCS upload succeeded before deletion; `ON CONFLICT DO NOTHING` in aggregation is load-bearing for idempotency |
 
