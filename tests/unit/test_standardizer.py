@@ -347,7 +347,7 @@ class TestStandardizeCA:
         assert "ON" in result.standardized
         assert "M5V 2T6" in result.standardized
 
-    def test_unrecognised_province_warns_and_uppercases(self) -> None:
+    def test_unrecognised_province_warns(self) -> None:
         comps = {
             "premise_number": "1",
             "thoroughfare_name": "TEST",
