@@ -381,6 +381,8 @@ class ValidateResponseV2(BaseModel):
     validated: str | None = None
     validation: ValidationResult
     components: ComponentSet | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     warnings: list[str] = Field(default_factory=list)
     api_version: Literal["2"] = "2"
 

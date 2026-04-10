@@ -164,7 +164,7 @@ async def _setup_non_us_validate(
 def _v1_to_v2(v1: ValidateResponseV1) -> ValidateResponseV2:
     """Convert a ValidateResponseV1 to ValidateResponseV2.
 
-    V2 drops latitude/longitude and uses empty strings (not None) for address fields.
+    V2 uses empty strings (not None) for address fields.
     """
     return ValidateResponseV2(
         address_line_1=v1.address_line_1 or "",
@@ -176,6 +176,8 @@ def _v1_to_v2(v1: ValidateResponseV1) -> ValidateResponseV2:
         validated=v1.validated,
         validation=v1.validation,
         components=v1.components,
+        latitude=v1.latitude,
+        longitude=v1.longitude,
         warnings=v1.warnings,
     )
 
