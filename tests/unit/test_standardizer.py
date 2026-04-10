@@ -279,3 +279,70 @@ class TestStandardizerLogging:
             standardize(components)
         assert "standardizing components" in caplog.text
         assert "count=3" in caplog.text
+
+
+class TestStandardizeCA:
+    def test_province_abbreviation_normalised(self) -> None:
+        comps = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "locality": "TORONTO",
+            "administrative_area": "ONTARIO",  # full name
+            "postcode": "M5V 2T6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.values["administrative_area"] == "ON"
+        assert result.region == "ON"
+
+    def test_postal_code_uppercase_and_spaced(self) -> None:
+        comps = {
+            "premise_number": "100",
+            "thoroughfare_name": "OAK",
+            "thoroughfare_trailing_type": "AVE",
+            "locality": "VANCOUVER",
+            "administrative_area": "BC",
+            "postcode": "v5k0a1",  # lowercase, no space
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.values["postcode"] == "V5K 0A1"
+        assert result.postal_code == "V5K 0A1"
+
+    def test_suffix_normalised(self) -> None:
+        comps = {
+            "premise_number": "200",
+            "thoroughfare_name": "ELM",
+            "thoroughfare_trailing_type": "STREET",  # full → ST
+            "locality": "OTTAWA",
+            "administrative_area": "ON",
+            "postcode": "K1A 0A6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.values["thoroughfare_trailing_type"] == "ST"
+
+    def test_spec_is_canada_post(self) -> None:
+        comps = {
+            "premise_number": "1",
+            "thoroughfare_name": "TEST",
+            "locality": "MONTREAL",
+            "administrative_area": "QC",
+            "postcode": "H3A 1A1",
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.spec == "canada-post"
+        assert result.components.spec_version == "2025"
+
+    def test_standardized_string_built(self) -> None:
+        comps = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "locality": "TORONTO",
+            "administrative_area": "ON",
+            "postcode": "M5V 2T6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.standardized  # non-empty
+        assert "TORONTO" in result.standardized
+        assert "ON" in result.standardized
+        assert "M5V 2T6" in result.standardized

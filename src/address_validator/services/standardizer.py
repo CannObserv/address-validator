@@ -1,8 +1,13 @@
-"""Address standardization per USPS Publication 28."""
+"""Address standardization per USPS Publication 28 (US) and Canada Post (CA)."""
 
 import logging
 import re
 
+from address_validator.canada_post_data.directionals import CA_DIRECTIONAL_MAP
+from address_validator.canada_post_data.provinces import PROVINCE_MAP
+from address_validator.canada_post_data.spec import CANADA_POST_SPEC, CANADA_POST_SPEC_VERSION
+from address_validator.canada_post_data.suffixes import CA_SUFFIX_MAP
+from address_validator.core.address_format import build_validated_string
 from address_validator.models import ComponentSet, StandardizeResponseV1
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -125,13 +130,125 @@ def _standardize_street_fields(
         std[f"{prefix}thoroughfare_post_modifier"] = v
 
 
+def _std_postal_code_ca(raw: str) -> str:
+    """Normalise a Canadian postal code to ``A1A 1A1`` format.
+
+    Strips whitespace, uppercases, and inserts the required space after
+    the FSA (first three characters).  Returns the raw value uppercased
+    if it does not match the expected six-character pattern after cleaning.
+    """
+    cleaned = raw.upper().replace(" ", "").replace("-", "")
+    if re.fullmatch(r"[A-Z]\d[A-Z]\d[A-Z]\d", cleaned):
+        return f"{cleaned[:3]} {cleaned[3:]}"
+    return raw.upper()
+
+
+def _standardize_ca(
+    components: dict[str, str],
+    upstream_warnings: list[str],
+) -> StandardizeResponseV1:
+    """Standardise a Canadian address per Canada Post Addressing Guidelines.
+
+    Normalises:
+    - ``administrative_area``: full province name → 2-letter abbreviation
+    - ``postcode``: uppercase + FSA-space-LDU format
+    - ``thoroughfare_trailing_type`` / ``thoroughfare_leading_type``: CA suffix table
+    - ``thoroughfare_pre_direction`` / ``thoroughfare_post_direction``: CA directionals
+
+    Components not present in the input are omitted from the output.
+    """
+    std: dict[str, str] = {}
+    warnings: list[str] = list(upstream_warnings)
+
+    # Copy all components as-is first; normalise known fields below.
+    for k, v in components.items():
+        if v:
+            std[k] = v
+
+    # --- administrative_area (province) ---
+    region = _get(components, "administrative_area")
+    if region:
+        abbr = PROVINCE_MAP.get(region.upper())
+        if abbr:
+            std["administrative_area"] = abbr
+        else:
+            warnings.append(f"Unrecognised province/territory: '{region}'")
+            std["administrative_area"] = region.upper()
+
+    # --- postcode ---
+    postcode = _get(components, "postcode")
+    if postcode:
+        std["postcode"] = _std_postal_code_ca(postcode)
+
+    # --- thoroughfare types ---
+    for key in ("thoroughfare_trailing_type", "thoroughfare_leading_type"):
+        v = _get(components, key)
+        if v:
+            std[key] = CA_SUFFIX_MAP.get(v.upper(), v.upper())
+
+    # --- directionals ---
+    for key in ("thoroughfare_pre_direction", "thoroughfare_post_direction"):
+        v = _get(components, key)
+        if v:
+            std[key] = CA_DIRECTIONAL_MAP.get(v.lower(), v.upper())
+
+    # --- Build top-level response fields ---
+    locality = std.get("locality", "")
+    admin_area = std.get("administrative_area", "")
+    postcode_out = std.get("postcode", "")
+
+    # Build address lines for the standardized string.
+    premise = std.get("premise_number", "")
+    pre_dir = std.get("thoroughfare_pre_direction", "")
+    leading_type = std.get("thoroughfare_leading_type", "")
+    name = std.get("thoroughfare_name", "")
+    trailing_type = std.get("thoroughfare_trailing_type", "")
+    post_dir = std.get("thoroughfare_post_direction", "")
+    unit_type = std.get("sub_premise_type", "")
+    unit_id = std.get("sub_premise_number", "")
+
+    # address_line_1: number + street
+    street_parts = [p for p in (pre_dir, leading_type, name, trailing_type, post_dir) if p]
+    street = " ".join(street_parts)
+    unit_part = " ".join(p for p in (unit_type, unit_id) if p)
+    address_line_1 = " ".join(p for p in (premise, street) if p)
+    address_line_2 = unit_part
+
+    standardized = build_validated_string(
+        address_line_1, address_line_2, locality, admin_area, postcode_out
+    )
+
+    return StandardizeResponseV1(
+        address_line_1=address_line_1,
+        address_line_2=address_line_2,
+        city=locality,
+        region=admin_area,
+        postal_code=postcode_out,
+        country="CA",
+        standardized=standardized,
+        components=ComponentSet(
+            spec=CANADA_POST_SPEC,
+            spec_version=CANADA_POST_SPEC_VERSION,
+            values=std,
+        ),
+        warnings=warnings,
+    )
+
+
 def standardize(
     components: dict[str, str],
     country: str = "US",
     upstream_warnings: list[str] | None = None,
 ) -> StandardizeResponseV1:
-    """Return a standardized address from parsed *components* (v1)."""
-    return _standardize(components, country, list(upstream_warnings) if upstream_warnings else [])
+    """Return a standardized address from parsed *components*.
+
+    Dispatches to ``_standardize_ca()`` for ``country="CA"`` and the
+    existing USPS Pub 28 pipeline for ``country="US"`` (default).
+    """
+    warnings = list(upstream_warnings) if upstream_warnings else []
+    if country == "CA":
+        return _standardize_ca(components, warnings)
+    return _standardize(components, country, warnings)
 
 
 # ---------------------------------------------------------------------------
