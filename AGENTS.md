@@ -29,8 +29,8 @@ HTTP request
      └─ countries        →   services/country_format.py  i18naddress → CountryFormatResponse; label lookup tables
  └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
      ├─ parse            →   US: usaddress pipeline; CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
-     ├─ standardize      →   ISO keys in/out by default; no input translation needed for iso-19160-4 clients
-     ├─ validate         →   same providers as v1; _v1_to_v2() drops lat/lng, uses "" not None for address fields
+     ├─ standardize      →   US: ISO keys via USPS pipeline; CA: ISO keys via _standardize_ca() (canada-post spec); enabled via check_country_v2
+     ├─ validate         →   US: same as v1; CA raw string: libpostal parse → _standardize_ca() → provider; other non-US: components-only; _v1_to_v2() drops lat/lng
      └─ countries        →   same service as v1 (CountryFormatResponseV2 adds api_version field)
  └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
      ├─ router.py             top-level /admin router
@@ -52,6 +52,9 @@ services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; tran
 services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
 services/street_splitter.py  bilingual street component splitter; decomposes libpostal road token into thoroughfare ISO elements; English trailing-type + French leading-type + CA directionals
 canada_post_data/directionals.py  bilingual EN/FR directional lookup (CA_DIRECTIONAL_MAP) for Canadian addresses; used by street_splitter
+canada_post_data/provinces.py  Canada Post province/territory table (PROVINCE_MAP): full names + abbreviations → 2-letter abbreviation; used by _standardize_ca()
+canada_post_data/suffixes.py   Canada Post street type table (CA_SUFFIX_MAP): bilingual EN/FR suffix → standard abbreviation; used by _standardize_ca()
+canada_post_data/spec.py       CANADA_POST_SPEC / CANADA_POST_SPEC_VERSION — tags CA ComponentSet responses; spec="canada-post", spec_version="2025"
 services/country_format.py  maps i18naddress ValidationRules → CountryFormatResponse; GET /api/v1/countries/{code}/format
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
