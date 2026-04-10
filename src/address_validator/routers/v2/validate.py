@@ -14,10 +14,11 @@ components.
 * **Pre-parsed components** (``components`` field): passed directly to
   :func:`~services.standardizer.standardize`, skipping the parse step.
 
-**Non-US addresses** must supply pre-parsed ``components``.  The USPS
-pipeline is bypassed entirely; components are passed verbatim to the
-Google provider.  Non-US raw address strings are rejected with 422
-``country_not_supported``.
+**Non-US addresses** must supply pre-parsed ``components``, except for
+CA which supports raw address strings via the libpostal sidecar.  The USPS
+pipeline is bypassed; for CA, components run through ``_standardize_ca()``;
+other non-US components are passed verbatim to the Google provider.
+Non-CA non-US raw address strings are rejected with 422 ``country_not_supported``.
 
 When both ``address`` and ``components`` are supplied, ``components``
 takes precedence and ``address`` is ignored.
@@ -59,6 +60,7 @@ from address_validator.services.component_profiles import (
     VALID_PROFILES,
     translate_components_to_iso,
 )
+from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import (
@@ -98,6 +100,65 @@ def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeRe
         standardized=standardized,
         components=ComponentSet(spec="raw", spec_version="1", values=components),
     )
+
+
+async def _setup_non_us_validate(
+    req: "ValidateRequestV1",
+    request: "Request",
+) -> "tuple[StandardizeResponseV1, str | None, object]":
+    """Validate country, provider capability, and build std for non-US addresses.
+
+    Returns ``(std, raw_input, provider)``.
+    Raises ``APIError`` (422 or 503) on validation failures.
+    """
+    if req.country not in VALID_ISO2:
+        raise APIError(
+            status_code=422,
+            error="invalid_country_code",
+            message=f"'{req.country}' is not a valid ISO 3166-1 alpha-2 country code.",
+        )
+    if not req.components and req.country != "CA":
+        raise APIError(
+            status_code=422,
+            error="country_not_supported",
+            message=(
+                "Raw address strings are only supported for US and CA. "
+                "Supply pre-parsed 'components' for other countries."
+            ),
+        )
+    provider = request.app.state.registry.get_provider()
+    if not provider.supports_non_us:
+        raise APIError(
+            status_code=422,
+            error="country_not_supported",
+            message=(
+                "Non-US address validation requires the Google provider. "
+                "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
+            ),
+        )
+    if req.components:
+        std: StandardizeResponseV1 = _build_non_us_std(req.components, req.country)
+        raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
+    else:
+        # CA raw string: parse via libpostal then CA standardize
+        libpostal_client = getattr(request.app.state, "libpostal_client", None)
+        try:
+            parse_result = await parse_address(  # type: ignore[union-attr]
+                req.address.strip(), country="CA", libpostal_client=libpostal_client
+            )
+        except LibpostalUnavailableError as exc:
+            raise APIError(
+                status_code=503,
+                error="parsing_unavailable",
+                message=(
+                    "CA address parsing is currently unavailable. Provide pre-parsed components."
+                ),
+            ) from exc
+        std = standardize(
+            parse_result.components.values, country="CA", upstream_warnings=parse_result.warnings
+        )
+        raw_input = req.address
+    return std, raw_input, provider
 
 
 def _v1_to_v2(v1: ValidateResponseV1) -> ValidateResponseV2:
@@ -143,8 +204,8 @@ router = APIRouter(
         "- `address` — raw address string; parsed then standardized automatically.\n"
         "- `components` — pre-parsed component dict; standardized only (parse skipped).\n"
         "When both are supplied, `components` takes precedence.\n\n"
-        "**Non-US addresses** must supply pre-parsed `components` "
-        "(raw strings → 422 `country_not_supported`). "
+        "**Non-US addresses:** CA supports raw strings via libpostal; other countries "
+        "require pre-parsed `components` (raw strings → 422 `country_not_supported`). "
         "Requires `VALIDATION_PROVIDER=google` or a chain containing Google"
         " (e.g. `usps,google`).\n\n"
         "**US DPV match codes** (in `validation.dpv_match_code`):\n"
@@ -188,33 +249,7 @@ async def validate_address_v2(
         )
 
     if req.country != "US":
-        if req.country not in VALID_ISO2:
-            raise APIError(
-                status_code=422,
-                error="invalid_country_code",
-                message=f"'{req.country}' is not a valid ISO 3166-1 alpha-2 country code.",
-            )
-        if not req.components:
-            raise APIError(
-                status_code=422,
-                error="country_not_supported",
-                message=(
-                    "Raw address strings are only supported for US. "
-                    "Supply pre-parsed 'components' for non-US addresses."
-                ),
-            )
-        provider = request.app.state.registry.get_provider()
-        if not provider.supports_non_us:
-            raise APIError(
-                status_code=422,
-                error="country_not_supported",
-                message=(
-                    "Non-US address validation requires the Google provider. "
-                    "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
-                ),
-            )
-        std = _build_non_us_std(req.components, req.country)
-        raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
+        std, raw_input, provider = await _setup_non_us_validate(req, request)
     else:
         check_country(req.country)
 
