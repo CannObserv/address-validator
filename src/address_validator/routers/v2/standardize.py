@@ -1,6 +1,6 @@
 """v2 standardize endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from address_validator.auth import require_api_key
 from address_validator.models import (
@@ -9,8 +9,9 @@ from address_validator.models import (
     StandardizeRequestV1,
     StandardizeResponseV2,
 )
-from address_validator.routers.v1.core import APIError, check_country
+from address_validator.routers.v1.core import APIError, check_country_v2
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
+from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 from address_validator.services.standardizer import standardize
@@ -36,11 +37,13 @@ _COMPONENT_PROFILE_DESCRIPTION = (
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
     summary="Standardize address per national postal profile",
 )
 async def standardize_address_v2(
     req: StandardizeRequestV1,
+    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=_COMPONENT_PROFILE_DESCRIPTION,
@@ -55,7 +58,7 @@ async def standardize_address_v2(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    check_country(req.country)
+    check_country_v2(req.country)
 
     upstream_warnings: list[str] = []
 
@@ -64,13 +67,30 @@ async def standardize_address_v2(
         comps = req.components
     else:
         # model_validator guarantees address is non-blank when components is absent
-        parse_result = await parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
+        libpostal_client = getattr(request.app.state, "libpostal_client", None)
+        try:
+            parse_result = await parse_address(  # type: ignore[union-attr]
+                req.address.strip(), country=req.country, libpostal_client=libpostal_client
+            )
+        except LibpostalUnavailableError as exc:
+            raise APIError(
+                status_code=503,
+                error="parsing_unavailable",
+                message=(
+                    "Address parsing for CA is currently unavailable. "
+                    "Try again shortly or provide pre-parsed components."
+                ),
+            ) from exc
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 
     result = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
     translated = translate_components(result.components.values, component_profile)
     if component_profile == "usps-pub28":
+        spec = result.components.spec
+        spec_version = result.components.spec_version
+    elif req.country == "CA":
+        # CA always uses canada-post spec regardless of component_profile
         spec = result.components.spec
         spec_version = result.components.spec_version
     else:
