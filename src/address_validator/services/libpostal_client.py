@@ -95,7 +95,7 @@ class LibpostalClient:
         try:
             response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
+        except (httpx.NetworkError, httpx.TimeoutException) as exc:
             logger.warning("libpostal sidecar unavailable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
         except httpx.HTTPStatusError as exc:
@@ -114,11 +114,15 @@ class LibpostalClient:
         Uses a lightweight GET /parse probe.  A 2xx status is sufficient —
         the response body is not inspected, so an empty parse result does
         not cause a false negative.
+
+        ``httpx.HTTPStatusError`` is intentionally absent: we do not call
+        ``raise_for_status()``, so non-2xx responses are handled via
+        ``response.is_success`` returning False rather than raising.
         """
         try:
             response = await self._http.get("/parse", params={"address": "1 main st"})
             return response.is_success
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError, RuntimeError):
+        except (httpx.NetworkError, httpx.TimeoutException, RuntimeError):
             return False
 
     async def aclose(self) -> None:

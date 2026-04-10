@@ -15,8 +15,3 @@ See ``docs/usps-pub28.md`` for additional research notes.
 
 USPS_PUB28_SPEC: str = "usps-pub28"
 USPS_PUB28_SPEC_VERSION: str = "2024-10"
-
-# ISO 19160-4 (Addressing — Digital interchange models for international
-# address data) — 2020 edition.
-ISO_19160_4_SPEC: str = "iso-19160-4"
-ISO_19160_4_SPEC_VERSION: str = "2020"

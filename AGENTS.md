@@ -47,6 +47,7 @@ db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_st
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
+services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION); used by v2 routers; USPS Pub 28 identifiers remain in usps_data/spec.py
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
 services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
 services/street_splitter.py  bilingual street component splitter; decomposes libpostal road token into thoroughfare ISO elements; English trailing-type + French leading-type + CA directionals

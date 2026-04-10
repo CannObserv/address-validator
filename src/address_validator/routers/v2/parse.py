@@ -8,7 +8,7 @@ from address_validator.routers.v1.core import APIError, check_country_v2
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
-from address_validator.usps_data.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
+from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
 router = APIRouter(
     prefix="/api/v2",
