@@ -14,12 +14,93 @@
 
 | Action | Path | Responsibility |
 |---|---|---|
-| Modify | `src/address_validator/routers/v1/validate.py` | Country guard + non-US passthrough path |
+| Modify | `src/address_validator/models.py` | Add `"invalid"` to `ValidationResult.status` Literal |
+| Modify | `src/address_validator/routers/v1/validate.py` | Country guard + non-US passthrough path + provider capability check |
 | Modify | `src/address_validator/services/validation/google_client.py` | Non-US API request + `_map_response_international` |
 | Modify | `src/address_validator/services/validation/google_provider.py` | Pass country; read `raw["status"]`; non-US component spec |
 | Modify | `tests/unit/test_validate_router.py` | Non-US acceptance + rejection tests |
 | Modify | `tests/unit/validation/test_google_client.py` | `_map_response_international` tests; US `_map_response` gains `"status"` |
 | Modify | `tests/unit/validation/test_google_provider.py` | Non-US provider tests; update fixtures with `"status"` key |
+
+---
+
+### Task 0: Update `models.py` — add `"not_found"` and `"invalid"` statuses
+
+**Files:**
+- Modify: `src/address_validator/models.py`
+
+The international mapper (Task 2) returns `"invalid"` for geocodable-but-incomplete addresses and `"not_found"` for unverifiable addresses. Neither status is in the `ValidationResult.status` Literal — Pydantic will raise `ValidationError` at runtime without this change.
+
+> **Note (implemented):** Both `"not_found"` and `"invalid"` were added together in commit `3afc33f`.
+
+- [ ] **Step 1: Update `ValidationResult.status` in `models.py`**
+
+Current `status` field (lines ~193–200):
+
+```python
+    status: Literal[
+        "confirmed",
+        "confirmed_missing_secondary",
+        "confirmed_bad_secondary",
+        "not_confirmed",
+        "unavailable",
+        "error",
+    ]
+```
+
+Replace with:
+
+```python
+    status: Literal[
+        "confirmed",
+        "confirmed_missing_secondary",
+        "confirmed_bad_secondary",
+        "not_confirmed",
+        "not_found",
+        "invalid",
+        "unavailable",
+        "error",
+    ]
+```
+
+Also update the `ValidationResult` docstring to document the new statuses:
+
+```python
+    """Provider-returned validation outcome metadata.
+
+    ``status`` is the primary machine-readable result:
+
+    * ``confirmed``                   — DPV code Y: fully confirmed delivery point.
+    * ``confirmed_missing_secondary`` — DPV code S: building confirmed, unit missing.
+    * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
+    * ``not_confirmed``               — DPV code N: address not found in USPS database.
+    * ``not_found``                   — non-US: address could not be geocoded or verified.
+    * ``invalid``                     — non-US: address is geocodable but incomplete (e.g. missing street number).
+    * ``unavailable``                 — provider not configured or unreachable.
+    * ``error``                       — provider rejected the input as malformed.
+    """
+```
+
+- [ ] **Step 2: Run the existing test suite to confirm no regressions**
+
+```bash
+uv run pytest --no-cov -x
+```
+
+Expected: all PASS (adding a Literal value is additive — no existing tests should fail).
+
+- [ ] **Step 3: Lint**
+
+```bash
+uv run ruff check src/address_validator/models.py --fix
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/address_validator/models.py
+git commit -m "#88 feat: add 'invalid' status to ValidationResult for non-US geocodable-but-incomplete addresses"
+```
 
 ---
 
@@ -128,6 +209,24 @@ class TestValidateNonUS:
         assert std_arg.city == "London"
         assert std_arg.address_line_1 == "10 Downing St"
 
+    def test_non_us_components_no_google_provider_returns_422(
+        self, client: TestClient
+    ) -> None:
+        # NullProvider (the default) cannot handle non-US — must 422
+        resp = client.post(
+            "/api/v1/validate",
+            json={
+                "components": {
+                    "address_line_1": "10 Downing St",
+                    "city": "London",
+                    "postal_code": "SW1A 2AA",
+                },
+                "country": "GB",
+            },
+        )
+        assert resp.status_code == 422
+        assert resp.json()["error"] == "country_not_supported"
+
     def test_us_requests_still_work(self, client: TestClient) -> None:
         with _mock_registry_with(_make_null_provider(NULL_RESPONSE)):
             resp = client.post(
@@ -184,11 +283,21 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
     if req.country != "US":
         if not req.components:
             raise APIError(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                status_code=422,
                 error="country_not_supported",
                 message=(
-                    f"Raw address strings are only supported for US. "
-                    f"Supply pre-parsed 'components' for non-US addresses."
+                    "Raw address strings are only supported for US. "
+                    "Supply pre-parsed 'components' for non-US addresses."
+                ),
+            )
+        provider = request.app.state.registry.get_provider()
+        if not isinstance(provider, GoogleProvider):
+            raise APIError(
+                status_code=422,
+                error="country_not_supported",
+                message=(
+                    "Non-US address validation requires the Google provider. "
+                    "Set VALIDATION_PROVIDER=google to enable it."
                 ),
             )
         std = _build_non_us_std(req.components, req.country)
@@ -208,17 +317,19 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
             raw_input = req.address
 
         std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+        provider = request.app.state.registry.get_provider()
 
-    provider = request.app.state.registry.get_provider()
-    ...  # rest of function unchanged
+    ...  # rest of function unchanged (provider is now set in both branches)
 ```
 
-Also add the `_build_non_us_std` helper function and its import. Add to the imports at the top of `validate.py`:
+Note: `provider` is assigned inside each branch so both paths share the same downstream `provider.validate(std, ...)` call without a second `get_provider()` call.
+
+Also add the `_build_non_us_std` helper function and its imports. Add to the imports at the top of `validate.py`:
 
 ```python
-from fastapi import status
 from address_validator.models import ComponentSet, StandardizeResponseV1
 from address_validator.services.validation._helpers import _build_validated_string
+from address_validator.services.validation.google_provider import GoogleProvider
 ```
 
 Add the helper function before the router definition:
@@ -979,7 +1090,8 @@ git commit -m "#88 fix: coverage/lint cleanup for non-US validate"
 
 ## Notes for the implementer
 
-- `validate.py` already imports `from fastapi import APIRouter, Depends, Request` — add `status` to that import.
+- `validate.py` already imports `from fastapi import APIRouter, Depends, Request` — no change needed, `status` module import is not used (raw integer `422` used instead, matching existing code style).
 - `validate.py` already imports `from address_validator.models import (ErrorResponse, ValidateRequestV1, ValidateResponseV1, ValidationResult)` — add `ComponentSet, StandardizeResponseV1` to that block.
+- `validate.py` needs `from address_validator.services.validation.google_provider import GoogleProvider` for the `isinstance` check — add to imports.
 - `google_provider.py` docstring says "Validates US addresses" — update to "Validates addresses" after the functional changes.
 - The `test_google_provider.py` fixtures `CLIENT_RESULT_WITH_WARNINGS` uses `**CLIENT_RESULT_Y` spread — after adding `"status"` to `CLIENT_RESULT_Y`, it will inherit correctly; no separate fix needed for that fixture.
