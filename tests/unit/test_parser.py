@@ -2,10 +2,12 @@
 
 import logging
 from unittest import mock
+from unittest.mock import AsyncMock
 
 import pytest
 import usaddress
 
+from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
@@ -135,6 +137,26 @@ class TestParseAddress:
         result = await parse_address("123 Main) St, Springfield, IL")
         assert "(" not in str(result.components.values)
         assert ")" not in str(result.components.values)
+
+    async def test_ca_no_libpostal_client_raises_unavailable(self) -> None:
+        with pytest.raises(LibpostalUnavailableError, match="No libpostal client configured"):
+            await parse_address("350 rue des Lilas, Quebec QC", country="CA", libpostal_client=None)
+
+    async def test_ca_libpostal_client_called(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.parse.return_value = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "locality": "TORONTO",
+            "administrative_area": "ON",
+            "postcode": "M5V 2T6",
+        }
+        result = await parse_address(
+            "123 Main St Toronto ON", country="CA", libpostal_client=mock_client
+        )
+        mock_client.parse.assert_awaited_once()
+        assert result.country == "CA"
+        assert result.components.values["locality"] == "TORONTO"
 
     async def test_intersection_parsed(self) -> None:
         result = await parse_address("1st St & 2nd Ave, Seattle, WA")

@@ -13,6 +13,7 @@ from address_validator.routers.v1.core import APIError, check_country
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
+from address_validator.usps_data.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
 router = APIRouter(
     prefix="/api/v2",
@@ -73,8 +74,8 @@ async def standardize_address_v2(
         spec = result.components.spec
         spec_version = result.components.spec_version
     else:
-        spec = "iso-19160-4"
-        spec_version = "2020"
+        spec = ISO_19160_4_SPEC
+        spec_version = ISO_19160_4_SPEC_VERSION
     return StandardizeResponseV2(
         address_line_1=result.address_line_1,
         address_line_2=result.address_line_2,

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class LibpostalUnavailableError(RuntimeError):
+class LibpostalUnavailableError(Exception):
     """Raised when the libpostal sidecar cannot be reached."""
 
 
@@ -109,11 +109,16 @@ class LibpostalClient:
         return _map_tags(response.json())
 
     async def health_check(self) -> bool:
-        """Return True if the sidecar is reachable and responds correctly."""
+        """Return True if the sidecar is reachable (responds with HTTP 2xx).
+
+        Uses a lightweight GET /parse probe.  A 2xx status is sufficient —
+        the response body is not inspected, so an empty parse result does
+        not cause a false negative.
+        """
         try:
-            result = await self.parse("1 main st")
-            return bool(result)
-        except LibpostalUnavailableError:
+            response = await self._http.get("/parse", params={"address": "1 main st"})
+            return response.is_success
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError, RuntimeError):
             return False
 
     async def aclose(self) -> None:

@@ -206,9 +206,12 @@ def split_road(road: str) -> dict[str, str]:
         # Nothing was parsed at all — store original as name (fallback)
         result["thoroughfare_name"] = road.upper()
 
-    # --- Fallback: if only directionals were extracted with no name ---
+    # --- Fallback: if nothing meaningful was extracted, use the full value as name ---
     if "thoroughfare_name" not in result and (
-        "thoroughfare_leading_type" not in result and "thoroughfare_trailing_type" not in result
+        "thoroughfare_leading_type" not in result
+        and "thoroughfare_trailing_type" not in result
+        and "thoroughfare_post_direction" not in result
+        and "thoroughfare_pre_direction" not in result
     ):
         result = {"thoroughfare_name": road.upper()}
 

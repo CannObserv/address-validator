@@ -8,6 +8,7 @@ from address_validator.routers.v1.core import APIError, check_country_v2
 from address_validator.services.component_profiles import VALID_PROFILES, translate_components
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
+from address_validator.usps_data.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
 router = APIRouter(
     prefix="/api/v2",
@@ -51,7 +52,7 @@ async def parse(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    check_country_v2(req.country)
+    country = check_country_v2(req.country)
     raw = req.address.strip()
     if not raw:
         raise APIError(
@@ -61,7 +62,7 @@ async def parse(
         )
     libpostal_client = getattr(request.app.state, "libpostal_client", None)
     try:
-        result = await parse_address(raw, country=req.country, libpostal_client=libpostal_client)
+        result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
         raise APIError(
             status_code=503,
@@ -76,8 +77,8 @@ async def parse(
         spec = result.components.spec
         spec_version = result.components.spec_version
     else:
-        spec = "iso-19160-4"
-        spec_version = "2020"
+        spec = ISO_19160_4_SPEC
+        spec_version = ISO_19160_4_SPEC_VERSION
     return ParseResponseV2(
         input=result.input,
         country=result.country,

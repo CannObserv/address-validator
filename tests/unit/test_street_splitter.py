@@ -71,3 +71,10 @@ class TestFallback:
     def test_single_token_is_thoroughfare_name(self) -> None:
         r = split_road("broadway")
         assert r["thoroughfare_name"] == "BROADWAY"
+
+    def test_bare_directional_preserved_not_overwritten(self) -> None:
+        # Edge case: libpostal emits a bare directional as road (no street name).
+        # The extracted directional must survive the fallback guard.
+        r = split_road("ouest")
+        assert r.get("thoroughfare_post_direction") == "O"
+        assert "thoroughfare_name" not in r

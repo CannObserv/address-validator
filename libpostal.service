@@ -7,6 +7,7 @@ Requires=docker.service
 [Service]
 Restart=always
 RestartSec=5
+TimeoutStartSec=120
 
 # Remove any stale container from a previous run before starting.
 ExecStartPre=-/usr/bin/docker stop libpostal
