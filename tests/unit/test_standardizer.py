@@ -346,3 +346,52 @@ class TestStandardizeCA:
         assert "TORONTO" in result.standardized
         assert "ON" in result.standardized
         assert "M5V 2T6" in result.standardized
+
+    def test_unrecognised_province_warns_and_uppercases(self) -> None:
+        comps = {
+            "premise_number": "1",
+            "thoroughfare_name": "TEST",
+            "locality": "TESTVILLE",
+            "administrative_area": "XX",  # not in PROVINCE_MAP
+            "postcode": "A1A 1A1",
+        }
+        result = standardize(comps, country="CA")
+        assert any("Unrecognised" in w for w in result.warnings)
+        assert result.components.values["administrative_area"] == "XX"
+
+    def test_directional_normalised(self) -> None:
+        comps = {
+            "premise_number": "350",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_post_direction": "NORTH",  # full → N
+            "locality": "TORONTO",
+            "administrative_area": "ON",
+            "postcode": "M5V 2T6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.values["thoroughfare_post_direction"] == "N"
+
+    def test_french_directional_normalised(self) -> None:
+        comps = {
+            "premise_number": "350",
+            "thoroughfare_name": "DES LILAS",
+            "thoroughfare_post_direction": "OUEST",  # French full → O
+            "locality": "QUEBEC",
+            "administrative_area": "QC",
+            "postcode": "G1L 1B6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.components.values["thoroughfare_post_direction"] == "O"
+
+    def test_non_normalized_fields_uppercased(self) -> None:
+        """Fields not explicitly normalized (city, street name) are uppercased via _get."""
+        comps = {
+            "premise_number": "123",
+            "thoroughfare_name": "main",  # lowercase
+            "locality": "toronto",  # lowercase
+            "administrative_area": "ON",
+            "postcode": "M5V 2T6",
+        }
+        result = standardize(comps, country="CA")
+        assert result.city == "TORONTO"
+        assert result.components.values["thoroughfare_name"] == "MAIN"

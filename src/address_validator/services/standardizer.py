@@ -160,20 +160,22 @@ def _standardize_ca(
     std: dict[str, str] = {}
     warnings: list[str] = list(upstream_warnings)
 
-    # Copy all components as-is first; normalise known fields below.
-    for k, v in components.items():
-        if v:
-            std[k] = v
+    # Normalise all components via _get (strip, uppercase, clean) — mirrors
+    # the US standardizer which applies the same chain to every field.
+    for k in components:
+        val = _get(components, k)
+        if val:
+            std[k] = val
 
     # --- administrative_area (province) ---
     region = _get(components, "administrative_area")
     if region:
-        abbr = PROVINCE_MAP.get(region.upper())
+        abbr = PROVINCE_MAP.get(region)
         if abbr:
             std["administrative_area"] = abbr
         else:
             warnings.append(f"Unrecognised province/territory: '{region}'")
-            std["administrative_area"] = region.upper()
+            std["administrative_area"] = region
 
     # --- postcode ---
     postcode = _get(components, "postcode")
@@ -184,13 +186,13 @@ def _standardize_ca(
     for key in ("thoroughfare_trailing_type", "thoroughfare_leading_type"):
         v = _get(components, key)
         if v:
-            std[key] = CA_SUFFIX_MAP.get(v.upper(), v.upper())
+            std[key] = CA_SUFFIX_MAP.get(v, v)
 
     # --- directionals ---
     for key in ("thoroughfare_pre_direction", "thoroughfare_post_direction"):
         v = _get(components, key)
         if v:
-            std[key] = CA_DIRECTIONAL_MAP.get(v.lower(), v.upper())
+            std[key] = CA_DIRECTIONAL_MAP.get(v.lower(), v)
 
     # --- Build top-level response fields ---
     locality = std.get("locality", "")

@@ -195,6 +195,7 @@ router = APIRouter(
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
         429: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
     summary="Validate an address against an authoritative source",
     description=(
