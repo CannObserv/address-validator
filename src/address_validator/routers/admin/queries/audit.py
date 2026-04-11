@@ -30,7 +30,14 @@ async def get_audit_rows(
     conditions: list[ColumnElement] = []
 
     if endpoint:
-        conditions.append(audit_log.c.endpoint == f"/api/v1/{endpoint}")
+        conditions.append(
+            audit_log.c.endpoint.in_(
+                [
+                    f"/api/v1/{endpoint}",
+                    f"/api/v2/{endpoint}",
+                ]
+            )
+        )
     if provider:
         conditions.append(audit_log.c.provider == provider)
     if client_ip:
