@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from address_validator.main import app
 from address_validator.models import ValidateResponseV1, ValidationResult
 from address_validator.services.libpostal_client import LibpostalUnavailableError
@@ -124,3 +126,37 @@ class TestV2ValidateCA:
         )
         assert response.status_code == 422
         assert response.json()["error"] == "country_not_supported"
+
+    def test_ca_response_includes_lat_lng(self, client) -> None:
+        """lat/lng from the provider are passed through to the v2 validate response."""
+        mock_parse = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "locality": "TORONTO",
+            "administrative_area": "ON",
+            "postcode": "M5V 2T6",
+        }
+        provider = _make_non_us_provider(
+            ValidateResponseV1(
+                country="CA",
+                validation=ValidationResult(status="confirmed"),
+                latitude=43.6826,
+                longitude=-79.2994,
+            )
+        )
+        with (
+            _mock_registry_with(provider),
+            patch(
+                "address_validator.services.libpostal_client.LibpostalClient.parse",
+                new_callable=AsyncMock,
+                return_value=mock_parse,
+            ),
+        ):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St Toronto ON M5V 2T6", "country": "CA"},
+            )
+        data = response.json()
+        assert data["latitude"] == pytest.approx(43.6826)
+        assert data["longitude"] == pytest.approx(-79.2994)
