@@ -27,7 +27,14 @@ if TYPE_CHECKING:
 # Shared expressions
 # ---------------------------------------------------------------------------
 
-_API_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
+_API_ENDPOINTS = (
+    "/api/v1/parse",
+    "/api/v1/standardize",
+    "/api/v1/validate",
+    "/api/v2/parse",
+    "/api/v2/standardize",
+    "/api/v2/validate",
+)
 _API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
 
 # ---------------------------------------------------------------------------
