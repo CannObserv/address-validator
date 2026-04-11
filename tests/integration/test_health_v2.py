@@ -11,6 +11,10 @@ class TestHealthV2:
         assert data["status"] == "ok"
         assert data["api_version"] == "2"
         assert data["database"] == "unconfigured"
+        # libpostal field is not asserted here: its value depends on whether the
+        # sidecar is reachable in the test environment. Libpostal-specific
+        # assertions are covered by test_libpostal_ok and
+        # test_libpostal_unavailable_does_not_degrade_status.
 
     def test_health_no_auth_required(self, client_no_auth) -> None:
         """Health check must be accessible without an API key."""

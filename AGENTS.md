@@ -93,8 +93,9 @@ See also: `docs/STYLE.md` — visual design, a11y, responsive, and performance s
 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
 - Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
-- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`
+- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`, `GET /api/v2/health`
 - `GET /api/v1/health` returns `{"status": "ok"|"degraded", "api_version": "1", "database": "ok"|"error"|"unconfigured"}`; HTTP 503 when `status == "degraded"` (DB unreachable); `database == "unconfigured"` when no DSN is configured
+- `GET /api/v2/health` returns the same shape plus `"libpostal": "ok"|"unavailable"`; libpostal unavailability does NOT affect `status` or HTTP status code
 - Tests: `conftest.py` sets `API_KEY` via `os.environ.setdefault` — value is read by the lifespan startup hook when `TestClient` first starts the app
 - Google provider uses Application Default Credentials (ADC) — no API key. Required IAM roles: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin dashboard (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`); any authenticated user is admin
