@@ -24,6 +24,15 @@ router = APIRouter(
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
     },
+    summary="Parse a US address into USPS Pub 28 components",
+    description=(
+        "Parses a raw US address string into labelled USPS Publication 28 components "
+        "using the usaddress CRF model.\n\n"
+        "US only. For CA support use `POST /api/v2/parse`.\n\n"
+        "Components are returned with USPS Pub 28 snake_case key names "
+        "(e.g. `premise_number`, `thoroughfare_name`). "
+        "See `components.spec` and `components.spec_version` for the schema identifier."
+    ),
 )
 async def parse_address_v1(req: ParseRequestV1) -> ParseResponseV1:
     check_country(req.country)

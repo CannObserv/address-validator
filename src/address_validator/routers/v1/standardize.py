@@ -32,6 +32,17 @@ router = APIRouter(
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
     },
+    summary="Standardize a US address per USPS Publication 28",
+    description=(
+        "Standardizes a US address using USPS Publication 28 abbreviation tables "
+        "(suffixes, directionals, state codes, unit designators).\n\n"
+        "US only. For CA support use `POST /api/v2/standardize`.\n\n"
+        "Both input modes are supported:\n"
+        "- `address` — raw string; parsed then standardized automatically.\n"
+        "- `components` — pre-parsed USPS Pub 28 component dict; standardized only "
+        "(parse step skipped).\n"
+        "When both are supplied, `components` takes precedence."
+    ),
 )
 async def standardize_address_v1(req: StandardizeRequestV1) -> StandardizeResponseV1:
     check_country(req.country)

@@ -32,8 +32,23 @@ _COMPONENT_PROFILE_DESCRIPTION = (
         401: {"model": ErrorResponse},
         403: {"model": ErrorResponse},
         422: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
     summary="Parse address into ISO 19160-4 components",
+    description=(
+        "Parses a raw address string into labelled ISO 19160-4 components.\n\n"
+        "Supported countries: **US** and **CA**. Other country codes → "
+        "422 `country_not_supported`.\n\n"
+        "**US** parsing uses the usaddress CRF model. "
+        "**CA** parsing requires the libpostal sidecar (port 4400); "
+        "returns HTTP 503 `parsing_unavailable` when the sidecar is unreachable.\n\n"
+        "The `component_profile` query parameter controls the key vocabulary "
+        "in `components.values`:\n"
+        "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
+        "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
+        "- `canada-post` — reserved; currently identical to `iso-19160-4`\n\n"
+        "HTTP 503 is returned when CA address parsing (libpostal sidecar) is unavailable."
+    ),
 )
 async def parse(
     req: ParseRequestV1,

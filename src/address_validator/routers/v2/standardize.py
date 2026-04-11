@@ -40,6 +40,29 @@ _COMPONENT_PROFILE_DESCRIPTION = (
         503: {"model": ErrorResponse},
     },
     summary="Standardize address per national postal profile",
+    description=(
+        "Standardizes address components according to the national postal profile "
+        "for the given country.\n\n"
+        "Supported countries: **US** and **CA**. Other country codes → "
+        "422 `country_not_supported`.\n\n"
+        "Both input modes are supported:\n"
+        "- `address` — raw string; parsed then standardized automatically.\n"
+        "- `components` — pre-parsed ISO 19160-4 component dict; standardized only "
+        "(parse step skipped).\n"
+        "When both are supplied, `components` takes precedence.\n\n"
+        "**US** standardization applies USPS Publication 28 abbreviation tables "
+        "(suffixes, directionals, state codes, unit designators).\n\n"
+        "**CA** standardization applies Canada Post tables "
+        "(bilingual suffixes, province codes, postal code formatting). "
+        "Raw string input requires the libpostal sidecar (port 4400); "
+        "returns HTTP 503 `parsing_unavailable` when the sidecar is unreachable.\n\n"
+        "The `component_profile` query parameter controls the key vocabulary "
+        "in `components.values`:\n"
+        "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
+        "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
+        "- `canada-post` — reserved; currently identical to `iso-19160-4`\n\n"
+        "CA responses always use `components.spec='canada-post'` regardless of profile."
+    ),
 )
 async def standardize_address_v2(
     req: StandardizeRequestV1,

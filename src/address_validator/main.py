@@ -81,21 +81,25 @@ def _load_custom_model() -> None:
 _DESCRIPTION = """
 Parse and standardize physical addresses.
 
-Uses geography-neutral field names (`region`, `postal_code`) and is
-designed to support multiple countries as additional parsers are added.
-Currently **US addresses only** (USPS Publication 28).
+Uses geography-neutral field names (`region`, `postal_code`).
+Supports **US** (USPS Publication 28) and **Canada** (Canada Post / libpostal).
 
 ## Versioning
 
 | Prefix | Status |
 |---|---|
-| `/api/v1/` | **Current** |
+| `/api/v2/` | **Current** — ISO 19160-4 component keys; US + CA |
+| `/api/v1/` | Stable — USPS Pub 28 component keys; US only |
 """
 
 _TAGS = [
     {
+        "name": "v2",
+        "description": "Current API — ISO 19160-4 component keys; US and CA addresses.",
+    },
+    {
         "name": "v1",
-        "description": "Current API — versioned routes under `/api/v1/`.",
+        "description": "Stable API — USPS Pub 28 component keys; US addresses only.",
     },
     {
         "name": "health",
