@@ -9,3 +9,4 @@ scripts/bin/
 node_modules/
 .worktrees
 *.egg-info/
+.claude/worktrees/
