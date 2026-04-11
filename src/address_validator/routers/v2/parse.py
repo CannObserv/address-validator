@@ -46,8 +46,7 @@ _COMPONENT_PROFILE_DESCRIPTION = (
         "in `components.values`:\n"
         "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
         "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
-        "- `canada-post` — reserved; currently identical to `iso-19160-4`\n\n"
-        "HTTP 503 is returned when CA address parsing (libpostal sidecar) is unavailable."
+        "- `canada-post` — reserved; currently identical to `iso-19160-4`"
     ),
 )
 async def parse(
