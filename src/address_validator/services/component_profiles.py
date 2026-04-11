@@ -56,6 +56,14 @@ _PROFILES: dict[str, dict[str, str]] = {
 #: Set of valid profile identifiers accepted by the API.
 VALID_PROFILES: frozenset[str] = frozenset(_PROFILES)
 
+#: Human-readable description of the ``component_profile`` query parameter.
+COMPONENT_PROFILE_DESCRIPTION = (
+    "Component key vocabulary. "
+    "`iso-19160-4` (default): ISO 19160-4 element names. "
+    "`usps-pub28`: USPS Publication 28 snake_case names (v1 backward compat). "
+    "`canada-post`: reserved; currently identical to `iso-19160-4`."
+)
+
 
 def translate_components(values: dict[str, str], profile: str) -> dict[str, str]:
     """Return *values* with keys renamed per *profile*.

@@ -57,6 +57,7 @@ from address_validator.models import (
 from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import (
+    COMPONENT_PROFILE_DESCRIPTION,
     VALID_PROFILES,
     translate_components_to_iso,
 )
@@ -69,13 +70,6 @@ from address_validator.services.validation.errors import (
 )
 
 logger = logging.getLogger(__name__)
-
-_COMPONENT_PROFILE_DESCRIPTION = (
-    "Component key vocabulary. "
-    "`iso-19160-4` (default): ISO 19160-4 element names. "
-    "`usps-pub28`: USPS Publication 28 snake_case names (v1 backward compat). "
-    "`canada-post`: reserved; currently identical to `iso-19160-4`."
-)
 
 
 def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeResponseV1:
@@ -241,7 +235,7 @@ async def validate_address_v2(
     request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
-        description=_COMPONENT_PROFILE_DESCRIPTION,
+        description=COMPONENT_PROFILE_DESCRIPTION,
     ),
 ) -> ValidateResponseV2:
     if component_profile not in VALID_PROFILES:
