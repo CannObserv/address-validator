@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, Query, Request
 from address_validator.auth import require_api_key
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV2
 from address_validator.routers.v1.core import APIError, check_country_v2
-from address_validator.services.component_profiles import VALID_PROFILES, translate_components
+from address_validator.services.component_profiles import (
+    COMPONENT_PROFILE_DESCRIPTION,
+    VALID_PROFILES,
+    translate_components,
+)
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
@@ -14,13 +18,6 @@ router = APIRouter(
     prefix="/api/v2",
     tags=["v2"],
     dependencies=[Depends(require_api_key)],
-)
-
-_COMPONENT_PROFILE_DESCRIPTION = (
-    "Component key vocabulary. "
-    "`iso-19160-4` (default): ISO 19160-4 element names. "
-    "`usps-pub28`: USPS Publication 28 snake_case names (v1 backward compat). "
-    "`canada-post`: reserved; currently identical to `iso-19160-4`."
 )
 
 
@@ -54,7 +51,7 @@ async def parse(
     request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
-        description=_COMPONENT_PROFILE_DESCRIPTION,
+        description=COMPONENT_PROFILE_DESCRIPTION,
     ),
 ) -> ParseResponseV2:
     if component_profile not in VALID_PROFILES:
