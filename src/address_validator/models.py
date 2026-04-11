@@ -343,6 +343,13 @@ class CountryFormatResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class HealthResponseV2(BaseModel):
+    status: Literal["ok", "degraded"] = "ok"
+    api_version: Literal["2"] = "2"
+    database: Literal["ok", "error", "unconfigured"] = "unconfigured"
+    libpostal: Literal["ok", "unavailable"] = "unavailable"
+
+
 class ParseResponseV2(BaseModel):
     """Response body for POST /api/v2/parse."""
 

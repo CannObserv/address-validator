@@ -31,6 +31,7 @@ from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v1.core import APIError, api_error_response
 from address_validator.routers.v2 import countries as v2_countries
+from address_validator.routers.v2 import health as v2_health
 from address_validator.routers.v2 import parse as v2_parse
 from address_validator.routers.v2 import standardize as v2_standardize
 from address_validator.routers.v2 import validate as v2_validate
@@ -265,6 +266,7 @@ app.include_router(v1_validate.router)
 app.include_router(v1_countries.router)
 
 # v2 routes
+app.include_router(v2_health.router)
 app.include_router(v2_parse.router)
 app.include_router(v2_standardize.router)
 app.include_router(v2_validate.router)
