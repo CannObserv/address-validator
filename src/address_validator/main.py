@@ -270,8 +270,8 @@ app.include_router(v2_standardize.router)
 app.include_router(v2_validate.router)
 app.include_router(v2_countries.router)
 
-# Admin dashboard
-app.include_router(admin_router)
+# Admin dashboard — excluded from public OpenAPI schema (exe.dev proxy auth, not X-API-Key)
+app.include_router(admin_router, include_in_schema=False)
 app.mount(
     "/static/admin",
     StaticFiles(directory=str(_THIS_DIR / "static" / "admin")),
