@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Type alias for what pipeline functions return.
+# provider type is object because ValidationProvider is a Protocol (not a base class)
 PipelineResult = tuple[StandardizedAddress, "str | None", object]
 
 

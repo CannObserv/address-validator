@@ -41,13 +41,11 @@ from address_validator.auth import require_api_key
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ErrorResponse,
-    StandardizeResponseV1,
     ValidateRequestV1,
     ValidateResponseV1,
     ValidationResult,
 )
 from address_validator.routers.deps import get_registry
-from address_validator.routers.v1.core import check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -115,7 +113,6 @@ async def validate_address_v1(
     if req.country != "US":
         std, raw_input, provider = await run_non_us_pipeline_v1(req, registry)
     else:
-        check_country(req.country)
         std, raw_input, provider = await run_us_pipeline(
             req, registry, component_profile="usps-pub28"
         )
@@ -143,8 +140,3 @@ async def validate_address_v1(
         result = result.model_copy(update={"warnings": std.warnings + result.warnings})
 
     return result
-
-
-# Expose StandardizeResponseV1 for callers that imported it from this module
-# in older code paths (backward-compat shim).
-__all__ = ["StandardizeResponseV1", "router", "validate_address_v1"]
