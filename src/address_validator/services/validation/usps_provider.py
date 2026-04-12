@@ -5,7 +5,7 @@ import logging
 from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
+    StandardizedAddress,
     ValidateResponseV1,
     ValidationResult,
 )
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class USPSProvider:
     """Validates US addresses against the USPS Addresses API v3.
 
-    Receives a fully normalised :class:`~models.StandardizeResponseV1` from the
+    Receives a fully normalised :class:`~models.StandardizedAddress` from the
     router (the result of the parse → standardize pipeline).  The
     ``address_line_1`` field carries the standardized street line sent to the
     USPS API.
@@ -39,7 +39,7 @@ class USPSProvider:
         return self._client
 
     async def validate(
-        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+        self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
         logger.debug("USPSProvider.validate: calling USPS API, country=%s", std.country)
         raw = await self._client.validate_address(

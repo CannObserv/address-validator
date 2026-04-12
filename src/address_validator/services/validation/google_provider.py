@@ -5,7 +5,7 @@ import logging
 from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
+    StandardizedAddress,
     ValidateResponseV1,
     ValidationResult,
 )
@@ -22,7 +22,7 @@ _WARNING_UNCONFIRMED = "One or more address components are unconfirmed"
 class GoogleProvider:
     """Validates addresses against the Google Address Validation API.
 
-    Receives a fully normalised :class:`~models.StandardizeResponseV1` from the
+    Receives a fully normalised :class:`~models.StandardizedAddress` from the
     router.  The ``address_line_1`` field carries the street line sent to the API.
 
     **US addresses** use ``enableUspsCass: true`` for USPS CASS-certified DPV
@@ -48,7 +48,7 @@ class GoogleProvider:
         return self._client
 
     async def validate(
-        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+        self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
         logger.debug("GoogleProvider.validate: calling Google API, country=%s", std.country)
         raw = await self._client.validate_address(

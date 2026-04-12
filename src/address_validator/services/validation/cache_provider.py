@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
+    StandardizedAddress,
     ValidateResponseV1,
     ValidationResult,
 )
@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _make_pattern_key(std: StandardizeResponseV1) -> str:
+def _make_pattern_key(std: StandardizedAddress) -> str:
     """SHA-256 of the sorted standardised component values + country.
 
     Sorting the dict eliminates key-insertion-order non-determinism.
@@ -371,7 +371,7 @@ class CachingProvider:
         return self._inner.supports_non_us
 
     async def validate(
-        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+        self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
         """Check the cache; delegate to inner provider on miss; store the result.
 

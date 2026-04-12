@@ -2,14 +2,14 @@
 
 from typing import Protocol, runtime_checkable
 
-from address_validator.models import StandardizeResponseV1, ValidateResponseV1
+from address_validator.models import StandardizedAddress, ValidateResponseV1
 
 
 @runtime_checkable
 class ValidationProvider(Protocol):
     """Async interface for address-validation backends.
 
-    All providers receive a fully normalised :class:`~models.StandardizeResponseV1`
+    All providers receive a fully normalised :class:`~models.StandardizedAddress`
     (the result of the parse → standardize pipeline) rather than raw user input.
     The router owns normalisation; providers own validation only.
 
@@ -22,7 +22,7 @@ class ValidationProvider(Protocol):
     """True if this provider can validate non-US addresses."""
 
     async def validate(
-        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+        self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
         """Validate the standardised address *std* and return an authoritative response.
 
