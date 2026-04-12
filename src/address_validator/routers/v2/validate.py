@@ -45,7 +45,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from address_validator.auth import require_api_key
 from address_validator.core.address_format import build_validated_string
-from address_validator.core.countries import VALID_ISO2, check_country
+from address_validator.core.countries import VALID_ISO2
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
@@ -252,8 +252,6 @@ async def validate_address_v2(
     if req.country != "US":
         std, raw_input, provider = await _setup_non_us_validate(req, request)
     else:
-        check_country(req.country)
-
         upstream_warnings: list[str] = []
 
         if req.components:

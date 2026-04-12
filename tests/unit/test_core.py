@@ -1,8 +1,8 @@
-"""Unit tests for routers/v1/core.py — APIError and api_error_response."""
+"""Unit tests for core.errors — APIError and api_error_response."""
 
 import json
 
-from address_validator.routers.v1.core import APIError, api_error_response
+from address_validator.core.errors import APIError, api_error_response
 
 
 class TestApiErrorResponse:
