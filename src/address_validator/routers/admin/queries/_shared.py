@@ -9,7 +9,6 @@ import sqlalchemy as sa
 from sqlalchemy import func, select
 
 from address_validator.db.tables import (
-    ERROR_STATUS_MIN,
     audit_daily_stats,
     audit_log,
 )
@@ -97,6 +96,3 @@ def _from_archived(columns: list, *where: ColumnElement) -> Select:
     for cond in where:
         stmt = stmt.where(cond)
     return stmt
-
-
-__all__ = ["ERROR_STATUS_MIN"]
