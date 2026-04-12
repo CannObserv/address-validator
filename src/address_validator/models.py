@@ -269,6 +269,12 @@ class StandardizeResponseV1(BaseModel):
     api_version: Literal["1"] = "1"
 
 
+#: Version-neutral alias for the internal standardized address representation.
+#: Use this name in service-layer and provider code; ``StandardizeResponseV1``
+#: remains the public v1 API response type.
+StandardizedAddress = StandardizeResponseV1
+
+
 # ---------------------------------------------------------------------------
 # Response models — v1 countries
 # ---------------------------------------------------------------------------

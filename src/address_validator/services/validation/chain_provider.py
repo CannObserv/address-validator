@@ -7,7 +7,7 @@ Do not instantiate directly in application code.
 
 import logging
 
-from address_validator.models import StandardizeResponseV1, ValidateResponseV1
+from address_validator.models import StandardizedAddress, ValidateResponseV1
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
     ProviderBadRequestError,
@@ -57,7 +57,7 @@ class ChainProvider:
         return any(p.supports_non_us for p in self._providers)
 
     async def validate(
-        self, std: StandardizeResponseV1, *, raw_input: str | None = None
+        self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
         last_transient: ProviderRateLimitedError | ProviderAtCapacityError | None = None
         last_bad_request: ProviderBadRequestError | None = None

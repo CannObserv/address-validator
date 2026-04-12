@@ -50,7 +50,7 @@ HTTP request
 
 db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates)
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
-models.py           API contract source of truth
+models.py           API contract source of truth; `StandardizedAddress = StandardizeResponseV1` type alias — use `StandardizedAddress` in service/provider code, `StandardizeResponseV1` only in v1 router return types
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
 core/countries.py  SUPPORTED_COUNTRIES, SUPPORTED_COUNTRIES_V2, VALID_ISO2 frozensets; check_country() (v1), check_country_v2() (v2); canonical home for country validation shared across all router versions
 core/errors.py     APIError exception class; api_error_response() — serialises APIError to JSONResponse; registered in main.py exception handler; imported by all router layers
