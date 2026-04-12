@@ -32,6 +32,7 @@ HTTP request
      ├─ standardize      →   US: ISO keys via USPS pipeline; CA: ISO keys via _standardize_ca() (canada-post spec); enabled via check_country_v2
      ├─ validate         →   US: same as v1; CA raw string: libpostal parse → _standardize_ca() → provider; other non-US: components-only; _v1_to_v2() drops lat/lng
      └─ countries        →   same service as v1 (CountryFormatResponseV2 adds api_version field)
+ └─ routers/deps.py            shared FastAPI dependency functions — get_registry() → ProviderRegistry; get_libpostal_client() → LibpostalClient | None; used by v1/validate, v2/parse, v2/standardize, v2/validate
  └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
      ├─ router.py             top-level /admin router
      ├─ deps.py               AdminUser from exe.dev proxy headers

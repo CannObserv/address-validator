@@ -41,7 +41,7 @@ import json
 import logging
 import math
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
 from address_validator.core.address_format import build_validated_string
@@ -56,19 +56,21 @@ from address_validator.models import (
     ValidateResponseV2,
     ValidationResult,
 )
+from address_validator.routers.deps import get_libpostal_client, get_registry
 from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import (
     COMPONENT_PROFILE_DESCRIPTION,
     VALID_PROFILES,
     translate_components_to_iso,
 )
-from address_validator.services.libpostal_client import LibpostalUnavailableError
+from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
+from address_validator.services.validation.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +101,8 @@ def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeRe
 
 async def _setup_non_us_validate(
     req: "ValidateRequestV1",
-    request: "Request",
+    registry: "ProviderRegistry",
+    libpostal_client: "LibpostalClient | None",
 ) -> "tuple[StandardizeResponseV1, str | None, object]":
     """Validate country, provider capability, and build std for non-US addresses.
 
@@ -121,7 +124,7 @@ async def _setup_non_us_validate(
                 "Supply pre-parsed 'components' for other countries."
             ),
         )
-    provider = request.app.state.registry.get_provider()
+    provider = registry.get_provider()
     if not provider.supports_non_us:
         raise APIError(
             status_code=422,
@@ -136,7 +139,6 @@ async def _setup_non_us_validate(
         raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     else:
         # CA raw string: parse via libpostal then CA standardize
-        libpostal_client = getattr(request.app.state, "libpostal_client", None)
         try:
             parse_result = await parse_address(  # type: ignore[union-attr]
                 req.address.strip(), country="CA", libpostal_client=libpostal_client
@@ -233,11 +235,12 @@ router = APIRouter(
 )
 async def validate_address_v2(
     req: ValidateRequestV1,
-    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
     ),
+    registry: ProviderRegistry = Depends(get_registry),
+    libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> ValidateResponseV2:
     if component_profile not in VALID_PROFILES:
         raise APIError(
@@ -250,7 +253,7 @@ async def validate_address_v2(
         )
 
     if req.country != "US":
-        std, raw_input, provider = await _setup_non_us_validate(req, request)
+        std, raw_input, provider = await _setup_non_us_validate(req, registry, libpostal_client)
     else:
         upstream_warnings: list[str] = []
 
@@ -265,7 +268,7 @@ async def validate_address_v2(
             raw_input = req.address
 
         std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
-        provider = request.app.state.registry.get_provider()
+        provider = registry.get_provider()
     logger.debug("validate_address_v2: provider=%s", type(provider).__name__)
     try:
         v1_result = await provider.validate(std, raw_input=raw_input)

@@ -37,7 +37,7 @@ def _mock_registry_with(provider):
     """Context manager that temporarily sets app.state.registry to return the given provider."""
     mock_reg = MagicMock()
     mock_reg.get_provider.return_value = provider
-    return patch.object(app.state, "registry", mock_reg, create=True)
+    return patch.object(app.state, "registry", mock_reg)
 
 
 class TestValidateEndpoint:

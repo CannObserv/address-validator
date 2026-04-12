@@ -1,6 +1,6 @@
 """v2 standardize endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country_v2
@@ -11,12 +11,13 @@ from address_validator.models import (
     StandardizeRequestV1,
     StandardizeResponseV2,
 )
+from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
     COMPONENT_PROFILE_DESCRIPTION,
     VALID_PROFILES,
     translate_components,
 )
-from address_validator.services.libpostal_client import LibpostalUnavailableError
+from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 from address_validator.services.standardizer import standardize
@@ -64,11 +65,11 @@ router = APIRouter(
 )
 async def standardize_address_v2(
     req: StandardizeRequestV1,
-    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
     ),
+    libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> StandardizeResponseV2:
     if component_profile not in VALID_PROFILES:
         raise APIError(
@@ -88,7 +89,6 @@ async def standardize_address_v2(
         comps = req.components
     else:
         # model_validator guarantees address is non-blank when components is absent
-        libpostal_client = getattr(request.app.state, "libpostal_client", None)
         try:
             parse_result = await parse_address(  # type: ignore[union-attr]
                 req.address.strip(), country=req.country, libpostal_client=libpostal_client

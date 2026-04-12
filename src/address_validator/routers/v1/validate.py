@@ -36,7 +36,7 @@ import json
 import logging
 import math
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core.address_format import build_validated_string
@@ -48,6 +48,7 @@ from address_validator.models import (
     ValidateResponseV1,
     ValidationResult,
 )
+from address_validator.routers.deps import get_registry
 from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import translate_components_to_iso
@@ -57,6 +58,7 @@ from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
+from address_validator.services.validation.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +134,10 @@ router = APIRouter(
         "recommended number of seconds to wait before retrying."
     ),
 )
-async def validate_address_v1(req: ValidateRequestV1, request: Request) -> ValidateResponseV1:
+async def validate_address_v1(
+    req: ValidateRequestV1,
+    registry: ProviderRegistry = Depends(get_registry),
+) -> ValidateResponseV1:
     if req.country != "US":
         if req.country not in VALID_ISO2:
             raise APIError(
@@ -149,7 +154,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
                     "Supply pre-parsed 'components' for non-US addresses."
                 ),
             )
-        provider = request.app.state.registry.get_provider()
+        provider = registry.get_provider()
         if not provider.supports_non_us:
             raise APIError(
                 status_code=422,
@@ -177,7 +182,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
             raw_input = req.address
 
         std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
-        provider = request.app.state.registry.get_provider()
+        provider = registry.get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std, raw_input=raw_input)

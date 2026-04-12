@@ -1,17 +1,18 @@
 """v2 parse endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country_v2
 from address_validator.core.errors import APIError
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV2
+from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
     COMPONENT_PROFILE_DESCRIPTION,
     VALID_PROFILES,
     translate_components,
 )
-from address_validator.services.libpostal_client import LibpostalUnavailableError
+from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
 from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
@@ -49,11 +50,11 @@ router = APIRouter(
 )
 async def parse(
     req: ParseRequestV1,
-    request: Request,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
     ),
+    libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> ParseResponseV2:
     if component_profile not in VALID_PROFILES:
         raise APIError(
@@ -72,7 +73,6 @@ async def parse(
             error="address_required",
             message="address is required and must not be blank.",
         )
-    libpostal_client = getattr(request.app.state, "libpostal_client", None)
     try:
         result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
