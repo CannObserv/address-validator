@@ -50,6 +50,7 @@ from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     ErrorResponse,
+    StandardizedAddress,
     StandardizeResponseV1,
     ValidateRequestV1,
     ValidateResponseV1,
@@ -75,8 +76,8 @@ from address_validator.services.validation.registry import ProviderRegistry
 logger = logging.getLogger(__name__)
 
 
-def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeResponseV1:
-    """Build a passthrough StandardizeResponseV1 from raw components for non-US addresses.
+def _build_non_us_std(components: dict[str, str], country: str) -> StandardizedAddress:
+    """Build a passthrough StandardizedAddress from raw components for non-US addresses.
 
     Skips the USPS Pub 28 pipeline entirely.  Components are used verbatim.
     The ``components.spec`` is ``"raw"`` to indicate no standardization was applied.
@@ -103,7 +104,7 @@ async def _setup_non_us_validate(
     req: "ValidateRequestV1",
     registry: "ProviderRegistry",
     libpostal_client: "LibpostalClient | None",
-) -> "tuple[StandardizeResponseV1, str | None, object]":
+) -> "tuple[StandardizedAddress, str | None, object]":
     """Validate country, provider capability, and build std for non-US addresses.
 
     Returns ``(std, raw_input, provider)``.
@@ -135,7 +136,7 @@ async def _setup_non_us_validate(
             ),
         )
     if req.components:
-        std: StandardizeResponseV1 = _build_non_us_std(req.components, req.country)
+        std: StandardizedAddress = _build_non_us_std(req.components, req.country)
         raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     else:
         # CA raw string: parse via libpostal then CA standardize

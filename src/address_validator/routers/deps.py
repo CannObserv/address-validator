@@ -7,6 +7,7 @@ from address_validator.services.validation.registry import ProviderRegistry
 
 
 def get_registry(request: Request) -> ProviderRegistry:
+    # Always set during lifespan startup; AttributeError here means broken startup.
     return request.app.state.registry
 
 
