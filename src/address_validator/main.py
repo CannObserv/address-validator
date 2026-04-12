@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from address_validator.core.errors import APIError, api_error_response
 from address_validator.db import engine as db_engine
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.api_version import ApiVersionHeaderMiddleware
@@ -29,7 +30,6 @@ from address_validator.routers.v1 import health as v1_health
 from address_validator.routers.v1 import parse as v1_parse
 from address_validator.routers.v1 import standardize as v1_standardize
 from address_validator.routers.v1 import validate as v1_validate
-from address_validator.routers.v1.core import APIError, api_error_response
 from address_validator.routers.v2 import countries as v2_countries
 from address_validator.routers.v2 import health as v2_health
 from address_validator.routers.v2 import parse as v2_parse

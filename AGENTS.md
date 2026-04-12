@@ -52,6 +52,8 @@ db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_st
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
+core/countries.py  SUPPORTED_COUNTRIES, SUPPORTED_COUNTRIES_V2, VALID_ISO2 frozensets; check_country() (v1), check_country_v2() (v2); canonical home for country validation shared across all router versions
+core/errors.py     APIError exception class; api_error_response() — serialises APIError to JSONResponse; registered in main.py exception handler; imported by all router layers
 services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION); used by v2 routers; USPS Pub 28 identifiers remain in usps_data/spec.py
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
 services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
@@ -65,7 +67,7 @@ services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert)
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
-routers/v1/core.py  VALID_ISO2, SUPPORTED_COUNTRIES (US only), SUPPORTED_COUNTRIES_V2 (US+CA), APIError, check_country(), check_country_v2()
+routers/v1/core.py  backward-compat re-export shim — all symbols now live in core/countries.py and core/errors.py; keep as-is to avoid breaking existing v1 callers
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)

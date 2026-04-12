@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, Response
 from fastapi import status as http_status
 
 from address_validator.auth import require_api_key
+from address_validator.core.countries import VALID_ISO2
+from address_validator.core.errors import APIError
 from address_validator.models import CountryFormatResponseV2, ErrorResponse
-from address_validator.routers.v1.core import VALID_ISO2, APIError
 from address_validator.services.country_format import get_country_format
 
 router = APIRouter(

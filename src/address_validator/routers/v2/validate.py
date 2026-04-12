@@ -45,6 +45,8 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from address_validator.auth import require_api_key
 from address_validator.core.address_format import build_validated_string
+from address_validator.core.countries import VALID_ISO2, check_country
+from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     ErrorResponse,
@@ -54,7 +56,6 @@ from address_validator.models import (
     ValidateResponseV2,
     ValidationResult,
 )
-from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
 from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import (
     COMPONENT_PROFILE_DESCRIPTION,
