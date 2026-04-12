@@ -10,7 +10,6 @@ from address_validator.core.countries import (
     SUPPORTED_COUNTRIES_V2,
     VALID_ISO2,
     check_country,
-    check_country_v2,
 )
 from address_validator.core.errors import APIError, api_error_response
 
@@ -21,5 +20,4 @@ __all__ = [
     "APIError",
     "api_error_response",
     "check_country",
-    "check_country_v2",
 ]

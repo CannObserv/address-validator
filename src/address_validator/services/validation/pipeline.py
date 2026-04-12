@@ -25,7 +25,7 @@ from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
-    StandardizeResponseV1,
+    StandardizeResponseV1,  # alias can't be used as a constructor; needed for build_non_us_std
 )
 from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.libpostal_client import LibpostalUnavailableError

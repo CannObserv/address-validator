@@ -8,7 +8,10 @@ from address_validator.canada_post_data.provinces import PROVINCE_MAP
 from address_validator.canada_post_data.spec import CANADA_POST_SPEC, CANADA_POST_SPEC_VERSION
 from address_validator.canada_post_data.suffixes import CA_SUFFIX_MAP
 from address_validator.core.address_format import build_validated_string
-from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.models import (  # alias can't be used as constructor
+    ComponentSet,
+    StandardizeResponseV1,
+)
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from address_validator.usps_data.states import STATE_MAP
