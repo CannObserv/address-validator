@@ -32,16 +32,14 @@ Non-US validation requires ``VALIDATION_PROVIDER=google`` or any chain
 containing a Google provider (e.g. ``usps,google``).
 """
 
-import json
 import logging
 import math
 
 from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
-from address_validator.core.address_format import build_validated_string
+from address_validator.core.errors import APIError
 from address_validator.models import (
-    ComponentSet,
     ErrorResponse,
     StandardizeResponseV1,
     ValidateRequestV1,
@@ -49,43 +47,19 @@ from address_validator.models import (
     ValidationResult,
 )
 from address_validator.routers.deps import get_registry
-from address_validator.routers.v1.core import VALID_ISO2, APIError, check_country
+from address_validator.routers.v1.core import check_country
 from address_validator.services.audit import set_audit_context
-from address_validator.services.component_profiles import translate_components_to_iso
-from address_validator.services.parser import parse_address
-from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
+from address_validator.services.validation.pipeline import (
+    run_non_us_pipeline_v1,
+    run_us_pipeline,
+)
 from address_validator.services.validation.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
-
-
-def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeResponseV1:
-    """Build a passthrough StandardizeResponseV1 from raw components for non-US addresses.
-
-    Skips the USPS Pub 28 pipeline entirely.  Components are used verbatim.
-    The ``components.spec`` is ``"raw"`` to indicate no standardization was applied.
-    """
-    address_line_1 = components.get("address_line_1", "")
-    address_line_2 = components.get("address_line_2", "")
-    city = components.get("city", "")
-    region = components.get("region", "")
-    postal_code = components.get("postal_code", "")
-    standardized = build_validated_string(address_line_1, address_line_2, city, region, postal_code)
-    return StandardizeResponseV1(
-        address_line_1=address_line_1,
-        address_line_2=address_line_2,
-        city=city,
-        region=region,
-        postal_code=postal_code,
-        country=country,
-        standardized=standardized,
-        components=ComponentSet(spec="raw", spec_version="1", values=components),
-    )
-
 
 router = APIRouter(
     prefix="/api/v1",
@@ -139,50 +113,13 @@ async def validate_address_v1(
     registry: ProviderRegistry = Depends(get_registry),
 ) -> ValidateResponseV1:
     if req.country != "US":
-        if req.country not in VALID_ISO2:
-            raise APIError(
-                status_code=422,
-                error="invalid_country_code",
-                message=f"'{req.country}' is not a valid ISO 3166-1 alpha-2 country code.",
-            )
-        if not req.components:
-            raise APIError(
-                status_code=422,
-                error="country_not_supported",
-                message=(
-                    "Raw address strings are only supported for US. "
-                    "Supply pre-parsed 'components' for non-US addresses."
-                ),
-            )
-        provider = registry.get_provider()
-        if not provider.supports_non_us:
-            raise APIError(
-                status_code=422,
-                error="country_not_supported",
-                message=(
-                    "Non-US address validation requires the Google provider. "
-                    "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
-                ),
-            )
-        std = _build_non_us_std(req.components, req.country)
-        raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
+        std, raw_input, provider = await run_non_us_pipeline_v1(req, registry)
     else:
         check_country(req.country)
+        std, raw_input, provider = await run_us_pipeline(
+            req, registry, component_profile="usps-pub28"
+        )
 
-        upstream_warnings: list[str] = []
-
-        if req.components:
-            comps = translate_components_to_iso(req.components, "usps-pub28")
-            raw_input = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
-        else:
-            # model_validator guarantees address is non-blank when components is absent
-            parse_result = await parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
-            comps = parse_result.components.values
-            upstream_warnings = parse_result.warnings
-            raw_input = req.address
-
-        std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
-        provider = registry.get_provider()
     logger.debug("validate_address_v1: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std, raw_input=raw_input)
@@ -206,3 +143,8 @@ async def validate_address_v1(
         result = result.model_copy(update={"warnings": std.warnings + result.warnings})
 
     return result
+
+
+# Expose StandardizeResponseV1 for callers that imported it from this module
+# in older code paths (backward-compat shim).
+__all__ = ["StandardizeResponseV1", "router", "validate_address_v1"]
