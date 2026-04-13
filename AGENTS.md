@@ -43,10 +43,11 @@ HTTP request
      ├─ endpoints.py          GET /admin/endpoints/{name}
      ├─ providers.py          GET /admin/providers/{name}
      ├─ candidates.py         GET /admin/candidates/ (list, grouped by raw_address); GET /{raw_hash} (detail); POST /{raw_hash}/status, /notes (HTMX triage actions)
+     ├─ partials.py           GET /admin/_partials/* — small lazy-loaded HTMX fragments (e.g. nav badges) injected into the shared admin layout
      └─ queries/              SQLAlchemy Core query helpers for dashboard views
          ├─ _shared.py        shared expressions, helpers, and time boundaries; is_error_expr / is_rate_limited_expr (429 is not an error)
          ├─ audit.py          get_audit_rows
-         ├─ candidates.py     get_candidate_groups, get_candidate_group, get_candidate_submissions, update_candidate_status, update_candidate_notes; WRITE_STATUSES frozenset; rows with status='labeled' are excluded from the triage view
+         ├─ candidates.py     get_candidate_groups, get_candidate_group, get_candidate_submissions, get_new_candidate_count, update_candidate_status, update_candidate_notes; WRITE_STATUSES frozenset; rows with status='labeled' are excluded from the triage view
          ├─ dashboard.py      get_dashboard_stats, get_sparkline_data
          ├─ endpoint.py       get_endpoint_stats
          └─ provider.py       get_provider_stats, get_provider_daily_usage (audit-derived requests today, per provider)
