@@ -7,7 +7,7 @@
 <p class="font-mono text-sm text-gray-700 dark:text-gray-300 mb-6 break-all">{{ group.raw_address }}</p>
 
 <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-    <div><div class="text-xs text-gray-500 uppercase mb-1">Status</div>{% with %}{% set group = group %}{% include "admin/candidates/_status.html" %}{% endwith %}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Status</div>{% include "admin/candidates/_status.html" %}</div>
     <div><div class="text-xs text-gray-500 uppercase mb-1">Submissions</div>{{ group.count }}</div>
     <div><div class="text-xs text-gray-500 uppercase mb-1">Failure Types</div>{{ (group.failure_types or []) | join(", ") }}</div>
     <div><div class="text-xs text-gray-500 uppercase mb-1">Last Seen</div>{{ group.last_seen.strftime('%Y-%m-%d %H:%M') if group.last_seen else '—' }}</div>

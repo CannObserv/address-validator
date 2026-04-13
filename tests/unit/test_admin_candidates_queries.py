@@ -192,3 +192,20 @@ async def test_update_candidate_notes_empty_string_stores_null(seeded_db: AsyncE
     group = await get_candidate_group(seeded_db, raw_hash=h)
     assert group is not None
     assert group["notes"] is None
+
+
+async def test_update_candidate_notes_whitespace_only_stores_null(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    await update_candidate_notes(seeded_db, raw_hash=h, notes="first note")
+    await update_candidate_notes(seeded_db, raw_hash=h, notes="   \n\t  ")
+    group = await get_candidate_group(seeded_db, raw_hash=h)
+    assert group is not None
+    assert group["notes"] is None
+
+
+async def test_update_candidate_notes_strips_surrounding_whitespace(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    await update_candidate_notes(seeded_db, raw_hash=h, notes="  meaningful note  ")
+    group = await get_candidate_group(seeded_db, raw_hash=h)
+    assert group is not None
+    assert group["notes"] == "meaningful note"

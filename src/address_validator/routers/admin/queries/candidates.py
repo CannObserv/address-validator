@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 
 _NON_LABELED = mtc.c.status != "labeled"
 
+# Statuses an admin may set via the triage UI. `labeled` is reserved for the
+# training pipeline; `mixed` is a derived rollup, never a stored value.
+WRITE_STATUSES: frozenset[str] = frozenset({"new", "reviewed", "rejected"})
+
 
 def _rollup_status_expr() -> ColumnElement:
     """CASE expression: single status -> that status; multiple -> 'mixed'."""
@@ -61,6 +65,7 @@ async def get_candidate_groups(
         where.append(mtc.c.created_at <= until)
 
     rollup = _rollup_status_expr()
+    last_seen = sa.func.max(mtc.c.created_at).label("last_seen")
 
     group_stmt = (
         sa.select(
@@ -70,7 +75,7 @@ async def get_candidate_groups(
             sa.func.array_agg(sa.distinct(mtc.c.failure_type)).label("failure_types"),
             sa.func.count().label("count"),
             sa.func.min(mtc.c.created_at).label("first_seen"),
-            sa.func.max(mtc.c.created_at).label("last_seen"),
+            last_seen,
             sa.func.max(mtc.c.notes).label("notes"),
         )
         .where(*where)
@@ -82,7 +87,7 @@ async def get_candidate_groups(
 
     count_stmt = sa.select(sa.func.count()).select_from(group_stmt.subquery())
 
-    list_stmt = group_stmt.order_by(sa.desc("last_seen")).limit(limit).offset(offset)
+    list_stmt = group_stmt.order_by(last_seen.desc()).limit(limit).offset(offset)
 
     async with engine.connect() as conn:
         total = (await conn.execute(count_stmt)).scalar() or 0
@@ -133,7 +138,7 @@ async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> li
 
 async def update_candidate_status(engine: AsyncEngine, *, raw_hash: str, status: str) -> int:
     """Set status on every non-labeled row in the group. Returns rowcount."""
-    if status not in {"new", "reviewed", "rejected"}:
+    if status not in WRITE_STATUSES:
         raise ValueError(f"invalid status: {status!r}")
     stmt = (
         sa.update(mtc).where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash).values(status=status)
@@ -145,7 +150,8 @@ async def update_candidate_status(engine: AsyncEngine, *, raw_hash: str, status:
 
 async def update_candidate_notes(engine: AsyncEngine, *, raw_hash: str, notes: str | None) -> int:
     """Set notes on every non-labeled row in the group. Returns rowcount."""
-    normalized = notes if notes else None
+    stripped = notes.strip() if notes else None
+    normalized = stripped if stripped else None
     stmt = (
         sa.update(mtc)
         .where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash)

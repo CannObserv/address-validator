@@ -1,9 +1,12 @@
 """Integration tests for admin candidate triage views."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from starlette.testclient import TestClient
+
+from address_validator.routers.admin.candidates import _parse_since
 
 
 @pytest.fixture(autouse=True)
@@ -173,3 +176,84 @@ def test_candidates_notes_post_round_trip(client: TestClient, admin_headers: dic
     assert "chained STE" in r.text
     update_mock.assert_awaited_once()
     assert update_mock.call_args.kwargs["notes"] == "chained STE"
+
+
+def test_candidates_status_post_404_on_unknown_hash(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """POST /status for a hash that resolves to no group must 404, not silently no-op."""
+    with (
+        patch(
+            "address_validator.routers.admin.candidates.update_candidate_status",
+            new=AsyncMock(return_value=0),
+        ),
+        patch(
+            "address_validator.routers.admin.candidates.get_candidate_group",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/status",
+            headers={**admin_headers, "HX-Request": "true"},
+            data={"status": "reviewed"},
+        )
+    assert r.status_code == 404
+
+
+def test_candidates_notes_post_404_on_unknown_hash(client: TestClient, admin_headers: dict) -> None:
+    with (
+        patch(
+            "address_validator.routers.admin.candidates.update_candidate_notes",
+            new=AsyncMock(return_value=0),
+        ),
+        patch(
+            "address_validator.routers.admin.candidates.get_candidate_group",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/notes",
+            headers={**admin_headers, "HX-Request": "true"},
+            data={"notes": "anything"},
+        )
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# _parse_since helper — querystring parsing
+# ---------------------------------------------------------------------------
+
+
+def test_parse_since_relative_days() -> None:
+    result = _parse_since("7d")
+    assert result is not None
+    delta = datetime.now(UTC) - result
+    assert timedelta(days=6, hours=23) < delta < timedelta(days=7, hours=1)
+
+
+def test_parse_since_relative_hours() -> None:
+    result = _parse_since("12h")
+    assert result is not None
+    delta = datetime.now(UTC) - result
+    assert timedelta(hours=11, minutes=59) < delta < timedelta(hours=12, minutes=1)
+
+
+def test_parse_since_iso_date() -> None:
+    result = _parse_since("2026-01-15")
+    assert result is not None
+    assert result.year == 2026
+    assert result.month == 1
+    assert result.day == 15
+    assert result.tzinfo is not None
+
+
+def test_parse_since_all_returns_none() -> None:
+    assert _parse_since("all") is None
+    assert _parse_since(None) is None
+    assert _parse_since("") is None
+
+
+def test_parse_since_invalid_returns_none() -> None:
+    assert _parse_since("garbage") is None
+    assert _parse_since("xd") is None  # int conversion fails
+    assert _parse_since("not-a-date") is None

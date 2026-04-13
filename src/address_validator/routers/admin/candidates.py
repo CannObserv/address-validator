@@ -16,13 +16,13 @@ from address_validator.routers.admin.queries import (
     update_candidate_notes,
     update_candidate_status,
 )
+from address_validator.routers.admin.queries.candidates import WRITE_STATUSES
 
 router = APIRouter(prefix="/candidates")
 
 _PER_PAGE = 50
 _VALID_FAILURE_TYPES = {"repeated_label_error", "post_parse_recovery"}
-_VALID_STATUSES = {"new", "reviewed", "rejected", "all"}
-_VALID_WRITE_STATUSES = {"new", "reviewed", "rejected"}
+_VALID_STATUSES = WRITE_STATUSES | {"all"}
 
 
 def _parse_since(raw: str | None) -> datetime | None:
@@ -121,12 +121,12 @@ async def candidates_update_status(
     status: str = Form(...),
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
-    if status not in _VALID_WRITE_STATUSES:
+    if status not in WRITE_STATUSES:
         raise HTTPException(status_code=400, detail=f"invalid status: {status}")
     await update_candidate_status(ctx.engine, raw_hash=raw_hash, status=status)
     group = await get_candidate_group(ctx.engine, raw_hash=raw_hash)
     if group is None:
-        return HTMLResponse("", status_code=200)
+        raise HTTPException(status_code=404, detail="candidate group not found")
     return templates.TemplateResponse(
         "admin/candidates/_status.html",
         {"request": request, "group": group},
@@ -143,7 +143,7 @@ async def candidates_update_notes(
     await update_candidate_notes(ctx.engine, raw_hash=raw_hash, notes=notes or None)
     group = await get_candidate_group(ctx.engine, raw_hash=raw_hash)
     if group is None:
-        return HTMLResponse("", status_code=200)
+        raise HTTPException(status_code=404, detail="candidate group not found")
     return templates.TemplateResponse(
         "admin/candidates/_notes.html",
         {"request": request, "group": group},
