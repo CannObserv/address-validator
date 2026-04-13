@@ -95,3 +95,81 @@ def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> N
         r = client.get("/admin/candidates/" + "a" * 64, headers=admin_headers)
     assert r.status_code == 200
     assert "123 MAIN ST STE 1" in r.text
+
+
+def test_candidates_status_post_updates_and_renders_partial(
+    client: TestClient, admin_headers: dict
+) -> None:
+    update_mock = AsyncMock(return_value=2)
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "x",
+            "raw_hash": "a" * 64,
+            "rollup_status": "reviewed",
+            "failure_types": [],
+            "count": 2,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": None,
+        }
+    )
+    with (
+        patch(
+            "address_validator.routers.admin.candidates.update_candidate_status",
+            new=update_mock,
+        ),
+        patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/status",
+            headers={**admin_headers, "HX-Request": "true"},
+            data={"status": "reviewed"},
+        )
+    assert r.status_code == 200
+    update_mock.assert_awaited_once()
+    kwargs = update_mock.call_args.kwargs
+    assert kwargs["status"] == "reviewed"
+    assert kwargs["raw_hash"] == "a" * 64
+
+
+def test_candidates_status_post_rejects_invalid_status(
+    client: TestClient, admin_headers: dict
+) -> None:
+    r = client.post(
+        "/admin/candidates/" + "a" * 64 + "/status",
+        headers={**admin_headers, "HX-Request": "true"},
+        data={"status": "labeled"},
+    )
+    assert r.status_code == 400
+
+
+def test_candidates_notes_post_round_trip(client: TestClient, admin_headers: dict) -> None:
+    update_mock = AsyncMock(return_value=1)
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "x",
+            "raw_hash": "a" * 64,
+            "rollup_status": "new",
+            "failure_types": [],
+            "count": 1,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": "chained STE",
+        }
+    )
+    with (
+        patch(
+            "address_validator.routers.admin.candidates.update_candidate_notes",
+            new=update_mock,
+        ),
+        patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/notes",
+            headers={**admin_headers, "HX-Request": "true"},
+            data={"notes": "chained STE"},
+        )
+    assert r.status_code == 200
+    assert "chained STE" in r.text
+    update_mock.assert_awaited_once()
+    assert update_mock.call_args.kwargs["notes"] == "chained STE"
