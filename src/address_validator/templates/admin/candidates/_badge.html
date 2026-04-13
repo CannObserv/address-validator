@@ -1,0 +1,6 @@
+{#- HTMX-loaded badge for the Candidates nav link. Empty span when count == 0. -#}
+{% if count and count > 0 -%}
+<span class="ml-1 inline-flex items-center justify-center rounded-full bg-co-purple text-white text-[10px] font-semibold leading-none px-1.5 py-0.5 min-w-[18px]" title="{{ count }} candidate group{{ 's' if count != 1 else '' }} awaiting triage">{{ count }}</span>
+{%- else -%}
+<span></span>
+{%- endif %}
