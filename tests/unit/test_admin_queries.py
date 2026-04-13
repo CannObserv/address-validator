@@ -621,7 +621,7 @@ async def test_endpoint_stats_429_not_counted_as_error(db: AsyncEngine) -> None:
 
     stats = await get_endpoint_stats(db, "validate")
     assert stats["error_rate"] == pytest.approx(25.0)
-    assert stats["rate_limited"] == 2
+    assert stats["rate_limited_all"] == 2
 
 
 def test_shared_is_error_expr_excludes_429() -> None:

@@ -375,3 +375,41 @@ class TestParseRetryAfter:
         resp = self._make_response({"Retry-After": "Wed, 21 Oct 2025 07:28:00 GMT"})
         delay = _parse_retry_after(resp, attempt=0)
         assert delay >= _RETRY_BASE_DELAY_S
+
+
+class TestQuotaWindowValidation:
+    def test_zero_limit_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"QuotaWindow\.limit must be positive"):
+            QuotaWindow(limit=0, duration_s=1.0, mode="soft")
+
+    def test_negative_limit_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"QuotaWindow\.limit must be positive"):
+            QuotaWindow(limit=-1, duration_s=1.0, mode="soft")
+
+    def test_zero_duration_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"QuotaWindow\.duration_s must be positive"):
+            QuotaWindow(limit=10, duration_s=0.0, mode="soft")
+
+    def test_negative_duration_raises(self) -> None:
+        with pytest.raises(ValueError, match=r"QuotaWindow\.duration_s must be positive"):
+            QuotaWindow(limit=10, duration_s=-0.5, mode="soft")
+
+
+class TestGetDailyQuotaState:
+    def test_returns_none_when_no_daily_window(self) -> None:
+        guard = QuotaGuard(
+            windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
+            provider_name="test",
+        )
+        assert guard.get_daily_quota_state() is None
+
+    def test_returns_remaining_and_limit_when_daily_window_present(self) -> None:
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=1.0, mode="soft"),
+                QuotaWindow(limit=1000, duration_s=86400.0, mode="hard"),
+            ],
+            provider_name="test",
+        )
+        state = guard.get_daily_quota_state()
+        assert state == {"remaining": 1000, "limit": 1000}

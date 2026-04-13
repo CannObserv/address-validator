@@ -46,7 +46,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                         func.count().filter(is_error_expr(audit_log.c.status_code)).label("errors"),
                         func.count()
                         .filter(is_rate_limited_expr(audit_log.c.status_code))
-                        .label("rate_limited"),
+                        .label("rate_limited_all"),
                         func.avg(audit_log.c.latency_ms)
                         .filter(audit_log.c.latency_ms.isnot(None))
                         .label("avg_latency"),
@@ -75,7 +75,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                                 audit_daily_stats.c.status_code == sa.literal(429),
                             ),
                             0,
-                        ).label("rate_limited"),
+                        ).label("rate_limited_all"),
                     ],
                     audit_daily_stats.c.endpoint == endpoint_path,
                 )
@@ -145,14 +145,14 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
 
     total = row.total + archived.total
     errors = row.errors + archived.errors
-    rate_limited = row.rate_limited + archived.rate_limited
+    rate_limited_all = row.rate_limited_all + archived.rate_limited_all
     error_rate = (errors / total * 100) if total > 0 else None
     return {
         "total": total,
         "last_24h": row.last_24h,
         "last_7d": row.last_7d,
         "error_rate": error_rate,
-        "rate_limited": rate_limited,
+        "rate_limited_all": rate_limited_all,
         "avg_latency_ms": round(row.avg_latency) if row.avg_latency else None,
         "status_codes_all": {r.status_code: r.count for r in status_rows},
         "status_codes_24h": {r.status_code: r.cnt for r in live_status_24h_rows},

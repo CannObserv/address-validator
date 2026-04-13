@@ -199,23 +199,22 @@ async def get_provider_daily_usage(engine: AsyncEngine) -> dict[str, int]:
 
     Returns a {provider_name: count} mapping. Providers with zero requests
     today are omitted. Rows with NULL provider are excluded.
-    Fails open: returns {} on any exception.
+
+    Like sibling admin queries, propagates DB errors to the centralized
+    handler in ``main.py`` rather than failing open here.
     """
     tb = _time_boundaries()
-    try:
-        async with engine.connect() as conn:
-            rows = (
-                await conn.execute(
-                    _from_live(
-                        [
-                            audit_log.c.provider,
-                            func.count().label("cnt"),
-                        ],
-                        audit_log.c.provider.isnot(None),
-                        audit_log.c.timestamp >= tb["today"],
-                    ).group_by(audit_log.c.provider)
-                )
-            ).fetchall()
-    except Exception:
-        return {}
+    async with engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                _from_live(
+                    [
+                        audit_log.c.provider,
+                        func.count().label("cnt"),
+                    ],
+                    audit_log.c.provider.isnot(None),
+                    audit_log.c.timestamp >= tb["today"],
+                ).group_by(audit_log.c.provider)
+            )
+        ).fetchall()
     return {r.provider: r.cnt for r in rows}
