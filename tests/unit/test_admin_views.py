@@ -32,6 +32,9 @@ def _mock_engine(client: TestClient):
     async def _empty_provider_stats(_engine, _name):
         return {}
 
+    async def _empty_daily_usage(_engine):
+        return {}
+
     with (
         patch(
             "address_validator.routers.admin.dashboard.get_dashboard_stats",
@@ -40,6 +43,10 @@ def _mock_engine(client: TestClient):
         patch(
             "address_validator.routers.admin.dashboard.get_sparkline_data",
             side_effect=_empty_sparkline,
+        ),
+        patch(
+            "address_validator.routers.admin.dashboard.get_provider_daily_usage",
+            side_effect=_empty_daily_usage,
         ),
         patch(
             "address_validator.routers.admin.audit_views.get_audit_rows",
@@ -60,6 +67,10 @@ def _mock_engine(client: TestClient):
         patch(
             "address_validator.routers.admin.providers.get_provider_stats",
             side_effect=_empty_provider_stats,
+        ),
+        patch(
+            "address_validator.routers.admin.providers.get_provider_daily_usage",
+            side_effect=_empty_daily_usage,
         ),
     ):
         yield
@@ -622,3 +633,26 @@ def test_endpoint_table_heading_is_requests(client: TestClient, admin_headers: d
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert "Recent Requests" not in response.text
     assert "Requests" in response.text
+
+
+def test_dashboard_quota_tile_shows_requests_today(client: TestClient, admin_headers: dict) -> None:
+    """Dashboard quota tile shows audit-derived requests_today, not bucket remaining."""
+    with (
+        patch(
+            "address_validator.routers.admin.dashboard.get_provider_daily_usage",
+            new_callable=AsyncMock,
+            return_value={"usps": 42},
+        ),
+        patch(
+            "address_validator.routers.admin.dashboard.get_quota_info",
+            return_value=[{"provider": "usps", "remaining": 9958, "limit": 10000}],
+        ),
+    ):
+        response = client.get("/admin/", headers=admin_headers)
+    assert response.status_code == 200
+    html = response.text
+    assert "USPS Requests Today" in html
+    assert "42" in html
+    assert "10000" in html
+    # Old "remaining" label must be gone
+    assert "Daily Quota" not in html

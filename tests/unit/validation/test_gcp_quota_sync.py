@@ -1,7 +1,7 @@
 """Unit tests for GCP quota sync — limit discovery and usage monitoring."""
 
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -102,6 +102,14 @@ class TestFetchDailyUsage:
         result = fetch_daily_usage(mock_client, "my-project")
         assert result is None
 
+    def test_skips_series_with_no_points(self) -> None:
+        """Series with empty points list should be skipped, returning None."""
+        mock_client = MagicMock()
+        empty_series = MagicMock()
+        empty_series.points = []
+        mock_client.list_time_series.return_value = [empty_series]
+        assert fetch_daily_usage(mock_client, "my-project") is None
+
 
 class TestReconcileOnce:
     def _make_guard(self, daily_limit: int = 160, used: int = 0) -> QuotaGuard:
@@ -158,3 +166,58 @@ class TestRunReconciliationLoop:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+    async def test_loop_iterations_handle_all_branches(self) -> None:
+        """Exercise the per-tick body: usage int, usage None, and raised exception.
+
+        The loop body has three branches (reconcile, debug-skip, except). All
+        three must be hit so the reconciliation loop is robust against
+        Monitoring outages and stale data.
+        """
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+                FixedResetQuotaWindow(limit=160, mode="hard"),
+            ],
+            provider_name="google",
+        )
+        guard._tokens[1] = 120.0
+
+        fetch_results: list = [50, None, Exception("boom")]
+        fetch_calls = 0
+
+        def _fake_fetch(_client, _project):
+            nonlocal fetch_calls
+            result = fetch_results[fetch_calls]
+            fetch_calls += 1
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        # Stop the loop after the third tick so the test never hangs.
+        async def _fake_sleep(_seconds):
+            if fetch_calls >= len(fetch_results):
+                raise asyncio.CancelledError
+
+        with (
+            patch(
+                "address_validator.services.validation.gcp_quota_sync.fetch_daily_usage",
+                side_effect=_fake_fetch,
+            ),
+            patch(
+                "address_validator.services.validation.gcp_quota_sync.asyncio.sleep",
+                side_effect=_fake_sleep,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await run_reconciliation_loop(
+                guard=guard,
+                daily_window_index=1,
+                monitoring_client=MagicMock(),
+                project_id="test",
+                interval_s=0.0,
+            )
+
+        assert fetch_calls == 3
+        # First tick reported usage=50 vs local=40 → adjust down by 10.
+        assert guard._tokens[1] == 110.0

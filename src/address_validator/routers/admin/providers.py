@@ -9,7 +9,11 @@ from starlette.responses import Response
 
 from address_validator.routers.admin._config import get_css_version, get_quota_info, templates
 from address_validator.routers.admin.deps import AdminContext, get_admin_context
-from address_validator.routers.admin.queries import get_audit_rows, get_provider_stats
+from address_validator.routers.admin.queries import (
+    get_audit_rows,
+    get_provider_daily_usage,
+    get_provider_stats,
+)
 
 router = APIRouter(prefix="/providers")
 
@@ -48,11 +52,11 @@ async def provider_detail(
         "validation_statuses": validation_status or [],
     }
 
-    # Find quota for this provider
+    daily_usage = await get_provider_daily_usage(ctx.engine)
     quota = None
     for q in get_quota_info(ctx.request):
         if q["provider"] == name:
-            quota = q
+            quota = {**q, "requests_today": daily_usage.get(name, 0)}
             break
 
     # HTMX partial — return just the rows (skip for boosted nav)

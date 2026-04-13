@@ -9,6 +9,8 @@ import sqlalchemy as sa
 from sqlalchemy import func, select
 
 from address_validator.db.tables import (
+    ERROR_STATUS_MIN,
+    RATE_LIMITED_STATUS,
     audit_daily_stats,
     audit_log,
 )
@@ -96,3 +98,20 @@ def _from_archived(columns: list, *where: ColumnElement) -> Select:
     for cond in where:
         stmt = stmt.where(cond)
     return stmt
+
+
+def is_error_expr(status_code_col: ColumnElement) -> ColumnElement:
+    """True for response status codes counted as errors.
+
+    Rate-limited (429) responses are excluded — rate limiting is traffic
+    control, not failure. Callers should surface 429 separately.
+    """
+    return sa.and_(
+        status_code_col >= ERROR_STATUS_MIN,
+        status_code_col != RATE_LIMITED_STATUS,
+    )
+
+
+def is_rate_limited_expr(status_code_col: ColumnElement) -> ColumnElement:
+    """True for 429 Too Many Requests responses."""
+    return status_code_col == RATE_LIMITED_STATUS

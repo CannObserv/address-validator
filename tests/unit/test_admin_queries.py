@@ -1,17 +1,23 @@
 """Tests for admin dashboard SQL query helpers."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.db.tables import audit_log
 from address_validator.routers.admin.queries import (
     get_audit_rows,
     get_dashboard_stats,
     get_endpoint_stats,
+    get_provider_daily_usage,
     get_provider_stats,
     get_sparkline_data,
+)
+from address_validator.routers.admin.queries._shared import (
+    is_error_expr,
+    is_rate_limited_expr,
 )
 
 
@@ -562,3 +568,97 @@ async def test_get_provider_stats_validation_statuses_canonical_order(
     keys = list(stats["validation_statuses_all"].keys())
     assert keys.index("confirmed") < keys.index("confirmed_missing_secondary")
     assert keys.index("confirmed_missing_secondary") < keys.index("not_confirmed")
+
+
+@pytest.mark.asyncio
+async def test_dashboard_stats_429_not_counted_as_error(db: AsyncEngine) -> None:
+    """429 responses must not inflate the 24h error rate."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code, provider) "
+                "VALUES "
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',500,'usps')"
+            ),
+            {"ts": now},
+        )
+
+    stats = await get_dashboard_stats(db)
+    # 4 API requests, 1 true error (500), 2 rate-limited (429).
+    assert stats["error_rate"] == pytest.approx(25.0)
+    assert stats["rate_limited_24h"] == 2
+
+
+@pytest.mark.asyncio
+async def test_dashboard_stats_rate_limited_zero_when_no_429(db: AsyncEngine) -> None:
+    """rate_limited_24h should default to 0, not None."""
+    stats = await get_dashboard_stats(db)
+    assert stats["rate_limited_24h"] == 0
+
+
+@pytest.mark.asyncio
+async def test_endpoint_stats_429_not_counted_as_error(db: AsyncEngine) -> None:
+    """429s on /api/v1/validate must not inflate endpoint error rate."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code) "
+                "VALUES "
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',200),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',500)"
+            ),
+            {"ts": now},
+        )
+
+    stats = await get_endpoint_stats(db, "validate")
+    assert stats["error_rate"] == pytest.approx(25.0)
+    assert stats["rate_limited_all"] == 2
+
+
+def test_shared_is_error_expr_excludes_429() -> None:
+    """is_error_expr should treat >=400 but not 429 as errors."""
+    expr_err = is_error_expr(audit_log.c.status_code)
+    expr_rl = is_rate_limited_expr(audit_log.c.status_code)
+    sql_err = str(expr_err.compile(compile_kwargs={"literal_binds": True}))
+    sql_rl = str(expr_rl.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "429" in sql_err  # the NOT 429 clause must reference 429
+    assert ">= 400" in sql_err or ">=400" in sql_err
+    assert "= 429" in sql_rl
+
+
+@pytest.mark.asyncio
+async def test_get_provider_daily_usage_counts_today_only(db: AsyncEngine) -> None:
+    """Counts current-UTC-day rows per provider; older rows are ignored."""
+    today = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    yesterday = today - timedelta(days=1)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code, provider) "
+                "VALUES "
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'google'),"
+                "(:yesterday,'1.1.1.1','POST','/api/v1/validate',200,'usps')"
+            ),
+            {"today": today, "yesterday": yesterday},
+        )
+
+    usage = await get_provider_daily_usage(db)
+    assert usage == {"usps": 2, "google": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_provider_daily_usage_empty(db: AsyncEngine) -> None:
+    assert await get_provider_daily_usage(db) == {}

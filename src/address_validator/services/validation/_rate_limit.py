@@ -226,7 +226,13 @@ class QuotaGuard:
     _DAILY_WINDOW_INDEX = 1
 
     def get_daily_quota_state(self) -> dict | None:
-        """Return remaining/limit for the daily window, or None if no daily window."""
+        """Return remaining/limit for the daily window, or None if no daily window.
+
+        ``remaining`` is the current token-bucket balance — *not* requests
+        made today. The admin dashboard surfaces audit-derived
+        ``requests_today`` to users; this field is retained for tests and
+        for any future operator-facing burst-headroom indicator.
+        """
         if len(self._windows) <= self._DAILY_WINDOW_INDEX:
             return None
         idx = self._DAILY_WINDOW_INDEX
