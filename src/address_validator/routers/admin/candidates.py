@@ -3,13 +3,19 @@
 import math
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from starlette.responses import Response
 
 from address_validator.routers.admin._config import get_css_version, templates
 from address_validator.routers.admin.deps import AdminContext, get_admin_context
-from address_validator.routers.admin.queries import get_candidate_groups
+from address_validator.routers.admin.queries import (
+    get_candidate_group,
+    get_candidate_groups,
+    get_candidate_submissions,
+    update_candidate_notes,
+    update_candidate_status,
+)
 
 router = APIRouter(prefix="/candidates")
 
@@ -82,4 +88,63 @@ async def candidates_list(
             "total_pages": total_pages,
             "filters": filters,
         },
+    )
+
+
+@router.get("/{raw_hash}", response_class=HTMLResponse, response_model=None)
+async def candidates_detail(
+    request: Request,
+    raw_hash: str,
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    group = await get_candidate_group(ctx.engine, raw_hash=raw_hash)
+    if group is None:
+        raise HTTPException(status_code=404, detail="candidate group not found")
+    submissions = await get_candidate_submissions(ctx.engine, raw_hash=raw_hash)
+    return templates.TemplateResponse(
+        "admin/candidates/detail.html",
+        {
+            "request": request,
+            "user": ctx.user,
+            "active_nav": "candidates",
+            "css_version": get_css_version(),
+            "group": group,
+            "submissions": submissions,
+        },
+    )
+
+
+@router.post("/{raw_hash}/status", response_class=HTMLResponse, response_model=None)
+async def candidates_update_status(
+    request: Request,
+    raw_hash: str,
+    status: str = Form(...),
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    if status not in _VALID_WRITE_STATUSES:
+        raise HTTPException(status_code=400, detail=f"invalid status: {status}")
+    await update_candidate_status(ctx.engine, raw_hash=raw_hash, status=status)
+    group = await get_candidate_group(ctx.engine, raw_hash=raw_hash)
+    if group is None:
+        return HTMLResponse("", status_code=200)
+    return templates.TemplateResponse(
+        "admin/candidates/_status.html",
+        {"request": request, "group": group},
+    )
+
+
+@router.post("/{raw_hash}/notes", response_class=HTMLResponse, response_model=None)
+async def candidates_update_notes(
+    request: Request,
+    raw_hash: str,
+    notes: str = Form(""),
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    await update_candidate_notes(ctx.engine, raw_hash=raw_hash, notes=notes or None)
+    group = await get_candidate_group(ctx.engine, raw_hash=raw_hash)
+    if group is None:
+        return HTMLResponse("", status_code=200)
+    return templates.TemplateResponse(
+        "admin/candidates/_notes.html",
+        {"request": request, "group": group},
     )

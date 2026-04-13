@@ -48,3 +48,50 @@ def test_candidates_list_filters_pass_through(client: TestClient, admin_headers:
     assert kwargs["status"] == "reviewed"
     assert kwargs["failure_type"] == "repeated_label_error"
     assert kwargs["since"] is not None
+
+
+def test_candidates_detail_404_on_unknown_hash(client: TestClient, admin_headers: dict) -> None:
+    with patch(
+        "address_validator.routers.admin.candidates.get_candidate_group",
+        new=AsyncMock(return_value=None),
+    ):
+        r = client.get("/admin/candidates/deadbeef" + "0" * 56, headers=admin_headers)
+    assert r.status_code == 404
+
+
+def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> None:
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "123 MAIN ST STE 1, SMP - 2 SEATTLE WA 98101",
+            "raw_hash": "a" * 64,
+            "rollup_status": "new",
+            "failure_types": ["repeated_label_error"],
+            "count": 3,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": None,
+        }
+    )
+    subs_mock = AsyncMock(
+        return_value=[
+            {
+                "id": 1,
+                "raw_address": "x",
+                "failure_type": "repeated_label_error",
+                "parsed_tokens": [["STE", "OccupancyIdentifier"]],
+                "recovered_components": None,
+                "created_at": None,
+                "status": "new",
+            },
+        ]
+    )
+    with (
+        patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),
+        patch(
+            "address_validator.routers.admin.candidates.get_candidate_submissions",
+            new=subs_mock,
+        ),
+    ):
+        r = client.get("/admin/candidates/" + "a" * 64, headers=admin_headers)
+    assert r.status_code == 200
+    assert "123 MAIN ST STE 1" in r.text
