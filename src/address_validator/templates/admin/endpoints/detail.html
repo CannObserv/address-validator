@@ -57,6 +57,11 @@
         <p class="text-2xl font-bold {% if stats.get("error_rate") and stats.error_rate > 5 %}text-red-600 dark:text-red-400{% else %}text-gray-900 dark:text-gray-100{% endif %}">
             {% if stats.get("error_rate") is not none %}{{ "%.1f" | format(stats.error_rate) }}%{% else %}N/A{% endif %}
         </p>
+        {% if stats.get("rate_limited", 0) > 0 %}
+        <p class="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            {{ stats.rate_limited }} rate-limited (not counted as errors)
+        </p>
+        {% endif %}
     </div>
 </div>
 
