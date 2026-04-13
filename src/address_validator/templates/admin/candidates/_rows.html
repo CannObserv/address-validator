@@ -1,0 +1,24 @@
+{% for row in rows %}
+<tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm">
+    <td class="px-3 py-2 max-w-sm">
+        <a href="/admin/candidates/{{ row.raw_hash }}"
+           class="text-co-purple hover:underline font-mono text-xs block truncate"
+           title="{{ row.raw_address }}">{{ row.raw_address }}</a>
+    </td>
+    <td class="px-3 py-2 whitespace-nowrap">
+        {% set group = row %}
+        {% include "admin/candidates/_status.html" with context %}
+    </td>
+    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
+        {{ (row.failure_types or []) | join(", ") }}
+    </td>
+    <td class="px-3 py-2 whitespace-nowrap text-right text-gray-700 dark:text-gray-300">{{ row.count }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ row.first_seen.strftime('%Y-%m-%d') if row.first_seen else '' }}</td>
+    <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{{ row.last_seen.strftime('%Y-%m-%d %H:%M') if row.last_seen else '' }}</td>
+    <td class="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 max-w-xs">
+        {% if row.notes %}<span class="block truncate" title="{{ row.notes }}">{{ row.notes }}</span>{% else %}<span class="text-gray-400">—</span>{% endif %}
+    </td>
+</tr>
+{% else %}
+<tr><td colspan="7" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No candidate groups found.</td></tr>
+{% endfor %}

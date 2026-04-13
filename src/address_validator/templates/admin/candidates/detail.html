@@ -1,0 +1,46 @@
+{% extends "admin/base.html" %}
+{% block title %}Candidate Detail{% endblock %}
+{% block content %}
+<div class="mb-4"><a href="/admin/candidates/" class="text-sm text-co-purple hover:underline">&larr; Back to candidates</a></div>
+
+<h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">Candidate Group</h1>
+<p class="font-mono text-sm text-gray-700 dark:text-gray-300 mb-6 break-all">{{ group.raw_address }}</p>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Status</div>{% with %}{% set group = group %}{% include "admin/candidates/_status.html" %}{% endwith %}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Submissions</div>{{ group.count }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Failure Types</div>{{ (group.failure_types or []) | join(", ") }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Last Seen</div>{{ group.last_seen.strftime('%Y-%m-%d %H:%M') if group.last_seen else '—' }}</div>
+</div>
+
+<div class="mb-6">
+    <div class="text-xs text-gray-500 uppercase mb-2">Notes</div>
+    {% include "admin/candidates/_notes.html" %}
+</div>
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Submissions</h2>
+<div class="space-y-3">
+    {% for s in submissions %}
+    <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-sm">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="text-xs text-gray-500">#{{ s.id }}</span>
+            <span class="text-xs text-gray-500">{{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '' }}</span>
+            <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ s.failure_type }}</span>
+            <span class="text-xs text-gray-500">{{ s.status }}</span>
+        </div>
+        <details class="text-xs">
+            <summary class="cursor-pointer text-co-purple">parsed_tokens</summary>
+            <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto">{{ s.parsed_tokens | tojson(indent=2) }}</pre>
+        </details>
+        {% if s.recovered_components %}
+        <details class="text-xs mt-2">
+            <summary class="cursor-pointer text-co-purple">recovered_components</summary>
+            <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto">{{ s.recovered_components | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="text-sm text-gray-400">No submissions.</div>
+    {% endfor %}
+</div>
+{% endblock %}
