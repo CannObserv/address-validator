@@ -569,6 +569,37 @@ async def test_get_provider_stats_validation_statuses_canonical_order(
     assert keys.index("confirmed_missing_secondary") < keys.index("not_confirmed")
 
 
+@pytest.mark.asyncio
+async def test_dashboard_stats_429_not_counted_as_error(db: AsyncEngine) -> None:
+    """429 responses must not inflate the 24h error rate."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code, provider) "
+                "VALUES "
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',500,'usps')"
+            ),
+            {"ts": now},
+        )
+
+    stats = await get_dashboard_stats(db)
+    # 4 API requests, 1 true error (500), 2 rate-limited (429).
+    assert stats["error_rate"] == pytest.approx(25.0)
+    assert stats["rate_limited_24h"] == 2
+
+
+@pytest.mark.asyncio
+async def test_dashboard_stats_rate_limited_zero_when_no_429(db: AsyncEngine) -> None:
+    """rate_limited_24h should default to 0, not None."""
+    stats = await get_dashboard_stats(db)
+    assert stats["rate_limited_24h"] == 0
+
+
 def test_shared_is_error_expr_excludes_429() -> None:
     """is_error_expr should treat >=400 but not 429 as errors."""
     expr_err = is_error_expr(audit_log.c.status_code)

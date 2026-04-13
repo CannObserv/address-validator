@@ -9,7 +9,6 @@ import sqlalchemy as sa
 from sqlalchemy import func
 
 from address_validator.db.tables import (
-    ERROR_STATUS_MIN,
     audit_daily_stats,
     audit_log,
 )
@@ -19,6 +18,8 @@ from ._shared import (
     _from_archived,
     _from_live,
     _time_boundaries,
+    is_error_expr,
+    is_rate_limited_expr,
 )
 
 if TYPE_CHECKING:
@@ -42,11 +43,18 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         func.count().filter(audit_log.c.timestamp >= last_7d).label("last_7d"),
                         func.count()
                         .filter(
-                            audit_log.c.status_code >= ERROR_STATUS_MIN,
+                            is_error_expr(audit_log.c.status_code),
                             audit_log.c.timestamp >= last_24h,
                             _API_ENDPOINT_FILTER,
                         )
                         .label("errors_24h"),
+                        func.count()
+                        .filter(
+                            is_rate_limited_expr(audit_log.c.status_code),
+                            audit_log.c.timestamp >= last_24h,
+                            _API_ENDPOINT_FILTER,
+                        )
+                        .label("rate_limited_24h"),
                         func.count()
                         .filter(
                             audit_log.c.timestamp >= last_24h,
@@ -138,6 +146,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
         "requests_7d": row.last_7d,
         "requests_all": row.total + archived_total,
         "error_rate": error_rate,
+        "rate_limited_24h": row.rate_limited_24h,
         "cache_hit_rate": cache_hit_rate,
         "endpoint_breakdown": breakdown,
     }
@@ -207,9 +216,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
                 _from_live(
                     [
                         day_bucket,
-                        func.count()
-                        .filter(audit_log.c.status_code >= ERROR_STATUS_MIN)
-                        .label("errors"),
+                        func.count().filter(is_error_expr(audit_log.c.status_code)).label("errors"),
                         func.count().label("total"),
                     ],
                     _API_ENDPOINT_FILTER,
