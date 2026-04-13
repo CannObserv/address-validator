@@ -1,6 +1,6 @@
 """Tests for admin dashboard SQL query helpers."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -11,6 +11,7 @@ from address_validator.routers.admin.queries import (
     get_audit_rows,
     get_dashboard_stats,
     get_endpoint_stats,
+    get_provider_daily_usage,
     get_provider_stats,
     get_sparkline_data,
 )
@@ -633,3 +634,31 @@ def test_shared_is_error_expr_excludes_429() -> None:
     assert "429" in sql_err  # the NOT 429 clause must reference 429
     assert ">= 400" in sql_err or ">=400" in sql_err
     assert "= 429" in sql_rl
+
+
+@pytest.mark.asyncio
+async def test_get_provider_daily_usage_counts_today_only(db: AsyncEngine) -> None:
+    """Counts current-UTC-day rows per provider; older rows are ignored."""
+    today = datetime.now(UTC).replace(hour=12, minute=0, second=0, microsecond=0)
+    yesterday = today - timedelta(days=1)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code, provider) "
+                "VALUES "
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'usps'),"
+                "(:today,'1.1.1.1','POST','/api/v1/validate',200,'google'),"
+                "(:yesterday,'1.1.1.1','POST','/api/v1/validate',200,'usps')"
+            ),
+            {"today": today, "yesterday": yesterday},
+        )
+
+    usage = await get_provider_daily_usage(db)
+    assert usage == {"usps": 2, "google": 1}
+
+
+@pytest.mark.asyncio
+async def test_get_provider_daily_usage_empty(db: AsyncEngine) -> None:
+    assert await get_provider_daily_usage(db) == {}

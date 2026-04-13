@@ -192,3 +192,30 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             {r.validation_status: r.count for r in vs_7d_rows}
         ),
     }
+
+
+async def get_provider_daily_usage(engine: AsyncEngine) -> dict[str, int]:
+    """Count audit_log rows for the current UTC day, grouped by provider.
+
+    Returns a {provider_name: count} mapping. Providers with zero requests
+    today are omitted. Rows with NULL provider are excluded.
+    Fails open: returns {} on any exception.
+    """
+    tb = _time_boundaries()
+    try:
+        async with engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    _from_live(
+                        [
+                            audit_log.c.provider,
+                            func.count().label("cnt"),
+                        ],
+                        audit_log.c.provider.isnot(None),
+                        audit_log.c.timestamp >= tb["today"],
+                    ).group_by(audit_log.c.provider)
+                )
+            ).fetchall()
+    except Exception:
+        return {}
+    return {r.provider: r.cnt for r in rows}
