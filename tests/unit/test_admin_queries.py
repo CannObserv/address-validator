@@ -600,6 +600,29 @@ async def test_dashboard_stats_rate_limited_zero_when_no_429(db: AsyncEngine) ->
     assert stats["rate_limited_24h"] == 0
 
 
+@pytest.mark.asyncio
+async def test_endpoint_stats_429_not_counted_as_error(db: AsyncEngine) -> None:
+    """429s on /api/v1/validate must not inflate endpoint error rate."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO audit_log "
+                "(timestamp, client_ip, method, endpoint, status_code) "
+                "VALUES "
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',429),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',200),"
+                "(:ts,'1.1.1.1','POST','/api/v1/validate',500)"
+            ),
+            {"ts": now},
+        )
+
+    stats = await get_endpoint_stats(db, "validate")
+    assert stats["error_rate"] == pytest.approx(25.0)
+    assert stats["rate_limited"] == 2
+
+
 def test_shared_is_error_expr_excludes_429() -> None:
     """is_error_expr should treat >=400 but not 429 as errors."""
     expr_err = is_error_expr(audit_log.c.status_code)
