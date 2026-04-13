@@ -6,12 +6,17 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.db.tables import audit_log
 from address_validator.routers.admin.queries import (
     get_audit_rows,
     get_dashboard_stats,
     get_endpoint_stats,
     get_provider_stats,
     get_sparkline_data,
+)
+from address_validator.routers.admin.queries._shared import (
+    is_error_expr,
+    is_rate_limited_expr,
 )
 
 
@@ -562,3 +567,15 @@ async def test_get_provider_stats_validation_statuses_canonical_order(
     keys = list(stats["validation_statuses_all"].keys())
     assert keys.index("confirmed") < keys.index("confirmed_missing_secondary")
     assert keys.index("confirmed_missing_secondary") < keys.index("not_confirmed")
+
+
+def test_shared_is_error_expr_excludes_429() -> None:
+    """is_error_expr should treat >=400 but not 429 as errors."""
+    expr_err = is_error_expr(audit_log.c.status_code)
+    expr_rl = is_rate_limited_expr(audit_log.c.status_code)
+    sql_err = str(expr_err.compile(compile_kwargs={"literal_binds": True}))
+    sql_rl = str(expr_rl.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "429" in sql_err  # the NOT 429 clause must reference 429
+    assert ">= 400" in sql_err or ">=400" in sql_err
+    assert "= 429" in sql_rl

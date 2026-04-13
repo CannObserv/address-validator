@@ -103,6 +103,7 @@ query_patterns = sa.Table(
 
 # Shared query constants
 ERROR_STATUS_MIN = 400
+RATE_LIMITED_STATUS = 429
 
 # ---------------------------------------------------------------------------
 # Model training candidate collection (migration 008)
