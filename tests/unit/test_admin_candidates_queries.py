@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from address_validator.routers.admin.queries.candidates import (
     get_candidate_group,
     get_candidate_groups,
+    get_candidate_submissions,
+    update_candidate_notes,
+    update_candidate_status,
 )
 
 
@@ -141,3 +144,51 @@ async def test_get_candidate_group_returns_none_for_labeled_only(seeded_db: Asyn
 async def test_get_candidate_group_returns_none_for_unknown_hash(seeded_db: AsyncEngine) -> None:
     group = await get_candidate_group(seeded_db, raw_hash="deadbeef" * 8)
     assert group is None
+
+
+async def test_get_candidate_submissions_returns_rows(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    rows = await get_candidate_submissions(seeded_db, raw_hash=h)
+    assert len(rows) == 2
+    # Newest first
+    assert rows[0]["created_at"] >= rows[1]["created_at"]
+    assert all(r["status"] != "labeled" for r in rows)
+
+
+async def test_update_candidate_status_applies_to_group(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    n = await update_candidate_status(seeded_db, raw_hash=h, status="reviewed")
+    assert n == 2
+    rows = await get_candidate_submissions(seeded_db, raw_hash=h)
+    assert all(r["status"] == "reviewed" for r in rows)
+
+
+async def test_update_candidate_status_skips_labeled(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr D")
+    # Try to touch addr D (labeled only) — rowcount must be 0.
+    n = await update_candidate_status(seeded_db, raw_hash=h, status="reviewed")
+    assert n == 0
+
+
+async def test_update_candidate_status_rejects_labeled_as_input(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    with pytest.raises(ValueError, match="invalid status"):
+        await update_candidate_status(seeded_db, raw_hash=h, status="labeled")
+
+
+async def test_update_candidate_notes_round_trip(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    n = await update_candidate_notes(seeded_db, raw_hash=h, notes="chained unit: STE X, SMP Y")
+    assert n == 2
+    group = await get_candidate_group(seeded_db, raw_hash=h)
+    assert group is not None
+    assert group["notes"] == "chained unit: STE X, SMP Y"
+
+
+async def test_update_candidate_notes_empty_string_stores_null(seeded_db: AsyncEngine) -> None:
+    h = _hex("addr A")
+    await update_candidate_notes(seeded_db, raw_hash=h, notes="first note")
+    await update_candidate_notes(seeded_db, raw_hash=h, notes="")
+    group = await get_candidate_group(seeded_db, raw_hash=h)
+    assert group is not None
+    assert group["notes"] is None
