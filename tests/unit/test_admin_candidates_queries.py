@@ -11,6 +11,7 @@ from address_validator.routers.admin.queries.candidates import (
     get_candidate_group,
     get_candidate_groups,
     get_candidate_submissions,
+    get_new_candidate_count,
     update_candidate_notes,
     update_candidate_status,
 )
@@ -209,3 +210,28 @@ async def test_update_candidate_notes_strips_surrounding_whitespace(seeded_db: A
     group = await get_candidate_group(seeded_db, raw_hash=h)
     assert group is not None
     assert group["notes"] == "meaningful note"
+
+
+async def test_get_new_candidate_count_counts_new_and_mixed(seeded_db: AsyncEngine) -> None:
+    # Seeded data: A=new, B=mixed, C=reviewed, D=labeled (excluded).
+    # Badge counts new + mixed = 2.
+    n = await get_new_candidate_count(seeded_db, since=None)
+    assert n == 2
+
+
+async def test_get_new_candidate_count_zero_when_nothing_actionable(seeded_db: AsyncEngine) -> None:
+    # Mark A and B as reviewed; only C remains, also reviewed; expect 0.
+    await update_candidate_status(seeded_db, raw_hash=_hex("addr A"), status="reviewed")
+    await update_candidate_status(seeded_db, raw_hash=_hex("addr B"), status="reviewed")
+    n = await get_new_candidate_count(seeded_db, since=None)
+    assert n == 0
+
+
+async def test_get_new_candidate_count_respects_since(seeded_db: AsyncEngine) -> None:
+    # All seeded `new`/`mixed` rows are within the last 3 days.
+    # A `since` of 1 hour ago should exclude older rows: addr A's newest
+    # row is "now"; addr B's newest is "1 hour ago" — both qualify only if
+    # the rollup window includes them. Use a tight 30s window: 0 groups match.
+    cutoff = datetime.now(UTC) + timedelta(seconds=30)
+    n = await get_new_candidate_count(seeded_db, since=cutoff)
+    assert n == 0

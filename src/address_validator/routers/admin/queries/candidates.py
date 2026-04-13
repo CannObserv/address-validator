@@ -95,6 +95,23 @@ async def get_candidate_groups(
     return rows, total
 
 
+async def get_new_candidate_count(engine: AsyncEngine, *, since: datetime | None) -> int:
+    """Count candidate groups with rollup status in ('new', 'mixed') for the badge."""
+    where: list[ColumnElement] = [_NON_LABELED]
+    if since is not None:
+        where.append(mtc.c.created_at >= since)
+    rollup = _rollup_status_expr()
+    group_stmt = (
+        sa.select(mtc.c.raw_address_hash)
+        .where(*where)
+        .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
+        .having(rollup.in_(("new", "mixed")))
+    )
+    count_stmt = sa.select(sa.func.count()).select_from(group_stmt.subquery())
+    async with engine.connect() as conn:
+        return (await conn.execute(count_stmt)).scalar() or 0
+
+
 async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | None:
     """Return the summary for a single group identified by raw_hash, or None."""
     rollup = _rollup_status_expr()

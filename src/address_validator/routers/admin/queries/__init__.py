@@ -5,6 +5,7 @@ from address_validator.routers.admin.queries.candidates import (
     get_candidate_group,
     get_candidate_groups,
     get_candidate_submissions,
+    get_new_candidate_count,
     update_candidate_notes,
     update_candidate_status,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "get_candidate_submissions",
     "get_dashboard_stats",
     "get_endpoint_stats",
+    "get_new_candidate_count",
     "get_provider_daily_usage",
     "get_provider_stats",
     "get_sparkline_data",

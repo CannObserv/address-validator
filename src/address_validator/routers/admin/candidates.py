@@ -13,6 +13,7 @@ from address_validator.routers.admin.queries import (
     get_candidate_group,
     get_candidate_groups,
     get_candidate_submissions,
+    get_new_candidate_count,
     update_candidate_notes,
     update_candidate_status,
 )
@@ -21,6 +22,7 @@ from address_validator.routers.admin.queries.candidates import WRITE_STATUSES
 router = APIRouter(prefix="/candidates")
 
 _PER_PAGE = 50
+_BADGE_LOOKBACK_DAYS = 30
 _VALID_FAILURE_TYPES: frozenset[str] = frozenset({"repeated_label_error", "post_parse_recovery"})
 _VALID_STATUSES: frozenset[str] = WRITE_STATUSES | {"all"}
 
@@ -88,6 +90,20 @@ async def candidates_list(
             "total_pages": total_pages,
             "filters": filters,
         },
+    )
+
+
+@router.get("/_badge", response_class=HTMLResponse, response_model=None)
+async def candidates_badge(
+    request: Request,
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    """HTMX-loaded fragment shown next to the Candidates nav link."""
+    since = datetime.now(UTC) - timedelta(days=_BADGE_LOOKBACK_DAYS)
+    count = await get_new_candidate_count(ctx.engine, since=since)
+    return templates.TemplateResponse(
+        "admin/candidates/_badge.html",
+        {"request": request, "count": count},
     )
 
 
