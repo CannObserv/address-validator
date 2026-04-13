@@ -114,6 +114,7 @@ model_training_candidates = sa.Table(
     metadata,
     sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
     sa.Column("raw_address", sa.Text(), nullable=False),
+    sa.Column("raw_address_hash", sa.Text(), nullable=False),
     sa.Column("failure_type", sa.Text(), nullable=False),
     sa.Column("parsed_tokens", JSONB(), nullable=False),
     sa.Column("recovered_components", JSONB(), nullable=True),
