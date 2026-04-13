@@ -54,20 +54,20 @@
     </div>
 </div>
 {% if quota %}
-<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Validation Provider Quota</h2>
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Validation Provider Usage Today</h2>
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
     {% for q in quota %}
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">{{ q.provider | upper }} Daily Quota</p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">{{ q.provider | upper }} Requests Today</p>
         <div class="flex items-baseline gap-2">
-            <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ q.remaining }}</p>
-            <p class="text-sm text-gray-500 dark:text-gray-400">/ {{ q.limit }}</p>
+            <p class="text-2xl font-bold text-gray-900 dark:text-gray-100">{{ q.requests_today }}</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400">/ {{ q.limit }} daily limit</p>
         </div>
         <div class="mt-2 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2" role="progressbar"
-             aria-valuenow="{{ q.remaining }}" aria-valuemin="0" aria-valuemax="{{ q.limit }}"
-             aria-label="{{ q.provider }} quota usage">
+             aria-valuenow="{{ q.requests_today }}" aria-valuemin="0" aria-valuemax="{{ q.limit }}"
+             aria-label="{{ q.provider }} daily usage">
             <div class="bg-co-purple h-2 rounded-full"
-                 style="width: {{ ((q.remaining / q.limit) * 100) | int if q.limit > 0 else 0 }}%"></div>
+                 style="width: {{ ((q.requests_today / q.limit) * 100) | int if q.limit > 0 else 0 }}%"></div>
         </div>
     </div>
     {% endfor %}
