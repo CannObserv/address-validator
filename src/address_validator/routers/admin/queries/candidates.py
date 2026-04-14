@@ -50,6 +50,9 @@ def _rollup_status_expr(has_assignment: ColumnElement) -> ColumnElement:
       2. any assignment exists -> 'assigned' (derived from join)
       3. all non-labeled rows new -> 'new'
       4. otherwise -> 'mixed'
+
+    Caller MUST apply the `_NON_LABELED` predicate in the WHERE clause —
+    this function trusts that `labeled` rows have already been filtered out.
     """
     all_rejected = sa.func.bool_and(mtc.c.status == sa.literal("rejected"))
     all_new = sa.func.bool_and(mtc.c.status == sa.literal("new"))
@@ -101,7 +104,8 @@ async def get_candidate_groups(
         .subquery()
     )
 
-    rollup = _rollup_status_expr(sa.func.max(batch_slugs_sub.c.batch_slugs))
+    batch_slugs_agg = sa.func.max(batch_slugs_sub.c.batch_slugs)
+    rollup = _rollup_status_expr(batch_slugs_agg)
 
     group_stmt = (
         sa.select(
@@ -113,7 +117,7 @@ async def get_candidate_groups(
             sa.func.min(mtc.c.created_at).label("first_seen"),
             last_seen,
             sa.func.max(mtc.c.notes).label("notes"),
-            sa.func.max(batch_slugs_sub.c.batch_slugs).label("batch_slugs"),
+            batch_slugs_agg.label("batch_slugs"),
         )
         .select_from(
             mtc.outerjoin(
@@ -183,7 +187,8 @@ async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | N
         .group_by(cba.c.raw_address_hash)
         .subquery()
     )
-    rollup = _rollup_status_expr(sa.func.max(batch_slugs_sub.c.batch_slugs))
+    batch_slugs_agg = sa.func.max(batch_slugs_sub.c.batch_slugs)
+    rollup = _rollup_status_expr(batch_slugs_agg)
     stmt = (
         sa.select(
             mtc.c.raw_address.label("raw_address"),
@@ -194,7 +199,7 @@ async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | N
             sa.func.min(mtc.c.created_at).label("first_seen"),
             sa.func.max(mtc.c.created_at).label("last_seen"),
             sa.func.max(mtc.c.notes).label("notes"),
-            sa.func.max(batch_slugs_sub.c.batch_slugs).label("batch_slugs"),
+            batch_slugs_agg.label("batch_slugs"),
         )
         .select_from(
             mtc.outerjoin(
