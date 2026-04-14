@@ -91,7 +91,7 @@ def upgrade() -> None:
             status, current_step, manifest_path,
             created_at, activated_at, deployed_at
         ) VALUES (
-            '01J00000000000000000MULTI1',
+            '01KMV1103Q0000000000000000',
             '2026_03_28-multi_unit',
             'Multi-unit designator handling — BLDG + APT/STE/UNIT/ROOM patterns (issue #72)',
             'repeated_label_error',
