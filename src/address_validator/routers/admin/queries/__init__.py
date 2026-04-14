@@ -1,6 +1,12 @@
 """Admin dashboard query helpers — backward-compatible re-exports."""
 
 from address_validator.routers.admin.queries.audit import get_audit_rows
+from address_validator.routers.admin.queries.batches import (
+    get_assignable_batches,
+    get_batch_by_slug,
+    get_batch_candidates,
+    list_batches,
+)
 from address_validator.routers.admin.queries.candidates import (
     get_candidate_group,
     get_candidate_groups,
@@ -20,7 +26,10 @@ from address_validator.routers.admin.queries.provider import (
 )
 
 __all__ = [
+    "get_assignable_batches",
     "get_audit_rows",
+    "get_batch_by_slug",
+    "get_batch_candidates",
     "get_candidate_group",
     "get_candidate_groups",
     "get_candidate_submissions",
@@ -30,6 +39,7 @@ __all__ = [
     "get_provider_daily_usage",
     "get_provider_stats",
     "get_sparkline_data",
+    "list_batches",
     "update_candidate_notes",
     "update_candidate_status",
 ]
