@@ -168,7 +168,7 @@ def upgrade() -> None:
             status, current_step, manifest_path,
             created_at, activated_at, deployed_at
         ) VALUES (
-            '01J00000000000000000MULTI1',
+            '01KMV1103Q0000000000000000',
             '2026_03_28-multi_unit',
             'Multi-unit designator handling — BLDG + APT/STE/UNIT/ROOM patterns (issue #72)',
             'repeated_label_error',
@@ -2147,6 +2147,35 @@ git commit -m "#103 feat: assign/unassign candidates to batches + surface submis
 - Modify: `scripts/model/contribute.py` (transition to `closed`, set `upstream_pr`)
 - Modify: `.claude/skills/train-model/SKILL.md` (reflect batch language + new flags)
 
+**Required cleanup passes (do these FIRST in this task):**
+
+1. **Rename `--session-dir` CLI flag → `--batch-dir` in all of `scripts/model/*.py`** and every `SKILL.md` example. Search:
+   ```bash
+   grep -rn "session-dir\|session_dir" scripts/model/ .claude/skills/train-model/
+   ```
+   Update call sites in SKILL.md examples and any Python string literals. Keep argparse `dest=` aligned so `args.batch_dir` replaces `args.session_dir`.
+
+2. **Rename `session_dir` key in `manifest.json`** writes. In `scripts/model/train.py` (or wherever the manifest is composed), rename the JSON key `session_dir` → `batch_dir` on new writes. Also patch the existing file:
+   ```bash
+   python -c "
+   import json, pathlib
+   p = pathlib.Path('training/batches/2026_03_28-multi_unit/manifest.json')
+   d = json.loads(p.read_text())
+   if 'session_dir' in d:
+       d['batch_dir'] = d.pop('session_dir')
+   p.write_text(json.dumps(d, indent=2) + '\n')
+   "
+   ```
+   Any reader (`performance.py`, `contribute.py`) that consumes this key must be updated in lock-step.
+
+3. **Scrub user-facing "session" strings** from `scripts/model/*.py` — help text, log messages, print statements, docstrings. Example:
+   ```bash
+   grep -rn "session" scripts/model/ | grep -v "\.pyc"
+   ```
+   Replace training-context uses with "batch". Keep unrelated uses (e.g. HTTP `session`, pytest `session`) intact.
+
+4. After the three cleanups, run the baseline suite: `uv run pytest --no-cov -x scripts/` (or a targeted `scripts/model` test if one exists). This isolates the rename from the lifecycle wiring below.
+
 - [ ] **Step 1: Read current identify.py**
 
 ```bash
@@ -2358,7 +2387,7 @@ Add to the Sensitive Areas table:
 
 ```
 | `src/address_validator/services/training_batches.py` | `ALLOWED_TRANSITIONS` is the single source of truth for batch status moves; assign_candidates side-effects flip row status to 'assigned' and auto-activate a planned batch on first assignment; unassign_candidates reverts row status to 'new' only when the group has zero remaining assignments. |
-| `alembic/versions/013_training_batches.py` | Seeds the pre-existing multi_unit batch with a hard-coded ULID ('01J00000000000000000MULTI1'); downgrade deletes assignments + batches and restores the old status CHECK (reviewed). |
+| `alembic/versions/013_training_batches.py` | Seeds the pre-existing multi_unit batch with a hard-coded ULID ('01KMV1103Q0000000000000000'); downgrade deletes assignments + batches and restores the old status CHECK (reviewed). |
 ```
 
 Also update the "Key conventions" area to mention that triage-list nav badge counts `new` groups (unchanged) and that `assigned` status is derived, not admin-settable.
@@ -2410,7 +2439,8 @@ EOF
 
 ## Self-Review Notes
 
-- **Spec coverage:** every section of the design doc maps to tasks — nomenclature (Task 1, 12, 14), data model (Tasks 2-3, 6), admin UX (Tasks 10-11, 13), services (Tasks 4-5), parser/middleware plumbing (Task 7), queries (Tasks 8-9), skill integration (Task 12), docs (Task 14). One follow-up: ULID seed value `01J00000000000000000MULTI1` is a hand-chosen placeholder — valid Crockford base32 ULID shape but not a real timestamp-ordered ULID; this is intentional and fine because lexical order is not load-bearing for seed rows.
+- **Spec coverage:** every section of the design doc maps to tasks — nomenclature (Task 1, 12, 14), data model (Tasks 2-3, 6), admin UX (Tasks 10-11, 13), services (Tasks 4-5), parser/middleware plumbing (Task 7), queries (Tasks 8-9), skill integration (Task 12), docs (Task 14). ULID seed value `01KMV1103Q0000000000000000` has a real 2026-03-28 timestamp prefix (decoded from `created_at=2026-03-28T20:09:04.375Z`) with a zero-padded random suffix — deterministic and timestamp-sortable alongside future real ULIDs.
+- **Mid-plan test-suite breakage:** between Task 2 (migration drops `reviewed` from the candidate status CHECK) and Task 11 (templates + tests updated to use `assigned`), existing tests at `tests/unit/test_admin_candidates_queries.py` and `tests/unit/test_admin_candidates_views.py` that insert `status='reviewed'` fail with an IntegrityError. This is expected mid-plan; intermediate commits are not independently greenable. CI should only run against the final branch state; the branch is designed to land as a single squash/merge unit once Task 11 is green.
 - **Type consistency:** `assign_candidates` / `unassign_candidates` / `create_batch` / `transition_status` / `advance_step` / `get_batch_id_by_slug` / `record_upstream_pr` — these names are used consistently across Tasks 4, 5, 9, 10, 11, 12.
 - **Batch-slug display:** `batch_slugs` is the column added by Task 8 and consumed by Tasks 11 (row template) and 13 (detail template). Consistent.
 - **Admin-settable statuses:** `WRITE_STATUSES` narrowed to `{'new', 'rejected'}` in Task 8; `assigned` and `labeled` not directly settable — matches design doc.
