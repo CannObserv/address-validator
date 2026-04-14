@@ -146,8 +146,10 @@ async def assign_candidates(
 ) -> int:
     """Assign candidate groups to a batch. Idempotent (ON CONFLICT DO NOTHING).
 
-    Side effect: any candidate row whose rollup becomes `assigned` (i.e. has
-    status='new' + now has >=1 assignment) has its row status set to 'assigned'.
+    Row statuses are not modified. The 'assigned' rollup is derived at read
+    time by joining to candidate_batch_assignments. Auto-activates a planned
+    batch on first assignment via a WHERE status='planned' guard (idempotent
+    under concurrency — a concurrent assign sees status='active' and skips).
     Returns the number of newly-inserted assignment rows.
     """
     if not raw_address_hashes:
@@ -164,15 +166,6 @@ async def assign_candidates(
 
     async with engine.begin() as conn:
         result = await conn.execute(stmt)
-        # Flip status='new' rows to 'assigned' for the touched groups.
-        await conn.execute(
-            sa.text(
-                "UPDATE model_training_candidates "
-                "SET status = 'assigned' "
-                "WHERE raw_address_hash = ANY(:hashes) AND status = 'new'"
-            ),
-            {"hashes": raw_address_hashes},
-        )
         # Trigger transition planned -> active if this is the batch's first assignment.
         # WHERE status='planned' guard makes this idempotent under concurrency —
         # a second concurrent assign sees status='active' and skips the UPDATE.
@@ -214,10 +207,11 @@ async def unassign_candidates(
     batch_id: str,
     raw_address_hashes: list[str],
 ) -> int:
-    """Remove candidate-batch assignments. Per-batch only.
+    """Remove candidate-batch assignments for a single batch. Per-batch semantics only.
 
-    Side effect: if a group now has zero assignments and its rows are
-    'assigned', revert them to 'new'. Returns rowcount of deleted assignments.
+    Row statuses are not affected. The rollup switches back to 'new'
+    automatically once the last assignment row is removed. Returns
+    rowcount of deleted assignment rows.
     """
     if not raw_address_hashes:
         return 0
@@ -227,19 +221,5 @@ async def unassign_candidates(
                 candidate_batch_assignments.c.batch_id == batch_id,
                 candidate_batch_assignments.c.raw_address_hash.in_(raw_address_hashes),
             )
-        )
-        # Revert to 'new' for any hash that no longer has ANY assignment.
-        await conn.execute(
-            sa.text(
-                "UPDATE model_training_candidates c "
-                "SET status = 'new' "
-                "WHERE c.raw_address_hash = ANY(:hashes) "
-                "  AND c.status = 'assigned' "
-                "  AND NOT EXISTS ("
-                "    SELECT 1 FROM candidate_batch_assignments a "
-                "    WHERE a.raw_address_hash = c.raw_address_hash"
-                "  )"
-            ),
-            {"hashes": raw_address_hashes},
         )
     return result.rowcount or 0

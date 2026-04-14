@@ -87,16 +87,16 @@ async def test_assign_activates_planned_batch(clean_db: AsyncEngine) -> None:
         batch = (
             await conn.execute(sa.select(training_batches).where(training_batches.c.id == batch_id))
         ).first()
-        cand = (
+        assignment_count = (
             await conn.execute(
-                sa.select(model_training_candidates.c.status).where(
-                    model_training_candidates.c.raw_address_hash == h
-                )
+                sa.select(sa.func.count())
+                .select_from(candidate_batch_assignments)
+                .where(candidate_batch_assignments.c.raw_address_hash == h)
             )
-        ).first()
+        ).scalar()
     assert batch.status == "active"
     assert batch.activated_at is not None
-    assert cand.status == "assigned"
+    assert assignment_count == 1
 
 
 async def test_assign_is_idempotent(clean_db: AsyncEngine) -> None:
@@ -107,7 +107,7 @@ async def test_assign_is_idempotent(clean_db: AsyncEngine) -> None:
     assert n2 == 0
 
 
-async def test_unassign_last_batch_reverts_to_new(clean_db: AsyncEngine) -> None:
+async def test_unassign_last_batch_removes_assignment_rows(clean_db: AsyncEngine) -> None:
     batch_id = await create_batch(clean_db, slug="test-e", description="desc")
     h = await _insert_candidate(clean_db, "789 ELM RD")
     await assign_candidates(clean_db, batch_id=batch_id, raw_address_hashes=[h])
@@ -115,13 +115,6 @@ async def test_unassign_last_batch_reverts_to_new(clean_db: AsyncEngine) -> None
     await unassign_candidates(clean_db, batch_id=batch_id, raw_address_hashes=[h])
 
     async with clean_db.connect() as conn:
-        cand = (
-            await conn.execute(
-                sa.select(model_training_candidates.c.status).where(
-                    model_training_candidates.c.raw_address_hash == h
-                )
-            )
-        ).first()
         remaining = (
             await conn.execute(
                 sa.select(sa.func.count())
@@ -129,11 +122,10 @@ async def test_unassign_last_batch_reverts_to_new(clean_db: AsyncEngine) -> None
                 .where(candidate_batch_assignments.c.raw_address_hash == h)
             )
         ).scalar()
-    assert cand.status == "new"
     assert remaining == 0
 
 
-async def test_unassign_keeps_assigned_when_other_batch_still_holds(
+async def test_unassign_keeps_one_assignment_when_other_batch_still_holds(
     clean_db: AsyncEngine,
 ) -> None:
     b1 = await create_batch(clean_db, slug="test-f1", description="desc")
@@ -145,14 +137,14 @@ async def test_unassign_keeps_assigned_when_other_batch_still_holds(
     await unassign_candidates(clean_db, batch_id=b1, raw_address_hashes=[h])
 
     async with clean_db.connect() as conn:
-        cand = (
+        remaining = (
             await conn.execute(
-                sa.select(model_training_candidates.c.status).where(
-                    model_training_candidates.c.raw_address_hash == h
-                )
+                sa.select(sa.func.count())
+                .select_from(candidate_batch_assignments)
+                .where(candidate_batch_assignments.c.raw_address_hash == h)
             )
-        ).first()
-    assert cand.status == "assigned"
+        ).scalar()
+    assert remaining == 1
 
 
 async def test_get_batch_id_by_slug(clean_db: AsyncEngine) -> None:

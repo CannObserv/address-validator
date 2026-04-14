@@ -128,7 +128,7 @@ model_training_candidates = sa.Table(
         "status",
         sa.Text(),
         sa.CheckConstraint(
-            "status IN ('new', 'assigned', 'labeled', 'rejected')",
+            "status IN ('new', 'labeled', 'rejected')",
             name="ck_model_training_candidates_status",
         ),
         nullable=False,

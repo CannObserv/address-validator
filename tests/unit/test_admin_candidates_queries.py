@@ -26,7 +26,14 @@ def _hex(s: str) -> str:
 
 
 async def _seed(engine: AsyncEngine) -> None:
-    """Seed three distinct raw_address groups with varying statuses."""
+    """Seed four distinct raw_address groups with varying rollup states.
+
+    Groups:
+      A: two `new` rows, no assignments         → rollup `new`
+      B: one `new` + one `rejected`             → rollup `mixed`
+      C: one `new` row + assignment to a batch  → rollup `assigned` (derived)
+      D: one `labeled` row                      → EXCLUDED from all triage queries
+    """
     now = datetime.now(UTC)
     rows = [
         # Group A: two `new` rows — rolls up to `new`
@@ -37,7 +44,7 @@ async def _seed(engine: AsyncEngine) -> None:
             "ts": now - timedelta(days=1),
         },
         {"raw": "addr A", "ft": "repeated_label_error", "status": "new", "ts": now},
-        # Group B: one `new` + one `assigned` — rolls up to `mixed`
+        # Group B: one `new` + one `rejected` — rolls up to `mixed`
         {
             "raw": "addr B",
             "ft": "post_parse_recovery",
@@ -47,14 +54,14 @@ async def _seed(engine: AsyncEngine) -> None:
         {
             "raw": "addr B",
             "ft": "post_parse_recovery",
-            "status": "assigned",
+            "status": "rejected",
             "ts": now - timedelta(hours=1),
         },
-        # Group C: one `assigned` row — rolls up to `assigned`
+        # Group C: one `new` row — rolls up to `assigned` via batch assignment below
         {
             "raw": "addr C",
             "ft": "repeated_label_error",
-            "status": "assigned",
+            "status": "new",
             "ts": now - timedelta(days=3),
         },
         # Group D: one `labeled` — must be EXCLUDED from all triage queries
@@ -71,13 +78,26 @@ async def _seed(engine: AsyncEngine) -> None:
                 r,
             )
 
+    # Group C: create a batch and assign addr C to derive the `assigned` rollup.
+    batch_id = await create_batch(engine, slug="seed-batch", description="seed")
+    async with engine.connect() as conn:
+        h_c = (
+            await conn.execute(
+                sa.select(mtc_tbl.c.raw_address_hash).where(mtc_tbl.c.raw_address == "addr C")
+            )
+        ).scalar_one()
+    await assign_candidates(engine, batch_id=batch_id, raw_address_hashes=[h_c])
+
 
 @pytest.fixture()
 async def seeded_db(db: AsyncEngine) -> AsyncEngine:
     """`db` fixture truncates everything; this extends by seeding candidate rows."""
     async with db.begin() as conn:
         await conn.execute(
-            text("TRUNCATE model_training_candidates, training_batches RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE candidate_batch_assignments, training_batches,"
+                " model_training_candidates RESTART IDENTITY CASCADE"
+            )
         )
     await _seed(db)
     return db
