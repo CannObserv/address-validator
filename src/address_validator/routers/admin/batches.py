@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.exc import IntegrityError
 
 if TYPE_CHECKING:
     from starlette.responses import Response
@@ -60,13 +61,20 @@ async def batches_create(
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     pattern = targeted_failure_pattern.strip() or None
-    await create_batch(
-        ctx.engine,
-        slug=slug.strip(),
-        description=description.strip(),
-        targeted_failure_pattern=pattern,
-    )
-    return RedirectResponse(url=f"/admin/batches/{slug.strip()}", status_code=303)
+    clean_slug = slug.strip()
+    try:
+        await create_batch(
+            ctx.engine,
+            slug=clean_slug,
+            description=description.strip(),
+            targeted_failure_pattern=pattern,
+        )
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"batch slug '{clean_slug}' already exists",
+        ) from exc
+    return RedirectResponse(url=f"/admin/batches/{clean_slug}", status_code=303)
 
 
 @router.get("/{slug}", response_class=HTMLResponse, response_model=None)

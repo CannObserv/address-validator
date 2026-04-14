@@ -4,7 +4,7 @@ Usage:
     python scripts/model/identify.py summary
     python scripts/model/identify.py export [--status new] [--type repeated_label_error]
         [--limit 100] [--out candidates.csv]
-    python scripts/model/identify.py mark ID [ID ...] --status reviewed
+    python scripts/model/identify.py mark ID [ID ...] --status rejected
 
 Requires VALIDATION_CACHE_DSN environment variable.
 """
@@ -123,6 +123,7 @@ async def _assign_to_batch(
 ) -> None:
     """Assign exported candidates to a batch (existing or newly created)."""
     from address_validator.services.training_batches import (  # noqa: PLC0415
+        advance_step,
         assign_candidates,
         create_batch,
         get_batch_id_by_slug,
@@ -142,6 +143,9 @@ async def _assign_to_batch(
             if batch_id is None:
                 print(f"Error: unknown batch slug: {batch_slug}", file=sys.stderr)
                 sys.exit(1)
+
+        # identify.py IS the identifying step — mark it so the admin UI reflects reality.
+        await advance_step(engine, batch_id=batch_id, step="identifying")
 
         n = await assign_candidates(
             engine,
@@ -196,7 +200,7 @@ def main() -> None:
 
     mark_cmd = sub.add_parser("mark", help="Update candidate status")
     mark_cmd.add_argument("ids", nargs="+", type=int)
-    mark_cmd.add_argument("--status", required=True, choices=["reviewed", "labeled", "rejected"])
+    mark_cmd.add_argument("--status", required=True, choices=["new", "labeled", "rejected"])
 
     args = parser.parse_args()
 
