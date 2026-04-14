@@ -16,13 +16,17 @@ from address_validator.routers.admin.queries import (
     update_candidate_notes,
     update_candidate_status,
 )
-from address_validator.routers.admin.queries.candidates import WRITE_STATUSES
+from address_validator.routers.admin.queries.candidates import (
+    DEFAULT_LOOKBACK_DAYS,
+    WRITE_STATUSES,
+)
 
 router = APIRouter(prefix="/candidates")
 
 _PER_PAGE = 50
 _VALID_FAILURE_TYPES: frozenset[str] = frozenset({"repeated_label_error", "post_parse_recovery"})
 _VALID_STATUSES: frozenset[str] = WRITE_STATUSES | {"all"}
+_DEFAULT_SINCE = f"{DEFAULT_LOOKBACK_DAYS}d"
 
 
 def _parse_since(raw: str | None) -> datetime | None:
@@ -45,7 +49,7 @@ async def candidates_list(
     page: int = Query(1, ge=1),
     status: str = Query("new"),
     failure_type: str | None = Query(None),
-    since: str = Query("30d"),
+    since: str = Query(_DEFAULT_SINCE),
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
     if status not in _VALID_STATUSES:

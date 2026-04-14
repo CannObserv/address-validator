@@ -27,6 +27,11 @@ _NON_LABELED = mtc.c.status != "labeled"
 # training pipeline; `mixed` is a derived rollup, never a stored value.
 WRITE_STATUSES: frozenset[str] = frozenset({"new", "reviewed", "rejected"})
 
+# Default time window for candidate-triage views. Drives both the list view's
+# `since=30d` querystring default AND the nav-badge lookback so the count
+# matches what the user lands on. Change in one place.
+DEFAULT_LOOKBACK_DAYS = 30
+
 
 def _rollup_status_expr() -> ColumnElement:
     """CASE expression: single status -> that status; multiple -> 'mixed'."""
