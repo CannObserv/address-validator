@@ -18,16 +18,45 @@
     {% include "admin/candidates/_notes.html" %}
 </div>
 
+<div class="mb-6">
+    <div class="text-xs text-gray-500 uppercase mb-2">Batches</div>
+    <div class="flex flex-wrap gap-2 items-center mb-2">
+        {% for slug in (group.batch_slugs or []) %}
+        <span class="inline-flex items-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs rounded px-2 py-0.5">
+            <a href="/admin/batches/{{ slug }}" class="hover:underline">{{ slug }}</a>
+            <form method="post" action="/admin/candidates/{{ group.raw_hash }}/batches/{{ slug }}/unassign" class="ml-2 inline">
+                <button class="text-xs text-red-600 hover:text-red-800" title="Remove from this batch">&times;</button>
+            </form>
+        </span>
+        {% else %}<span class="text-gray-400 text-xs">not assigned to any batch</span>{% endfor %}
+    </div>
+    <form method="post" action="/admin/candidates/{{ group.raw_hash }}/batches" class="flex gap-2 items-center">
+        <select name="batch_id" required class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded px-2 py-1 text-sm">
+            <option value="">Assign to batch…</option>
+            {% for b in assignable_batches %}
+            <option value="{{ b.id }}">{{ b.slug }} ({{ b.status }})</option>
+            {% endfor %}
+        </select>
+        <button class="bg-co-purple text-white px-3 py-1 rounded text-sm font-medium">Assign</button>
+    </form>
+</div>
+
 <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Submissions</h2>
 <div class="space-y-3">
     {% for s in submissions %}
     <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-sm">
-        <div class="flex items-center gap-3 mb-2">
+        <div class="flex items-center gap-3 mb-2 flex-wrap">
             <span class="text-xs text-gray-500">#{{ s.id }}</span>
             <span class="text-xs text-gray-500">{{ s.created_at.strftime('%Y-%m-%d %H:%M') if s.created_at else '' }}</span>
-            <span class="text-xs font-medium text-gray-700 dark:text-gray-300">{{ s.failure_type }}</span>
-            <span class="text-xs text-gray-500">{{ s.status }}</span>
+            <span class="text-xs font-medium text-gray-700 dark:text-gray-300" title="{{ s.failure_reason or '' }}">{{ s.failure_type }}</span>
+            <span class="text-xs text-gray-500">status: {{ s.status }}</span>
+            {% if s.endpoint %}<span class="text-xs text-gray-500">endpoint: <span class="font-mono">{{ s.endpoint }}</span></span>{% endif %}
+            {% if s.api_version %}<span class="text-xs text-gray-500">v{{ s.api_version }}</span>{% endif %}
+            {% if s.provider %}<span class="text-xs text-gray-500">provider: {{ s.provider }}</span>{% endif %}
         </div>
+        {% if s.failure_reason %}
+        <div class="text-xs text-gray-600 dark:text-gray-400 mb-2 italic">{{ s.failure_reason }}</div>
+        {% endif %}
         <details class="text-xs">
             <summary class="cursor-pointer text-co-purple">parsed_tokens</summary>
             <pre class="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded overflow-x-auto">{{ s.parsed_tokens | tojson(indent=2) }}</pre>

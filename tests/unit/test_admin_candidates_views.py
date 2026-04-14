@@ -43,12 +43,12 @@ def test_candidates_list_filters_pass_through(client: TestClient, admin_headers:
         new=mock,
     ):
         r = client.get(
-            "/admin/candidates/?status=reviewed&failure_type=repeated_label_error&since=7d",
+            "/admin/candidates/?status=assigned&failure_type=repeated_label_error&since=7d",
             headers=admin_headers,
         )
     assert r.status_code == 200
     kwargs = mock.call_args.kwargs
-    assert kwargs["status"] == "reviewed"
+    assert kwargs["status"] == "assigned"
     assert kwargs["failure_type"] == "repeated_label_error"
     assert kwargs["since"] is not None
 
@@ -73,6 +73,7 @@ def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> N
             "first_seen": None,
             "last_seen": None,
             "notes": None,
+            "batch_slugs": [],
         }
     )
     subs_mock = AsyncMock(
@@ -81,10 +82,14 @@ def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> N
                 "id": 1,
                 "raw_address": "x",
                 "failure_type": "repeated_label_error",
+                "failure_reason": None,
                 "parsed_tokens": [["STE", "OccupancyIdentifier"]],
                 "recovered_components": None,
                 "created_at": None,
                 "status": "new",
+                "endpoint": None,
+                "api_version": None,
+                "provider": None,
             },
         ]
     )
@@ -93,6 +98,10 @@ def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> N
         patch(
             "address_validator.routers.admin.candidates.get_candidate_submissions",
             new=subs_mock,
+        ),
+        patch(
+            "address_validator.routers.admin.candidates.get_assignable_batches",
+            new=AsyncMock(return_value=[]),
         ),
     ):
         r = client.get("/admin/candidates/" + "a" * 64, headers=admin_headers)
@@ -108,7 +117,7 @@ def test_candidates_status_post_updates_and_renders_partial(
         return_value={
             "raw_address": "x",
             "raw_hash": "a" * 64,
-            "rollup_status": "reviewed",
+            "rollup_status": "rejected",
             "failure_types": [],
             "count": 2,
             "first_seen": None,
@@ -126,12 +135,12 @@ def test_candidates_status_post_updates_and_renders_partial(
         r = client.post(
             "/admin/candidates/" + "a" * 64 + "/status",
             headers={**admin_headers, "HX-Request": "true"},
-            data={"status": "reviewed"},
+            data={"status": "rejected"},
         )
     assert r.status_code == 200
     update_mock.assert_awaited_once()
     kwargs = update_mock.call_args.kwargs
-    assert kwargs["status"] == "reviewed"
+    assert kwargs["status"] == "rejected"
     assert kwargs["raw_hash"] == "a" * 64
 
 
@@ -195,7 +204,7 @@ def test_candidates_status_post_404_on_unknown_hash(
         r = client.post(
             "/admin/candidates/" + "a" * 64 + "/status",
             headers={**admin_headers, "HX-Request": "true"},
-            data={"status": "reviewed"},
+            data={"status": "rejected"},
         )
     assert r.status_code == 404
 
@@ -257,3 +266,32 @@ def test_parse_since_invalid_returns_none() -> None:
     assert _parse_since("garbage") is None
     assert _parse_since("xd") is None  # int conversion fails
     assert _parse_since("not-a-date") is None
+
+
+def test_candidates_assign_batch_redirects(client: TestClient, admin_headers: dict) -> None:
+    with patch(
+        "address_validator.routers.admin.candidates.assign_candidates",
+        new=AsyncMock(return_value=1),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/batches",
+            data={"batch_id": "01KMV1103Q0000000000000000"},
+            headers=admin_headers,
+            follow_redirects=False,
+        )
+    assert r.status_code == 303
+    assert r.headers["location"] == "/admin/candidates/" + "a" * 64
+
+
+def test_candidates_unassign_batch_404_on_unknown_slug(
+    client: TestClient, admin_headers: dict
+) -> None:
+    with patch(
+        "address_validator.routers.admin.candidates.get_batch_by_slug",
+        new=AsyncMock(return_value=None),
+    ):
+        r = client.post(
+            "/admin/candidates/" + "a" * 64 + "/batches/no-such/unassign",
+            headers=admin_headers,
+        )
+    assert r.status_code == 404
