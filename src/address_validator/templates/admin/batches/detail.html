@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block title %}Batch {{ batch.slug }}{% endblock %}
+{% block content %}
+<div class="mb-4"><a href="/admin/batches/" class="text-sm text-co-purple hover:underline">&larr; Back to batches</a></div>
+
+<h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">{{ batch.slug }}</h1>
+<p class="text-sm text-gray-600 dark:text-gray-300 mb-4">{{ batch.description }}</p>
+
+<div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Status</div>{{ batch.status }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Current Step</div>{{ batch.current_step or '—' }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Targeted Pattern</div>{{ batch.targeted_failure_pattern or '—' }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Manifest</div><span class="font-mono text-xs">{{ batch.manifest_path or '—' }}</span></div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Created</div>{{ batch.created_at.strftime('%Y-%m-%d %H:%M') if batch.created_at else '—' }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Activated</div>{{ batch.activated_at.strftime('%Y-%m-%d %H:%M') if batch.activated_at else '—' }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Deployed</div>{{ batch.deployed_at.strftime('%Y-%m-%d %H:%M') if batch.deployed_at else '—' }}</div>
+    <div><div class="text-xs text-gray-500 uppercase mb-1">Closed</div>{{ batch.closed_at.strftime('%Y-%m-%d %H:%M') if batch.closed_at else '—' }}</div>
+</div>
+
+{% set next_statuses = {
+    'planned': ['active','closed'],
+    'active': ['deployed','closed'],
+    'deployed': ['observing','closed'],
+    'observing': ['closed'],
+    'closed': []
+}[batch.status] %}
+{% if next_statuses %}
+<form method="post" action="/admin/batches/{{ batch.slug }}/status" class="flex gap-2 items-center mb-6">
+    <label class="text-xs text-gray-500 uppercase">Transition to</label>
+    <select name="status" class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded px-2 py-1 text-sm">
+        {% for s in next_statuses %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <button class="bg-co-purple text-white px-3 py-1 rounded text-sm font-medium">Apply</button>
+</form>
+{% endif %}
+
+<h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Assigned Candidates ({{ candidates|length }})</h2>
+<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <table class="w-full text-left">
+        <thead class="bg-gray-50 dark:bg-gray-700 text-xs text-gray-500 uppercase">
+            <tr>
+                <th class="px-3 py-2">Raw Address</th>
+                <th class="px-3 py-2">Submissions</th>
+                <th class="px-3 py-2">Last Seen</th>
+                <th class="px-3 py-2">Assigned At</th>
+                <th class="px-3 py-2">Assigned By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for c in candidates %}
+            <tr class="border-t border-gray-200 dark:border-gray-700 text-sm">
+                <td class="px-3 py-2 font-mono text-xs"><a class="text-co-purple hover:underline" href="/admin/candidates/{{ c.raw_hash }}">{{ c.raw_address }}</a></td>
+                <td class="px-3 py-2">{{ c.submission_count }}</td>
+                <td class="px-3 py-2">{{ c.last_seen.strftime('%Y-%m-%d %H:%M') if c.last_seen else '—' }}</td>
+                <td class="px-3 py-2">{{ c.assigned_at.strftime('%Y-%m-%d %H:%M') if c.assigned_at else '—' }}</td>
+                <td class="px-3 py-2">{{ c.assigned_by or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="px-3 py-4 text-gray-400">No candidates assigned.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
