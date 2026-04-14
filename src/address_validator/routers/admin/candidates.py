@@ -175,7 +175,7 @@ async def candidates_assign_batch(
         ctx.engine,
         batch_id=batch_id,
         raw_address_hashes=[raw_hash],
-        assigned_by=ctx.user.email if ctx.user else None,
+        assigned_by=ctx.user.email,
     )
     return RedirectResponse(url=f"/admin/candidates/{raw_hash}", status_code=303)
 
