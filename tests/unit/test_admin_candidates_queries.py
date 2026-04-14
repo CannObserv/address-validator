@@ -218,7 +218,7 @@ async def test_update_candidate_notes_strips_surrounding_whitespace(seeded_db: A
 
 
 async def test_get_new_candidate_count_counts_new_and_mixed(seeded_db: AsyncEngine) -> None:
-    # Seeded data: A=new, B=mixed, C=reviewed, D=labeled (excluded).
+    # Seeded data: A=new, B=mixed, C=assigned, D=labeled (excluded).
     # Badge counts new + mixed = 2.
     n = await get_new_candidate_count(seeded_db, since=None)
     assert n == 2
