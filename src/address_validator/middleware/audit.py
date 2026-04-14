@@ -191,8 +191,19 @@ class AuditMiddleware:
         # Fire-and-forget training candidate write if parser flagged one
         candidate = get_candidate_data()
         if candidate is not None:
+            api_version: str | None = None
+            if path.startswith("/api/v1/"):
+                api_version = "1"
+            elif path.startswith("/api/v2/"):
+                api_version = "2"
             candidate_task = asyncio.create_task(
-                write_training_candidate(engine=engine, **candidate)
+                write_training_candidate(
+                    engine=engine,
+                    endpoint=path,
+                    provider=provider,
+                    api_version=api_version,
+                    **candidate,
+                )
             )
             _background_tasks.add(candidate_task)
             candidate_task.add_done_callback(_background_tasks.discard)
