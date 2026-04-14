@@ -174,17 +174,16 @@ async def assign_candidates(
             {"hashes": raw_address_hashes},
         )
         # Trigger transition planned -> active if this is the batch's first assignment.
-        batch_status = (
-            await conn.execute(
-                sa.select(training_batches.c.status).where(training_batches.c.id == batch_id)
+        # WHERE status='planned' guard makes this idempotent under concurrency —
+        # a second concurrent assign sees status='active' and skips the UPDATE.
+        await conn.execute(
+            sa.update(training_batches)
+            .where(
+                training_batches.c.id == batch_id,
+                training_batches.c.status == "planned",
             )
-        ).scalar_one()
-        if batch_status == "planned":
-            await conn.execute(
-                sa.update(training_batches)
-                .where(training_batches.c.id == batch_id)
-                .values(status="active", activated_at=datetime.now(UTC))
-            )
+            .values(status="active", activated_at=datetime.now(UTC))
+        )
     return result.rowcount or 0
 
 
