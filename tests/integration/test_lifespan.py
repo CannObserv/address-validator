@@ -1,5 +1,7 @@
 """Integration test — validate_config() wired into FastAPI lifespan startup."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -28,6 +30,24 @@ class TestLifespanValidateConfig:
         """Service must start without error when provider is none."""
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
 
-        with TestClient(app) as client:
+        # The nested TestClient creates its own anyio event loop. The shared
+        # AsyncEngine singleton was created in the session client's loop.
+        # Using that engine (or disposing it) from a different loop raises
+        # "Future attached to a different loop". We isolate the nested lifespan
+        # from the shared engine by patching init/close/get to no-ops so that
+        # app.state.engine is set to None (the except RuntimeError branch in
+        # main.py lifespan). This test asserts only startup config validity;
+        # engine lifecycle and audit behaviour are covered elsewhere.
+        with (
+            patch("address_validator.db.engine.init_engine", AsyncMock()),
+            patch("address_validator.db.engine.close_engine", AsyncMock()),
+            patch(
+                "address_validator.db.engine.get_engine",
+                side_effect=RuntimeError("isolated for lifespan test"),
+            ),
+            patch("address_validator.middleware.audit.write_audit_row", AsyncMock()),
+            patch("address_validator.middleware.audit.write_training_candidate", AsyncMock()),
+            TestClient(app) as client,
+        ):
             resp = client.get("/api/v1/health")
         assert resp.status_code == 200

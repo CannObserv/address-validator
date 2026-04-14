@@ -7,7 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 TEST_API_KEY = "test-api-key-for-pytest"
+TEST_CACHE_DSN = (
+    "postgresql+asyncpg://address_validator:address_validator_dev@localhost/address_validator_test"
+)
+
+# Set these before importing the app so the lifespan hook reads safe values.
+# Without the DSN guard, sourcing /etc/address-validator/.env in the caller's
+# shell would make TestClient connect to the production database and the audit
+# middleware would write real rows on every request.
 os.environ.setdefault("API_KEY", TEST_API_KEY)
+os.environ.setdefault("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
 
 from address_validator.main import app  # noqa: E402
 
@@ -35,16 +44,28 @@ def client(api_key: str) -> Generator[TestClient, None, None]:
         yield c
 
 
-@pytest.fixture()
-def client_no_auth() -> TestClient:
-    """A client with **no** X-API-Key header — for auth rejection tests."""
-    return TestClient(app)
+@pytest.fixture(scope="session")
+def client_no_auth(client: TestClient) -> TestClient:
+    """A client with **no** X-API-Key header — for auth rejection tests.
+
+    Shares ``client.portal`` (the same anyio event loop) so that background
+    audit writes don't race against asyncpg connections from a different loop.
+    Does NOT enter a separate lifespan — the session-scoped ``client`` owns it.
+    """
+    c = TestClient(app)
+    c.portal = client.portal
+    return c
 
 
-@pytest.fixture()
-def client_bad_auth() -> TestClient:
-    """A client with a **wrong** X-API-Key — for 403 tests."""
-    return TestClient(app, headers={"X-API-Key": "wrong-key"})
+@pytest.fixture(scope="session")
+def client_bad_auth(client: TestClient) -> TestClient:
+    """A client with a **wrong** X-API-Key — for 403 tests.
+
+    Same event-loop sharing rationale as ``client_no_auth``.
+    """
+    c = TestClient(app, headers={"X-API-Key": "wrong-key"})
+    c.portal = client.portal
+    return c
 
 
 @pytest.fixture(scope="session")
