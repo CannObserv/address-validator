@@ -29,6 +29,7 @@ def set_candidate_data(
     failure_type: str,
     parsed_tokens: list[tuple[str, str]] | list[Any],
     recovered_components: dict[str, str] | None = None,
+    failure_reason: str | None = None,
 ) -> None:
     """Set training candidate data for the current request context."""
     _candidate_data.set(
@@ -37,6 +38,7 @@ def set_candidate_data(
             "failure_type": failure_type,
             "parsed_tokens": parsed_tokens,
             "recovered_components": recovered_components,
+            "failure_reason": failure_reason,
         }
     )
 
@@ -58,6 +60,10 @@ async def write_training_candidate(
     failure_type: str,
     parsed_tokens: list[tuple[str, str]] | list[Any],
     recovered_components: dict[str, str] | None = None,
+    endpoint: str | None = None,
+    provider: str | None = None,
+    api_version: str | None = None,
+    failure_reason: str | None = None,
 ) -> None:
     """Insert a training candidate row. Logs and swallows all errors (fail-open)."""
     if engine is None:
@@ -71,6 +77,10 @@ async def write_training_candidate(
                     failure_type=failure_type,
                     parsed_tokens=tokens_json,
                     recovered_components=recovered_components,
+                    endpoint=endpoint,
+                    provider=provider,
+                    api_version=api_version,
+                    failure_reason=failure_reason,
                 )
             )
     except Exception:

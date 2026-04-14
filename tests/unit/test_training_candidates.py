@@ -3,7 +3,9 @@
 from unittest import mock
 
 import pytest
+import sqlalchemy as sa
 
+from address_validator.db.tables import model_training_candidates as mtc
 from address_validator.services.training_candidates import (
     get_candidate_data,
     reset_candidate_data,
@@ -85,3 +87,26 @@ class TestWriteTrainingCandidate:
             failure_type="repeated_label_error",
             parsed_tokens=[],
         )
+
+
+@pytest.mark.asyncio
+async def test_write_persists_context_columns(db) -> None:
+    async with db.begin() as conn:
+        await conn.execute(sa.text("TRUNCATE model_training_candidates RESTART IDENTITY CASCADE"))
+
+    await write_training_candidate(
+        db,
+        raw_address="111 TEST ST",
+        failure_type="repeated_label_error",
+        parsed_tokens=[("111", "AddressNumber")],
+        recovered_components=None,
+        endpoint="/api/v1/parse",
+        provider=None,
+        api_version="1",
+        failure_reason="RepeatedLabelError on token 'ROOM'",
+    )
+    async with db.connect() as conn:
+        row = (await conn.execute(sa.select(mtc).where(mtc.c.raw_address == "111 TEST ST"))).first()
+    assert row.endpoint == "/api/v1/parse"
+    assert row.api_version == "1"
+    assert row.failure_reason.startswith("RepeatedLabelError")
