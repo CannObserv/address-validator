@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 
 class TestHealthV2:
     def test_health_ok(self, client) -> None:
@@ -10,7 +12,8 @@ class TestHealthV2:
         data = response.json()
         assert data["status"] == "ok"
         assert data["api_version"] == "2"
-        assert data["database"] == "unconfigured"
+        # VALIDATION_CACHE_DSN is set to the test DB by tests/conftest.py.
+        assert data["database"] == "ok"
         # libpostal field is not asserted here: its value depends on whether the
         # sidecar is reachable in the test environment. Libpostal-specific
         # assertions are covered by test_libpostal_ok and
@@ -25,30 +28,33 @@ class TestHealthV2:
         response = client.get("/api/v2/health")
         assert response.headers.get("api-version") == "2"
 
-    def test_health_database_ok(self, client) -> None:
+    def test_health_database_ok(self, client, monkeypatch: pytest.MonkeyPatch) -> None:
         """When engine is configured and SELECT 1 succeeds, database is 'ok'."""
         mock_conn = AsyncMock()
         mock_engine = MagicMock()
         mock_engine.connect.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
         mock_engine.connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        with patch.object(client.app.state, "engine", mock_engine, create=True):
-            response = client.get("/api/v2/health")
+        # Use monkeypatch.setattr instead of patch.object + create=True.
+        # patch.object + create=True deletes State attributes on exit because
+        # they live in State._state, not __dict__ (local=False in mock internals).
+        monkeypatch.setattr(client.app.state, "engine", mock_engine)
+        response = client.get("/api/v2/health")
 
         assert response.status_code == 200
         assert response.json()["database"] == "ok"
         assert response.json()["status"] == "ok"
         mock_conn.execute.assert_awaited_once()
 
-    def test_health_database_error(self, client) -> None:
+    def test_health_database_error(self, client, monkeypatch: pytest.MonkeyPatch) -> None:
         """When SELECT 1 fails, status is 'degraded' and HTTP 503 is returned."""
         mock_engine = MagicMock()
         mock_engine.connect.return_value.__aenter__ = AsyncMock(
             side_effect=Exception("connection refused")
         )
 
-        with patch.object(client.app.state, "engine", mock_engine, create=True):
-            response = client.get("/api/v2/health")
+        monkeypatch.setattr(client.app.state, "engine", mock_engine)
+        response = client.get("/api/v2/health")
 
         assert response.status_code == 503
         assert response.json()["status"] == "degraded"

@@ -41,6 +41,10 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src", "scripts"]
 addopts = "--cov=src/address_validator --cov-report=term-missing --cov-fail-under=80"
+markers = [
+    "integration: full HTTP stack tests (require app lifespan)",
+    "unit: isolated unit tests",
+]
 
 [tool.coverage.run]
 source = ["src/address_validator"]

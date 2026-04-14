@@ -13,10 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import command
-
-TEST_CACHE_DSN = (
-    "postgresql+asyncpg://address_validator:address_validator_dev@localhost/address_validator_test"
-)
+from tests.conftest import TEST_CACHE_DSN
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -42,13 +39,16 @@ def mock_google_auth():
 
 @pytest.fixture()
 async def db(run_cache_migrations: None) -> AsyncEngine:
-    """Function-scoped engine: truncates both cache tables before each test."""
+    """Function-scoped engine: truncates all app tables before each test."""
     engine = create_async_engine(TEST_CACHE_DSN)
     async with engine.begin() as conn:
         await conn.execute(
             text(
                 "TRUNCATE validated_addresses, query_patterns,"
-                " audit_log, audit_daily_stats RESTART IDENTITY CASCADE"
+                " audit_log, audit_daily_stats,"
+                " candidate_batch_assignments, model_training_candidates,"
+                " training_batches"
+                " RESTART IDENTITY CASCADE"
             )
         )
     yield engine

@@ -191,6 +191,8 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 ```
 uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
+uv run pytest -m integration    # integration tests only
+uv run pytest -m "not integration"  # unit tests only (faster)
 npm test                        # admin JS tests (vitest + jsdom)
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
@@ -198,6 +200,8 @@ uv run ruff format .            # format
 ```
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Ruff must be clean before any commit.
+
+**NEVER** source `/etc/address-validator/.env` before running tests. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. `tests/conftest.py` sets `VALIDATION_CACHE_DSN` via `os.environ.setdefault` so no shell prep is needed for `uv run pytest`. See `.env.test` for standalone-script use.
 
 ## Common tasks
 
