@@ -12,7 +12,15 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
-from address_validator.db.tables import model_training_candidates as mtc
+from address_validator.db.tables import (
+    candidate_batch_assignments as cba,
+)
+from address_validator.db.tables import (
+    model_training_candidates as mtc,
+)
+from address_validator.db.tables import (
+    training_batches as tb,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -24,8 +32,9 @@ if TYPE_CHECKING:
 _NON_LABELED = mtc.c.status != "labeled"
 
 # Statuses an admin may set via the triage UI. `labeled` is reserved for the
-# training pipeline; `mixed` is a derived rollup, never a stored value.
-WRITE_STATUSES: frozenset[str] = frozenset({"new", "reviewed", "rejected"})
+# training pipeline; `mixed` and `assigned` are derived rollups, never stored
+# values. `assigned` is derived at read time from candidate_batch_assignments.
+WRITE_STATUSES: frozenset[str] = frozenset({"new", "rejected"})
 
 # Default time window for candidate-triage views. Drives both the list view's
 # `since=30d` querystring default AND the nav-badge lookback so the count
@@ -33,10 +42,24 @@ WRITE_STATUSES: frozenset[str] = frozenset({"new", "reviewed", "rejected"})
 DEFAULT_LOOKBACK_DAYS = 30
 
 
-def _rollup_status_expr() -> ColumnElement:
-    """CASE expression: single status -> that status; multiple -> 'mixed'."""
+def _rollup_status_expr(has_assignment: ColumnElement) -> ColumnElement:
+    """Compute rollup status from aggregated row statuses + assignment presence.
+
+    Precedence (top wins):
+      1. all non-labeled rows rejected -> 'rejected' (admin intent overrides)
+      2. any assignment exists -> 'assigned' (derived from join)
+      3. all non-labeled rows new -> 'new'
+      4. otherwise -> 'mixed'
+
+    Caller MUST apply the `_NON_LABELED` predicate in the WHERE clause —
+    this function trusts that `labeled` rows have already been filtered out.
+    """
+    all_rejected = sa.func.bool_and(mtc.c.status == sa.literal("rejected"))
+    all_new = sa.func.bool_and(mtc.c.status == sa.literal("new"))
     return sa.case(
-        (sa.func.count(sa.distinct(mtc.c.status)) == 1, sa.func.min(mtc.c.status)),
+        (all_rejected, sa.literal("rejected")),
+        (has_assignment.isnot(None), sa.literal("assigned")),
+        (all_new, sa.literal("new")),
         else_=sa.literal("mixed"),
     ).label("rollup_status")
 
@@ -69,8 +92,20 @@ async def get_candidate_groups(
     if until is not None:
         where.append(mtc.c.created_at <= until)
 
-    rollup = _rollup_status_expr()
     last_seen = sa.func.max(mtc.c.created_at).label("last_seen")
+
+    batch_slugs_sub = (
+        sa.select(
+            cba.c.raw_address_hash,
+            sa.func.array_agg(sa.distinct(tb.c.slug)).label("batch_slugs"),
+        )
+        .select_from(cba.join(tb, cba.c.batch_id == tb.c.id))
+        .group_by(cba.c.raw_address_hash)
+        .subquery()
+    )
+
+    batch_slugs_agg = sa.func.max(batch_slugs_sub.c.batch_slugs)
+    rollup = _rollup_status_expr(batch_slugs_agg)
 
     group_stmt = (
         sa.select(
@@ -82,6 +117,13 @@ async def get_candidate_groups(
             sa.func.min(mtc.c.created_at).label("first_seen"),
             last_seen,
             sa.func.max(mtc.c.notes).label("notes"),
+            batch_slugs_agg.label("batch_slugs"),
+        )
+        .select_from(
+            mtc.outerjoin(
+                batch_slugs_sub,
+                mtc.c.raw_address_hash == batch_slugs_sub.c.raw_address_hash,
+            )
         )
         .where(*where)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
@@ -91,7 +133,6 @@ async def get_candidate_groups(
         group_stmt = group_stmt.having(status_filter)
 
     count_stmt = sa.select(sa.func.count()).select_from(group_stmt.subquery())
-
     list_stmt = group_stmt.order_by(last_seen.desc()).limit(limit).offset(offset)
 
     async with engine.connect() as conn:
@@ -105,9 +146,26 @@ async def get_new_candidate_count(engine: AsyncEngine, *, since: datetime | None
     where: list[ColumnElement] = [_NON_LABELED]
     if since is not None:
         where.append(mtc.c.created_at >= since)
-    rollup = _rollup_status_expr()
+
+    batch_slugs_sub = (
+        sa.select(
+            cba.c.raw_address_hash,
+            sa.func.array_agg(sa.distinct(tb.c.slug)).label("batch_slugs"),
+        )
+        .select_from(cba.join(tb, cba.c.batch_id == tb.c.id))
+        .group_by(cba.c.raw_address_hash)
+        .subquery()
+    )
+
+    rollup = _rollup_status_expr(sa.func.max(batch_slugs_sub.c.batch_slugs))
     group_stmt = (
         sa.select(mtc.c.raw_address_hash)
+        .select_from(
+            mtc.outerjoin(
+                batch_slugs_sub,
+                mtc.c.raw_address_hash == batch_slugs_sub.c.raw_address_hash,
+            )
+        )
         .where(*where)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
         .having(rollup.in_(("new", "mixed")))
@@ -119,7 +177,18 @@ async def get_new_candidate_count(engine: AsyncEngine, *, since: datetime | None
 
 async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | None:
     """Return the summary for a single group identified by raw_hash, or None."""
-    rollup = _rollup_status_expr()
+    batch_slugs_sub = (
+        sa.select(
+            cba.c.raw_address_hash,
+            sa.func.array_agg(sa.distinct(tb.c.slug)).label("batch_slugs"),
+        )
+        .select_from(cba.join(tb, cba.c.batch_id == tb.c.id))
+        .where(cba.c.raw_address_hash == raw_hash)
+        .group_by(cba.c.raw_address_hash)
+        .subquery()
+    )
+    batch_slugs_agg = sa.func.max(batch_slugs_sub.c.batch_slugs)
+    rollup = _rollup_status_expr(batch_slugs_agg)
     stmt = (
         sa.select(
             mtc.c.raw_address.label("raw_address"),
@@ -130,6 +199,13 @@ async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | N
             sa.func.min(mtc.c.created_at).label("first_seen"),
             sa.func.max(mtc.c.created_at).label("last_seen"),
             sa.func.max(mtc.c.notes).label("notes"),
+            batch_slugs_agg.label("batch_slugs"),
+        )
+        .select_from(
+            mtc.outerjoin(
+                batch_slugs_sub,
+                mtc.c.raw_address_hash == batch_slugs_sub.c.raw_address_hash,
+            )
         )
         .where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
@@ -146,6 +222,10 @@ async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> li
             mtc.c.id,
             mtc.c.raw_address,
             mtc.c.failure_type,
+            mtc.c.failure_reason,
+            mtc.c.endpoint,
+            mtc.c.provider,
+            mtc.c.api_version,
             mtc.c.parsed_tokens,
             mtc.c.recovered_components,
             mtc.c.created_at,
@@ -159,7 +239,11 @@ async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> li
 
 
 async def update_candidate_status(engine: AsyncEngine, *, raw_hash: str, status: str) -> int:
-    """Set status on every non-labeled row in the group. Returns rowcount."""
+    """Set status on every non-labeled row in the group. Returns rowcount.
+
+    Only 'new' and 'rejected' are admin-settable. 'assigned' is set via
+    services.training_batches.assign_candidates; 'labeled' via the training pipeline.
+    """
     if status not in WRITE_STATUSES:
         raise ValueError(f"invalid status: {status!r}")
     stmt = (

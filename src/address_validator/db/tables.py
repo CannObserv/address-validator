@@ -128,11 +128,79 @@ model_training_candidates = sa.Table(
         "status",
         sa.Text(),
         sa.CheckConstraint(
-            "status IN ('new', 'reviewed', 'labeled', 'rejected')",
+            "status IN ('new', 'labeled', 'rejected')",
             name="ck_model_training_candidates_status",
         ),
         nullable=False,
         server_default=sa.text("'new'"),
     ),
+    sa.Column("endpoint", sa.Text(), nullable=True),
+    sa.Column("provider", sa.Text(), nullable=True),
+    sa.Column("api_version", sa.Text(), nullable=True),
+    sa.Column("failure_reason", sa.Text(), nullable=True),
     sa.Column("notes", sa.Text(), nullable=True),
+)
+
+# ---------------------------------------------------------------------------
+# Training batch lifecycle (migration 013)
+# ---------------------------------------------------------------------------
+
+training_batches = sa.Table(
+    "training_batches",
+    metadata,
+    sa.Column("id", sa.Text(), primary_key=True),
+    sa.Column("slug", sa.Text(), nullable=False, unique=True),
+    sa.Column("description", sa.Text(), nullable=False),
+    sa.Column("targeted_failure_pattern", sa.Text(), nullable=True),
+    sa.Column(
+        "status",
+        sa.Text(),
+        sa.CheckConstraint(
+            "status IN ('planned', 'active', 'deployed', 'observing', 'closed')",
+            name="ck_training_batches_status",
+        ),
+        nullable=False,
+    ),
+    sa.Column(
+        "current_step",
+        sa.Text(),
+        sa.CheckConstraint(
+            "current_step IS NULL OR current_step IN ("
+            "'identifying', 'labeling', 'training', 'testing',"
+            " 'deployed', 'observing', 'contributed')",
+            name="ck_training_batches_current_step",
+        ),
+        nullable=True,
+    ),
+    sa.Column("manifest_path", sa.Text(), nullable=True),
+    sa.Column("upstream_pr", sa.Text(), nullable=True),
+    sa.Column(
+        "created_at",
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+    ),
+    sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("deployed_at", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
+)
+
+candidate_batch_assignments = sa.Table(
+    "candidate_batch_assignments",
+    metadata,
+    sa.Column("raw_address_hash", sa.Text(), nullable=False, primary_key=True),
+    sa.Column(
+        "batch_id",
+        sa.Text(),
+        sa.ForeignKey("training_batches.id", ondelete="CASCADE"),
+        nullable=False,
+        primary_key=True,
+    ),
+    sa.Column(
+        "assigned_at",
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.text("now()"),
+    ),
+    sa.Column("assigned_by", sa.Text(), nullable=True),
 )

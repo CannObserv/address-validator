@@ -4,7 +4,7 @@ import math
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.responses import Response
 
 from address_validator.routers.admin._config import get_css_version, templates
@@ -16,16 +16,24 @@ from address_validator.routers.admin.queries import (
     update_candidate_notes,
     update_candidate_status,
 )
+from address_validator.routers.admin.queries.batches import (
+    get_assignable_batches,
+    get_batch_by_slug,
+)
 from address_validator.routers.admin.queries.candidates import (
     DEFAULT_LOOKBACK_DAYS,
     WRITE_STATUSES,
+)
+from address_validator.services.training_batches import (
+    assign_candidates,
+    unassign_candidates,
 )
 
 router = APIRouter(prefix="/candidates")
 
 _PER_PAGE = 50
 _VALID_FAILURE_TYPES: frozenset[str] = frozenset({"repeated_label_error", "post_parse_recovery"})
-_VALID_STATUSES: frozenset[str] = WRITE_STATUSES | {"all"}
+_VALID_STATUSES: frozenset[str] = WRITE_STATUSES | {"all", "assigned"}
 _DEFAULT_SINCE = f"{DEFAULT_LOOKBACK_DAYS}d"
 
 
@@ -105,6 +113,7 @@ async def candidates_detail(
     if group is None:
         raise HTTPException(status_code=404, detail="candidate group not found")
     submissions = await get_candidate_submissions(ctx.engine, raw_hash=raw_hash)
+    assignable = await get_assignable_batches(ctx.engine)
     return templates.TemplateResponse(
         "admin/candidates/detail.html",
         {
@@ -114,6 +123,7 @@ async def candidates_detail(
             "css_version": get_css_version(),
             "group": group,
             "submissions": submissions,
+            "assignable_batches": assignable,
         },
     )
 
@@ -152,3 +162,37 @@ async def candidates_update_notes(
         "admin/candidates/_notes.html",
         {"request": request, "group": group},
     )
+
+
+@router.post("/{raw_hash}/batches", response_class=HTMLResponse, response_model=None)
+async def candidates_assign_batch(
+    request: Request,
+    raw_hash: str,
+    batch_id: str = Form(...),
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    await assign_candidates(
+        ctx.engine,
+        batch_id=batch_id,
+        raw_address_hashes=[raw_hash],
+        assigned_by=ctx.user.email,
+    )
+    return RedirectResponse(url=f"/admin/candidates/{raw_hash}", status_code=303)
+
+
+@router.post(
+    "/{raw_hash}/batches/{batch_slug}/unassign",
+    response_class=HTMLResponse,
+    response_model=None,
+)
+async def candidates_unassign_batch(
+    request: Request,
+    raw_hash: str,
+    batch_slug: str,
+    ctx: AdminContext = Depends(get_admin_context),
+) -> Response:
+    batch = await get_batch_by_slug(ctx.engine, slug=batch_slug)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="batch not found")
+    await unassign_candidates(ctx.engine, batch_id=batch["id"], raw_address_hashes=[raw_hash])
+    return RedirectResponse(url=f"/admin/candidates/{raw_hash}", status_code=303)

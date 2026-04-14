@@ -8,7 +8,7 @@ performance signal.
 Usage:
     python scripts/model/performance.py summary [--since 7d] [--until now]
     python scripts/model/performance.py report --since 2026-03-28 \
-        --out training/sessions/.../performance.md
+        --out training/batches/.../performance.md
     python scripts/model/performance.py ambiguous --since 7d [--limit 20]
 
 Requires VALIDATION_CACHE_DSN environment variable.
@@ -24,13 +24,15 @@ import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # Ensure the src/ layout is importable when run directly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine
+import sqlalchemy as sa  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
-from address_validator.db.tables import audit_log
+from address_validator.db.tables import audit_log  # noqa: E402
 
 _PARSE_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
 
@@ -317,6 +319,36 @@ async def _generate_report(dsn: str, since: datetime, until: datetime | None, ou
         await engine.dispose()
 
 
+async def _transition_batch_observing(dsn: str, batch_slug: str) -> None:
+    """Transition batch to observing status and advance step. Tolerates gracefully."""
+    from sqlalchemy.ext.asyncio import create_async_engine  # noqa: PLC0415
+
+    from address_validator.services.training_batches import (  # noqa: PLC0415
+        InvalidTransitionError,
+        advance_step,
+        get_batch_id_by_slug,
+        transition_status,
+    )
+
+    engine = create_async_engine(dsn)
+    try:
+        batch_id = await get_batch_id_by_slug(engine, slug=batch_slug)
+        if batch_id is None:
+            print(f"Warning: batch slug '{batch_slug}' not found in DB — skipping lifecycle update")
+            return
+        try:
+            await transition_status(engine, batch_id=batch_id, target="observing")
+            print(f"Batch '{batch_slug}': status → observing")
+        except InvalidTransitionError as exc:
+            print(f"Warning: could not transition batch status: {exc}")
+        await advance_step(engine, batch_id=batch_id, step="observing")
+        print(f"Batch '{batch_slug}': step → observing")
+    except Exception as exc:
+        print(f"Warning: DB lifecycle update failed: {exc}")
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Model performance metrics from audit log")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -331,6 +363,10 @@ def main() -> None:
     p_report.add_argument("--since", required=True, help="Start date (ISO date or 7d/24h)")
     p_report.add_argument("--until", default="now", help="End date")
     p_report.add_argument("--out", required=True, help="Output markdown file path")
+    p_report.add_argument(
+        "--batch",
+        help="Slug of the training batch to transition to 'observing' on success",
+    )
 
     # ambiguous
     p_ambig = sub.add_parser("ambiguous", help="Show recent ambiguous parses")
@@ -352,6 +388,9 @@ def main() -> None:
         asyncio.run(_show_summary(dsn, since, until))
     elif args.command == "report":
         asyncio.run(_generate_report(dsn, since, until, args.out))
+        batch_slug = getattr(args, "batch", None)
+        if batch_slug:
+            asyncio.run(_transition_batch_observing(dsn, batch_slug))
     elif args.command == "ambiguous":
         asyncio.run(_show_ambiguous(dsn, since, until, args.limit))
 

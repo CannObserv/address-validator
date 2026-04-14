@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+import sqlalchemy as sa
 from fastapi import FastAPI
-
-if TYPE_CHECKING:
-    import pytest
-
+from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
+from address_validator.db.tables import model_training_candidates as mtc
+from address_validator.main import app
 from address_validator.middleware.audit import (
     AuditMiddleware,
     _check_validate_invariants,
@@ -21,6 +22,7 @@ from address_validator.middleware.audit import (
 )
 from address_validator.middleware.request_id import RequestIdMiddleware
 from address_validator.services.audit import set_audit_context
+from tests.conftest import TEST_API_KEY
 
 # ULID: 26 Crockford base-32 characters.
 _ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
@@ -256,3 +258,45 @@ def test_audit_row_receives_pattern_key() -> None:
     assert kwargs["pattern_key"] == "cafebabe1234", (
         f"pattern_key should be 'cafebabe1234', got {kwargs.get('pattern_key')!r}"
     )
+
+
+@pytest.mark.asyncio
+async def test_audit_writes_candidate_with_endpoint_and_version(db):
+    """Post an ambiguous address; candidate row should capture endpoint + api_version."""
+    # Clear stale rows from the test DB.
+    async with db.begin() as conn:
+        await conn.execute(sa.text("TRUNCATE model_training_candidates RESTART IDENTITY CASCADE"))
+
+    # Wire app state so middleware can write audit/candidate rows without a full lifespan.
+    saved_engine = getattr(app.state, "engine", None)
+    saved_api_key = getattr(app.state, "api_key", None)
+    app.state.engine = db
+    app.state.api_key = TEST_API_KEY
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/parse",
+                json={"address": "995 9TH ST APT 201 ROOM 104", "country": "US"},
+                headers={"X-API-Key": TEST_API_KEY},
+            )
+        assert resp.status_code == 200
+
+        await asyncio.sleep(0.3)  # let fire-and-forget audit task complete
+
+        async with db.connect() as conn:
+            row = (
+                await conn.execute(
+                    sa.select(mtc.c.endpoint, mtc.c.api_version, mtc.c.failure_reason)
+                    .where(mtc.c.raw_address.like("995 9TH ST APT%"))
+                    .order_by(mtc.c.id.desc())
+                    .limit(1)
+                )
+            ).first()
+        assert row is not None, "candidate row not written"
+        assert row.endpoint == "/api/v1/parse"
+        assert row.api_version == "1"
+        assert row.failure_reason is not None
+    finally:
+        app.state.engine = saved_engine
+        app.state.api_key = saved_api_key

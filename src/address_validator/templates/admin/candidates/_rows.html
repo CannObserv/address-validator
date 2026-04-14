@@ -9,6 +9,11 @@
         {% set group = row %}
         {% include "admin/candidates/_status.html" with context %}
     </td>
+    <td class="px-3 py-2 whitespace-nowrap text-xs">
+        {% for slug in (row.batch_slugs or []) %}
+        <a href="/admin/batches/{{ slug }}" class="inline-block bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded px-2 py-0.5 mr-1 mb-1">{{ slug }}</a>
+        {% else %}<span class="text-gray-400">—</span>{% endfor %}
+    </td>
     <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600 dark:text-gray-400">
         {{ (row.failure_types or []) | join(", ") }}
     </td>
@@ -20,5 +25,5 @@
     </td>
 </tr>
 {% else %}
-<tr><td colspan="7" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No candidate groups found.</td></tr>
+<tr><td colspan="8" class="px-3 py-8 text-center text-gray-400 dark:text-gray-500">No candidate groups found.</td></tr>
 {% endfor %}

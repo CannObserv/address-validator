@@ -11,7 +11,7 @@
         <label for="status" class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Status</label>
         <select name="status" id="status"
                 class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm">
-            {% for opt, label in [('new', 'New + Mixed'), ('reviewed', 'Reviewed'), ('rejected', 'Rejected'), ('all', 'All')] %}
+            {% for opt, label in [('new', 'New + Mixed'), ('assigned', 'Assigned'), ('rejected', 'Rejected'), ('all', 'All')] %}
             <option value="{{ opt }}" {% if filters.status == opt %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
@@ -46,6 +46,7 @@
             <tr>
                 <th class="px-3 py-2">Raw Address</th>
                 <th class="px-3 py-2">Status</th>
+                <th class="px-3 py-2">Batches</th>
                 <th class="px-3 py-2">Failure</th>
                 <th class="px-3 py-2 text-right">Count</th>
                 <th class="px-3 py-2">First Seen</th>

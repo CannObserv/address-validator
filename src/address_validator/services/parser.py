@@ -447,6 +447,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             failure_type="repeated_label_error",
             parsed_tokens=list(exc.parsed_string),
             recovered_components=component_values,
+            failure_reason=f"usaddress.RepeatedLabelError: {exc}".replace("\n", " ")[:400],
         )
 
         logger.debug("parsed address type=Ambiguous country=%s", country)
@@ -477,6 +478,10 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
             failure_type="post_parse_recovery",
             parsed_tokens=[(v, k) for k, v in tagged.items()],
             recovered_components=component_values,
+            failure_reason=(
+                "; ".join(w for w in warnings if "recovered" in w.lower())[:400]
+                or "post-parse recovery heuristics matched"
+            ),
         )
 
     set_audit_context(parse_type=addr_type)

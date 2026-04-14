@@ -4,7 +4,7 @@ Usage:
     python scripts/model/identify.py summary
     python scripts/model/identify.py export [--status new] [--type repeated_label_error]
         [--limit 100] [--out candidates.csv]
-    python scripts/model/identify.py mark ID [ID ...] --status reviewed
+    python scripts/model/identify.py mark ID [ID ...] --status rejected
 
 Requires VALIDATION_CACHE_DSN environment variable.
 """
@@ -19,13 +19,15 @@ import os
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # Ensure the src/ layout is importable when run directly
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine
+import sqlalchemy as sa  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
-from address_validator.db.tables import model_training_candidates
+from address_validator.db.tables import model_training_candidates  # noqa: E402
 
 
 async def _show_summary(dsn: str) -> None:
@@ -67,8 +69,8 @@ async def _export_csv(
     status: str = "new",
     failure_type: str | None = None,
     limit: int = 100,
-) -> int:
-    """Export candidates to CSV. Returns count of exported rows."""
+) -> list[str]:
+    """Export candidates to CSV. Returns list of raw_address_hash values exported."""
     engine = create_async_engine(dsn)
     try:
         query = (
@@ -86,7 +88,7 @@ async def _export_csv(
 
         if not rows:
             print("No candidates found matching criteria.")
-            return 0
+            return []
 
         with Path(outfile).open("w", newline="") as f:
             writer = csv.writer(f)
@@ -106,7 +108,52 @@ async def _export_csv(
                 )
 
         print(f"Exported {len(rows)} candidates to {outfile}")
-        return len(rows)
+        return [row["raw_address_hash"] for row in rows]
+    finally:
+        await engine.dispose()
+
+
+async def _assign_to_batch(
+    dsn: str,
+    raw_address_hashes: list[str],
+    *,
+    batch_slug: str | None = None,
+    create_slug: str | None = None,
+    description: str | None = None,
+) -> None:
+    """Assign exported candidates to a batch (existing or newly created)."""
+    from address_validator.services.training_batches import (  # noqa: PLC0415
+        advance_step,
+        assign_candidates,
+        create_batch,
+        get_batch_id_by_slug,
+    )
+
+    engine = create_async_engine(dsn)
+    try:
+        if create_slug:
+            batch_id = await create_batch(
+                engine,
+                slug=create_slug,
+                description=description or "",
+            )
+            print(f"Created batch '{create_slug}' ({batch_id})")
+        else:
+            batch_id = await get_batch_id_by_slug(engine, slug=batch_slug)  # type: ignore[arg-type]
+            if batch_id is None:
+                print(f"Error: unknown batch slug: {batch_slug}", file=sys.stderr)
+                sys.exit(1)
+
+        # identify.py IS the identifying step — mark it so the admin UI reflects reality.
+        await advance_step(engine, batch_id=batch_id, step="identifying")
+
+        n = await assign_candidates(
+            engine,
+            batch_id=batch_id,
+            raw_address_hashes=raw_address_hashes,
+            assigned_by="scripts/model/identify.py",
+        )
+        print(f"Assigned {n} candidate group(s) to batch '{create_slug or batch_slug}'")
     finally:
         await engine.dispose()
 
@@ -137,12 +184,29 @@ def main() -> None:
     export_cmd.add_argument("--type", dest="failure_type", default=None)
     export_cmd.add_argument("--limit", type=int, default=100)
     export_cmd.add_argument("--out", default="training/candidates.csv")
+    export_cmd.add_argument(
+        "--batch",
+        help="slug of an existing batch to assign exported candidates to",
+    )
+    export_cmd.add_argument(
+        "--create-batch",
+        metavar="SLUG",
+        help="create a new planned batch with this slug and assign exported candidates to it",
+    )
+    export_cmd.add_argument(
+        "--batch-description",
+        help="description for --create-batch (required when --create-batch is used)",
+    )
 
     mark_cmd = sub.add_parser("mark", help="Update candidate status")
     mark_cmd.add_argument("ids", nargs="+", type=int)
-    mark_cmd.add_argument("--status", required=True, choices=["reviewed", "labeled", "rejected"])
+    mark_cmd.add_argument("--status", required=True, choices=["new", "labeled", "rejected"])
 
     args = parser.parse_args()
+
+    # Validate --create-batch requires --batch-description
+    if args.command == "export" and args.create_batch and not args.batch_description:
+        parser.error("--create-batch requires --batch-description")
 
     dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
     if not dsn:
@@ -152,7 +216,7 @@ def main() -> None:
     if args.command == "summary":
         asyncio.run(_show_summary(dsn))
     elif args.command == "export":
-        asyncio.run(
+        raw_address_hashes = asyncio.run(
             _export_csv(
                 dsn,
                 args.out,
@@ -161,6 +225,18 @@ def main() -> None:
                 limit=args.limit,
             )
         )
+        batch_slug = getattr(args, "batch", None)
+        create_slug = getattr(args, "create_batch", None)
+        if raw_address_hashes and (batch_slug or create_slug):
+            asyncio.run(
+                _assign_to_batch(
+                    dsn,
+                    raw_address_hashes,
+                    batch_slug=batch_slug,
+                    create_slug=create_slug,
+                    description=getattr(args, "batch_description", None),
+                )
+            )
     elif args.command == "mark":
         asyncio.run(_update_status(dsn, args.ids, args.status))
 

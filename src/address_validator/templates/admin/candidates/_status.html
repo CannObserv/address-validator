@@ -1,4 +1,4 @@
-{#- Renders one row's status cell and the Review/Reject/Reset action buttons. -#}
+{#- Renders one row's status cell and the Reject/Reset action buttons. -#}
 {#- Required context: `group` — dict with raw_hash, rollup_status. -#}
 {% set meta = cs_meta.get(group.rollup_status, cs_meta["new"]) %}
 <div id="status-{{ group.raw_hash }}" class="flex items-center gap-2">
@@ -8,11 +8,6 @@
     </span>
     <div class="flex items-center gap-1 ml-2">
         {% set btn_cls = "px-2 text-xs rounded border focus:outline-none focus:ring-2 focus:ring-co-purple-700 min-h-[32px] inline-flex items-center" %}
-        <button class="{{ btn_cls }} border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20"
-                hx-post="/admin/candidates/{{ group.raw_hash }}/status"
-                hx-vals='{"status": "reviewed"}'
-                hx-target="#status-{{ group.raw_hash }}"
-                hx-swap="outerHTML">Review</button>
         <button class="{{ btn_cls }} border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
                 hx-post="/admin/candidates/{{ group.raw_hash }}/status"
                 hx-vals='{"status": "rejected"}'
