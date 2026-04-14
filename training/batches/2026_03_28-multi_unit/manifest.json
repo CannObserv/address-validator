@@ -13,7 +13,7 @@
   "output_model": "usaddr-multi-unit.crfsuite",
   "deployed": true,
   "upstream_pr": null,
-  "session_dir": "training/batches/2026_03_28-multi_unit",
   "rationale_file": "rationale.md",
-  "performance_file": null
+  "performance_file": null,
+  "batch_dir": "training/batches/2026_03_28-multi_unit"
 }

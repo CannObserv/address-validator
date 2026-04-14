@@ -12,7 +12,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -26,7 +28,10 @@ import usaddress
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPLOY_DIR = PROJECT_ROOT / "src" / "address_validator" / "custom_model"
 DEPLOY_PATH = DEPLOY_DIR / "usaddr-custom.crfsuite"
-SESSIONS_DIR = PROJECT_ROOT / "training" / "sessions"
+BATCHES_DIR = PROJECT_ROOT / "training" / "batches"
+
+# Ensure the src/ layout is importable when run directly
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
 def _validate_model(model_path: Path) -> bool:
@@ -53,7 +58,7 @@ def _validate_model(model_path: Path) -> bool:
 
 def _update_manifest_deployed(model_name: str) -> None:
     """Mark the corresponding manifest as deployed."""
-    for manifest_file in sorted(SESSIONS_DIR.rglob("manifest.json")):
+    for manifest_file in sorted(BATCHES_DIR.rglob("manifest.json")):
         with manifest_file.open() as f:
             manifest = json.load(f)
         if manifest.get("output_model") == model_name:
@@ -65,6 +70,36 @@ def _update_manifest_deployed(model_name: str) -> None:
     print(f"Warning: no manifest found for model '{model_name}'")
 
 
+async def _transition_batch(dsn: str, batch_slug: str) -> None:
+    """Transition batch to deployed status and advance step. Tolerates gracefully."""
+    from sqlalchemy.ext.asyncio import create_async_engine  # noqa: PLC0415
+
+    from address_validator.services.training_batches import (  # noqa: PLC0415
+        InvalidTransitionError,
+        advance_step,
+        get_batch_id_by_slug,
+        transition_status,
+    )
+
+    engine = create_async_engine(dsn)
+    try:
+        batch_id = await get_batch_id_by_slug(engine, slug=batch_slug)
+        if batch_id is None:
+            print(f"Warning: batch slug '{batch_slug}' not found in DB — skipping lifecycle update")
+            return
+        try:
+            await transition_status(engine, batch_id=batch_id, target="deployed")
+            print(f"Batch '{batch_slug}': status → deployed")
+        except InvalidTransitionError as exc:
+            print(f"Warning: could not transition batch status: {exc}")
+        await advance_step(engine, batch_id=batch_id, step="deployed")
+        print(f"Batch '{batch_slug}': step → deployed")
+    except Exception as exc:
+        print(f"Warning: DB lifecycle update failed: {exc}")
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Deploy trained usaddress model")
     parser.add_argument("--model", required=True, help="Path to .crfsuite model to deploy")
@@ -74,6 +109,10 @@ def main() -> None:
         "--health-url",
         default="http://localhost:8000/api/v1/health",
         help="Health check URL for --smoke-test (default: http://localhost:8000/api/v1/health)",
+    )
+    parser.add_argument(
+        "--batch",
+        help="Slug of the training batch to transition to 'deployed' on success",
     )
     args = parser.parse_args()
 
@@ -127,6 +166,14 @@ def main() -> None:
         print("2. Run: sudo systemctl restart address-validator")
         print("3. Verify: journalctl -u address-validator -n 20")
         print(f"   Look for: 'loaded custom usaddress model: {DEPLOY_PATH}'")
+
+    # Advance batch lifecycle in DB if requested
+    if args.batch:
+        dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+        if not dsn:
+            print("Warning: VALIDATION_CACHE_DSN not set — skipping batch lifecycle update")
+        else:
+            asyncio.run(_transition_batch(dsn, args.batch))
 
 
 if __name__ == "__main__":

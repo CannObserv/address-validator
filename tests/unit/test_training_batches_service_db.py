@@ -19,6 +19,8 @@ from address_validator.services.training_batches import (
     InvalidTransitionError,
     assign_candidates,
     create_batch,
+    get_batch_id_by_slug,
+    record_upstream_pr,
     transition_status,
     unassign_candidates,
 )
@@ -151,3 +153,21 @@ async def test_unassign_keeps_assigned_when_other_batch_still_holds(
             )
         ).first()
     assert cand.status == "assigned"
+
+
+async def test_get_batch_id_by_slug(clean_db: AsyncEngine) -> None:
+    batch_id = await create_batch(clean_db, slug="slug-lookup", description="d")
+    assert await get_batch_id_by_slug(clean_db, slug="slug-lookup") == batch_id
+    assert await get_batch_id_by_slug(clean_db, slug="no-such") is None
+
+
+async def test_record_upstream_pr_updates_column(clean_db: AsyncEngine) -> None:
+    batch_id = await create_batch(clean_db, slug="pr-test", description="d")
+    await record_upstream_pr(clean_db, batch_id=batch_id, upstream_pr="https://x/pr/1")
+    async with clean_db.connect() as conn:
+        val = (
+            await conn.execute(
+                sa.select(training_batches.c.upstream_pr).where(training_batches.c.id == batch_id)
+            )
+        ).scalar_one()
+    assert val == "https://x/pr/1"

@@ -90,9 +90,18 @@ uv run python scripts/model/identify.py summary
 
 **Ask operator:** Which failure type / pattern do you want to target? (e.g. `repeated_label_error`, `post_parse_recovery`)
 
-**Export candidates:**
+**Export candidates (and create a batch):**
 ```bash
 uv run python scripts/model/identify.py export --type <failure_type> \
+  --create-batch <YYYY_MM_DD-slug> \
+  --batch-description "<description>" \
+  --out training/batches/<YYYY_MM_DD-slug>/candidates.csv
+```
+
+Or assign to an existing batch:
+```bash
+uv run python scripts/model/identify.py export --type <failure_type> \
+  --batch <slug> \
   --out training/batches/<batch-dir>/candidates.csv
 ```
 
@@ -170,7 +179,8 @@ Pretty-printed/indented XML will break parserator (whitespace becomes tokenized)
 uv run python scripts/model/train.py \
   --name <pattern-name> \
   --description "<description>" \
-  --session-dir training/batches/<batch>
+  --batch-dir training/batches/<batch> \
+  --batch <slug>
 ```
 
 The script automatically:
@@ -233,7 +243,8 @@ uv run python scripts/model/deploy.py \
   --model training/models/usaddr-<name>.crfsuite \
   --restart \
   --smoke-test \
-  --health-url http://localhost:8000/api/v1/health
+  --health-url http://localhost:8000/api/v1/health \
+  --batch <slug>
 ```
 
 **Set env var** (if not already set):
@@ -277,7 +288,8 @@ uv run python scripts/model/performance.py summary --since <deploy-date>
 ```bash
 uv run python scripts/model/performance.py report \
   --since <deploy-date> \
-  --out training/batches/<batch>/performance.md
+  --out training/batches/<batch>/performance.md \
+  --batch <slug>
 ```
 
 **Update manifest:**
@@ -311,13 +323,34 @@ Ask operator which fork branch the training data was pushed to (default: `main`)
 
 ```bash
 uv run python scripts/model/contribute.py --name <pattern-name> \
-  --stage upstream --branch <branch>
+  --stage upstream --branch <branch> \
+  --batch <slug>
 ```
 
 The script presents three choices: `[o]` open PR via `gh`, `[i]` show manual
 instructions, `[n]` abort.
 
 Include the performance report and rationale in the PR description.
+
+---
+
+## Batch lifecycle
+
+When `--batch <slug>` is passed, each script automatically advances the batch
+status in the database on successful completion:
+
+| Script | Trigger | Status transition | Step set |
+|---|---|---|---|
+| `identify.py export --create-batch` | export success | `planned` (new batch) | — (assign activates it) |
+| `train.py --batch <slug>` | training success | — | `training` |
+| `deploy.py --batch <slug>` | deploy success | → `deployed` | `deployed` |
+| `performance.py report --batch <slug>` | report written | → `observing` | `observing` |
+| `contribute.py --stage upstream --batch <slug>` | PR opened | → `closed` | `contributed` |
+
+All transitions are graceful: if `--batch` is omitted or `VALIDATION_CACHE_DSN`
+is not set, the scripts run exactly as before with no DB interaction.
+`InvalidTransitionError` (e.g. re-deploying an already-deployed batch) prints a
+warning and continues rather than crashing.
 
 ---
 

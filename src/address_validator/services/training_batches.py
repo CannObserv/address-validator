@@ -187,6 +187,27 @@ async def assign_candidates(
     return result.rowcount or 0
 
 
+async def get_batch_id_by_slug(engine: AsyncEngine, *, slug: str) -> str | None:
+    """Return the batch id for a given slug, or None if not found."""
+    async with engine.connect() as conn:
+        row = (
+            await conn.execute(
+                sa.select(training_batches.c.id).where(training_batches.c.slug == slug)
+            )
+        ).first()
+    return row.id if row else None
+
+
+async def record_upstream_pr(engine: AsyncEngine, *, batch_id: str, upstream_pr: str) -> None:
+    """Record the upstream PR URL on a batch."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.update(training_batches)
+            .where(training_batches.c.id == batch_id)
+            .values(upstream_pr=upstream_pr)
+        )
+
+
 async def unassign_candidates(
     engine: AsyncEngine,
     *,

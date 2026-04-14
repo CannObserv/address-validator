@@ -11,7 +11,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -22,8 +24,11 @@ import usaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TRAINING_DIR = PROJECT_ROOT / "training"
-SESSIONS_DIR = TRAINING_DIR / "sessions"
+BATCHES_DIR = TRAINING_DIR / "batches"
 MODELS_DIR = TRAINING_DIR / "models"
+
+# Ensure the src/ layout is importable when run directly
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 
 def _find_upstream_training_files() -> list[Path]:
@@ -50,19 +55,19 @@ def _find_upstream_training_files() -> list[Path]:
     return []
 
 
-def _find_custom_training_files(session_dir: Path) -> list[Path]:
-    """Find training XML files in a session directory."""
-    xmls = sorted(session_dir.glob("training-data*.xml"))
+def _find_custom_training_files(batch_dir: Path) -> list[Path]:
+    """Find training XML files in a batch directory."""
+    xmls = sorted(batch_dir.glob("training-data*.xml"))
     if not xmls:
-        # Fallback: any XML in the session dir
-        xmls = sorted(session_dir.glob("*.xml"))
+        # Fallback: any XML in the batch dir
+        xmls = sorted(batch_dir.glob("*.xml"))
     return xmls
 
 
 def _build_manifest(
     name: str,
     description: str,
-    session_dir: str,
+    batch_dir: str,
     training_files: list[tuple[str, str]],
     test_files: list[str],
     output_model: str,
@@ -74,7 +79,7 @@ def _build_manifest(
         "id": f"{datetime.now(UTC).strftime('%Y-%m-%d')}-{name}",
         "description": description,
         "usaddress_version": version,
-        "session_dir": session_dir,
+        "batch_dir": batch_dir,
         "training_files": [f"{src}:{path}" for src, path in training_files],
         "test_files": test_files,
         "created_at": datetime.now(UTC).isoformat(),
@@ -86,29 +91,59 @@ def _build_manifest(
     }
 
 
+async def _advance_batch(dsn: str, batch_slug: str) -> None:
+    """Advance batch step to 'training'. Tolerates batch-not-found gracefully."""
+    from sqlalchemy.ext.asyncio import create_async_engine  # noqa: PLC0415
+
+    from address_validator.services.training_batches import (  # noqa: PLC0415
+        InvalidTransitionError,
+        advance_step,
+        get_batch_id_by_slug,
+    )
+
+    engine = create_async_engine(dsn)
+    try:
+        batch_id = await get_batch_id_by_slug(engine, slug=batch_slug)
+        if batch_id is None:
+            print(f"Warning: batch slug '{batch_slug}' not found in DB — skipping step advance")
+            return
+        await advance_step(engine, batch_id=batch_id, step="training")
+        print(f"Batch '{batch_slug}': step → training")
+    except InvalidTransitionError as exc:
+        print(f"Warning: could not advance batch step: {exc}")
+    except Exception as exc:
+        print(f"Warning: DB step advance failed: {exc}")
+    finally:
+        await engine.dispose()
+
+
 def main() -> None:  # noqa: PLR0912 PLR0915
     parser = argparse.ArgumentParser(description="Train custom usaddress model")
     parser.add_argument("--name", required=True, help="Short name for this training run")
     parser.add_argument("--description", required=True, help="What this training addresses")
     parser.add_argument("--custom-only", action="store_true", help="Train on custom data only")
     parser.add_argument(
-        "--session-dir",
-        help="Session dir with training data (default: auto-created)",
+        "--batch-dir",
+        help="Batch dir with training data (default: auto-created)",
     )
     parser.add_argument(
         "--files",
         nargs="*",
-        help="Specific custom XML files (overrides session dir search)",
+        help="Specific custom XML files (overrides batch dir search)",
+    )
+    parser.add_argument(
+        "--batch",
+        help="Slug of the training batch to advance step on completion",
     )
     args = parser.parse_args()
 
-    # Determine session directory
-    if args.session_dir:
-        session_dir = Path(args.session_dir)
+    # Determine batch directory
+    if args.batch_dir:
+        batch_dir = Path(args.batch_dir)
     else:
         ts = datetime.now(UTC).strftime("%Y_%m_%d-%H_%M")
-        session_dir = SESSIONS_DIR / f"{ts}-{args.name.replace(' ', '_')}"
-    session_dir.mkdir(parents=True, exist_ok=True)
+        batch_dir = BATCHES_DIR / f"{ts}-{args.name.replace(' ', '_')}"
+    batch_dir.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Collect training files
@@ -124,22 +159,22 @@ def main() -> None:  # noqa: PLR0912 PLR0915
     if args.files:
         custom_files = [Path(f) for f in args.files]
     else:
-        custom_files = _find_custom_training_files(session_dir)
+        custom_files = _find_custom_training_files(batch_dir)
     if not custom_files:
-        print(f"Error: no training XML found in {session_dir}", file=sys.stderr)
+        print(f"Error: no training XML found in {batch_dir}", file=sys.stderr)
         sys.exit(1)
 
     for f in custom_files:
         training_file_entries.append(("custom", str(f.name)))
         training_paths.append(f)
 
-    print(f"Session: {session_dir}")
+    print(f"Batch: {batch_dir}")
     print(f"Training with {len(training_paths)} files:")
     for src, name in training_file_entries:
         print(f"  [{src}] {name}")
 
-    # Find test files in session dir
-    test_files = sorted(str(f.name) for f in session_dir.glob("test-cases*.csv"))
+    # Find test files in batch dir
+    test_files = sorted(str(f.name) for f in batch_dir.glob("test-cases*.csv"))
 
     # Backup current model
     current_model = Path(usaddress.MODEL_PATH)
@@ -178,27 +213,35 @@ def main() -> None:  # noqa: PLR0912 PLR0915
         shutil.copy2(backup_path, current_model)
         print("Restored original bundled model.")
 
-    # Check for rationale file in session dir
+    # Check for rationale file in batch dir
     rationale_file = None
-    rationale_path = session_dir / "rationale.md"
+    rationale_path = batch_dir / "rationale.md"
     if rationale_path.exists():
         rationale_file = "rationale.md"
         print(f"Found rationale at {rationale_path}")
 
-    # Write manifest to session dir
+    # Write manifest to batch dir
     manifest = _build_manifest(
         name=args.name,
         description=args.description,
-        session_dir=str(session_dir),
+        batch_dir=str(batch_dir),
         training_files=training_file_entries,
         test_files=test_files,
         output_model=output_name,
         rationale_file=rationale_file,
     )
-    manifest_path = session_dir / "manifest.json"
+    manifest_path = batch_dir / "manifest.json"
     with manifest_path.open("w") as f:
         json.dump(manifest, f, indent=2)
     print(f"Wrote manifest to {manifest_path}")
+
+    # Advance batch step in DB if requested
+    if args.batch:
+        dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+        if not dsn:
+            print("Warning: VALIDATION_CACHE_DSN not set — skipping batch step advance")
+        else:
+            asyncio.run(_advance_batch(dsn, args.batch))
 
 
 if __name__ == "__main__":

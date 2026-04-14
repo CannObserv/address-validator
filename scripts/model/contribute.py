@@ -12,7 +12,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -21,7 +23,10 @@ from pathlib import Path
 import usaddress
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SESSIONS_DIR = PROJECT_ROOT / "training" / "sessions"
+BATCHES_DIR = PROJECT_ROOT / "training" / "batches"
+
+# Ensure the src/ layout is importable when run directly
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 # Our fork — update when fork is created
 FORK_REPO = ""  # e.g. "CannObserv/usaddress"
@@ -30,7 +35,7 @@ UPSTREAM_REPO = "datamade/usaddress"
 
 def _find_manifest(name: str) -> tuple[dict, Path] | None:
     """Find a manifest by name (matches anywhere in the manifest ID)."""
-    for manifest_file in sorted(SESSIONS_DIR.rglob("manifest.json"), reverse=True):
+    for manifest_file in sorted(BATCHES_DIR.rglob("manifest.json"), reverse=True):
         with manifest_file.open() as f:
             manifest = json.load(f)
         if name in manifest.get("id", ""):
@@ -104,7 +109,7 @@ pytest
 """
 
 
-def _stage_fork(name: str, manifest: dict, session_dir: Path) -> None:
+def _stage_fork(name: str, manifest: dict, batch_dir: Path) -> None:
     """Show instructions for pushing training data to our fork."""
     if not FORK_REPO:
         print(
@@ -127,10 +132,10 @@ def _stage_fork(name: str, manifest: dict, session_dir: Path) -> None:
 
     print(f"\nFiles to push to fork {FORK_REPO}:")
     for fname in custom_files:
-        training_path = session_dir / fname
+        training_path = batch_dir / fname
         if training_path.exists():
             print(f"  training/{fname}")
-    test_path = session_dir / "test-data.xml"
+    test_path = batch_dir / "test-data.xml"
     if test_path.exists():
         print("  measure_performance/test_data/test-data.xml")
 
@@ -141,8 +146,11 @@ def _stage_fork(name: str, manifest: dict, session_dir: Path) -> None:
     )
 
 
-def _stage_upstream(name: str, manifest: dict, session_dir: Path, branch: str = "main") -> None:
-    """Display the upstream PR body and either open it via gh or print manual instructions."""
+def _stage_upstream(name: str, manifest: dict, batch_dir: Path, branch: str = "main") -> str | None:
+    """Display the upstream PR body and either open it via gh or print manual instructions.
+
+    Returns the PR URL if opened via gh, else None.
+    """
     if not FORK_REPO:
         print("Error: FORK_REPO not configured. Run --stage fork first.", file=sys.stderr)
         sys.exit(1)
@@ -154,8 +162,8 @@ def _stage_upstream(name: str, manifest: dict, session_dir: Path, branch: str = 
         print("Error: no custom training files in manifest", file=sys.stderr)
         sys.exit(1)
 
-    training_xml = session_dir / custom_files[0]
-    test_xml_path = session_dir / "test-data.xml"
+    training_xml = batch_dir / custom_files[0]
+    test_xml_path = batch_dir / "test-data.xml"
     test_xml = test_xml_path if test_xml_path.exists() else None
 
     pr_title = manifest["description"]
@@ -192,6 +200,7 @@ def _stage_upstream(name: str, manifest: dict, session_dir: Path, branch: str = 
         print(f"       --head {fork_org}:{branch} \\")
         print(f'       --title "{pr_title}" \\')
         print("       --body $'<paste body above>'")
+        return None
     elif choice == "o":
         result = subprocess.run(  # noqa: S603
             [  # noqa: S607
@@ -207,14 +216,54 @@ def _stage_upstream(name: str, manifest: dict, session_dir: Path, branch: str = 
                 "--body",
                 pr_body,
             ],
+            capture_output=True,
+            text=True,
             check=False,
         )
         if result.returncode != 0:
             print("Error: gh pr create failed. Check output above.", file=sys.stderr)
+            print(result.stderr, file=sys.stderr)
             sys.exit(1)
+        pr_url = result.stdout.strip()
+        print(pr_url)
+        return pr_url
     else:
         print(f"Unknown choice '{choice}'. Aborted.")
         sys.exit(1)
+
+
+async def _close_batch(dsn: str, batch_slug: str, upstream_pr: str | None) -> None:
+    """Transition batch to closed and record upstream PR. Tolerates gracefully."""
+    from sqlalchemy.ext.asyncio import create_async_engine  # noqa: PLC0415
+
+    from address_validator.services.training_batches import (  # noqa: PLC0415
+        InvalidTransitionError,
+        advance_step,
+        get_batch_id_by_slug,
+        record_upstream_pr,
+        transition_status,
+    )
+
+    engine = create_async_engine(dsn)
+    try:
+        batch_id = await get_batch_id_by_slug(engine, slug=batch_slug)
+        if batch_id is None:
+            print(f"Warning: batch slug '{batch_slug}' not found in DB — skipping lifecycle update")
+            return
+        try:
+            await transition_status(engine, batch_id=batch_id, target="closed")
+            print(f"Batch '{batch_slug}': status → closed")
+        except InvalidTransitionError as exc:
+            print(f"Warning: could not transition batch status: {exc}")
+        await advance_step(engine, batch_id=batch_id, step="contributed")
+        print(f"Batch '{batch_slug}': step → contributed")
+        if upstream_pr:
+            await record_upstream_pr(engine, batch_id=batch_id, upstream_pr=upstream_pr)
+            print(f"Batch '{batch_slug}': upstream_pr recorded")
+    except Exception as exc:
+        print(f"Warning: DB lifecycle update failed: {exc}")
+    finally:
+        await engine.dispose()
 
 
 def main() -> None:
@@ -231,6 +280,10 @@ def main() -> None:
         default="main",
         help="Branch in the fork to use as PR head (default: main)",
     )
+    parser.add_argument(
+        "--batch",
+        help="Slug of the training batch to transition to 'closed' on upstream PR success",
+    )
     args = parser.parse_args()
 
     result = _find_manifest(args.name)
@@ -238,15 +291,23 @@ def main() -> None:
         print(f"Error: no manifest found matching '{args.name}'", file=sys.stderr)
         sys.exit(1)
 
-    manifest, session_dir = result
+    manifest, batch_dir = result
     print(f"Using manifest: {manifest['id']}")
-    print(f"Session: {session_dir}")
+    print(f"Batch: {batch_dir}")
     print(f"Description: {manifest['description']}")
 
     if args.stage == "fork":
-        _stage_fork(args.name, manifest, session_dir)
+        _stage_fork(args.name, manifest, batch_dir)
     else:
-        _stage_upstream(args.name, manifest, session_dir, branch=args.branch)
+        pr_url = _stage_upstream(args.name, manifest, batch_dir, branch=args.branch)
+
+        # Advance batch lifecycle in DB if requested and upstream PR was opened
+        if args.batch and pr_url is not None:
+            dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+            if not dsn:
+                print("Warning: VALIDATION_CACHE_DSN not set — skipping batch lifecycle update")
+            else:
+                asyncio.run(_close_batch(dsn, args.batch, pr_url))
 
 
 if __name__ == "__main__":
