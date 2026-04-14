@@ -107,6 +107,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Note: the 'reviewed' -> 'new' data migration in upgrade() is not reversed
+    # here; the two statuses are indistinguishable after the fact. The old CHECK
+    # is restored so post-downgrade writes can re-introduce 'reviewed', but
+    # historical rows already migrated to 'new' stay 'new'.
     op.execute("DROP TABLE IF EXISTS candidate_batch_assignments")
     op.execute("DROP TABLE IF EXISTS training_batches")
 
