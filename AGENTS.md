@@ -85,7 +85,7 @@ static/admin/images/ Cannabis Observer brand SVGs
 scripts/backfill_pattern_key.py  One-time backfill: populate NULL pattern_key on audit_log validate rows
 scripts/model/       Training pipeline scripts (identify, label, train, test_model, deploy, performance, contribute)
 skills/train-model/  /train-model skill — interactive 7-step pipeline orchestration
-training/sessions/   Per-session training artifacts (timestamped dirs)
+training/batches/    Per-batch training artifacts (timestamped dirs)
 training/upstream/   Upstream usaddress training data (labeled.xml)
 ```
 

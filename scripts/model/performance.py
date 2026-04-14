@@ -8,7 +8,7 @@ performance signal.
 Usage:
     python scripts/model/performance.py summary [--since 7d] [--until now]
     python scripts/model/performance.py report --since 2026-03-28 \
-        --out training/sessions/.../performance.md
+        --out training/batches/.../performance.md
     python scripts/model/performance.py ambiguous --since 7d [--limit 20]
 
 Requires VALIDATION_CACHE_DSN environment variable.

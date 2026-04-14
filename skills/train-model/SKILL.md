@@ -36,12 +36,12 @@ improvements upstream. Issue #75.
 /train-model --step contribute  # Resume at contribution step
 ```
 
-## Session directory structure
+## Batch directory structure
 
-All artifacts for a training session live in a timestamped directory:
+All artifacts for a training batch live in a timestamped directory:
 
 ```
-training/sessions/2026_03_28-multi_unit/
+training/batches/2026_03_28-multi_unit/
 ├── candidates.csv          # exported from identify step
 ├── training-data.xml       # labeled training XML (parserator format)
 ├── test-data.xml           # labeled test XML
@@ -93,7 +93,7 @@ uv run python scripts/model/identify.py summary
 **Export candidates:**
 ```bash
 uv run python scripts/model/identify.py export --type <failure_type> \
-  --out training/sessions/<session-dir>/candidates.csv
+  --out training/batches/<batch-dir>/candidates.csv
 ```
 
 If no DB candidates, prompt operator to create a manual CSV or generate examples
@@ -111,9 +111,9 @@ directly in the conversation based on the target pattern.
 
 **Purpose:** Generate labeled training XML for parserator.
 
-**Create session directory:**
+**Create batch directory:**
 ```bash
-mkdir -p training/sessions/<YYYY_MM_DD-pattern_name>
+mkdir -p training/batches/<YYYY_MM_DD-pattern_name>
 ```
 
 **Labeling approach (choose based on context):**
@@ -121,8 +121,8 @@ mkdir -p training/sessions/<YYYY_MM_DD-pattern_name>
 1. **CLI labeling** (when `ANTHROPIC_API_KEY` is available):
    ```bash
    uv run python scripts/model/label.py candidates.csv \
-     training/sessions/<session>/training-data.xml \
-     --test-output training/sessions/<session>/test-data.xml
+     training/batches/<batch>/training-data.xml \
+     --test-output training/batches/<batch>/test-data.xml
    ```
 
 2. **Direct labeling in conversation** (preferred in skill context):
@@ -146,7 +146,7 @@ Pretty-printed/indented XML will break parserator (whitespace becomes tokenized)
 **Generate test cases CSV** (`test-cases.csv`) with columns:
 `raw_address`, `expected_labels` (JSON), `description`, `should_fail_old_model`
 
-**Document labeling rationale** in `training/sessions/<session>/rationale.md`:
+**Document labeling rationale** in `training/batches/<batch>/rationale.md`:
 - Governing standards (FGDC, USPS Pub 28, upstream training data)
 - Per-pattern label assignments with evidence counts
 - Patterns attempted but excluded, with root cause analysis
@@ -170,14 +170,14 @@ Pretty-printed/indented XML will break parserator (whitespace becomes tokenized)
 uv run python scripts/model/train.py \
   --name <pattern-name> \
   --description "<description>" \
-  --session-dir training/sessions/<session>
+  --session-dir training/batches/<batch>
 ```
 
 The script automatically:
 - Finds upstream training data in `training/upstream/`
-- Finds custom XML in the session directory
+- Finds custom XML in the batch directory
 - Backs up the current model, trains, restores original
-- Writes manifest to the session directory
+- Writes manifest to the batch directory
 
 **Check upstream data:** If upstream training data is missing:
 ```bash
@@ -203,7 +203,7 @@ curl -sL https://raw.githubusercontent.com/datamade/usaddress/master/training/la
 ```bash
 uv run python scripts/model/test_model.py \
   --model training/models/usaddr-<name>.crfsuite \
-  --test-dir training/sessions/<session> \
+  --test-dir training/batches/<batch> \
   --run-pytest
 ```
 
@@ -245,7 +245,7 @@ echo 'CUSTOM_MODEL_PATH=/path/to/src/address_validator/custom_model/usaddr-custo
 **Commit the deployed model:**
 ```bash
 git add -f src/address_validator/custom_model/usaddr-custom.crfsuite \
-  training/sessions/<session>/
+  training/batches/<batch>/
 git commit -m "#<issue> feat: deploy custom usaddress model for <pattern-name>"
 ```
 
@@ -277,7 +277,7 @@ uv run python scripts/model/performance.py summary --since <deploy-date>
 ```bash
 uv run python scripts/model/performance.py report \
   --since <deploy-date> \
-  --out training/sessions/<session>/performance.md
+  --out training/batches/<batch>/performance.md
 ```
 
 **Update manifest:**
@@ -285,7 +285,7 @@ The performance report path is recorded in manifest.json (`performance_file` fie
 
 **Commit:**
 ```bash
-git add training/sessions/<session>/performance.md
+git add training/batches/<batch>/performance.md
 git commit -m "#<issue> docs: add performance report for <pattern-name> model"
 ```
 
