@@ -16,12 +16,9 @@ from starlette.responses import Response
 from address_validator.routers.admin._config import templates
 from address_validator.routers.admin.deps import AdminContext, get_admin_context
 from address_validator.routers.admin.queries import get_new_candidate_count
+from address_validator.routers.admin.queries.candidates import DEFAULT_LOOKBACK_DAYS
 
 router = APIRouter(prefix="/_partials")
-
-# Window the badge counts over. Matches the candidate list view's default
-# `since=30d` filter — keep these two in sync if either changes.
-_CANDIDATES_BADGE_LOOKBACK_DAYS = 30
 
 
 @router.get("/candidates_badge", response_class=HTMLResponse, response_model=None)
@@ -35,9 +32,9 @@ async def candidates_badge(
     Intentionally *not* filtered by `failure_type` — the badge is a global
     triage-queue indicator, not a filter-aware view.
     """
-    since = datetime.now(UTC) - timedelta(days=_CANDIDATES_BADGE_LOOKBACK_DAYS)
+    since = datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
     count = await get_new_candidate_count(ctx.engine, since=since)
     return templates.TemplateResponse(
-        "admin/candidates/_badge.html",
+        "admin/_partials/candidates_badge.html",
         {"request": request, "count": count},
     )
