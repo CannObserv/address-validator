@@ -4,9 +4,11 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.db.tables import model_training_candidates as mtc_tbl
 from address_validator.routers.admin.queries.candidates import (
     get_candidate_group,
     get_candidate_groups,
@@ -15,6 +17,7 @@ from address_validator.routers.admin.queries.candidates import (
     update_candidate_notes,
     update_candidate_status,
 )
+from address_validator.services.training_batches import assign_candidates, create_batch
 
 
 def _hex(s: str) -> str:
@@ -34,7 +37,7 @@ async def _seed(engine: AsyncEngine) -> None:
             "ts": now - timedelta(days=1),
         },
         {"raw": "addr A", "ft": "repeated_label_error", "status": "new", "ts": now},
-        # Group B: one `new` + one `reviewed` — rolls up to `mixed`
+        # Group B: one `new` + one `assigned` — rolls up to `mixed`
         {
             "raw": "addr B",
             "ft": "post_parse_recovery",
@@ -44,14 +47,14 @@ async def _seed(engine: AsyncEngine) -> None:
         {
             "raw": "addr B",
             "ft": "post_parse_recovery",
-            "status": "reviewed",
+            "status": "assigned",
             "ts": now - timedelta(hours=1),
         },
-        # Group C: one `reviewed` row — rolls up to `reviewed`
+        # Group C: one `assigned` row — rolls up to `assigned`
         {
             "raw": "addr C",
             "ft": "repeated_label_error",
-            "status": "reviewed",
+            "status": "assigned",
             "ts": now - timedelta(days=3),
         },
         # Group D: one `labeled` — must be EXCLUDED from all triage queries
@@ -73,7 +76,9 @@ async def _seed(engine: AsyncEngine) -> None:
 async def seeded_db(db: AsyncEngine) -> AsyncEngine:
     """`db` fixture truncates everything; this extends by seeding candidate rows."""
     async with db.begin() as conn:
-        await conn.execute(text("TRUNCATE model_training_candidates RESTART IDENTITY"))
+        await conn.execute(
+            text("TRUNCATE model_training_candidates, training_batches RESTART IDENTITY CASCADE")
+        )
     await _seed(db)
     return db
 
@@ -93,7 +98,7 @@ async def test_get_candidate_groups_rolls_up_status(seeded_db: AsyncEngine) -> N
     assert by_raw["addr A"]["count"] == 2
     assert by_raw["addr B"]["rollup_status"] == "mixed"
     assert by_raw["addr B"]["count"] == 2
-    assert by_raw["addr C"]["rollup_status"] == "reviewed"
+    assert by_raw["addr C"]["rollup_status"] == "assigned"
     assert by_raw["addr C"]["count"] == 1
     assert "addr D" not in by_raw
     assert total == 3
@@ -158,16 +163,16 @@ async def test_get_candidate_submissions_returns_rows(seeded_db: AsyncEngine) ->
 
 async def test_update_candidate_status_applies_to_group(seeded_db: AsyncEngine) -> None:
     h = _hex("addr A")
-    n = await update_candidate_status(seeded_db, raw_hash=h, status="reviewed")
+    n = await update_candidate_status(seeded_db, raw_hash=h, status="rejected")
     assert n == 2
     rows = await get_candidate_submissions(seeded_db, raw_hash=h)
-    assert all(r["status"] == "reviewed" for r in rows)
+    assert all(r["status"] == "rejected" for r in rows)
 
 
 async def test_update_candidate_status_skips_labeled(seeded_db: AsyncEngine) -> None:
     h = _hex("addr D")
     # Try to touch addr D (labeled only) — rowcount must be 0.
-    n = await update_candidate_status(seeded_db, raw_hash=h, status="reviewed")
+    n = await update_candidate_status(seeded_db, raw_hash=h, status="rejected")
     assert n == 0
 
 
@@ -220,9 +225,9 @@ async def test_get_new_candidate_count_counts_new_and_mixed(seeded_db: AsyncEngi
 
 
 async def test_get_new_candidate_count_zero_when_nothing_actionable(seeded_db: AsyncEngine) -> None:
-    # Mark A and B as reviewed; only C remains, also reviewed; expect 0.
-    await update_candidate_status(seeded_db, raw_hash=_hex("addr A"), status="reviewed")
-    await update_candidate_status(seeded_db, raw_hash=_hex("addr B"), status="reviewed")
+    # Mark A and B as rejected; only C remains, already assigned; expect 0.
+    await update_candidate_status(seeded_db, raw_hash=_hex("addr A"), status="rejected")
+    await update_candidate_status(seeded_db, raw_hash=_hex("addr B"), status="rejected")
     n = await get_new_candidate_count(seeded_db, since=None)
     assert n == 0
 
@@ -235,3 +240,37 @@ async def test_get_new_candidate_count_respects_since(seeded_db: AsyncEngine) ->
     cutoff = datetime.now(UTC) + timedelta(seconds=30)
     n = await get_new_candidate_count(seeded_db, since=cutoff)
     assert n == 0
+
+
+async def test_rollup_assigned_when_linked_to_batch(seeded_db: AsyncEngine) -> None:
+    # seed a new candidate
+    async with seeded_db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO model_training_candidates "
+                "(raw_address, failure_type, parsed_tokens, status) "
+                "VALUES ('ASSIGN ME', 'repeated_label_error', '[]'::jsonb, 'new')"
+            )
+        )
+        h = (
+            await conn.execute(
+                sa.select(mtc_tbl.c.raw_address_hash).where(mtc_tbl.c.raw_address == "ASSIGN ME")
+            )
+        ).scalar_one()
+
+    batch_id = await create_batch(seeded_db, slug="q-test", description="d")
+    await assign_candidates(seeded_db, batch_id=batch_id, raw_address_hashes=[h])
+
+    rows, _ = await get_candidate_groups(
+        seeded_db,
+        status="assigned",
+        failure_type=None,
+        since=None,
+        until=None,
+        limit=10,
+        offset=0,
+    )
+    match = next((r for r in rows if r["raw_hash"] == h), None)
+    assert match is not None
+    assert "q-test" in (match.get("batch_slugs") or [])
+    assert match["rollup_status"] == "assigned"

@@ -12,7 +12,15 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
-from address_validator.db.tables import model_training_candidates as mtc
+from address_validator.db.tables import (
+    candidate_batch_assignments as cba,
+)
+from address_validator.db.tables import (
+    model_training_candidates as mtc,
+)
+from address_validator.db.tables import (
+    training_batches as tb,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -25,7 +33,9 @@ _NON_LABELED = mtc.c.status != "labeled"
 
 # Statuses an admin may set via the triage UI. `labeled` is reserved for the
 # training pipeline; `mixed` is a derived rollup, never a stored value.
-WRITE_STATUSES: frozenset[str] = frozenset({"new", "reviewed", "rejected"})
+# `assigned` is set by services.training_batches.assign_candidates and cleared
+# by unassign_candidates — admins never POST it directly.
+WRITE_STATUSES: frozenset[str] = frozenset({"new", "rejected"})
 
 # Default time window for candidate-triage views. Drives both the list view's
 # `since=30d` querystring default AND the nav-badge lookback so the count
@@ -72,6 +82,16 @@ async def get_candidate_groups(
     rollup = _rollup_status_expr()
     last_seen = sa.func.max(mtc.c.created_at).label("last_seen")
 
+    batch_slugs_sub = (
+        sa.select(
+            cba.c.raw_address_hash,
+            sa.func.array_agg(sa.distinct(tb.c.slug)).label("batch_slugs"),
+        )
+        .select_from(cba.join(tb, cba.c.batch_id == tb.c.id))
+        .group_by(cba.c.raw_address_hash)
+        .subquery()
+    )
+
     group_stmt = (
         sa.select(
             mtc.c.raw_address.label("raw_address"),
@@ -82,6 +102,13 @@ async def get_candidate_groups(
             sa.func.min(mtc.c.created_at).label("first_seen"),
             last_seen,
             sa.func.max(mtc.c.notes).label("notes"),
+            sa.func.max(batch_slugs_sub.c.batch_slugs).label("batch_slugs"),
+        )
+        .select_from(
+            mtc.outerjoin(
+                batch_slugs_sub,
+                mtc.c.raw_address_hash == batch_slugs_sub.c.raw_address_hash,
+            )
         )
         .where(*where)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
@@ -91,7 +118,6 @@ async def get_candidate_groups(
         group_stmt = group_stmt.having(status_filter)
 
     count_stmt = sa.select(sa.func.count()).select_from(group_stmt.subquery())
-
     list_stmt = group_stmt.order_by(last_seen.desc()).limit(limit).offset(offset)
 
     async with engine.connect() as conn:
@@ -120,6 +146,16 @@ async def get_new_candidate_count(engine: AsyncEngine, *, since: datetime | None
 async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | None:
     """Return the summary for a single group identified by raw_hash, or None."""
     rollup = _rollup_status_expr()
+    batch_slugs_sub = (
+        sa.select(
+            cba.c.raw_address_hash,
+            sa.func.array_agg(sa.distinct(tb.c.slug)).label("batch_slugs"),
+        )
+        .select_from(cba.join(tb, cba.c.batch_id == tb.c.id))
+        .where(cba.c.raw_address_hash == raw_hash)
+        .group_by(cba.c.raw_address_hash)
+        .subquery()
+    )
     stmt = (
         sa.select(
             mtc.c.raw_address.label("raw_address"),
@@ -130,6 +166,13 @@ async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | N
             sa.func.min(mtc.c.created_at).label("first_seen"),
             sa.func.max(mtc.c.created_at).label("last_seen"),
             sa.func.max(mtc.c.notes).label("notes"),
+            sa.func.max(batch_slugs_sub.c.batch_slugs).label("batch_slugs"),
+        )
+        .select_from(
+            mtc.outerjoin(
+                batch_slugs_sub,
+                mtc.c.raw_address_hash == batch_slugs_sub.c.raw_address_hash,
+            )
         )
         .where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
@@ -146,6 +189,10 @@ async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> li
             mtc.c.id,
             mtc.c.raw_address,
             mtc.c.failure_type,
+            mtc.c.failure_reason,
+            mtc.c.endpoint,
+            mtc.c.provider,
+            mtc.c.api_version,
             mtc.c.parsed_tokens,
             mtc.c.recovered_components,
             mtc.c.created_at,
@@ -159,7 +206,11 @@ async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> li
 
 
 async def update_candidate_status(engine: AsyncEngine, *, raw_hash: str, status: str) -> int:
-    """Set status on every non-labeled row in the group. Returns rowcount."""
+    """Set status on every non-labeled row in the group. Returns rowcount.
+
+    Only 'new' and 'rejected' are admin-settable. 'assigned' is set via
+    services.training_batches.assign_candidates; 'labeled' via the training pipeline.
+    """
     if status not in WRITE_STATUSES:
         raise ValueError(f"invalid status: {status!r}")
     stmt = (
