@@ -8,6 +8,8 @@ from address_validator.main import app
 from address_validator.models import ValidateResponseV1, ValidationResult
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 
+pytestmark = pytest.mark.integration
+
 
 def _make_non_us_provider(response: ValidateResponseV1) -> AsyncMock:
     """Return a mock provider with supports_non_us=True."""

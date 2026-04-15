@@ -1,5 +1,9 @@
 """Integration tests for POST /api/v1/standardize."""
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 class TestV1StandardizeAuth:
     def test_missing_key_returns_401(self, client_no_auth) -> None:

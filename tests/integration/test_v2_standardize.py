@@ -1,5 +1,9 @@
 """Integration tests for POST /api/v2/standardize."""
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 class TestV2StandardizeISO:
     def test_returns_iso_keys_by_default(self, client) -> None:

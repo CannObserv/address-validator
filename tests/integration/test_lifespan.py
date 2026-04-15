@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from address_validator.main import app
 
+pytestmark = pytest.mark.integration
+
 
 class TestLifespanValidateConfig:
     def test_misconfigured_usps_aborts_startup(self, monkeypatch: pytest.MonkeyPatch) -> None:

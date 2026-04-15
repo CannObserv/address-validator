@@ -1,5 +1,9 @@
 """Integration tests for POST /api/v2/validate."""
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 class TestV2ValidateBasic:
     def test_us_address_returns_200(self, client) -> None:

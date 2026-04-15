@@ -2,6 +2,8 @@
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 class TestV1ParseAuth:
     def test_missing_key_returns_401(self, client_no_auth) -> None:

@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 
 class TestHealthV2:
     def test_health_ok(self, client) -> None:

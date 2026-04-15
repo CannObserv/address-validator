@@ -2,7 +2,11 @@
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from address_validator.services.libpostal_client import LibpostalUnavailableError
+
+pytestmark = pytest.mark.integration
 
 
 class TestV2ParseCA:

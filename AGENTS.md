@@ -191,8 +191,8 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 ```
 uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
-uv run pytest -m integration    # integration tests only
-uv run pytest -m "not integration"  # unit tests only (faster)
+uv run pytest --no-cov -m integration    # integration tests only
+uv run pytest --no-cov -m "not integration"  # unit tests only (faster; coverage fails below 80% on partial runs)
 npm test                        # admin JS tests (vitest + jsdom)
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix

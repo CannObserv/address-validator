@@ -13,6 +13,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+pytestmark = pytest.mark.integration
+
 
 class TestValidateNullProvider:
     """Always-run tests — NullProvider requires no external credentials."""

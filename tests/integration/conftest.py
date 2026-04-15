@@ -24,8 +24,6 @@ if TYPE_CHECKING:
 
     from fastapi.testclient import TestClient
 
-pytestmark = pytest.mark.integration
-
 
 @pytest.fixture(autouse=True)
 def _restore_engine_singleton(client: TestClient) -> Generator[None, None, None]:

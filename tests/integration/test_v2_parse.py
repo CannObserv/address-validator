@@ -1,5 +1,9 @@
 """Integration tests for POST /api/v2/parse."""
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 
 class TestV2ParseISO:
     def test_returns_iso_keys_by_default(self, client) -> None:
