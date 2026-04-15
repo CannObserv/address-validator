@@ -8,8 +8,6 @@ production database.
 
 import os
 
-_PROD_DB = "address_validator\n"  # not address_validator_test
-
 
 def test_validation_cache_dsn_points_to_test_database() -> None:
     """conftest.py must pre-set VALIDATION_CACHE_DSN to the test database.

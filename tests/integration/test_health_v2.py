@@ -1,6 +1,6 @@
 """Integration tests for GET /api/v2/health."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -60,30 +60,34 @@ class TestHealthV2:
         assert response.json()["status"] == "degraded"
         assert response.json()["database"] == "error"
 
-    def test_libpostal_ok(self, client) -> None:
+    def test_libpostal_ok(self, client, monkeypatch: pytest.MonkeyPatch) -> None:
         """When libpostal sidecar is reachable, libpostal field is 'ok'."""
         mock_client = AsyncMock()
         mock_client.health_check = AsyncMock(return_value=True)
 
-        with patch.object(client.app.state, "libpostal_client", mock_client, create=True):
-            response = client.get("/api/v2/health")
+        monkeypatch.setattr(client.app.state, "libpostal_client", mock_client)
+        response = client.get("/api/v2/health")
 
         assert response.status_code == 200
         assert response.json()["libpostal"] == "ok"
 
-    def test_libpostal_unavailable_does_not_degrade_status(self, client) -> None:
+    def test_libpostal_unavailable_does_not_degrade_status(
+        self, client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When libpostal is down, status stays 'ok' and HTTP 200 is returned."""
         mock_client = AsyncMock()
         mock_client.health_check = AsyncMock(return_value=False)
 
-        with patch.object(client.app.state, "libpostal_client", mock_client, create=True):
-            response = client.get("/api/v2/health")
+        monkeypatch.setattr(client.app.state, "libpostal_client", mock_client)
+        response = client.get("/api/v2/health")
 
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
         assert response.json()["libpostal"] == "unavailable"
 
-    def test_libpostal_unavailable_with_database_error(self, client) -> None:
+    def test_libpostal_unavailable_with_database_error(
+        self, client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """503 when DB is down regardless of libpostal state."""
         mock_libpostal = AsyncMock()
         mock_libpostal.health_check = AsyncMock(return_value=False)
@@ -92,11 +96,9 @@ class TestHealthV2:
             side_effect=Exception("connection refused")
         )
 
-        with (
-            patch.object(client.app.state, "libpostal_client", mock_libpostal, create=True),
-            patch.object(client.app.state, "engine", mock_engine, create=True),
-        ):
-            response = client.get("/api/v2/health")
+        monkeypatch.setattr(client.app.state, "libpostal_client", mock_libpostal)
+        monkeypatch.setattr(client.app.state, "engine", mock_engine)
+        response = client.get("/api/v2/health")
 
         assert response.status_code == 503
         assert response.json()["status"] == "degraded"
