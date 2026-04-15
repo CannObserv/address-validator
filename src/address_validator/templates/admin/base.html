@@ -19,8 +19,6 @@
 {% set nav_items = [
     ('dashboard', '/admin/', 'Dashboard', none),
     ('audit', '/admin/audit/', 'Audit Log', none),
-    ('candidates', '/admin/candidates/', 'Candidates', none),
-    ('batches', '/admin/batches/', 'Batches', none),
 ] %}
 {% set endpoint_items = [] %}
 {% for ep in ['parse', 'standardize', 'validate'] %}
@@ -30,7 +28,11 @@
 {% for prov in ['usps', 'google'] %}
     {% set _ = provider_items.append(('provider_' + prov, '/admin/providers/' + prov, prov | upper, 'Providers')) %}
 {% endfor %}
-{% set all_nav_items = nav_items + endpoint_items + provider_items %}
+{% set training_items = [
+    ('batches', '/admin/batches/', 'Batches', 'Training'),
+    ('candidates', '/admin/candidates/', 'Candidates', 'Training'),
+] %}
+{% set all_nav_items = nav_items + endpoint_items + provider_items + training_items %}
 
 <body class="h-full bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100" hx-boost="true">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
