@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Docker space hygiene (Sun 03:30 UTC)
+
+[Timer]
+OnCalendar=Sun 03:30 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
