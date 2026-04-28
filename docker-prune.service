@@ -9,5 +9,3 @@ User=exedev
 ExecStart=/usr/bin/docker system prune -f
 ExecStartPost=/home/exedev/address-validator/scripts/docker-prune-check.sh
 
-[Install]
-WantedBy=multi-user.target

@@ -158,7 +158,7 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Backfill pattern_key: `source /etc/address-validator/.env && uv run python scripts/backfill_pattern_key.py` (dry-run; add `--apply`)
 - Install audit-archive timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
 - Install docker-prune timer: `sudo cp docker-prune.service docker-prune.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now docker-prune.timer`
-- Docker hygiene: weekly `docker system prune -f` via docker-prune.timer (Sun 03:30 UTC); logs a journal warning if disk ≥ 85% after prune; does **not** use `-a` (active images are safe)
+- Docker hygiene: weekly `docker system prune -f` via docker-prune.timer (Sun 03:30 UTC); logs a journal warning if disk ≥ 85% after prune (inspect with `journalctl -t docker-prune -p warning`); does **not** use `-a` (active images are safe)
 
 ## Infrastructure
 
