@@ -146,11 +146,12 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 
 ## Deployment
 
-- systemd unit: `/etc/systemd/system/address-validator.service` (repo copy is canonical)
+- systemd unit: `/etc/systemd/system/address-validator.service` (repo copy `infra/address-validator.service` is canonical)
 - Env file: `/etc/address-validator/.env`
 - Restart: `sudo systemctl restart address-validator`
 - Logs: `journalctl -u address-validator -f`
 - Re-install unit: `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+- Install libpostal service: `sudo cp infra/libpostal.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now libpostal`
 - Pre-commit: `uv run pre-commit install` (ruff + Tailwind CSS build)
 - Backfill audit log: `source /etc/address-validator/.env && uv run python scripts/backfill_audit_log.py`
 - Archive audit log: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py`

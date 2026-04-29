@@ -207,35 +207,52 @@ persistent deployment.  The API key is stored in
 
 ```
 src/address_validator/
-  main.py                      # FastAPI app entry point, CORS config
+  main.py                      # FastAPI app, lifespan, exception handlers
   auth.py                      # API key authentication dependency
-  models.py                    # Shared Pydantic request/response models
+  models.py                    # Pydantic request/response models (API contract)
   logging_filter.py            # RequestIdFilter — injects request_id into logs
   middleware/
+    api_version.py             # Appends API-Version header on /api/v1/ and /api/v2/ responses
+    audit.py                   # Records every API request to audit_log (fire-and-forget)
     request_id.py              # ULID generation, X-Request-ID header
-  routers/v1/
-    core.py                    # Country validation, APIError, helpers
-    health.py                  # GET /api/v1/health
-    parse.py                   # POST /api/v1/parse
-    standardize.py             # POST /api/v1/standardize
+  core/
+    address_format.py          # Canonical single-line address string builder
+    countries.py               # SUPPORTED_COUNTRIES, check_country(), check_country_v2()
+    errors.py                  # APIError, api_error_response()
+  routers/
+    deps.py                    # Shared FastAPI dependencies (registry, libpostal client)
+    v1/                        # USPS Pub 28 surface (parse, standardize, validate, countries, health)
+    v2/                        # ISO 19160-4 surface; component_profile query param
+    admin/                     # Admin dashboard (Jinja2 + HTMX, exe.dev auth)
+      queries/                 # SQLAlchemy Core query helpers (audit, candidates, batches, dashboard)
   services/
-    parser.py                  # usaddress wrapper, tag-name mapping
+    parser.py                  # usaddress (US) + libpostal (CA) dispatcher
     standardizer.py            # USPS Pub 28 standardization logic
-    validation/                # Provider abstraction + USPS/Google/chain/cache
-  usps_data/
-    spec.py                    # Pub 28 spec identifier constants
-    suffixes.py                # Street suffix abbreviations
-    directionals.py            # Directional abbreviations
-    states.py                  # State name → abbreviation map
-    units.py                   # Secondary unit designators
-docs/
-  usps-pub28.md                # Pub 28 research notes
-  usps-addresses-v3r2_3.yaml   # Archived USPS Addresses API v3 spec
+    country_format.py          # i18naddress → CountryFormatResponse
+    audit.py                   # Audit ContextVars + write_audit_row
+    training_candidates.py     # Training candidate ContextVars + write_training_candidate
+    training_batches.py        # Batch lifecycle state machine + CRUD
+    libpostal_client.py        # Async httpx client for libpostal sidecar (port 4400)
+    street_splitter.py         # Bilingual CA street component splitter
+    spec.py                    # ISO 19160-4 spec identifiers
+    component_profiles.py      # ISO 19160-4 ↔ USPS Pub 28 key translation
+    validation/                # Provider abstraction (USPS, Google, chain, cache, pipeline)
+  db/
+    engine.py                  # AsyncEngine singleton + Alembic migration runner
+    tables.py                  # SQLAlchemy Core Table definitions
+  usps_data/                   # Pub 28 lookup tables (suffixes, directionals, states, units)
+  canada_post_data/            # Canada Post lookup tables (provinces, suffixes, directionals)
+alembic/                       # Database migrations
+docs/                          # Architecture docs, USPS/ISO research, design plans
+infra/                         # systemd unit + timer files for VM deployment
+scripts/
+  model/                       # Training pipeline scripts (identify → contribute)
+  *.py / *.sh                  # DB maintenance and build utilities
 tests/
-  conftest.py                  # Shared fixtures, API_KEY bootstrap
-  unit/                        # Unit tests (parser, standardizer, auth, data)
+  unit/                        # Unit tests
   integration/                 # Integration tests (HTTP endpoints)
-infra/                         # systemd unit + timer files
+  js/                          # Vitest + jsdom tests for admin JS
+training/                      # Per-batch training artifacts and upstream usaddress data
 pyproject.toml                 # Project metadata, dependencies, tool config
 ```
 
