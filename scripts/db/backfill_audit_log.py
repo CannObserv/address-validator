@@ -5,7 +5,7 @@ Extracts: timestamp, client IP, HTTP method, endpoint path, status code.
 Fields left NULL: request_id, latency_ms, provider, validation_status, cache_hit.
 
 Usage:
-    uv run python scripts/backfill_audit_log.py
+    uv run python scripts/db/backfill_audit_log.py
 
 Idempotency: skips if any rows with NULL request_id already exist in the
 journal's time range (indicating a previous backfill).

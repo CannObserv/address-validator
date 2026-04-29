@@ -10,8 +10,8 @@ request window [audit.timestamp - latency_ms, audit.timestamp].
 Only rows with exactly one match are updated (ambiguous matches are skipped).
 
 Usage:
-    uv run python scripts/backfill_pattern_key.py          # dry-run (report only)
-    uv run python scripts/backfill_pattern_key.py --apply   # actually update rows
+    uv run python scripts/db/backfill_pattern_key.py          # dry-run (report only)
+    uv run python scripts/db/backfill_pattern_key.py --apply   # actually update rows
 
 Env vars:
     VALIDATION_CACHE_DSN    PostgreSQL DSN (required)

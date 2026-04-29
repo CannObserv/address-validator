@@ -10,6 +10,6 @@ repos:
       - id: build-tailwind-css
         name: Build Tailwind CSS
         language: system
-        entry: scripts/pre-commit-tailwind.sh
+        entry: scripts/build/pre-commit-tailwind.sh
         files: '^(src/address_validator/templates/.*\.html|src/address_validator/static/admin/css/input\.css|tailwind\.config\.js)$'
         pass_filenames: false

@@ -4,8 +4,8 @@
 Steps: aggregate → export Parquet → upload GCS → delete old rows → VACUUM.
 
 Usage:
-    uv run python scripts/archive_audit.py               # archive expired rows
-    uv run python scripts/archive_audit.py --backfill     # aggregate ALL rows first
+    uv run python infra/archive_audit.py               # archive expired rows
+    uv run python infra/archive_audit.py --backfill     # aggregate ALL rows first
 
 Env vars:
     VALIDATION_CACHE_DSN    PostgreSQL DSN (required)

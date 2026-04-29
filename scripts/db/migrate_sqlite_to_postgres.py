@@ -10,7 +10,7 @@ Run order
 
        VALIDATION_CACHE_DB=/path/to/validation_cache.db \\
        VALIDATION_CACHE_DSN=postgresql+asyncpg://... \\
-       python scripts/migrate_sqlite_to_postgres.py
+       python scripts/db/migrate_sqlite_to_postgres.py
 
 The script is idempotent: rows already present in PostgreSQL are skipped
 (ON CONFLICT DO NOTHING) so it is safe to re-run.
@@ -19,7 +19,7 @@ Dependencies
 ------------
 Requires ``asyncpg`` — already present in the project venv::
 
-    uv run python scripts/migrate_sqlite_to_postgres.py
+    uv run python scripts/db/migrate_sqlite_to_postgres.py
 """
 
 from __future__ import annotations

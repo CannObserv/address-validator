@@ -39,7 +39,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-pythonpath = ["src", "scripts"]
+pythonpath = ["src", "scripts", "infra"]
 addopts = "--cov=src/address_validator --cov-report=term-missing --cov-fail-under=80"
 markers = [
     "integration: full HTTP stack tests (require app lifespan)",

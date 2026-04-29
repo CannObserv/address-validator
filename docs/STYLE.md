@@ -173,7 +173,7 @@ Guidelines for charts and sparklines (see #47):
 ### CSS
 
 - **Pre-built Tailwind only** — never CDN or runtime JIT
-- Built via `scripts/build-css.sh` (standalone Tailwind CLI binary)
+- Built via `scripts/build/build-css.sh` (standalone Tailwind CLI binary)
 - Cache-busted via git SHA: `?v={{ css_version }}`
 - Pre-commit hook auto-rebuilds and stages on template/CSS/config changes
 
@@ -222,4 +222,4 @@ Guidelines for charts and sparklines (see #47):
 3. Add nav links in base.html (both desktop sidebar and mobile drawer)
 4. Use established component patterns (cards, tables, forms) from this guide
 5. Include `dark:` variants on all color utilities
-6. Run `scripts/build-css.sh` (or let pre-commit handle it)
+6. Run `scripts/build/build-css.sh` (or let pre-commit handle it)

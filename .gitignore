@@ -5,7 +5,7 @@ __pycache__/
 .env
 .coverage
 htmlcov/
-scripts/bin/
+scripts/build/bin/
 node_modules/
 .worktrees
 *.egg-info/
