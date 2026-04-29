@@ -287,7 +287,7 @@ pyproject.toml                 # Project metadata, dependencies, tool config
 ```bash
 uv run pytest                          # full suite with coverage
 uv run pytest --no-cov                 # fast, no coverage
-uv run pytest tests/unit/test_parser.py # single file
+uv run pytest tests/unit/services/test_parser.py # single file
 uv run ruff check .                    # lint
 uv run ruff format .                   # format
 ```
