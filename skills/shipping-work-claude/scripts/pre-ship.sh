@@ -27,7 +27,7 @@ if [ -f "$PROJECT_ROOT/.env" ]; then
 fi
 
 echo "=== Lint (ruff) ==="
-uv run ruff check . --exclude vendor/
+uv run ruff check .
 
 echo ""
 echo "=== Tests ==="
