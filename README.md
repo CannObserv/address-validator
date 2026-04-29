@@ -199,7 +199,7 @@ export API_KEY="your-secret-key"
 uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
 ```
 
-A systemd unit file (`address-validator.service`) is included for
+A systemd unit file (`infra/address-validator.service`) is included for
 persistent deployment.  The API key is stored in
 `/etc/address-validator/.env` and loaded via `EnvironmentFile=`.
 
@@ -235,7 +235,7 @@ tests/
   conftest.py                  # Shared fixtures, API_KEY bootstrap
   unit/                        # Unit tests (parser, standardizer, auth, data)
   integration/                 # Integration tests (HTTP endpoints)
-address-validator.service      # systemd unit file
+infra/                         # systemd unit + timer files
 pyproject.toml                 # Project metadata, dependencies, tool config
 ```
 

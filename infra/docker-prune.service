@@ -7,5 +7,5 @@ Requires=docker.service
 Type=oneshot
 User=exedev
 ExecStart=/usr/bin/docker system prune -f
-ExecStartPost=/home/exedev/address-validator/scripts/docker-prune-check.sh
+ExecStartPost=/home/exedev/address-validator/infra/docker-prune-check.sh
 

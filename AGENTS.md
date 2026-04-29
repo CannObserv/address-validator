@@ -4,7 +4,7 @@
 
 ## What this project is
 
-FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpostal sidecar) addresses. systemd+uvicorn on port 8000. libpostal sidecar on port 4400 (pelias/libpostal-service Docker, libpostal.service).
+FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpostal sidecar) addresses. systemd+uvicorn on port 8000. libpostal sidecar on port 4400 (pelias/libpostal-service Docker, infra/libpostal.service).
 
 ## Architecture
 
@@ -150,14 +150,14 @@ See `docs/VALIDATION-PROVIDERS.md` for DPV code mapping and provider details.
 - Env file: `/etc/address-validator/.env`
 - Restart: `sudo systemctl restart address-validator`
 - Logs: `journalctl -u address-validator -f`
-- Re-install unit: `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+- Re-install unit: `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
 - Pre-commit: `uv run pre-commit install` (ruff + Tailwind CSS build)
 - Backfill audit log: `source /etc/address-validator/.env && uv run python scripts/backfill_audit_log.py`
 - Archive audit log: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py`
 - Backfill rollups: `source /etc/address-validator/.env && uv run python scripts/archive_audit.py --backfill`
 - Backfill pattern_key: `source /etc/address-validator/.env && uv run python scripts/backfill_pattern_key.py` (dry-run; add `--apply`)
-- Install audit-archive timer: `sudo cp audit-archive.service audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
-- Install docker-prune timer: `sudo cp docker-prune.service docker-prune.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now docker-prune.timer`
+- Install audit-archive timer: `sudo cp infra/audit-archive.service infra/audit-archive.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer`
+- Install docker-prune timer: `sudo cp infra/docker-prune.service infra/docker-prune.timer /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now docker-prune.timer`
 - Docker hygiene: weekly `docker system prune -f` via docker-prune.timer (Sun 03:30 UTC); logs a journal warning if disk ≥ 85% after prune (inspect with `journalctl -t docker-prune -p warning`); does **not** use `-a` (active images are safe)
 
 ## Infrastructure
@@ -175,7 +175,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 |---|---|
 | Code change (no env/service) | `sudo systemctl restart address-validator` |
 | Env var change | Edit `/etc/address-validator/.env`, then restart |
-| Service unit change | `sudo cp address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
+| Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
 | New worktree created | Kill any dev server on 8001 (`lsof -ti:8001 \| xargs kill 2>/dev/null`), then start from new worktree with `--reload` |
 | Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
 | Worktree finished | Kill dev server on 8001, delete worktree |
