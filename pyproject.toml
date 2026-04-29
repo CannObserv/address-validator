@@ -68,7 +68,7 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = [".venv", "vendor"]
+exclude = [".venv", "skills-vendor"]
 
 [tool.ruff.lint]
 select = [

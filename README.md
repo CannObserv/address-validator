@@ -253,6 +253,8 @@ tests/
   integration/                 # Integration tests (HTTP endpoints)
   js/                          # Vitest + jsdom tests for admin JS
 training/                      # Per-batch training artifacts and upstream usaddress data
+skills/                        # local skill overrides and symlinks into skills-vendor/
+skills-vendor/                 # vendored skill repo submodules
 pyproject.toml                 # Project metadata, dependencies, tool config
 ```
 
