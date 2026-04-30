@@ -39,7 +39,7 @@ journalctl -t docker-prune -p warning
 
 ## Database maintenance scripts
 
-**NEVER** source `/etc/address-validator/.env` before `uv run pytest`. For one-off scripts only:
+**NEVER** source `/etc/address-validator/.env` before `uv run pytest`. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. For one-off scripts only:
 
 ```bash
 source /etc/address-validator/.env

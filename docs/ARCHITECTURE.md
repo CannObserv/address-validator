@@ -6,9 +6,9 @@ All source modules live under `src/address_validator/`.
 
 ```
 HTTP request
- └─ middleware/request_id.py   generates ULID, sets ContextVar, echoes X-Request-ID header
- └─ middleware/audit.py        records every API request to audit_log (fire-and-forget)
  └─ middleware/api_version.py  appends API-Version: 1 or 2 header on /api/v1/ and /api/v2/ responses
+ └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
+ └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
  └─ routers/v1/               thin handlers, validation, error handling; USPS Pub 28 key vocabulary
      ├─ parse            →   services/parser.py        usaddress wrapper + post-parse recovery
      ├─ standardize      →   services/standardizer.py  Pub 28 abbrev tables from usps_data/

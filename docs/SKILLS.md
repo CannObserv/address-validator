@@ -49,8 +49,6 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | Skill | Trigger | Purpose |
 |---|---|---|
 | `/train-model` | "train model", "retrain usaddress", "fix parsing" | Interactive 7-step CRF model training pipeline |
-| `/init` | New project without CLAUDE.md | Initialize CLAUDE.md with codebase documentation |
-| `/claude-api` | Claude API / Anthropic SDK work | Build, debug, optimize; handles prompt caching and model migration |
 
 ## SocratiCode skills
 
@@ -59,25 +57,4 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `socraticode:codebase-exploration` | Semantic search, dependency graphs, architecture understanding |
 | `socraticode:codebase-management` | Index management, health checks, file watching, context artifacts |
 
-### When to use each SocratiCode tool
-
-**Principle: search before reading** — leverage the semantic index rather than consuming raw file content.
-
-| Objective | Tool |
-|---|---|
-| Understand codebase purpose or feature location | `codebase_search` with broad queries |
-| Locate specific functions, constants, or types | `codebase_search` with exact names |
-| Find error messages, logs, or regex patterns | grep / ripgrep |
-| View file imports and dependents | `codebase_graph_query` |
-| Assess impact before code modifications | `codebase_graph_query` |
-| Identify breaking changes from a modification | `codebase_impact target=X` |
-| Trace execution from entry points | `codebase_flow entrypoint=X` |
-| Discover project entry points | `codebase_flow` (no arguments) |
-| Analyze callers and callees for a function | `codebase_symbol name=X` |
-| List symbols within files | `codebase_symbols file=path` |
-| Search symbols project-wide | `codebase_symbols query=X` |
-| Detect architectural issues | `codebase_graph_circular`, `codebase_graph_stats` |
-| Visualize module structure | `codebase_graph_visualize` |
-| Verify index currency | `codebase_status` |
-| Explore available project knowledge | `codebase_context` |
-| Locate schemas, endpoints, or configs | `codebase_context_search` |
+See `AGENTS.md` → Skills → SocratiCode for the "when to use each tool" reference table.

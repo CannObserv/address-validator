@@ -12,7 +12,7 @@ See `docs/ARCHITECTURE.md` for the full module map.
 
 ```
 HTTP request
- └─ middleware: request_id → audit → api_version
+ └─ middleware: api_version → request_id → audit
  └─ routers/v1/   USPS Pub 28 vocabulary — parse, standardize, validate, countries
  └─ routers/v2/   ISO 19160-4 surface; component_profile param; CA via libpostal
  └─ routers/admin/  Jinja2 + HTMX dashboard (exe.dev auth)
