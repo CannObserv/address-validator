@@ -1,5 +1,26 @@
 # Validation Providers
 
+## Full env var reference
+
+| Variable | Values / Type | Default | Notes |
+|---|---|---|---|
+| `VALIDATION_PROVIDER` | `none`, `usps`, `google`, comma-sep list | `none` | Comma-sep = ordered fallback chain |
+| `USPS_CONSUMER_KEY` | string | — | USPS OAuth2 client ID |
+| `USPS_CONSUMER_SECRET` | string | — | USPS OAuth2 client secret |
+| `USPS_RATE_LIMIT_RPS` | float ≥ 1 | `5.0` | USPS per-second soft window |
+| `USPS_DAILY_LIMIT` | positive int | `10000` | USPS per-day soft window |
+| `GOOGLE_PROJECT_ID` | string | — | GCP project; auto-discovered from ADC if unset |
+| `GOOGLE_RATE_LIMIT_RPM` | positive int | `5` | Google per-minute soft window |
+| `GOOGLE_DAILY_LIMIT` | positive int | `160` | Auto-discovered from Cloud Quotas; env var is fallback |
+| `GOOGLE_QUOTA_RECONCILE_INTERVAL_S` | positive float | `900` | Seconds between quota reconciliation runs |
+| `VALIDATION_LATENCY_BUDGET_S` | positive float | `1.0` | Max seconds a request may queue before overflow to next provider |
+| `VALIDATION_CACHE_DSN` | PostgreSQL DSN | — | Required when `VALIDATION_PROVIDER` is non-null |
+| `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` | Days before re-validating via live provider; `0` = no expiry |
+| `AUDIT_RETENTION_DAYS` | non-negative int | `90` | Days to retain audit_log rows before archival |
+| `AUDIT_ARCHIVE_BUCKET` | GCS bucket name | — | Required for archival |
+| `AUDIT_ARCHIVE_PREFIX` | string | `audit/` | GCS key prefix for archived rows |
+| `CUSTOM_MODEL_PATH` | absolute path | — | Path to `.crfsuite` model file; unset = bundled usaddress model |
+
 ## DPV status mapping
 
 | DPV code | `validation.status` | Meaning |
