@@ -3,7 +3,7 @@
     {
       "name": "architecture-overview",
       "path": "./AGENTS.md",
-      "description": "Full architecture overview: middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
+      "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch query, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
     },
     {
       "name": "usps-api-spec",
@@ -43,7 +43,7 @@
     {
       "name": "design-plans",
       "path": "./docs/plans",
-      "description": "All feature and architectural design docs (61 plans, March–April 2026): rationale, tradeoffs, and decisions behind every major subsystem — quota guards, middleware refactors, CA address support, admin dashboard, training pipeline, and more."
+      "description": "Feature and architectural design docs: rationale, tradeoffs, and decisions behind every major subsystem — quota guards, middleware refactors, CA address support, admin dashboard, training pipeline, and more."
     }
   ]
 }
