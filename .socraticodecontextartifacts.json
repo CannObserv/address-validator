@@ -1,0 +1,49 @@
+{
+  "artifacts": [
+    {
+      "name": "architecture-overview",
+      "path": "./AGENTS.md",
+      "description": "Full architecture overview: middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
+    },
+    {
+      "name": "usps-api-spec",
+      "path": "./docs/usps-addresses-v3r2_3.yaml",
+      "description": "USPS Address Validation API v3 OpenAPI spec — upstream provider contract, request/response shapes, DPV fields."
+    },
+    {
+      "name": "usps-pub28-reference",
+      "path": "./docs/usps-pub28.md",
+      "description": "USPS Publication 28 standardization rules — suffix/directional/unit abbreviation conventions used by the standardizer."
+    },
+    {
+      "name": "validation-providers",
+      "path": "./docs/VALIDATION-PROVIDERS.md",
+      "description": "DPV code mapping and behavioral details for USPS and Google validation providers; quota, rate-limit, and fallback semantics."
+    },
+    {
+      "name": "address-validation-research",
+      "path": "./docs/address-validation-research.md",
+      "description": "Domain research: address standards (USPS Pub 28, ISO 19160-4, Canada Post), provider landscape, parsing libraries, and design tradeoffs."
+    },
+    {
+      "name": "logging-contract",
+      "path": "./docs/LOGGING.md",
+      "description": "Logging event/level table: what is logged at each level, PII policy (no address content at INFO+), structured fields."
+    },
+    {
+      "name": "admin-style-guide",
+      "path": "./docs/STYLE.md",
+      "description": "Admin UI visual design, accessibility, responsive layout, and performance standards for Jinja2/HTMX/Tailwind templates."
+    },
+    {
+      "name": "dependency-policy",
+      "path": "./docs/DEPENDENCY-POLICY.md",
+      "description": "Dependency version pinning rules and upgrade policy."
+    },
+    {
+      "name": "design-plans",
+      "path": "./docs/plans",
+      "description": "All feature and architectural design docs (61 plans, March–April 2026): rationale, tradeoffs, and decisions behind every major subsystem — quota guards, middleware refactors, CA address support, admin dashboard, training pipeline, and more."
+    }
+  ]
+}

@@ -6,6 +6,28 @@
 
 FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpostal sidecar) addresses. systemd+uvicorn on port 8000. libpostal sidecar on port 4400 (pelias/libpostal-service Docker, `infra/libpostal.service`).
 
+## Code Exploration Policy
+
+SocratiCode MCP tools are **deferred** — schemas are not loaded at session start and calling any `codebase_*` tool without loading first will fail with `InputValidationError`. A `SessionStart` hook echoes a reminder with the prefetch query each session; use `ToolSearch` to load schemas before the first `codebase_*` call.
+
+**Negative rule.** Broad semantic questions → SocratiCode (`codebase_search`, `codebase_symbol`, etc.). `grep`/`ripgrep` → exact string or regex matches only. Explore subagent → path-pattern file walks only, not semantic search.
+
+Prefetch query: `select:mcp__plugin_socraticode_socraticode__codebase_search,mcp__plugin_socraticode_socraticode__codebase_symbol,mcp__plugin_socraticode_socraticode__codebase_symbols,mcp__plugin_socraticode_socraticode__codebase_flow,mcp__plugin_socraticode_socraticode__codebase_impact,mcp__plugin_socraticode_socraticode__codebase_graph_query,mcp__plugin_socraticode_socraticode__codebase_graph_circular,mcp__plugin_socraticode_socraticode__codebase_graph_stats,mcp__plugin_socraticode_socraticode__codebase_graph_visualize,mcp__plugin_socraticode_socraticode__codebase_status,mcp__plugin_socraticode_socraticode__codebase_context,mcp__plugin_socraticode_socraticode__codebase_context_search`
+
+| Objective | Tool |
+|---|---|
+| Explore codebase purpose or feature location | `codebase_search` with broad queries |
+| Locate specific functions, constants, or types | `codebase_search` with exact names |
+| Find exact strings, error messages, or regex patterns | grep / ripgrep |
+| View file imports and dependents | `codebase_graph_query` |
+| Assess impact before modifying code | `codebase_impact target=X` |
+| Trace execution or discover entry points | `codebase_flow` / `codebase_flow entrypoint=X` |
+| Analyze callers and callees for a function | `codebase_symbol name=X` |
+| List or search symbols | `codebase_symbols file=path` / `codebase_symbols query=X` |
+| Detect circular deps, view stats, visualize structure | `codebase_graph_circular`, `codebase_graph_stats`, `codebase_graph_visualize` |
+| Verify index currency | `codebase_status` |
+| Browse knowledge artifacts; locate schemas, endpoints, configs | `codebase_context`, `codebase_context_search` |
+
 ## Architecture
 
 See `docs/ARCHITECTURE.md` for the full module map.
@@ -156,31 +178,8 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/shipping-work-claude` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
-| `socraticode:codebase-exploration` | Semantic search, dependency graphs, architecture understanding |
-| `socraticode:codebase-management` | Index management, health checks, file watching |
-
-### SocratiCode: when to use each tool
-
-**Principle: search before reading** — leverage the semantic index rather than consuming raw file content.
-
-| Objective | Tool |
-|---|---|
-| Understand codebase purpose or feature location | `codebase_search` with broad queries |
-| Locate specific functions, constants, or types | `codebase_search` with exact names |
-| Find error messages, logs, or regex patterns | grep / ripgrep |
-| View file imports and dependents | `codebase_graph_query` |
-| Assess impact before code modifications | `codebase_graph_query` |
-| Identify breaking changes from a modification | `codebase_impact target=X` |
-| Trace execution from entry points | `codebase_flow entrypoint=X` |
-| Discover project entry points | `codebase_flow` (no arguments) |
-| Analyze callers and callees for a function | `codebase_symbol name=X` |
-| List symbols within files | `codebase_symbols file=path` |
-| Search symbols project-wide | `codebase_symbols query=X` |
-| Detect architectural issues | `codebase_graph_circular`, `codebase_graph_stats` |
-| Visualize module structure | `codebase_graph_visualize` |
-| Verify index currency | `codebase_status` |
-| Explore available project knowledge | `codebase_context` |
-| Locate schemas, endpoints, or configs | `codebase_context_search` |
+| `socraticode:codebase-exploration` | Semantic search, dependency graphs — see **Code Exploration Policy** above |
+| `socraticode:codebase-management` | Index management, health checks, file watching — see **Code Exploration Policy** above |
 
 ## Commit convention
 

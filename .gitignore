@@ -10,5 +10,4 @@ node_modules/
 .worktrees
 *.egg-info/
 .claude/worktrees/
-.socraticodecontextartifacts.json
 .claude/scheduled_tasks.lock
