@@ -8,7 +8,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 |---|---|---|
 | `/brainstorming` | New feature without prior design | Explore requirements and design options before any code |
 | `/writing-plans` | After brainstorming; before multi-step impl | Produce a step-by-step implementation plan |
-| `/using-git-worktrees` | Every feature branch | Creates isolated worktree + uv sync + .env copy; dev server on port 8001 |
+| `/using-git-worktrees` | Every feature branch | Parallel branch checkouts via git worktree — creation, lifecycle, and cleanup; consult AGENTS.md for project-specific port and env setup |
 | `/test-driven-development` | Before writing implementation code | Write failing tests first, then implement |
 | `/systematic-debugging` | Any bug or unexpected test failure | Structured root-cause analysis before proposing fixes |
 | `/verification-before-completion` | Before claiming done or opening a PR | Run verification commands and confirm output; evidence before assertions |

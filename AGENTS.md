@@ -169,7 +169,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 |---|---|
 | `/brainstorming` | Before any new feature — design before code |
 | `/writing-plans` | After brainstorming; before multi-step implementation |
-| `/using-git-worktrees` | Every feature branch — isolated worktree on port 8001 |
+| `/using-git-worktrees` | Every feature branch — isolated worktree; see port/lifecycle table above |
 | `/test-driven-development` | Before writing implementation code |
 | `/systematic-debugging` | Any bug or unexpected test failure |
 | `/verification-before-completion` | Before claiming done or opening a PR |
