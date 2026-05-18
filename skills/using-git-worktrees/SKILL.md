@@ -114,4 +114,4 @@ git branch -d $BRANCH_NAME  # only if merged
 - **executing-plans** — REQUIRED before executing tasks
 
 **Pairs with:**
-- **shipping-work-claude** — for PR creation after implementation
+- **shipping-work-python-fastapi** — for PR creation after implementation

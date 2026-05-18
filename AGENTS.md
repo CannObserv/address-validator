@@ -173,9 +173,9 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/test-driven-development` | Before writing implementation code |
 | `/systematic-debugging` | Any bug or unexpected test failure |
 | `/verification-before-completion` | Before claiming done or opening a PR |
-| `/reviewing-code-claude` | Code review — tiered findings, implements approved fixes |
-| `/reviewing-architecture-claude` | Architecture review |
-| `/shipping-work-claude` | Finalize — commit, push, close issues |
+| `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
+| `/reviewing-architecture` | Architecture review |
+| `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
 | `socraticode:codebase-exploration` | Semantic search, dependency graphs — see **Code Exploration Policy** above |

@@ -6,7 +6,7 @@ metadata:
   author: gregoryfoster
   version: "1.0"
   triggers: brainstorm, design this, let's design
-  overrides: brainstorming
+  overrides: obra-superpowers/brainstorming
   override-reason: "Hard-block variant (no code until design explicitly approved); uses docs/plans/ path convention; Conventional Commits for design doc commit; writing-plans is optional not mandatory terminal state"
 ---
 
