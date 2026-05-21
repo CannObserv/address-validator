@@ -8,6 +8,7 @@ import pytest
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
+    ProviderBadRequestError,
     ProviderRateLimitedError,
 )
 from address_validator.services.validation.google_client import GoogleClient
@@ -276,6 +277,21 @@ class TestGoogleClientValidateAddress:
             await client.validate_address("123 Main St")
 
     @pytest.mark.asyncio
+    async def test_400_raises_provider_bad_request_error(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-114: Google 400 must be translated, not propagated as raw HTTPStatusError."""
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 400
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "400 Bad Request", request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+        with pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("")
+        assert exc_info.value.provider == "google"
+
+    @pytest.mark.asyncio
     async def test_429_raises_provider_rate_limited_error_after_retries(
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
@@ -507,7 +523,7 @@ class TestMapResponseUsHasStatusKey:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
         assert result["status"] == "not_confirmed"
 
-    def test_no_dpv_has_unavailable_status(self) -> None:
+    def test_no_dpv_no_postal_address_has_unavailable_status(self) -> None:
         raw = {
             "result": {
                 "verdict": {},
@@ -517,3 +533,99 @@ class TestMapResponseUsHasStatusKey:
         }
         result = GoogleClient._map_response(raw)
         assert result["status"] == "unavailable"
+
+
+# -- US postalAddress fallback (GH-114) ------------------------------------
+#
+# When CASS cannot fully process the address (no DPV confirmation), Google
+# still returns rich data in result.address.postalAddress + result.verdict.
+# The US mapper must read from that block instead of discarding it as
+# "unavailable" with empty components.
+
+# Captured from a live API call for input
+# "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA" with enableUspsCass=True.
+GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL = {
+    "result": {
+        "verdict": {
+            "inputGranularity": "PREMISE",
+            "validationGranularity": "PREMISE",
+            "geocodeGranularity": "PREMISE",
+            "hasInferredComponents": True,
+            "possibleNextAction": "FIX",
+        },
+        "address": {
+            "formattedAddress": (
+                "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA 98036-5635, USA"
+            ),
+            "postalAddress": {
+                "regionCode": "US",
+                "postalCode": "98036-5635",
+                "administrativeArea": "WA",
+                "locality": "Lynnwood",
+                "addressLines": ["Lynnwood City Hall", "44th Ave W"],
+            },
+            "missingComponentTypes": ["street_number"],
+        },
+        "geocode": {"location": {"latitude": 47.8253139, "longitude": -122.2936207}},
+        "uspsData": {
+            "standardizedAddress": {
+                "firstAddressLine": "LYNNWOOD CITY HALL, 44TH AVENUE WEST, LYNNWOOD, WA, USA"
+            },
+            "dpvFootnote": "A1M1",
+        },
+    }
+}
+
+
+class TestMapResponseUsPostalFallback:
+    """When uspsData.dpvConfirmation is absent, fall back to postalAddress.
+
+    Regression: GH-114 — Google returns structured data in result.address.postalAddress
+    even when CASS can't issue a DPV code (e.g., missing street_number). The US mapper
+    previously discarded all of it and returned status="unavailable" with empty fields.
+    """
+
+    def test_status_derived_from_verdict_when_dpv_absent(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        # validationGranularity=PREMISE, addressComplete falsy → "invalid"
+        assert result["status"] == "invalid"
+
+    def test_dpv_match_code_none_when_dpv_absent(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["dpv_match_code"] is None
+
+    def test_address_line_1_from_postal_address_lines(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["address_line_1"] == "Lynnwood City Hall"
+
+    def test_address_line_2_from_postal_address_lines(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["address_line_2"] == "44th Ave W"
+
+    def test_city_from_postal_locality(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["city"] == "Lynnwood"
+
+    def test_region_from_postal_administrative_area(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["region"] == "WA"
+
+    def test_postal_code_from_postal_address(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["postal_code"] == "98036-5635"
+
+    def test_latitude_preserved(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["latitude"] == pytest.approx(47.8253139)
+
+    def test_inferred_components_propagated(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["has_inferred_components"] is True
+
+    def test_existing_cass_path_unchanged_when_dpv_present(self) -> None:
+        """When dpvConfirmation is present, USPS standardized fields still win."""
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_Y)
+        assert result["dpv_match_code"] == "Y"
+        assert result["address_line_1"] == "123 MAIN ST"
+        assert result["city"] == "SPRINGFIELD"
+        assert result["postal_code"] == "62701-1234"

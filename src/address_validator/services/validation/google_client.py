@@ -25,11 +25,15 @@ from address_validator.services.validation._rate_limit import (
     QuotaGuard,
     _parse_retry_after,
 )
-from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import (
+    ProviderBadRequestError,
+    ProviderRateLimitedError,
+)
 
 logger = logging.getLogger(__name__)
 
 _VALIDATE_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
+_HTTP_BAD_REQUEST = 400
 
 # Verdict granularities that indicate the address was not geocodable at all.
 _NON_GRANULAR: frozenset[str] = frozenset({"GRANULARITY_UNSPECIFIED", "OTHER", ""})
@@ -145,6 +149,9 @@ class GoogleClient:
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == _HTTP_BAD_REQUEST:
+                    logger.warning("GoogleClient: 400 Bad Request from Google API")
+                    raise ProviderBadRequestError("google", detail="HTTP 400") from exc
                 if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
                     if attempt < _RETRY_MAX:
                         delay = _parse_retry_after(exc.response, attempt)
@@ -170,7 +177,15 @@ class GoogleClient:
 
     @staticmethod
     def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise the Google Address Validation API JSON response."""
+        """Normalise the Google Address Validation API JSON response (US path).
+
+        When USPS CASS issues a DPV code, the USPS-standardized fields are
+        authoritative.  When CASS cannot fully process the address (no
+        ``dpvConfirmation``, e.g. missing street_number — GH-114), Google
+        still returns rich structured data in ``result.address.postalAddress``
+        and ``result.verdict``; fall back to those instead of dropping
+        everything as ``"unavailable"``.
+        """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         usps = result.get("uspsData", {})
@@ -178,21 +193,43 @@ class GoogleClient:
         geocode = result.get("geocode", {})
         location = geocode.get("location", {})
 
-        zip_code = std_addr.get("zipCode", "")
-        zip_ext = std_addr.get("zipCodeExtension", "") or ""
-        postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
-
         lat = location.get("latitude")
         lng = location.get("longitude")
 
         dpv = usps.get("dpvConfirmation") or None
+
+        if dpv is not None:
+            # CASS-confirmed: USPS standardizedAddress is authoritative.
+            zip_code = std_addr.get("zipCode", "")
+            zip_ext = std_addr.get("zipCodeExtension", "") or ""
+            postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
+            address_line_1 = std_addr.get("firstAddressLine", "")
+            address_line_2 = std_addr.get("secondAddressLine", "")
+            city = std_addr.get("city", "")
+            region = std_addr.get("state", "")
+            status = _DPV_TO_STATUS.get(dpv, "unavailable")
+        else:
+            # No CASS DPV — read Google's postalAddress + verdict instead.
+            postal_addr = result.get("address", {}).get("postalAddress", {})
+            address_lines = postal_addr.get("addressLines", [])
+            address_line_1 = address_lines[0] if len(address_lines) > 0 else ""
+            address_line_2 = address_lines[1] if len(address_lines) > 1 else ""
+            city = postal_addr.get("locality", "")
+            region = postal_addr.get("administrativeArea", "")
+            postal_code = postal_addr.get("postalCode", "")
+            status = (
+                _verdict_to_status(verdict)
+                if postal_addr or verdict.get("validationGranularity")
+                else "unavailable"
+            )
+
         return {
             "dpv_match_code": dpv,
-            "status": _DPV_TO_STATUS.get(dpv, "unavailable"),
-            "address_line_1": std_addr.get("firstAddressLine", ""),
-            "address_line_2": std_addr.get("secondAddressLine", ""),
-            "city": std_addr.get("city", ""),
-            "region": std_addr.get("state", ""),
+            "status": status,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "region": region,
             "postal_code": postal_code,
             "vacant": usps.get("dpvVacant") or None,
             "latitude": lat,

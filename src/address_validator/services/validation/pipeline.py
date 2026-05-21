@@ -103,6 +103,20 @@ async def run_us_pipeline(
         raw_input = req.address
 
     std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+
+    # GH-114: parser couldn't extract a USPS street line from a raw input (e.g. a
+    # place-name autocomplete string). Pass the raw string through as
+    # address_line_1 so Google can still attempt to geocode/validate it.
+    # USPS will 400 → ChainProvider falls through to Google.
+    if not req.components and req.address and not std.address_line_1.strip():
+        fallback_warning = "Address has no parseable street line; passing raw input to provider"
+        std = std.model_copy(
+            update={
+                "address_line_1": req.address.strip(),
+                "warnings": [*std.warnings, fallback_warning],
+            }
+        )
+
     provider = registry.get_provider()
     return std, raw_input, provider
 

@@ -300,3 +300,52 @@ class TestRunUsPipeline:
         )
         # Should not raise
         await run_us_pipeline(req, registry, component_profile="iso-19160-4")
+
+    @pytest.mark.asyncio
+    async def test_empty_street_line_raw_fallback(self) -> None:
+        """GH-114: when the parser yields no street line for a raw US address,
+        the pipeline must pass the raw input as ``address_line_1`` so providers
+        (especially Google) can still attempt to validate it.
+        """
+        registry, _ = _make_registry()
+        # Place-name input — usaddress will not extract a premise_number/street.
+        req = ValidateRequestV1(
+            address="Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA",
+            country="US",
+        )
+        std, raw_input, _ = await run_us_pipeline(req, registry)
+
+        # Without the fallback, std.address_line_1 would be "" — which then
+        # leads to upstream 400 → 500 (the bug). With the fallback, the raw
+        # input is propagated so the provider call can succeed.
+        assert std.address_line_1 != ""
+        assert "lynnwood city hall" in std.address_line_1.lower()
+        # raw_input remains the original request address (used as cache key seed)
+        assert raw_input == "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA"
+        # A warning should flag the fallback for caller-side observability.
+        assert any("parseable street" in w.lower() for w in std.warnings)
+
+    @pytest.mark.asyncio
+    async def test_empty_street_line_no_fallback_for_components_input(self) -> None:
+        """Components-mode requests bypass the raw fallback — the caller
+        controls component values directly; we don't synthesize a street line
+        from a JSON-encoded blob.
+        """
+        registry, _ = _make_registry()
+        # Components with only a city — no street info supplied.
+        req = ValidateRequestV1(components={"city": "Lynnwood"}, country="US")
+        std, _raw_input, _ = await run_us_pipeline(req, registry)
+
+        # No street info supplied → address_line_1 stays empty. (Provider will
+        # then either 400-→-error or short-circuit; see route handler tests.)
+        assert std.address_line_1 == ""
+
+    @pytest.mark.asyncio
+    async def test_well_parsed_address_unchanged(self) -> None:
+        """The fallback must not alter normally-parseable addresses."""
+        registry, _ = _make_registry()
+        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_1 == "123 MAIN ST"
+        # No fallback warning should be present.
+        assert not any("parseable street" in w.lower() for w in std.warnings)
