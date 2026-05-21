@@ -43,19 +43,7 @@ class TestV2ValidateBasic:
 
 
 class TestV2ValidateUnparseableInput:
-    """GH-114: inputs without a USPS-parseable street must not return 500.
-
-    Before the fix:
-      - Standardize produced empty address_line_1
-      - USPS API returned 400 → ProviderBadRequestError → ChainProvider fallthrough
-      - Google API returned 400 for empty address → raw httpx.HTTPStatusError → 500
-      - text/plain "Internal Server Error" body; no audit row written
-
-    After the fix:
-      - Empty address_line_1 → pipeline passes raw input through (B2)
-      - Google returns rich postalAddress data, mapper reads it (B1)
-      - Google 400 (if it still rejects) → ProviderBadRequestError → 200 status=error (Fix 1)
-    """
+    """GH-114 regression: unparseable-street inputs return 200 with a structured body, not 500."""
 
     @pytest.mark.parametrize(
         "addr",
@@ -68,8 +56,7 @@ class TestV2ValidateUnparseableInput:
         ],
     )
     def test_unparseable_input_returns_200_with_geocoded_response(self, client, addr) -> None:
-        """When the provider returns a geocoded address, the route returns 200
-        with a populated, structured response — not 500 text/plain."""
+        """Geocoded provider response → 200 with structured body."""
         google_response = ValidateResponseV1(
             address_line_1="Lynnwood City Hall",
             address_line_2="44th Ave W",
@@ -103,9 +90,7 @@ class TestV2ValidateUnparseableInput:
         assert call_std.address_line_1.lower().startswith(addr.split(",")[0].lower())
 
     def test_unparseable_input_provider_bad_request_returns_200_status_error(self, client) -> None:
-        """If the provider rejects the address as malformed (e.g. Google 400 →
-        ProviderBadRequestError), the route returns 200 with status='error' —
-        not 500 text/plain."""
+        """Provider raises ProviderBadRequestError → 200 with status='error'."""
         provider = AsyncMock()
         provider.validate = AsyncMock(
             side_effect=ProviderBadRequestError("google", detail="HTTP 400")

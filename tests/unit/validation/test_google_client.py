@@ -536,14 +536,9 @@ class TestMapResponseUsHasStatusKey:
 
 
 # -- US postalAddress fallback (GH-114) ------------------------------------
-#
-# When CASS cannot fully process the address (no DPV confirmation), Google
-# still returns rich data in result.address.postalAddress + result.verdict.
-# The US mapper must read from that block instead of discarding it as
-# "unavailable" with empty components.
-
-# Captured from a live API call for input
-# "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA" with enableUspsCass=True.
+# Captured live for input "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA"
+# with enableUspsCass=True. CASS produced no DPV (dpvFootnote=A1M1) but Google
+# still returned a populated result.address.postalAddress.
 GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL = {
     "result": {
         "verdict": {
@@ -578,12 +573,7 @@ GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL = {
 
 
 class TestMapResponseUsPostalFallback:
-    """When uspsData.dpvConfirmation is absent, fall back to postalAddress.
-
-    Regression: GH-114 — Google returns structured data in result.address.postalAddress
-    even when CASS can't issue a DPV code (e.g., missing street_number). The US mapper
-    previously discarded all of it and returned status="unavailable" with empty fields.
-    """
+    """GH-114 regression: fall back to postalAddress when CASS produces no dpvConfirmation."""
 
     def test_status_derived_from_verdict_when_dpv_absent(self) -> None:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)

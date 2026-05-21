@@ -28,7 +28,7 @@ def _mock_registry_with(provider):
 
 
 class TestV1ValidateUnparseableInput:
-    """GH-114 regression — v1 must not 500 on inputs without a USPS-parseable street."""
+    """GH-114 regression: v1 must not 500 on inputs without a USPS-parseable street."""
 
     def test_unparseable_input_returns_200_with_geocoded_response(self, client: TestClient) -> None:
         google_response = ValidateResponseV1(
@@ -52,6 +52,9 @@ class TestV1ValidateUnparseableInput:
             )
         assert response.status_code == 200, response.text
         assert response.json()["validation"]["status"] == "invalid"
+        assert provider.validate.await_count == 1
+        call_std = provider.validate.await_args.args[0]
+        assert call_std.address_line_1.lower().startswith("lynnwood city hall")
 
     def test_unparseable_input_provider_bad_request_returns_200_status_error(
         self, client: TestClient

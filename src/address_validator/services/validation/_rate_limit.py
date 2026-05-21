@@ -19,6 +19,9 @@ import httpx
 
 from address_validator.services.validation.errors import ProviderAtCapacityError
 
+# HTTP status code for "Bad Request" — provider rejected the input.
+_HTTP_BAD_REQUEST = 400
+
 # HTTP status code for "Too Many Requests".
 _HTTP_TOO_MANY_REQUESTS = 429
 
