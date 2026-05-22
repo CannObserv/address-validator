@@ -11,6 +11,7 @@ import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from starlette.responses import StreamingResponse
 from starlette.testclient import TestClient
 
 from address_validator.db.tables import model_training_candidates as mtc
@@ -257,8 +258,9 @@ def test_audit_reraises_unhandled_exception() -> None:
     mock_write.assert_called_once()
 
 
-def test_audit_skips_invariant_check_on_exception() -> None:
-    """A validate endpoint that raises should report the exception, not an invariant violation."""
+def test_audit_uses_exception_label_over_internal_error() -> None:
+    """When the inner app raises, error_detail must be the exception class name,
+    not the generic `internal_error` mapped from status 500."""
     mini = FastAPI()
     mini.add_middleware(AuditMiddleware)
     mini.add_middleware(RequestIdMiddleware)
@@ -276,6 +278,43 @@ def test_audit_skips_invariant_check_on_exception() -> None:
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
     assert kwargs["error_detail"] == "unhandled_exception:ValueError"
+
+
+def test_audit_streaming_response_raises_mid_stream() -> None:
+    """When a 2xx response starts streaming and then raises:
+    - error_detail is the exception label, NOT 'audit_invariant_violated'
+      (proves _check_validate_invariants is skipped on exception)
+    - status_code is preserved as 200, NOT overwritten to 500
+      (proves the partial-status branch in _emit_audit_artifacts)
+    """
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.post("/api/v1/validate")
+    async def _stream_then_raise() -> StreamingResponse:
+        async def _gen():
+            yield b'{"partial":'
+            raise RuntimeError("mid-stream boom")
+
+        # 200 status header fires before the generator raises — the invariant
+        # check would otherwise trip on NULL audit fields for this 2xx path.
+        return StreamingResponse(_gen(), status_code=200, media_type="application/json")
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini, raise_server_exceptions=False)
+        tc.post("/api/v1/validate")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["status_code"] == 200, (
+        f"status_code should stay at 200 (partial status preserved), got {kwargs['status_code']}"
+    )
+    assert kwargs["error_detail"] == "unhandled_exception:RuntimeError", (
+        f"error_detail should be exception label, got {kwargs['error_detail']!r}"
+    )
 
 
 def test_audit_skips_candidate_write_on_exception() -> None:

@@ -116,17 +116,20 @@ def _check_validate_invariants(
     return True
 
 
-def _queue_audit_writes(
+def _emit_audit_artifacts(
     scope: Scope,
     path: str,
     status_code: int,
     elapsed_ms: int,
-    exc_info: Exception | None,
+    exc_info: BaseException | None,
 ) -> None:
     """Queue fire-and-forget audit + candidate writes.
 
     Called from both the success and exception paths in AuditMiddleware. No-op
-    when the app has no engine configured.
+    when the app has no engine configured. `exc_info` accepts `BaseException`
+    so that `asyncio.CancelledError` (and other non-`Exception` shutdown
+    conditions) still produce a labeled audit row instead of a `status_code=0`
+    row with no `error_detail`.
     """
     app = scope.get("app")
     engine = getattr(app.state, "engine", None) if app else None
@@ -139,13 +142,14 @@ def _queue_audit_writes(
     pattern_key = get_audit_pattern_key()
     parse_type = get_audit_parse_type()
 
+    error_detail: str | None
     if exc_info is not None:
         # Preserve a partial status if http.response.start fired before the
         # exception; otherwise fall back to 500 (what ServerErrorMiddleware
         # will send to the client).
         if status_code == 0:
             status_code = 500
-        error_detail: str | None = f"unhandled_exception:{type(exc_info).__name__}"
+        error_detail = f"unhandled_exception:{type(exc_info).__name__}"
     else:
         error_detail = _error_detail_from_status(status_code)
         if not _check_validate_invariants(
@@ -220,7 +224,7 @@ class AuditMiddleware:
 
         status_code = 0
         start = time.monotonic()
-        exc_info: Exception | None = None
+        exc_info: BaseException | None = None
 
         async def capture_status(message: Message) -> None:
             nonlocal status_code
@@ -230,12 +234,20 @@ class AuditMiddleware:
 
         try:
             await self.app(scope, receive, capture_status)
-        except Exception as exc:
+        except BaseException as exc:
             # ServerErrorMiddleware (outside this middleware) still needs to see
             # the exception so it can synthesize a 500 — re-raise after queuing
-            # the audit-row write in finally.
+            # the audit-row write in finally. `BaseException` is intentional:
+            # `asyncio.CancelledError` is BaseException in 3.8+, and a cancelled
+            # request without this catch produces a status_code=0 row with no
+            # error_detail.
             exc_info = exc
             raise
         finally:
             elapsed_ms = int((time.monotonic() - start) * 1000)
-            _queue_audit_writes(scope, path, status_code, elapsed_ms, exc_info)
+            try:
+                _emit_audit_artifacts(scope, path, status_code, elapsed_ms, exc_info)
+            except Exception:
+                # Defense in depth: a bug in the helper must never mask the
+                # exception we are re-raising (or suppress a clean return).
+                logger.exception("audit: post-request write block failed")
