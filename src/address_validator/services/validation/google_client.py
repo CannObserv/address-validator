@@ -25,6 +25,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
+    _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -135,9 +136,12 @@ class GoogleClient:
         non-US addresses (USPS-specific field).
 
         Raises:
-            ProviderBadRequestError: on HTTP 400 (input the provider rejects).
+            ProviderBadRequestError: on HTTP 400 (input the provider rejects)
+                or HTTP 401/403 (operator action required: rotate credentials
+                or fix IAM).
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
-            httpx.HTTPStatusError: on any other non-2xx response.
+            ProviderTransientError: on HTTP 5xx or any other unexpected
+                non-2xx response.
         """
         address_lines = [street_address]
         city_state_zip = " ".join(p for p in (city, state, zip_code) if p)
@@ -188,7 +192,7 @@ class GoogleClient:
                         continue
                     delay = _parse_retry_after(exc.response, attempt)
                     raise ProviderRateLimitedError("google", retry_after_seconds=delay) from exc
-                raise
+                _raise_for_unexpected_status(exc, provider="google", logger=logger)
 
             raw: dict[str, Any] = resp.json()
             if country == "US":

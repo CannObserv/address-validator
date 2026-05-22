@@ -12,6 +12,7 @@ from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.services.validation.usps_client import USPSClient, USPSToken
 
@@ -170,17 +171,103 @@ class TestUSPSClient:
         assert mock_http.post.call_count == 1  # single token fetch despite 3 concurrent calls
 
     @pytest.mark.asyncio
-    async def test_http_error_propagates(self, client: USPSClient, mock_http: AsyncMock) -> None:
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    async def test_5xx_raises_transient_error(
+        self, status: int, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-115: USPS 5xx must map to ProviderTransientError so the chain
+        falls through, mirroring the 429 path."""
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         bad_resp = MagicMock(spec=httpx.Response)
-        bad_resp.status_code = 500
+        bad_resp.status_code = status
         bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "500", request=MagicMock(), response=bad_resp
+            str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ProviderTransientError) as exc_info:
             await client.validate_address("999 Fake St", "Nowhere", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_auth_status_raises_bad_request(
+        self, status: int, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH-115: 401/403 from USPS (bad OAuth creds) maps to
+        ProviderBadRequestError + ERROR log so operators get paged."""
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = status
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            str(status), request=MagicMock(), response=bad_resp
+        )
+        mock_http.get.return_value = bad_resp
+
+        with caplog.at_level("ERROR"), pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert str(status) in exc_info.value.detail
+        assert any(
+            "operator action required" in record.message.lower() and record.levelname == "ERROR"
+            for record in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    async def test_unexpected_status_raises_transient_error(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-115: never leak raw httpx.HTTPStatusError for unhandled status codes."""
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 418
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "418", request=MagicMock(), response=bad_resp
+        )
+        mock_http.get.return_value = bad_resp
+
+        with pytest.raises(ProviderTransientError):
+            await client.validate_address("123 Main St", "Springfield", "IL")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [500, 503])
+    async def test_token_endpoint_5xx_raises_transient_error(
+        self, status: int, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-115: 5xx from the OAuth2 token endpoint must also map cleanly —
+        previously this propagated as raw HTTPStatusError through _get_token."""
+        token_fail = MagicMock(spec=httpx.Response)
+        token_fail.status_code = status
+        token_fail.raise_for_status.side_effect = httpx.HTTPStatusError(
+            str(status), request=MagicMock(), response=token_fail
+        )
+        mock_http.post.return_value = token_fail
+
+        with pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        # Address endpoint must NOT have been hit when token fetch failed.
+        mock_http.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_token_endpoint_auth_failure_raises_bad_request(
+        self, status: int, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """Token endpoint 401/403 (wrong consumer_key/secret) follows the same
+        operator-action path as the address endpoint."""
+        token_fail = MagicMock(spec=httpx.Response)
+        token_fail.status_code = status
+        token_fail.raise_for_status.side_effect = httpx.HTTPStatusError(
+            str(status), request=MagicMock(), response=token_fail
+        )
+        mock_http.post.return_value = token_fail
+
+        with caplog.at_level("ERROR"), pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        mock_http.get.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(
