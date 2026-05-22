@@ -207,6 +207,101 @@ def test_invariants_no_override_when_fields_present() -> None:
     assert kwargs["error_detail"] is None
 
 
+# ---------------------------------------------------------------------------
+# Unhandled-exception coverage (issue #116)
+# ---------------------------------------------------------------------------
+
+
+def test_audit_writes_row_when_endpoint_raises() -> None:
+    """Audit row must be written even when the inner app raises (issue #116)."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v1/boom")
+    async def _boom() -> dict[str, str]:
+        raise RuntimeError("kaboom")
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini, raise_server_exceptions=False)
+        resp = tc.get("/api/v1/boom")
+
+    assert resp.status_code == 500
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["status_code"] == 500
+    assert kwargs["error_detail"] == "unhandled_exception:RuntimeError"
+
+
+def test_audit_reraises_unhandled_exception() -> None:
+    """ServerErrorMiddleware must still see the exception so it can produce a 500."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v1/boom")
+    async def _boom() -> dict[str, str]:
+        raise RuntimeError("kaboom")
+
+    mock_write = AsyncMock()
+    with (
+        patch("address_validator.middleware.audit.write_audit_row", mock_write),
+        pytest.raises(RuntimeError, match="kaboom"),
+    ):
+        tc = TestClient(mini, raise_server_exceptions=True)
+        tc.get("/api/v1/boom")
+
+    mock_write.assert_called_once()
+
+
+def test_audit_skips_invariant_check_on_exception() -> None:
+    """A validate endpoint that raises should report the exception, not an invariant violation."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.post("/api/v1/validate")
+    async def _fake_validate() -> dict[str, str]:
+        raise ValueError("kaboom")
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini, raise_server_exceptions=False)
+        tc.post("/api/v1/validate")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["error_detail"] == "unhandled_exception:ValueError"
+
+
+def test_audit_skips_candidate_write_on_exception() -> None:
+    """No training candidate row should be written when the inner app raises."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v1/boom")
+    async def _boom() -> dict[str, str]:
+        raise RuntimeError("kaboom")
+
+    mock_write = AsyncMock()
+    mock_candidate = AsyncMock()
+    with (
+        patch("address_validator.middleware.audit.write_audit_row", mock_write),
+        patch("address_validator.middleware.audit.write_training_candidate", mock_candidate),
+    ):
+        tc = TestClient(mini, raise_server_exceptions=False)
+        tc.get("/api/v1/boom")
+
+    mock_write.assert_called_once()
+    mock_candidate.assert_not_called()
+
+
 def test_audit_row_receives_parse_type() -> None:
     """parse_type ContextVar set during the endpoint must appear in the audit row."""
     mini = FastAPI()

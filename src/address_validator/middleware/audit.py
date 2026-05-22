@@ -116,6 +116,89 @@ def _check_validate_invariants(
     return True
 
 
+def _queue_audit_writes(
+    scope: Scope,
+    path: str,
+    status_code: int,
+    elapsed_ms: int,
+    exc_info: Exception | None,
+) -> None:
+    """Queue fire-and-forget audit + candidate writes.
+
+    Called from both the success and exception paths in AuditMiddleware. No-op
+    when the app has no engine configured.
+    """
+    app = scope.get("app")
+    engine = getattr(app.state, "engine", None) if app else None
+    if engine is None:
+        return
+
+    provider = get_audit_provider()
+    validation_status = get_audit_validation_status()
+    cache_hit = get_audit_cache_hit()
+    pattern_key = get_audit_pattern_key()
+    parse_type = get_audit_parse_type()
+
+    if exc_info is not None:
+        # Preserve a partial status if http.response.start fired before the
+        # exception; otherwise fall back to 500 (what ServerErrorMiddleware
+        # will send to the client).
+        if status_code == 0:
+            status_code = 500
+        error_detail: str | None = f"unhandled_exception:{type(exc_info).__name__}"
+    else:
+        error_detail = _error_detail_from_status(status_code)
+        if not _check_validate_invariants(
+            path, status_code, provider, validation_status, cache_hit
+        ):
+            error_detail = "audit_invariant_violated"
+
+    task = asyncio.create_task(
+        write_audit_row(
+            engine,
+            timestamp=datetime.now(UTC),
+            request_id=get_request_id() or None,
+            client_ip=_get_client_ip(scope),
+            method=scope.get("method", ""),
+            endpoint=path,
+            status_code=status_code,
+            latency_ms=elapsed_ms,
+            provider=provider,
+            validation_status=validation_status,
+            cache_hit=cache_hit,
+            error_detail=error_detail,
+            pattern_key=pattern_key,
+            parse_type=parse_type,
+        )
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+    # Skip training candidate write on exception — parser may have left
+    # partial ContextVar state we don't want to persist.
+    if exc_info is not None:
+        return
+    candidate = get_candidate_data()
+    if candidate is None:
+        return
+    api_version: str | None = None
+    if path.startswith("/api/v1/"):
+        api_version = "1"
+    elif path.startswith("/api/v2/"):
+        api_version = "2"
+    candidate_task = asyncio.create_task(
+        write_training_candidate(
+            engine=engine,
+            endpoint=path,
+            provider=provider,
+            api_version=api_version,
+            **candidate,
+        )
+    )
+    _background_tasks.add(candidate_task)
+    candidate_task.add_done_callback(_background_tasks.discard)
+
+
 class AuditMiddleware:
     """Record API requests to the audit_log table after the response is sent."""
 
@@ -137,6 +220,7 @@ class AuditMiddleware:
 
         status_code = 0
         start = time.monotonic()
+        exc_info: Exception | None = None
 
         async def capture_status(message: Message) -> None:
             nonlocal status_code
@@ -144,66 +228,14 @@ class AuditMiddleware:
                 status_code = message.get("status", 0)
             await send(message)
 
-        await self.app(scope, receive, capture_status)
-
-        elapsed_ms = int((time.monotonic() - start) * 1000)
-
-        app = scope.get("app")
-        engine = getattr(app.state, "engine", None) if app else None
-        if engine is None:
-            return
-
-        method: str = scope.get("method", "")
-
-        provider = get_audit_provider()
-        validation_status = get_audit_validation_status()
-        cache_hit = get_audit_cache_hit()
-        pattern_key = get_audit_pattern_key()
-        parse_type = get_audit_parse_type()
-        error_detail = _error_detail_from_status(status_code)
-
-        if not _check_validate_invariants(
-            path, status_code, provider, validation_status, cache_hit
-        ):
-            error_detail = "audit_invariant_violated"
-
-        task = asyncio.create_task(
-            write_audit_row(
-                engine,
-                timestamp=datetime.now(UTC),
-                request_id=get_request_id() or None,
-                client_ip=_get_client_ip(scope),
-                method=method,
-                endpoint=path,
-                status_code=status_code,
-                latency_ms=elapsed_ms,
-                provider=provider,
-                validation_status=validation_status,
-                cache_hit=cache_hit,
-                error_detail=error_detail,
-                pattern_key=pattern_key,
-                parse_type=parse_type,
-            )
-        )
-        _background_tasks.add(task)
-        task.add_done_callback(_background_tasks.discard)
-
-        # Fire-and-forget training candidate write if parser flagged one
-        candidate = get_candidate_data()
-        if candidate is not None:
-            api_version: str | None = None
-            if path.startswith("/api/v1/"):
-                api_version = "1"
-            elif path.startswith("/api/v2/"):
-                api_version = "2"
-            candidate_task = asyncio.create_task(
-                write_training_candidate(
-                    engine=engine,
-                    endpoint=path,
-                    provider=provider,
-                    api_version=api_version,
-                    **candidate,
-                )
-            )
-            _background_tasks.add(candidate_task)
-            candidate_task.add_done_callback(_background_tasks.discard)
+        try:
+            await self.app(scope, receive, capture_status)
+        except Exception as exc:
+            # ServerErrorMiddleware (outside this middleware) still needs to see
+            # the exception so it can synthesize a 500 — re-raise after queuing
+            # the audit-row write in finally.
+            exc_info = exc
+            raise
+        finally:
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            _queue_audit_writes(scope, path, status_code, elapsed_ms, exc_info)
