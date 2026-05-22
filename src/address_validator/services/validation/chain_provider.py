@@ -12,31 +12,38 @@ from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 
+_TransientErr = ProviderRateLimitedError | ProviderAtCapacityError | ProviderTransientError
+
 
 class ChainProvider:
     """Tries each provider in order, falling back on recoverable errors.
 
-    On :class:`~services.validation.errors.ProviderRateLimitedError`,
-    :class:`~services.validation.errors.ProviderAtCapacityError`, or
-    :class:`~services.validation.errors.ProviderBadRequestError` from the
-    current provider, the next provider in the chain is tried.
+    On any of the following errors from the current provider, the next
+    provider in the chain is tried:
+
+    * :class:`~services.validation.errors.ProviderRateLimitedError` (HTTP 429)
+    * :class:`~services.validation.errors.ProviderAtCapacityError` (local quota)
+    * :class:`~services.validation.errors.ProviderTransientError` (HTTP 5xx /
+      unexpected non-2xx)
+    * :class:`~services.validation.errors.ProviderBadRequestError` (HTTP 400)
 
     When all providers fail:
 
-    * If **any** provider raised a transient error (rate-limited / at-capacity),
-      a :class:`~services.validation.errors.ProviderRateLimitedError` with
-      ``provider="all"`` is raised — the caller should retry later.
+    * If **any** provider raised a transient error (rate-limited / at-capacity
+      / upstream 5xx), a :class:`~services.validation.errors.ProviderRateLimitedError`
+      with ``provider="all"`` is raised — the caller should retry later.
     * If **every** provider raised
       :class:`~services.validation.errors.ProviderBadRequestError`, a
       ``ProviderBadRequestError("all")`` is raised — the input itself is
       the problem, not transient capacity.
 
-    Any other exception (network error, unexpected 5xx, etc.) is re-raised
+    Any other exception (network error, programming bug, etc.) is re-raised
     immediately without trying further providers.
 
     Parameters
@@ -59,13 +66,17 @@ class ChainProvider:
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV1:
-        last_transient: ProviderRateLimitedError | ProviderAtCapacityError | None = None
+        last_transient: _TransientErr | None = None
         last_bad_request: ProviderBadRequestError | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
                 return await provider.validate(std, raw_input=raw_input)
-            except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
+            except (
+                ProviderRateLimitedError,
+                ProviderAtCapacityError,
+                ProviderTransientError,
+            ) as exc:
                 last_transient = exc
                 logger.warning(
                     "ChainProvider: %s unavailable (%s), trying next provider",

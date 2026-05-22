@@ -48,6 +48,38 @@ class ProviderBadRequestError(Exception):
         super().__init__(f"Provider '{provider}' rejected request: {detail}")
 
 
+class ProviderTransientError(Exception):
+    """Raised when an upstream provider returns a transient server-side failure.
+
+    Covers HTTP 5xx and any unexpected non-2xx status not handled by the
+    400/429 paths.  Semantically distinct from:
+
+    * :class:`ProviderRateLimitedError` — upstream returned HTTP 429 (quota
+      exhausted); has explicit ``Retry-After`` semantics.
+    * :class:`ProviderAtCapacityError` — local quota decision; the request
+      was *not sent*.
+
+    This error means the request *was* sent and the upstream service failed.
+    Tracking it separately preserves the distinction for metrics, alerting,
+    and triage.  :class:`~services.validation.chain_provider.ChainProvider`
+    catches it and advances to the next provider, mirroring the rate-limit
+    and at-capacity paths.
+
+    Parameters
+    ----------
+    provider:
+        Short name of the provider (e.g. ``"usps"``, ``"google"``).
+    retry_after_seconds:
+        Hint for how long to wait before retrying.  Defaults to ``0.0``
+        when no delay information is available.
+    """
+
+    def __init__(self, provider: str, retry_after_seconds: float = 0.0) -> None:
+        self.provider = provider
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(f"Provider '{provider}' returned a transient failure")
+
+
 class ProviderAtCapacityError(Exception):
     """Raised by :class:`~services.validation._rate_limit.QuotaGuard` when a
     request cannot be dispatched within the configured latency budget, or when

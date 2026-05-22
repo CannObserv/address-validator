@@ -10,6 +10,7 @@ from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.services.validation.google_client import GoogleClient
 
@@ -264,16 +265,62 @@ class TestGoogleClientValidateAddress:
             await client.validate_address("123 Main St")
 
     @pytest.mark.asyncio
-    async def test_non_429_status_error_propagates(
-        self, client: GoogleClient, mock_http: AsyncMock
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_auth_status_raises_bad_request(
+        self, status: int, client: GoogleClient, mock_http: AsyncMock, caplog
     ) -> None:
+        """GH-115: 401/403 from Google (expired creds, missing IAM) must map
+        to ProviderBadRequestError so the chain falls through, while logging
+        at ERROR so operators get paged."""
         bad_resp = MagicMock(spec=httpx.Response)
-        bad_resp.status_code = 403
+        bad_resp.status_code = status
         bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "403", request=MagicMock(), response=bad_resp
+            str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
-        with pytest.raises(httpx.HTTPStatusError):
+
+        with caplog.at_level("ERROR"), pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert str(status) in exc_info.value.detail
+        assert any(
+            "operator action required" in record.message.lower() and record.levelname == "ERROR"
+            for record in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    async def test_5xx_raises_transient_error(
+        self, status: int, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-115: Google 5xx must map to ProviderTransientError so the chain
+        falls through (research doc: 'transient → fallback')."""
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = status
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            str(status), request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+
+        with pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+
+    @pytest.mark.asyncio
+    async def test_unexpected_status_raises_transient_error(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        """GH-115: any non-2xx outside 400/401/403/429/5xx still maps cleanly
+        — never let raw httpx.HTTPStatusError escape the client."""
+        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp.status_code = 418  # I'm a teapot
+        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "418", request=MagicMock(), response=bad_resp
+        )
+        mock_http.post.return_value = bad_resp
+
+        with pytest.raises(ProviderTransientError):
             await client.validate_address("123 Main St")
 
     @pytest.mark.asyncio

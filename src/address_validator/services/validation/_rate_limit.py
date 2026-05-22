@@ -8,6 +8,7 @@ Provides:
 """
 
 import asyncio
+import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,13 +18,31 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from address_validator.services.validation.errors import ProviderAtCapacityError
+from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
+    ProviderBadRequestError,
+    ProviderTransientError,
+)
 
 # HTTP status code for "Bad Request" — provider rejected the input.
 _HTTP_BAD_REQUEST = 400
 
+# HTTP status codes treated as operator-action-required auth failures
+# (expired creds, missing IAM role, project disabled).
+_HTTP_UNAUTHORIZED = 401
+_HTTP_FORBIDDEN = 403
+
 # HTTP status code for "Too Many Requests".
 _HTTP_TOO_MANY_REQUESTS = 429
+
+# HTTP server-error range — upstream service failure; treated as transient.
+_HTTP_SERVER_ERROR_MIN = 500
+_HTTP_SERVER_ERROR_MAX = 599
+
+# Default retry-after hint when a transient error has no explicit Retry-After
+# header.  Kept small — the chain provider only uses it to populate the
+# response header when the chain is fully exhausted.
+_TRANSIENT_DEFAULT_RETRY_AFTER_S = 1.0
 
 # Maximum number of retry attempts on HTTP 429 (not counting the initial try).
 _RETRY_MAX = 3
@@ -243,6 +262,49 @@ class QuotaGuard:
             "remaining": int(self._tokens[idx]),
             "limit": self._windows[idx].limit,
         }
+
+
+def _raise_for_unexpected_status(
+    exc: httpx.HTTPStatusError,
+    *,
+    provider: str,
+    logger: logging.Logger,
+) -> None:
+    """Map a non-2xx response outside the 400/429 paths to a typed provider error.
+
+    Callers handle HTTP 400 (``ProviderBadRequestError``) and 429
+    (``ProviderRateLimitedError``) directly; this helper covers everything
+    else so raw :class:`httpx.HTTPStatusError` never escapes the client:
+
+    * **401 / 403** — credentials/IAM problem.  Logged at ``ERROR`` (operator
+      action required) and raised as ``ProviderBadRequestError`` so the
+      chain provider falls through to the next provider instead of taking
+      the whole service down.
+    * **5xx** — upstream outage; raised as ``ProviderTransientError`` so the
+      chain falls through, mirroring the 429 path.
+    * **Anything else** — also mapped to ``ProviderTransientError`` and
+      logged so we can spot new failure modes.
+
+    Never returns.
+    """
+    status = exc.response.status_code
+    if status in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
+        logger.error(
+            "%s provider returned HTTP %d — operator action required "
+            "(rotate credentials or verify IAM permissions)",
+            provider,
+            status,
+        )
+        raise ProviderBadRequestError(provider, detail=f"HTTP {status}") from exc
+    if _HTTP_SERVER_ERROR_MIN <= status <= _HTTP_SERVER_ERROR_MAX:
+        logger.warning("%s provider returned HTTP %d (upstream outage)", provider, status)
+        raise ProviderTransientError(
+            provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+        ) from exc
+    logger.warning("%s provider returned unexpected HTTP %d", provider, status)
+    raise ProviderTransientError(
+        provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+    ) from exc
 
 
 def _parse_retry_after(response: httpx.Response, attempt: int) -> float:

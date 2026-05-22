@@ -15,6 +15,7 @@ from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -248,6 +249,52 @@ class TestChainProvider:
         await chain.validate(std_address, raw_input="456 Elm Ave")
 
         second.validate.assert_awaited_once_with(std_address, raw_input="456 Elm Ave")
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_second_on_transient_error(self, std_address: object) -> None:
+        """GH-115: ProviderTransientError (upstream 5xx) falls through like
+        ProviderRateLimitedError and ProviderAtCapacityError."""
+        primary = AsyncMock()
+        primary.validate = AsyncMock(
+            side_effect=ProviderTransientError("google", retry_after_seconds=1.0)
+        )
+        secondary = _mock_provider(_CONFIRMED)
+        chain = ChainProvider(providers=[primary, secondary])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+        assert result.validation.provider == "usps"
+        primary.validate.assert_awaited_once()
+        secondary.validate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_all_when_all_providers_transient(self, std_address: object) -> None:
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(side_effect=ProviderTransientError("usps", retry_after_seconds=1.0))
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(
+            side_effect=ProviderTransientError("google", retry_after_seconds=2.5)
+        )
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds == 2.5
+
+    @pytest.mark.asyncio
+    async def test_transient_then_bad_request_raises_rate_limited(
+        self, std_address: object
+    ) -> None:
+        """Transient (5xx) wins over bad-request — caller should retry later
+        rather than treating the input as malformed."""
+        p1 = AsyncMock()
+        p1.validate = AsyncMock(side_effect=ProviderTransientError("google", retry_after_seconds=2))
+        p2 = AsyncMock()
+        p2.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", detail="HTTP 401"))
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ProviderRateLimitedError):
+            await chain.validate(std_address)  # type: ignore[arg-type]
 
     def test_supports_non_us_false_when_all_providers_false(self) -> None:
         p1 = AsyncMock()

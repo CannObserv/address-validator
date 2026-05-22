@@ -24,6 +24,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
+    _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -107,7 +108,13 @@ class USPSClient:
                     "client_secret": self._consumer_secret,
                 },
             )
-            resp.raise_for_status()
+            try:
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                # Token endpoint failures share the same operator-vs-outage
+                # semantics as the address endpoint: 401/403 → bad-request
+                # (creds bad), 5xx → transient (USPS outage).
+                _raise_for_unexpected_status(exc, provider="usps", logger=logger)
             data: dict[str, Any] = resp.json()
 
             expires_in: int = int(data.get("expires_in", 3600))
@@ -138,9 +145,11 @@ class USPSClient:
         ``city``, ``region``, ``postal_code``, ``vacant``.
 
         Raises :class:`~services.validation.errors.ProviderBadRequestError`
-        when the USPS API returns HTTP 400 (malformed input).
+        when the USPS API returns HTTP 400 (malformed input) or HTTP 401/403
+        (operator action required: fix OAuth credentials).
 
-        Raises :class:`httpx.HTTPStatusError` on other non-429 non-2xx responses.
+        Raises :class:`~services.validation.errors.ProviderTransientError`
+        on HTTP 5xx or any unexpected non-2xx response.
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if city:
@@ -180,7 +189,7 @@ class USPSClient:
                         continue
                     delay = _parse_retry_after(exc.response, attempt)
                     raise ProviderRateLimitedError("usps", retry_after_seconds=delay) from exc
-                raise
+                _raise_for_unexpected_status(exc, provider="usps", logger=logger)
 
             raw: dict[str, Any] = resp.json()
             return self._map_response(raw)
