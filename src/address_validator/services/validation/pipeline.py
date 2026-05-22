@@ -110,7 +110,12 @@ async def run_us_pipeline(
     # address_line_1 so any geocoding-capable provider can attempt to resolve it.
     # USPS-only deployments will return status=error from the resulting 400;
     # Google-included chains return a geocoded status=invalid with structured fields.
-    if not req.components and req.address and not std.address_line_1.strip():
+    if (
+        not req.components
+        and req.address
+        and req.address.strip()
+        and not std.address_line_1.strip()
+    ):
         fallback_warning = "Address has no parseable street line; passing raw input to provider"
         raw_street = re.sub(r"\s+", " ", req.address).strip()
         std = std.model_copy(

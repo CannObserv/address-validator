@@ -12,7 +12,7 @@ Callers should not instantiate this class directly; use
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 from google.auth.credentials import Credentials
@@ -48,17 +48,25 @@ def _verdict_to_status(verdict: dict[str, Any]) -> str:
     return "not_found"
 
 
-def _read_postal_address(postal_addr: dict[str, Any]) -> tuple[str, str, str, str, str]:
-    """Extract (line_1, line_2, city, region, postal_code) from a Google postalAddress."""
+class _PostalFields(NamedTuple):
+    """Subset of a Google postalAddress consumed by both US and non-US mappers."""
+
+    address_line_1: str
+    address_line_2: str
+    city: str
+    region: str
+    postal_code: str
+
+
+def _read_postal_address(postal_addr: dict[str, Any]) -> _PostalFields:
+    """Extract address/city/region/postal fields from a Google postalAddress."""
     address_lines = postal_addr.get("addressLines", [])
-    address_line_1 = address_lines[0] if len(address_lines) > 0 else ""
-    address_line_2 = address_lines[1] if len(address_lines) > 1 else ""
-    return (
-        address_line_1,
-        address_line_2,
-        postal_addr.get("locality", ""),
-        postal_addr.get("administrativeArea", ""),
-        postal_addr.get("postalCode", ""),
+    return _PostalFields(
+        address_line_1=address_lines[0] if len(address_lines) > 0 else "",
+        address_line_2=address_lines[1] if len(address_lines) > 1 else "",
+        city=postal_addr.get("locality", ""),
+        region=postal_addr.get("administrativeArea", ""),
+        postal_code=postal_addr.get("postalCode", ""),
     )
 
 
@@ -218,9 +226,12 @@ class GoogleClient:
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
             postal_addr = result.get("address", {}).get("postalAddress", {})
-            address_line_1, address_line_2, city, region, postal_code = _read_postal_address(
-                postal_addr
-            )
+            fields = _read_postal_address(postal_addr)
+            address_line_1 = fields.address_line_1
+            address_line_2 = fields.address_line_2
+            city = fields.city
+            region = fields.region
+            postal_code = fields.postal_code
             status = (
                 _verdict_to_status(verdict)
                 if postal_addr or verdict.get("validationGranularity")
@@ -251,18 +262,16 @@ class GoogleClient:
         postal_addr = result.get("address", {}).get("postalAddress", {})
         location = result.get("geocode", {}).get("location", {})
 
-        address_line_1, address_line_2, city, region, postal_code = _read_postal_address(
-            postal_addr
-        )
+        fields = _read_postal_address(postal_addr)
 
         return {
             "dpv_match_code": None,
             "status": _verdict_to_status(verdict),
-            "address_line_1": address_line_1,
-            "address_line_2": address_line_2,
-            "city": city,
-            "region": region,
-            "postal_code": postal_code,
+            "address_line_1": fields.address_line_1,
+            "address_line_2": fields.address_line_2,
+            "city": fields.city,
+            "region": fields.region,
+            "postal_code": fields.postal_code,
             "vacant": None,
             "latitude": location.get("latitude"),
             "longitude": location.get("longitude"),

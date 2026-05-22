@@ -125,7 +125,7 @@ Places autocomplete string like `"Lynnwood City Hall, 44th Avenue West, Lynnwood
 the standardize step produces `address_line_1=""`. The pipeline detects this and substitutes
 the raw input string as `address_line_1` before calling the provider, so any geocoding-capable
 provider can attempt to resolve it. USPS-only deployments return `validation.status="error"`
-(USPS 400s on the empty/non-USPS street); Google-included chains return
+(USPS rejects the raw string as non-USPS-formatted); Google-included chains return
 `validation.status="invalid"` with a populated `postalAddress` (locality, region, postal code,
 geocoded lat/lng) read from Google's response. A warning string
 `"Address has no parseable street line; passing raw input to provider"` is added to
