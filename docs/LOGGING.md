@@ -23,8 +23,10 @@ To include it in formatted output, add `%(request_id)s` to the uvicorn log forma
 | Cache storage error (fail-open) | `WARNING` | `services.validation.cache_provider` | `request_id` |
 | USPS API call start | `DEBUG` | `services.validation.usps_provider` | `country=`, `request_id` |
 | USPS OAuth2 token fetch | `DEBUG` | `services.validation.usps_client` | `request_id` |
+| USPS 400 Bad Request | `WARNING` | `services.validation.usps_client` | `request_id` |
 | USPS 429 received | `WARNING` | `services.validation.usps_client` | `request_id` |
 | Google API call start | `DEBUG` | `services.validation.google_provider` | `country=`, `request_id` |
+| Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |

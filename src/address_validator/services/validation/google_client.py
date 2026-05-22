@@ -12,7 +12,7 @@ Callers should not instantiate this class directly; use
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, NamedTuple
 
 import httpx
 from google.auth.credentials import Credentials
@@ -20,12 +20,16 @@ from google.auth.transport.requests import Request as AuthRequest
 
 from address_validator.services.validation._helpers import _DPV_TO_STATUS
 from address_validator.services.validation._rate_limit import (
+    _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
 )
-from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.errors import (
+    ProviderBadRequestError,
+    ProviderRateLimitedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,28 @@ def _verdict_to_status(verdict: dict[str, Any]) -> str:
     if verdict.get("validationGranularity", "") not in _NON_GRANULAR:
         return "invalid"
     return "not_found"
+
+
+class _PostalFields(NamedTuple):
+    """Subset of a Google postalAddress consumed by both US and non-US mappers."""
+
+    address_line_1: str
+    address_line_2: str
+    city: str
+    region: str
+    postal_code: str
+
+
+def _read_postal_address(postal_addr: dict[str, Any]) -> _PostalFields:
+    """Extract address/city/region/postal fields from a Google postalAddress."""
+    address_lines = postal_addr.get("addressLines", [])
+    return _PostalFields(
+        address_line_1=address_lines[0] if len(address_lines) > 0 else "",
+        address_line_2=address_lines[1] if len(address_lines) > 1 else "",
+        city=postal_addr.get("locality", ""),
+        region=postal_addr.get("administrativeArea", ""),
+        postal_code=postal_addr.get("postalCode", ""),
+    )
 
 
 class GoogleClient:
@@ -96,9 +122,7 @@ class GoogleClient:
 
         Retries up to :data:`~services.validation._rate_limit._RETRY_MAX` times
         on HTTP 429, honouring the ``Retry-After`` header when present and
-        falling back to exponential backoff.  Raises
-        :class:`~services.validation.errors.ProviderRateLimitedError` when all
-        retries are exhausted.
+        falling back to exponential backoff.
 
         Returns a normalised dict with keys:
         ``status``, ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
@@ -110,7 +134,10 @@ class GoogleClient:
         ``status`` is always present.  ``dpv_match_code`` is ``None`` for
         non-US addresses (USPS-specific field).
 
-        Raises :class:`httpx.HTTPStatusError` on non-429 non-2xx responses.
+        Raises:
+            ProviderBadRequestError: on HTTP 400 (input the provider rejects).
+            ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
+            httpx.HTTPStatusError: on any other non-2xx response.
         """
         address_lines = [street_address]
         city_state_zip = " ".join(p for p in (city, state, zip_code) if p)
@@ -145,6 +172,9 @@ class GoogleClient:
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == _HTTP_BAD_REQUEST:
+                    logger.warning("GoogleClient: 400 Bad Request from Google API")
+                    raise ProviderBadRequestError("google", detail="HTTP 400") from exc
                 if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
                     if attempt < _RETRY_MAX:
                         delay = _parse_retry_after(exc.response, attempt)
@@ -170,7 +200,7 @@ class GoogleClient:
 
     @staticmethod
     def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise the Google Address Validation API JSON response."""
+        """Normalise US Google response; falls back to postalAddress when CASS produces no DPV."""
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         usps = result.get("uspsData", {})
@@ -178,21 +208,43 @@ class GoogleClient:
         geocode = result.get("geocode", {})
         location = geocode.get("location", {})
 
-        zip_code = std_addr.get("zipCode", "")
-        zip_ext = std_addr.get("zipCodeExtension", "") or ""
-        postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
-
         lat = location.get("latitude")
         lng = location.get("longitude")
 
         dpv = usps.get("dpvConfirmation") or None
+
+        if dpv is not None:
+            # CASS-confirmed: USPS standardizedAddress is authoritative.
+            zip_code = std_addr.get("zipCode", "")
+            zip_ext = std_addr.get("zipCodeExtension", "") or ""
+            postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
+            address_line_1 = std_addr.get("firstAddressLine", "")
+            address_line_2 = std_addr.get("secondAddressLine", "")
+            city = std_addr.get("city", "")
+            region = std_addr.get("state", "")
+            status = _DPV_TO_STATUS.get(dpv, "unavailable")
+        else:
+            # No CASS DPV — read Google's postalAddress + verdict instead.
+            postal_addr = result.get("address", {}).get("postalAddress", {})
+            fields = _read_postal_address(postal_addr)
+            address_line_1 = fields.address_line_1
+            address_line_2 = fields.address_line_2
+            city = fields.city
+            region = fields.region
+            postal_code = fields.postal_code
+            status = (
+                _verdict_to_status(verdict)
+                if postal_addr or verdict.get("validationGranularity")
+                else "unavailable"
+            )
+
         return {
             "dpv_match_code": dpv,
-            "status": _DPV_TO_STATUS.get(dpv, "unavailable"),
-            "address_line_1": std_addr.get("firstAddressLine", ""),
-            "address_line_2": std_addr.get("secondAddressLine", ""),
-            "city": std_addr.get("city", ""),
-            "region": std_addr.get("state", ""),
+            "status": status,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
+            "city": city,
+            "region": region,
             "postal_code": postal_code,
             "vacant": usps.get("dpvVacant") or None,
             "latitude": lat,
@@ -204,36 +256,25 @@ class GoogleClient:
 
     @staticmethod
     def _map_response_international(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise a non-US Google Address Validation API response.
-
-        Reads from ``result.address.postalAddress`` and ``result.verdict``
-        instead of ``result.uspsData``.  ``dpv_match_code`` is always ``None``
-        (USPS-specific field, not present for non-US addresses).
-        """
+        """Normalise a non-US Google response; reads postalAddress + verdict (no USPS CASS)."""
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         postal_addr = result.get("address", {}).get("postalAddress", {})
-        geocode = result.get("geocode", {})
-        location = geocode.get("location", {})
+        location = result.get("geocode", {}).get("location", {})
 
-        address_lines = postal_addr.get("addressLines", [])
-        address_line_1 = address_lines[0] if len(address_lines) > 0 else ""
-        address_line_2 = address_lines[1] if len(address_lines) > 1 else ""
-
-        lat = location.get("latitude")
-        lng = location.get("longitude")
+        fields = _read_postal_address(postal_addr)
 
         return {
             "dpv_match_code": None,
             "status": _verdict_to_status(verdict),
-            "address_line_1": address_line_1,
-            "address_line_2": address_line_2,
-            "city": postal_addr.get("locality", ""),
-            "region": postal_addr.get("administrativeArea", ""),
-            "postal_code": postal_addr.get("postalCode", ""),
+            "address_line_1": fields.address_line_1,
+            "address_line_2": fields.address_line_2,
+            "city": fields.city,
+            "region": fields.region,
+            "postal_code": fields.postal_code,
             "vacant": None,
-            "latitude": lat,
-            "longitude": lng,
+            "latitude": location.get("latitude"),
+            "longitude": location.get("longitude"),
             "has_inferred_components": verdict.get("hasInferredComponents", False),
             "has_replaced_components": verdict.get("hasReplacedComponents", False),
             "has_unconfirmed_components": verdict.get("hasUnconfirmedComponents", False),

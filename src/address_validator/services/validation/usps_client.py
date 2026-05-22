@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from address_validator.services.validation._rate_limit import (
+    _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
     QuotaGuard,
@@ -29,7 +30,6 @@ from address_validator.services.validation.errors import (
     ProviderRateLimitedError,
 )
 
-_HTTP_BAD_REQUEST = 400
 _ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)

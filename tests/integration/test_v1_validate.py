@@ -9,11 +9,68 @@ against the running FastAPI app, including the parse → standardize pipeline.
 """
 
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from address_validator.main import app
+from address_validator.models import ValidateResponseV1, ValidationResult
+from address_validator.services.validation.errors import ProviderBadRequestError
+
 pytestmark = pytest.mark.integration
+
+
+def _mock_registry_with(provider):
+    mock_reg = MagicMock()
+    mock_reg.get_provider.return_value = provider
+    return patch.object(app.state, "registry", mock_reg)
+
+
+class TestV1ValidateUnparseableInput:
+    """GH-114 regression: v1 must not 500 on inputs without a USPS-parseable street."""
+
+    def test_unparseable_input_returns_200_with_geocoded_response(self, client: TestClient) -> None:
+        google_response = ValidateResponseV1(
+            address_line_1="Lynnwood City Hall",
+            address_line_2="44th Ave W",
+            city="Lynnwood",
+            region="WA",
+            postal_code="98036-5635",
+            country="US",
+            latitude=47.8253139,
+            longitude=-122.2936207,
+            validation=ValidationResult(status="invalid", provider="google"),
+        )
+        provider = AsyncMock()
+        provider.validate = AsyncMock(return_value=google_response)
+        provider.supports_non_us = True
+        with _mock_registry_with(provider):
+            response = client.post(
+                "/api/v1/validate",
+                json={"address": "Lynnwood City Hall", "country": "US"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["validation"]["status"] == "invalid"
+        assert provider.validate.await_count == 1
+        call_std = provider.validate.await_args.args[0]
+        assert call_std.address_line_1.lower().startswith("lynnwood city hall")
+
+    def test_unparseable_input_provider_bad_request_returns_200_status_error(
+        self, client: TestClient
+    ) -> None:
+        provider = AsyncMock()
+        provider.validate = AsyncMock(
+            side_effect=ProviderBadRequestError("google", detail="HTTP 400")
+        )
+        provider.supports_non_us = True
+        with _mock_registry_with(provider):
+            response = client.post(
+                "/api/v1/validate",
+                json={"address": "Lynnwood City Hall", "country": "US"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["validation"]["status"] == "error"
 
 
 class TestValidateNullProvider:

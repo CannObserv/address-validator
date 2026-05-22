@@ -300,3 +300,43 @@ class TestRunUsPipeline:
         )
         # Should not raise
         await run_us_pipeline(req, registry, component_profile="iso-19160-4")
+
+    @pytest.mark.asyncio
+    async def test_empty_street_line_raw_fallback(self) -> None:
+        """GH-114: parser yields no street line for raw input → raw passes through."""
+        registry, _ = _make_registry()
+        req = ValidateRequestV1(
+            address="Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA",
+            country="US",
+        )
+        std, raw_input, _ = await run_us_pipeline(req, registry)
+
+        assert std.address_line_1 != ""
+        assert "lynnwood city hall" in std.address_line_1.lower()
+        assert raw_input == "Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA"
+        assert any("parseable street" in w.lower() for w in std.warnings)
+
+    @pytest.mark.asyncio
+    async def test_empty_street_line_collapses_internal_whitespace(self) -> None:
+        """GH-114: raw fallback collapses internal whitespace to keep cache keys stable."""
+        registry, _ = _make_registry()
+        req = ValidateRequestV1(address="Foo   Bar  Baz", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_1 == "Foo Bar Baz"
+
+    @pytest.mark.asyncio
+    async def test_empty_street_line_no_fallback_for_components_input(self) -> None:
+        """Components-mode requests bypass the raw fallback."""
+        registry, _ = _make_registry()
+        req = ValidateRequestV1(components={"city": "Lynnwood"}, country="US")
+        std, _raw_input, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_1 == ""
+
+    @pytest.mark.asyncio
+    async def test_well_parsed_address_unchanged(self) -> None:
+        """The fallback must not alter normally-parseable addresses."""
+        registry, _ = _make_registry()
+        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_1 == "123 MAIN ST"
+        assert not any("parseable street" in w.lower() for w in std.warnings)

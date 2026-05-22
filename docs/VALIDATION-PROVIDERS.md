@@ -114,7 +114,22 @@ logic would allow. The task is cancelled on application shutdown.
 
 `ChainProvider` catches both `ProviderRateLimitedError` (upstream HTTP 429 after retries) and
 `ProviderAtCapacityError` (local quota exhausted before sending) and delegates to the next
-provider.
+provider. It also catches `ProviderBadRequestError` (upstream HTTP 400, e.g. USPS or Google
+rejecting a malformed input) and tries the next provider; only if every provider in the chain
+raises `ProviderBadRequestError` does the route handler return `validation.status="error"`.
+
+## Empty-street raw fallback
+
+When the USPS parser cannot extract a street line from a raw `address` input (e.g. a Google
+Places autocomplete string like `"Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA"`),
+the standardize step produces `address_line_1=""`. The pipeline detects this and substitutes
+the raw input string as `address_line_1` before calling the provider, so any geocoding-capable
+provider can attempt to resolve it. USPS-only deployments return `validation.status="error"`
+(USPS rejects the raw string as non-USPS-formatted); Google-included chains return
+`validation.status="invalid"` with a populated `postalAddress` (locality, region, postal code,
+geocoded lat/lng) read from Google's response. A warning string
+`"Address has no parseable street line; passing raw input to provider"` is added to
+`warnings` so callers can distinguish this path from a normally-parsed address.
 
 ## Notes
 

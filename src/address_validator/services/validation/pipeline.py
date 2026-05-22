@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from address_validator.core.address_format import build_validated_string
@@ -103,6 +104,27 @@ async def run_us_pipeline(
         raw_input = req.address
 
     std = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
+
+    # GH-114: parser couldn't extract a USPS street line from a raw input (e.g. a
+    # place-name autocomplete string). Pass the raw string through as
+    # address_line_1 so any geocoding-capable provider can attempt to resolve it.
+    # USPS-only deployments will return status=error from the resulting 400;
+    # Google-included chains return a geocoded status=invalid with structured fields.
+    if (
+        not req.components
+        and req.address
+        and req.address.strip()
+        and not std.address_line_1.strip()
+    ):
+        fallback_warning = "Address has no parseable street line; passing raw input to provider"
+        raw_street = re.sub(r"\s+", " ", req.address).strip()
+        std = std.model_copy(
+            update={
+                "address_line_1": raw_street,
+                "warnings": [*std.warnings, fallback_warning],
+            }
+        )
+
     provider = registry.get_provider()
     return std, raw_input, provider
 
