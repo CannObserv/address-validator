@@ -144,9 +144,10 @@ def _emit_audit_artifacts(
 
     error_detail: str | None
     if exc_info is not None:
-        # Preserve a partial status if http.response.start fired before the
-        # exception; otherwise fall back to 500 (what ServerErrorMiddleware
-        # will send to the client).
+        # Preserve a partial status when http.response.start fired before the
+        # raise — that's what the client actually received (likely a truncated
+        # 2xx body). Fall back to 500 only when no status header fired;
+        # ServerErrorMiddleware will then synthesize a 500 for the client.
         if status_code == 0:
             status_code = 500
         error_detail = f"unhandled_exception:{type(exc_info).__name__}"
@@ -250,4 +251,8 @@ class AuditMiddleware:
             except Exception:
                 # Defense in depth: a bug in the helper must never mask the
                 # exception we are re-raising (or suppress a clean return).
-                logger.exception("audit: post-request write block failed")
+                logger.exception(
+                    "audit: post-request write block failed for %s (request_id=%s)",
+                    path,
+                    get_request_id() or "?",
+                )

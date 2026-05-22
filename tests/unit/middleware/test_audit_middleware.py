@@ -280,12 +280,61 @@ def test_audit_uses_exception_label_over_internal_error() -> None:
     assert kwargs["error_detail"] == "unhandled_exception:ValueError"
 
 
+def test_audit_writes_row_on_cancelled_error() -> None:
+    """asyncio.CancelledError is a BaseException (not Exception) in 3.8+;
+    AuditMiddleware must still produce a labeled audit row and re-raise.
+
+    Regression guard for the BaseException widening — if this widening is
+    reverted to `except Exception`, no row is written for cancelled requests
+    and the audit log silently drops them (re-opens issue #116 for that path).
+
+    NOTE: TestClient runs the ASGI app via an anyio portal, which translates
+    a propagating `asyncio.CancelledError` into `concurrent.futures.CancelledError`
+    at the `.result()` boundary. The middleware itself sees the asyncio one
+    (proven by `error_detail == "unhandled_exception:CancelledError"`); only
+    the exception type surfacing to the test differs.
+    """
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v1/boom")
+    async def _boom() -> dict[str, str]:
+        raise asyncio.CancelledError
+
+    mock_write = AsyncMock()
+    with (
+        patch("address_validator.middleware.audit.write_audit_row", mock_write),
+        pytest.raises(BaseException) as exc_info,
+    ):
+        tc = TestClient(mini, raise_server_exceptions=True)
+        tc.get("/api/v1/boom")
+
+    # Either the asyncio CancelledError or its anyio-portal-translated sibling.
+    assert (
+        isinstance(exc_info.value, asyncio.CancelledError)
+        or type(exc_info.value).__name__ == "CancelledError"
+    ), f"unexpected exception type: {type(exc_info.value)!r}"
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["error_detail"] == "unhandled_exception:CancelledError"
+
+
 def test_audit_streaming_response_raises_mid_stream() -> None:
     """When a 2xx response starts streaming and then raises:
     - error_detail is the exception label, NOT 'audit_invariant_violated'
       (proves _check_validate_invariants is skipped on exception)
     - status_code is preserved as 200, NOT overwritten to 500
       (proves the partial-status branch in _emit_audit_artifacts)
+
+    NOTE: depends on Starlette propagating mid-stream exceptions from
+    StreamingResponse up through middleware rather than catching them
+    internally. If a future Starlette version captures these, the
+    `error_detail` assertion below will fail loudly (a recoverable failure
+    mode), and the test will need to be rewritten against a different
+    mid-stream-raise primitive.
     """
     mini = FastAPI()
     mini.add_middleware(AuditMiddleware)
