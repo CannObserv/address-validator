@@ -1,9 +1,7 @@
 node_modules/
-package-lock.json
 .venv/
 dist/
 build/
 htmlcov/
 skills-vendor/
 skills/
-src/address_validator/static/admin/css/

@@ -13,3 +13,15 @@ repos:
         entry: scripts/build/pre-commit-tailwind.sh
         files: '^(src/address_validator/templates/.*\.html|src/address_validator/static/admin/css/input\.css|tailwind\.config\.js)$'
         pass_filenames: false
+      - id: eslint
+        name: ESLint (admin JS)
+        language: system
+        entry: npm run --silent lint:js
+        files: '^(src/address_validator/static/admin/js/.*\.js|tests/js/.*\.js)$'
+        pass_filenames: false
+      - id: prettier-check
+        name: Prettier check (admin JS)
+        language: system
+        entry: npm run --silent format:js:check
+        files: '^(src/address_validator/static/admin/js/.*\.js|tests/js/.*\.js)$'
+        pass_filenames: false

@@ -122,7 +122,10 @@ uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
 uv run pytest --no-cov -m integration    # integration tests only
 uv run pytest --no-cov -m "not integration"  # unit tests only (faster; coverage fails below 80% on partial runs)
-npm test                        # admin JS tests (vitest + jsdom)
+npm run test:js                 # admin JS tests (vitest + jsdom)
+npm run lint:js                 # admin JS lint (ESLint flat config)
+npm run format:js:check         # admin JS format check (Prettier)
+npm run format:js               # admin JS format write
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
