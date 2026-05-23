@@ -7,7 +7,10 @@ function stubMatchMedia(matches = false) {
         matches,
         addEventListener: vi.fn(),
     };
-    vi.stubGlobal('matchMedia', vi.fn(() => mql));
+    vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mql)
+    );
     return mql;
 }
 
@@ -69,7 +72,9 @@ describe('system preference change', () => {
     it('applies system preference when no localStorage override', async () => {
         const mql = stubMatchMedia(false);
         let changeHandler;
-        mql.addEventListener = vi.fn((_, handler) => { changeHandler = handler; });
+        mql.addEventListener = vi.fn((_, handler) => {
+            changeHandler = handler;
+        });
 
         await import(SRC);
 
@@ -81,7 +86,9 @@ describe('system preference change', () => {
         localStorage.setItem('theme', 'light');
         const mql = stubMatchMedia(false);
         let changeHandler;
-        mql.addEventListener = vi.fn((_, handler) => { changeHandler = handler; });
+        mql.addEventListener = vi.fn((_, handler) => {
+            changeHandler = handler;
+        });
 
         await import(SRC);
 

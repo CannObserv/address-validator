@@ -2,10 +2,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:js": "vitest run",
+    "lint:js": "eslint src/address_validator/static/admin/js tests/js",
+    "format:js": "prettier --write src/address_validator/static/admin/js tests/js",
+    "format:js:check": "prettier --check src/address_validator/static/admin/js tests/js"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
     "jsdom": "^26.1.0",
+    "prettier": "^3.8.3",
     "vitest": "^3.1.1"
   }
 }
