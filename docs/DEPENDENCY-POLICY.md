@@ -14,19 +14,18 @@ Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower 
 
 ## JavaScript (npm + package.json)
 
-The admin dashboard's JS toolchain (ESLint, Prettier, Vitest, jsdom) is dev-only — no JS ships to a request path. Because nothing reaches runtime, the JS devDep rules are intentionally looser than the Python rules: caret ranges (`^X.Y.Z`) on devDeps are acceptable risk here, where they would not be in `pyproject.toml`. The Node runtime itself is treated more strictly — see below.
+The admin dashboard's JS toolchain (ESLint, Prettier, Vitest, jsdom) is dev-only — no JS ships to a request path. Because nothing reaches runtime, the JS devDep rules are intentionally looser than the Python rules: caret ranges (`^X.Y.Z`) on devDeps are acceptable risk here, where they would not be in `pyproject.toml`. The Node runtime itself is enforced (via `engine-strict=true`) and pinned to an exact patch across `.nvmrc` / `.node-version` — see below.
 
 ### Node runtime floor
 
-- Pinned in **two** places, both load-bearing:
-  - `package.json` → `engines.node` set to `>=X.Y.Z` (current installed patch) — mirrors the Python "update the lower bound to the newly installed version" rule
-  - `.npmrc` → `engine-strict=true` (turns `engines` from advisory into enforced)
-- `.nvmrc` and `.node-version` track the **exact** patch (`X.Y.Z`, not just `X`) so contributor / CI version managers (nvm, fnm, asdf) all converge on one runtime
-- Bump the floor only to a current LTS line. When bumping: install the new Node on the VM **before** raising the floor, otherwise `engine-strict=true` blocks every subsequent `npm install`. Tighten all three files (`engines.node`, `.nvmrc`, `.node-version`) together — drift between them defeats the convergence guarantee
+Three files, three distinct roles:
+
+- **Enforcement** — `package.json` declares the floor as a bounded major range (`>=X.Y.Z <X+1.0.0`); `.npmrc` flips `engines` from advisory to enforced via `engine-strict=true` (without it, `npm install` ignores the floor). The range mirrors the Python `>=major.minor,<major+1` rule, but one decimal tighter: Node is shared VM-wide infra, so contributor-side patch determinism matters more than for per-venv Python deps — this asymmetry is intentional.
+- **Convergence** — `.nvmrc` and `.node-version` both hold the **exact** patch (`X.Y.Z`, not just `X`) so contributor / CI version managers (nvm, fnm, asdf) all install the same runtime.
+- **Bumping** — only move the floor to a current LTS line. Install the new Node on the VM **before** raising `engines.node`, otherwise `engine-strict=true` blocks every subsequent `npm install`. Move all three files (`engines.node`, `.nvmrc`, `.node-version`) in the same commit — drift between them defeats the convergence guarantee.
 
 ### devDeps
 
-- Caret ranges (`^X.Y.Z`) are fine for devDeps — they don't ship to prod and tolerate minor drift
 - Always commit `package-lock.json` alongside `package.json` (mirrors the `uv.lock` rule)
 - Use `npm install --save-dev <pkg>` to add; `npm update` to refresh within ranges; `npm outdated` to spot majors needing manual bumps
 

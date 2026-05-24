@@ -8,7 +8,7 @@
     "format:js:check": "prettier --check src/address_validator/static/admin/js tests/js"
   },
   "engines": {
-    "node": ">=24.15.0"
+    "node": ">=24.15.0 <25.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
