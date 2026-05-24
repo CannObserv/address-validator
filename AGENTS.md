@@ -131,7 +131,7 @@ uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
 ```
 
-Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Ruff must be clean before any commit.
+Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff, plus ESLint + Prettier when admin JS is touched).
 
 **NEVER** source `/etc/address-validator/.env` before running tests. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. `tests/conftest.py` sets `VALIDATION_CACHE_DSN` via `os.environ.setdefault` so no shell prep is needed for `uv run pytest`. See `.env.test` for standalone-script use.
 
