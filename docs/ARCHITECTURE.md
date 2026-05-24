@@ -78,7 +78,7 @@ logging_filter.py   RequestIdFilter — injects request_id into every LogRecord 
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)
-tests/js/           Vitest + jsdom tests for admin JS (npm test)
+tests/js/           Vitest + jsdom tests for admin JS (npm run test:js)
 package.json        Node dev-only deps (vitest, jsdom); type: "module"
 vitest.config.js    Vitest config — jsdom environment, tests/js/ scope
 static/admin/images/ Cannabis Observer brand SVGs
