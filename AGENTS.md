@@ -96,6 +96,8 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 
+**Worktree path convention — `.worktrees/<branch-slug>/` only.** Always create worktrees via `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-create.sh [--new] <branch>` (resolves to `<repo>/.worktrees/`). Never create sibling-directory worktrees (`../address-validator-<n>/`) or hand-roll paths — these are invisible to `worktree-destroy.sh` and the source of leaked dev-server zombies. Always destroy via `worktree-destroy.sh <branch>`; never run `git worktree remove` by hand. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
+
 ## Server lifecycle
 
 | After… | Do this |
@@ -103,10 +105,11 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | Code change (no env/service) | `sudo systemctl restart address-validator` |
 | Env var change | Edit `/etc/address-validator/.env`, then restart |
 | Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
-| New worktree created | Kill any dev server on 8001 (`lsof -ti:8001 \| xargs kill 2>/dev/null`), then start from new worktree with `--reload` |
+| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree with `--reload` |
 | Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
-| Worktree finished | Kill dev server on 8001, delete worktree |
-| Stale process suspected | `ps aux \| grep uvicorn` — kill anything not PID from `systemctl show address-validator -p MainPID` |
+| Agent-driven smoke check | Use plain `uvicorn` (no `--reload`) — the watcher process leaks if the agent shell exits before cleanup |
+| Worktree finished | `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-destroy.sh <branch>` — never `git worktree remove` by hand |
+| Stale process suspected | `pgrep -af "\.worktrees/.*uvicorn"` lists zombies; kill all PIDs not matching `systemctl show address-validator -p MainPID` |
 
 ## Environment
 
