@@ -14,7 +14,11 @@ from address_validator.services.validation.errors import (
     ProviderRateLimitedError,
     ProviderTransientError,
 )
-from address_validator.services.validation.usps_client import USPSClient, USPSToken
+from address_validator.services.validation.usps_client import (
+    USPSClient,
+    USPSToken,
+    _normalise_flag,
+)
 
 TOKEN_RESPONSE = {
     "access_token": "tok-abc",
@@ -400,6 +404,32 @@ class TestUSPSClient:
 
         mock_http.get.assert_not_called()
         mock_http.post.assert_not_called()
+
+
+class TestNormaliseFlag:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (None, None),
+            ("", None),
+            (" ", None),
+            ("  ", None),
+            ("\t", None),
+            ("\n", None),
+            ("\r\n", None),
+            (" \t \n ", None),
+            ("Y", "Y"),
+            ("S", "S"),
+            ("D", "D"),
+            ("N", "N"),
+            (" Y", "Y"),
+            ("Y ", "Y"),
+            (" Y ", "Y"),
+            ("\tY\n", "Y"),
+        ],
+    )
+    def test_normalise_flag(self, value: str | None, expected: str | None) -> None:
+        assert _normalise_flag(value) == expected
 
 
 class TestMapResponse:

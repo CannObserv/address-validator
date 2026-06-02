@@ -35,22 +35,24 @@ _ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)
 
+_TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"  # noqa: S105
+_ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
+
+# Token is refreshed 60 s before it actually expires to avoid races.
+_TOKEN_REFRESH_BUFFER_S = 60
+
 
 def _normalise_flag(value: str | None) -> str | None:
     """Strip whitespace and coerce empty/whitespace-only to None.
 
     USPS uses " " (single space) as a "no determination" sentinel for some
     additionalInfo flags (DPVConfirmation, possibly others). This collapses
-    None, "", and any whitespace-only value to None uniformly.
+    None, "", and any whitespace-only value to None uniformly. Note:
+    downstream ``ValidationResult.dpv_match_code`` is typed as
+    ``Literal["Y","S","D","N"] | None`` — whitespace values would otherwise
+    fail Pydantic validation at the response boundary.
     """
     return (value or "").strip() or None
-
-
-_TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"  # noqa: S105
-_ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
-
-# Token is refreshed 60 s before it actually expires to avoid races.
-_TOKEN_REFRESH_BUFFER_S = 60
 
 
 @dataclass

@@ -55,7 +55,7 @@ class USPSProvider:
         # the documented Literal set.
         dpv = raw.get("dpv_match_code")
         status = _DPV_TO_STATUS.get(dpv, "unavailable")
-        dpv = dpv if dpv in _DPV_TO_STATUS else None
+        dpv_for_response = dpv if dpv in _DPV_TO_STATUS else None
 
         address_line_1 = raw.get("address_line_1") or None
         address_line_2 = raw.get("address_line_2") or None
@@ -100,7 +100,7 @@ class USPSProvider:
             components=components,
             validation=ValidationResult(
                 status=status,
-                dpv_match_code=dpv,
+                dpv_match_code=dpv_for_response,
                 provider="usps",
             ),
             warnings=[],
