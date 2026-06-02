@@ -41,6 +41,10 @@ _ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
 # Token is refreshed 60 s before it actually expires to avoid races.
 _TOKEN_REFRESH_BUFFER_S = 60
 
+# Top-level keys in the USPS v3 response that we currently consume in
+# _map_response. Anything else is fed to the recon logger (issue #122).
+_CONSUMED_TOP_LEVEL_KEYS = frozenset({"address", "additionalInfo"})
+
 
 def _normalise_flag(value: str | None) -> str | None:
     """Strip whitespace and coerce empty/whitespace-only to None.
@@ -53,6 +57,28 @@ def _normalise_flag(value: str | None) -> str | None:
     fail Pydantic validation at the response boundary.
     """
     return (value or "").strip() or None
+
+
+def _summarise_shape(value: Any) -> str:
+    """Return a structural label for a value without revealing its contents.
+
+    PII safety: never includes scalar values. For dicts/lists, returns only
+    schema-level info (key names, lengths, element shape). USPS keys
+    (``firm``, ``corrections``, ``matches``) can carry address content;
+    only their *structure* is safe to log at INFO.
+    """
+    if isinstance(value, list):
+        if not value:
+            return "list[empty]"
+        return f"list[len={len(value)},item={_summarise_shape(value[0])}]"
+    if isinstance(value, dict):
+        return f"dict[keys={sorted(value.keys())}]"
+    # Scalar / None — name only, never the value.
+    if value is None:
+        return "none"
+    if isinstance(value, bool):
+        return "bool"
+    return type(value).__name__
 
 
 @dataclass
@@ -96,10 +122,20 @@ class USPSClient:
         self._token_lock = asyncio.Lock()
         self._rate_limiter = quota_guard
 
+    # Tracks unique structural signatures already logged by the recon path
+    # (issue #122). Class-level so dedup spans the process lifetime; reset
+    # via _reset_recon_state() in tests.
+    _recon_seen_signatures: set[str] = set()  # noqa: RUF012
+
     @property
     def quota_guard(self) -> QuotaGuard:
         """Expose the rate limiter for quota state inspection."""
         return self._rate_limiter
+
+    @classmethod
+    def _reset_recon_state(cls) -> None:
+        """Clear the dedup set for recon logging — test-only hook."""
+        cls._recon_seen_signatures.clear()
 
     async def _get_token(self) -> str:
         """Return a valid access token, fetching a new one if needed.
@@ -210,8 +246,39 @@ class USPSClient:
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("usps", retry_after_seconds=0.0)
 
-    @staticmethod
-    def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
+    @classmethod
+    def _log_recon_shape(cls, raw: dict[str, Any], dpv_label: str | None) -> None:
+        """Log the structural shape of unsurfaced top-level fields.
+
+        Reconnaissance for issue #122 (epic): the USPS v3 response includes
+        ``corrections``, ``firm``, and ``matches`` which we currently
+        discard. Before deciding whether/how to surface them we need to
+        know what shapes they take across the DPV matrix (``Y``/``S``/``D``/
+        ``N``/blank). Logs the structure (key names, list lengths, value
+        types) of every top-level key outside :data:`_CONSUMED_TOP_LEVEL_KEYS`
+        once per unique signature, paired with the normalised DPV code so
+        we can cross-reference shape vs. match class.
+
+        PII safety: ``_summarise_shape`` never emits scalar values. Only
+        schema-level metadata reaches INFO logs — consistent with
+        ``docs/LOGGING.md``.
+        """
+        extras = {k: v for k, v in raw.items() if k not in _CONSUMED_TOP_LEVEL_KEYS}
+        if not extras:
+            return
+        shape = {k: _summarise_shape(v) for k, v in extras.items()}
+        signature = f"dpv={dpv_label}|{sorted(shape.items())}"
+        if signature in cls._recon_seen_signatures:
+            return
+        cls._recon_seen_signatures.add(signature)
+        logger.info(
+            "USPSClient recon: novel response shape (dpv=%s, extras=%r)",
+            dpv_label,
+            shape,
+        )
+
+    @classmethod
+    def _map_response(cls, raw: dict[str, Any]) -> dict[str, Any]:
         """Normalise the USPS v3 JSON response to a provider-neutral dict.
 
         Returns a flat dict with keys:
@@ -221,12 +288,15 @@ class USPSClient:
         addr = raw.get("address", {})
         extra = raw.get("additionalInfo", {})
 
+        dpv_label = _normalise_flag(extra.get("DPVConfirmation"))
+        cls._log_recon_shape(raw, dpv_label)
+
         zip_code = addr.get("ZIPCode", "")
         zip_ext = addr.get("ZIPPlus4", "") or ""
         postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
 
         return {
-            "dpv_match_code": _normalise_flag(extra.get("DPVConfirmation")),
+            "dpv_match_code": dpv_label,
             "address_line_1": addr.get("streetAddress", ""),
             "address_line_2": addr.get("secondaryAddress", ""),
             "city": addr.get("city", ""),
