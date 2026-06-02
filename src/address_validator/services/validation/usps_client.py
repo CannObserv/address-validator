@@ -35,6 +35,17 @@ _ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)
 
+
+def _normalise_flag(value: str | None) -> str | None:
+    """Strip whitespace and coerce empty/whitespace-only to None.
+
+    USPS uses " " (single space) as a "no determination" sentinel for some
+    additionalInfo flags (DPVConfirmation, possibly others). This collapses
+    None, "", and any whitespace-only value to None uniformly.
+    """
+    return (value or "").strip() or None
+
+
 _TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"  # noqa: S105
 _ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
 
@@ -212,17 +223,12 @@ class USPSClient:
         zip_ext = addr.get("ZIPPlus4", "") or ""
         postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
 
-        # USPS returns DPVConfirmation=" " (single space) when no DPV
-        # determination is available — strip then None-coerce so downstream
-        # status mapping returns "unavailable" instead of raising KeyError.
-        dpv = (extra.get("DPVConfirmation") or "").strip() or None
-
         return {
-            "dpv_match_code": dpv,
+            "dpv_match_code": _normalise_flag(extra.get("DPVConfirmation")),
             "address_line_1": addr.get("streetAddress", ""),
             "address_line_2": addr.get("secondaryAddress", ""),
             "city": addr.get("city", ""),
             "region": addr.get("state", ""),
             "postal_code": postal_code,
-            "vacant": extra.get("vacant") or None,
+            "vacant": _normalise_flag(extra.get("vacant")),
         }

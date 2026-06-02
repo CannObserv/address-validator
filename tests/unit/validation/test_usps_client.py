@@ -486,3 +486,13 @@ class TestMapResponse:
         result = USPSClient._map_response(raw)
         assert result["dpv_match_code"] is None
         assert result["vacant"] is None
+
+    @pytest.mark.parametrize("whitespace", [" ", "  ", "\t", "\n", "\r\n", " \t "])
+    def test_map_response_whitespace_dpv_variants_collapse_to_none(self, whitespace: str) -> None:
+        raw = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "additionalInfo": {"DPVConfirmation": whitespace, "vacant": whitespace},
+        }
+        result = USPSClient._map_response(raw)
+        assert result["dpv_match_code"] is None
+        assert result["vacant"] is None

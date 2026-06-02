@@ -49,8 +49,13 @@ class USPSProvider:
             zip_code=std.postal_code,
         )
 
+        # Map known DPV codes; any unrecognised value (a future USPS sentinel
+        # we don't yet handle) collapses to status="unavailable" and is dropped
+        # from the response — ValidationResult.dpv_match_code is restricted to
+        # the documented Literal set.
         dpv = raw.get("dpv_match_code")
-        status = _DPV_TO_STATUS[dpv] if dpv is not None else "unavailable"
+        status = _DPV_TO_STATUS.get(dpv, "unavailable")
+        dpv = dpv if dpv in _DPV_TO_STATUS else None
 
         address_line_1 = raw.get("address_line_1") or None
         address_line_2 = raw.get("address_line_2") or None
@@ -95,7 +100,7 @@ class USPSProvider:
             components=components,
             validation=ValidationResult(
                 status=status,
-                dpv_match_code=dpv,  # type: ignore[arg-type]
+                dpv_match_code=dpv,
                 provider="usps",
             ),
             warnings=[],
