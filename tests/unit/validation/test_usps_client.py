@@ -461,3 +461,28 @@ class TestMapResponse:
         raw = {"address": {}, "additionalInfo": {"DPVConfirmation": "N"}}
         result = USPSClient._map_response(raw)
         assert result["address_line_1"] == ""
+
+    def test_map_response_blank_dpv_confirmation_normalised_to_none(self) -> None:
+        # USPS returns DPVConfirmation=" " when it can't reach a DPV
+        # determination (e.g. commercial buildings without individual
+        # delivery-point records). Real payload captured from production.
+        raw = {
+            "address": {
+                "streetAddress": "1319 E METHOW VALLEY HWY",
+                "city": "TWISP",
+                "state": "WA",
+                "ZIPCode": "98856",
+            },
+            "additionalInfo": {
+                "deliveryPoint": "",
+                "carrierRoute": "",
+                "DPVConfirmation": " ",
+                "DPVCMRA": "",
+                "business": "",
+                "centralDeliveryPoint": "",
+                "vacant": "",
+            },
+        }
+        result = USPSClient._map_response(raw)
+        assert result["dpv_match_code"] is None
+        assert result["vacant"] is None
