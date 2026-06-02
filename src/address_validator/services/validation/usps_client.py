@@ -208,6 +208,18 @@ class USPSClient:
         addr = raw.get("address", {})
         extra = raw.get("additionalInfo", {})
 
+        # Diagnostic instrumentation — capture any DPVConfirmation value that
+        # isn't a known code or falsy. additionalInfo holds DPV/CMRA/vacant
+        # metadata flags only — no street/city/PII.
+        dpv_raw = extra.get("DPVConfirmation")
+        if dpv_raw not in (None, "", "Y", "S", "D", "N"):
+            logger.warning(
+                "USPSClient: unexpected DPVConfirmation %r (additionalInfo=%r, top_level_keys=%r)",
+                dpv_raw,
+                extra,
+                sorted(raw.keys()),
+            )
+
         zip_code = addr.get("ZIPCode", "")
         zip_ext = addr.get("ZIPPlus4", "") or ""
         postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
