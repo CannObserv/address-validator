@@ -1,6 +1,7 @@
 """Unit tests for the USPS v3 client (token caching, request shape, response mapping)."""
 
 import asyncio
+from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -551,27 +552,43 @@ class TestSummariseShape:
         assert "ACME" not in out
         assert "555" not in out
 
-    def test_summarise_list_carries_length_and_item_shape(self) -> None:
+    def test_summarise_list_carries_length_bucket_and_item_shape(self) -> None:
         out = _summarise_shape(
             [
                 {"code": "SENTINELVALUE1", "text": "SECRETZIP"},
                 {"code": "SENTINELVALUE2", "text": "OTHERSECRET"},
             ]
         )
-        assert out == "list[len=2,item=dict[keys=['code', 'text']]]"
+        # len=2 buckets to "many" so the dedup set doesn't grow per-length.
+        assert out == "list[len=many,item=dict[keys=['code', 'text']]]"
         # Item values must not leak into the summary.
         assert "SENTINELVALUE1" not in out
         assert "SECRETZIP" not in out
         assert "OTHERSECRET" not in out
 
+    @pytest.mark.parametrize(
+        ("length", "expected_bucket"),
+        [
+            (1, "len=1"),
+            (2, "len=many"),
+            (5, "len=many"),
+            (100, "len=many"),
+        ],
+    )
+    def test_summarise_list_length_buckets(self, length: int, expected_bucket: str) -> None:
+        # All lengths >= 2 collapse to "many" so a single signature covers
+        # the "this field is a non-trivial list" case across process lifetime.
+        out = _summarise_shape([{"k": "v"}] * length)
+        assert expected_bucket in out
+
 
 class TestReconLogging:
     """Issue #122 — recon logging of unsurfaced USPS top-level fields."""
 
-    def setup_method(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _reset_recon_state(self) -> Generator[None, None, None]:
         USPSClient._reset_recon_state()
-
-    def teardown_method(self) -> None:
+        yield
         USPSClient._reset_recon_state()
 
     def test_no_log_when_only_consumed_keys_present(self, caplog) -> None:
