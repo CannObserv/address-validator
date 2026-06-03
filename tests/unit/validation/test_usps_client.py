@@ -1,6 +1,7 @@
 """Unit tests for the USPS v3 client (token caching, request shape, response mapping)."""
 
 import asyncio
+from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -18,6 +19,7 @@ from address_validator.services.validation.usps_client import (
     USPSClient,
     USPSToken,
     _normalise_flag,
+    _summarise_shape,
 )
 
 TOKEN_RESPONSE = {
@@ -526,3 +528,140 @@ class TestMapResponse:
         result = USPSClient._map_response(raw)
         assert result["dpv_match_code"] is None
         assert result["vacant"] is None
+
+
+class TestSummariseShape:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            (None, "none"),
+            (True, "bool"),
+            ("foo", "str"),
+            (1, "int"),
+            (1.5, "float"),
+            ([], "list[empty]"),
+        ],
+    )
+    def test_summarise_scalar_and_empty(self, value: object, expected: str) -> None:
+        assert _summarise_shape(value) == expected
+
+    def test_summarise_dict_emits_sorted_keys_only(self) -> None:
+        # Values are dropped — only key names reach the log.
+        out = _summarise_shape({"name": "ACME LLC", "phone": "555-1212"})
+        assert out == "dict[keys=['name', 'phone']]"
+        assert "ACME" not in out
+        assert "555" not in out
+
+    def test_summarise_list_carries_length_bucket_and_item_shape(self) -> None:
+        out = _summarise_shape(
+            [
+                {"code": "SENTINELVALUE1", "text": "SECRETZIP"},
+                {"code": "SENTINELVALUE2", "text": "OTHERSECRET"},
+            ]
+        )
+        # len=2 buckets to "many" so the dedup set doesn't grow per-length.
+        assert out == "list[len=many,item=dict[keys=['code', 'text']]]"
+        # Item values must not leak into the summary.
+        assert "SENTINELVALUE1" not in out
+        assert "SECRETZIP" not in out
+        assert "OTHERSECRET" not in out
+
+    @pytest.mark.parametrize(
+        ("length", "expected_bucket"),
+        [
+            (1, "len=1"),
+            (2, "len=many"),
+            (5, "len=many"),
+            (100, "len=many"),
+        ],
+    )
+    def test_summarise_list_length_buckets(self, length: int, expected_bucket: str) -> None:
+        # All lengths >= 2 collapse to "many" so a single signature covers
+        # the "this field is a non-trivial list" case across process lifetime.
+        out = _summarise_shape([{"k": "v"}] * length)
+        assert expected_bucket in out
+
+
+class TestReconLogging:
+    """Issue #122 — recon logging of unsurfaced USPS top-level fields."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_recon_state(self) -> Generator[None, None, None]:
+        USPSClient._reset_recon_state()
+        yield
+        USPSClient._reset_recon_state()
+
+    def test_no_log_when_only_consumed_keys_present(self, caplog) -> None:
+        raw = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "additionalInfo": {"DPVConfirmation": "Y"},
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            USPSClient._map_response(raw)
+        recon_records = [r for r in caplog.records if "recon" in r.getMessage()]
+        assert recon_records == []
+
+    def test_logs_shape_of_discarded_fields_at_info(self, caplog) -> None:
+        # Mirrors the partial-match payload that motivated issue #122.
+        raw = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "additionalInfo": {"DPVConfirmation": " "},
+            "corrections": [{"code": "A", "text": "expanded zip"}],
+            "firm": {"name": "ACME LLC"},
+            "matches": [{"address": {}, "score": 0.9}],
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            USPSClient._map_response(raw)
+        recon = [r for r in caplog.records if "recon" in r.getMessage()]
+        assert len(recon) == 1
+        msg = recon[0].getMessage()
+        # Cross-reference coordinate (normalised DPV) is in the line.
+        assert "dpv=None" in msg
+        # Structural metadata for each unsurfaced key is present.
+        for key in ("corrections", "firm", "matches"):
+            assert key in msg
+        # Values must not leak — neither street content nor firm name.
+        assert "ACME" not in msg
+        assert "expanded zip" not in msg
+
+    def test_dedup_suppresses_repeat_signatures(self, caplog) -> None:
+        raw = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "additionalInfo": {"DPVConfirmation": "Y"},
+            "firm": {"name": "ACME"},
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            USPSClient._map_response(raw)
+            USPSClient._map_response(raw)
+            USPSClient._map_response(raw)
+        recon = [r for r in caplog.records if "recon" in r.getMessage()]
+        assert len(recon) == 1
+
+    def test_different_dpv_codes_are_separate_signatures(self, caplog) -> None:
+        # Same structural shape across DPV codes should still log once per
+        # code — that's the matrix coordinate we want to populate.
+        base = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "firm": {"name": "ACME"},
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            for dpv in ("Y", "S", "D", "N"):
+                USPSClient._map_response({**base, "additionalInfo": {"DPVConfirmation": dpv}})
+        recon = [r for r in caplog.records if "recon" in r.getMessage()]
+        assert len(recon) == 4
+        observed_codes = {f"dpv={code}" for code in ("Y", "S", "D", "N")}
+        seen = {code for code in observed_codes if any(code in r.getMessage() for r in recon)}
+        assert seen == observed_codes
+
+    def test_truly_unknown_top_level_keys_are_logged(self, caplog) -> None:
+        # A new USPS field we've never seen — recon should pick it up.
+        raw = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "additionalInfo": {"DPVConfirmation": "Y"},
+            "futureUSPSField": {"foo": 1, "bar": 2},
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            USPSClient._map_response(raw)
+        recon = [r for r in caplog.records if "recon" in r.getMessage()]
+        assert len(recon) == 1
+        assert "futureUSPSField" in recon[0].getMessage()
