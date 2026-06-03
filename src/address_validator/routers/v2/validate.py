@@ -62,7 +62,7 @@ from address_validator.services.validation.errors import (
     ProviderRateLimitedError,
 )
 from address_validator.services.validation.pipeline import (
-    run_non_us_pipeline_v2,
+    run_non_us_pipeline,
     run_us_pipeline,
 )
 from address_validator.services.validation.registry import ProviderRegistry
@@ -144,7 +144,7 @@ async def validate_address_v2(
         )
 
     if req.country != "US":
-        std, raw_input, provider = await run_non_us_pipeline_v2(req, registry, libpostal_client)
+        std, raw_input, provider = await run_non_us_pipeline(req, registry, libpostal_client)
     else:
         std, raw_input, provider = await run_us_pipeline(
             req, registry, component_profile=component_profile

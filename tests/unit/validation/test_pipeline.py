@@ -17,7 +17,7 @@ from address_validator.models import (
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.validation.pipeline import (
     build_non_us_std,
-    run_non_us_pipeline_v2,
+    run_non_us_pipeline,
     run_us_pipeline,
 )
 
@@ -67,7 +67,7 @@ class TestBuildNonUsSd:
 
 
 # ---------------------------------------------------------------------------
-# run_non_us_pipeline_v2
+# run_non_us_pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -79,13 +79,13 @@ def _make_registry(supports_non_us: bool = True):
     return registry, provider
 
 
-class TestRunNonUsPipelineV2:
+class TestRunNonUsPipeline:
     @pytest.mark.asyncio
     async def test_invalid_country_code_raises_422(self) -> None:
         registry, _ = _make_registry()
         req = ValidateRequest(address="1 Main St", country="XX")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "invalid_country_code"
 
@@ -94,7 +94,7 @@ class TestRunNonUsPipelineV2:
         registry, _ = _make_registry()
         req = ValidateRequest(address="10 Downing St", country="GB")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "country_not_supported"
 
@@ -103,7 +103,7 @@ class TestRunNonUsPipelineV2:
         registry, _ = _make_registry()
         req = ValidateRequest(address="10 Downing St", country="GB")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert "CA" in exc_info.value.message
 
     @pytest.mark.asyncio
@@ -114,7 +114,7 @@ class TestRunNonUsPipelineV2:
             country="GB",
         )
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "country_not_supported"
 
@@ -123,7 +123,7 @@ class TestRunNonUsPipelineV2:
         registry, provider = _make_registry()
         comps = {"address_line_1": "10 Downing St", "city": "London"}
         req = ValidateRequest(components=comps, country="GB")
-        std, raw_input, returned_provider = await run_non_us_pipeline_v2(
+        std, raw_input, returned_provider = await run_non_us_pipeline(
             req, registry, libpostal_client=None
         )
 
@@ -158,7 +158,7 @@ class TestRunNonUsPipelineV2:
             new=AsyncMock(return_value=parse_response),
         ):
             req = ValidateRequest(address="123 Main St, Toronto ON M5V 1A1", country="CA")
-            _std, raw_input, returned_provider = await run_non_us_pipeline_v2(
+            _std, raw_input, returned_provider = await run_non_us_pipeline(
                 req, registry, libpostal_client=libpostal_client
             )
 
@@ -176,7 +176,7 @@ class TestRunNonUsPipelineV2:
         ):
             req = ValidateRequest(address="123 Main St, Toronto ON M5V 1A1", country="CA")
             with pytest.raises(APIError) as exc_info:
-                await run_non_us_pipeline_v2(req, registry, libpostal_client=libpostal_client)
+                await run_non_us_pipeline(req, registry, libpostal_client=libpostal_client)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.error == "parsing_unavailable"

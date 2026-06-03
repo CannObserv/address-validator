@@ -26,5 +26,3 @@ and the project uses semantic versioning.
 ### Preserved
 
 - The admin dashboard endpoint and audit queries continue to filter on both `/api/v1/*` and `/api/v2/*` paths, so the 494k+ historical audit_log rows generated before the v1 cutover remain visible alongside fresh v2 traffic.
-
-[3.0.0]: https://github.com/CannObserv/address-validator/compare/v2.0.0...v3.0.0

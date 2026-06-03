@@ -89,7 +89,7 @@ to return USPS Pub 28 component keys instead of the ISO 19160-4 default.
 _TAGS = [
     {
         "name": "v2",
-        "description": "Current API — ISO 19160-4 component keys; US and CA addresses.",
+        "description": "ISO 19160-4 component keys; US and CA addresses.",
     },
     {
         "name": "health",

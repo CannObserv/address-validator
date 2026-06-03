@@ -8,7 +8,7 @@ Public API
 ----------
 ``build_non_us_std``          — build a passthrough StandardizedAddress for non-US components
 ``run_us_pipeline``           — US parse/standardize path; returns (std, raw_input, provider)
-``run_non_us_pipeline_v2``    — non-US path (CA supports raw strings via libpostal)
+``run_non_us_pipeline``       — non-US path (CA supports raw strings via libpostal)
 """
 
 from __future__ import annotations
@@ -21,11 +21,7 @@ from typing import TYPE_CHECKING
 from address_validator.core.address_format import build_validated_string
 from address_validator.core.countries import VALID_ISO2
 from address_validator.core.errors import APIError
-from address_validator.models import (
-    ComponentSet,
-    StandardizedAddress,
-    StandardizeResponseV2,  # alias can't be used as a constructor; needed for build_non_us_std
-)
+from address_validator.models import ComponentSet, StandardizedAddress
 from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import parse_address
@@ -55,7 +51,7 @@ def build_non_us_std(components: dict[str, str], country: str) -> StandardizedAd
     region = components.get("region", "")
     postal_code = components.get("postal_code", "")
     standardized = build_validated_string(address_line_1, address_line_2, city, region, postal_code)
-    return StandardizeResponseV2(
+    return StandardizedAddress(
         address_line_1=address_line_1,
         address_line_2=address_line_2,
         city=city,
@@ -128,14 +124,14 @@ async def run_us_pipeline(
     return std, raw_input, provider
 
 
-async def run_non_us_pipeline_v2(
+async def run_non_us_pipeline(
     req: ValidateRequest,
     registry: ProviderRegistry,
     libpostal_client: LibpostalClient | None,
 ) -> PipelineResult:
-    """Run the v2 non-US validation setup and return (std, raw_input, provider).
+    """Run the non-US validation setup and return (std, raw_input, provider).
 
-    v2 supports pre-parsed ``components`` for all non-US countries, plus raw
+    Supports pre-parsed ``components`` for all non-US countries, plus raw
     address strings for CA via the libpostal sidecar.  Other non-US raw strings
     are rejected with 422 ``country_not_supported``.
 
