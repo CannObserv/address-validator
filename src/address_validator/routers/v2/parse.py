@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
-from address_validator.core.countries import check_country_v2
+from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
@@ -65,7 +65,7 @@ async def parse(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    country = check_country_v2(req.country)
+    country = check_country(req.country)
     raw = req.address.strip()
     if not raw:
         raise APIError(

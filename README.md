@@ -220,7 +220,7 @@ src/address_validator/
     request_id.py              # ULID generation, X-Request-ID header
   core/
     address_format.py          # Canonical single-line address string builder
-    countries.py               # SUPPORTED_COUNTRIES, check_country(), check_country_v2()
+    countries.py               # SUPPORTED_COUNTRIES (US+CA), VALID_ISO2, check_country()
     errors.py                  # APIError, api_error_response()
   routers/
     deps.py                    # Shared FastAPI dependencies (registry, libpostal client)

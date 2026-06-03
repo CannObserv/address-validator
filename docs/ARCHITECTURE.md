@@ -11,7 +11,7 @@ HTTP request
  └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
  └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
      ├─ parse            →   services/parser.py — US: usaddress wrapper + post-parse recovery; CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
-     ├─ standardize      →   services/standardizer.py — US: ISO keys via USPS pipeline (Pub 28 abbrev tables from usps_data/); CA: ISO keys via _standardize_ca() (canada-post spec); enabled via check_country_v2
+     ├─ standardize      →   services/standardizer.py — US: ISO keys via USPS pipeline (Pub 28 abbrev tables from usps_data/); CA: ISO keys via _standardize_ca() (canada-post spec); enabled via check_country
      ├─ validate         →   parse → standardize → services/validation/  — US: USPS pipeline; CA raw string: libpostal parse → _standardize_ca() → provider; other non-US: components-only
      │                              config.py         pydantic-settings models (USPSConfig, GoogleConfig, ValidationConfig) + validate_config()
      │                              registry.py       ProviderRegistry class — provider lifecycle, quota info, no globals
@@ -51,11 +51,11 @@ db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_st
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth; StandardizedAddress = StandardizeResponseV2 type alias — use StandardizedAddress in service/provider code for version-neutral typing, StandardizeResponseV2 as the public response model on /api/v2/standardize
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
-core/countries.py  SUPPORTED_COUNTRIES_V2, VALID_ISO2 frozensets; check_country_v2() — canonical home for country validation used by all v2 routes
+core/countries.py  SUPPORTED_COUNTRIES (US+CA), VALID_ISO2 frozensets; check_country() — canonical home for country validation used by all v2 routes
 core/errors.py     APIError exception class; api_error_response() — serialises APIError to JSONResponse; registered in main.py exception handler; imported by all router layers
 services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION); used by v2 routers; USPS Pub 28 identifiers remain in usps_data/spec.py
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
-services/validation/pipeline.py  parse → standardize → provider-selection pipeline; build_non_us_std() (shared passthrough std for non-US components), run_us_pipeline() (US path, accepts component_profile param), run_non_us_pipeline_v2() (CA raw strings via libpostal, other non-US via components-only); all return (std, raw_input, provider); raises APIError on validation failures
+services/validation/pipeline.py  parse → standardize → provider-selection pipeline; build_non_us_std() (shared passthrough std for non-US components), run_us_pipeline() (US path, accepts component_profile param), run_non_us_pipeline() (CA raw strings via libpostal, other non-US via components-only); all return (std, raw_input, provider); raises APIError on validation failures
 services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
 services/street_splitter.py  bilingual street component splitter; decomposes libpostal road token into thoroughfare ISO elements; English trailing-type + French leading-type + CA directionals
 canada_post_data/directionals.py  bilingual EN/FR directional lookup (CA_DIRECTIONAL_MAP) for Canadian addresses; used by street_splitter

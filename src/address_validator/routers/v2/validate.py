@@ -124,7 +124,7 @@ router = APIRouter(
         "It is validated but does not affect the validate response structure."
     ),
 )
-async def validate_address_v2(
+async def validate_address(
     req: ValidateRequest,
     component_profile: str = Query(
         default="iso-19160-4",
@@ -150,7 +150,7 @@ async def validate_address_v2(
             req, registry, component_profile=component_profile
         )
 
-    logger.debug("validate_address_v2: provider=%s", type(provider).__name__)
+    logger.debug("validate_address: provider=%s", type(provider).__name__)
     try:
         result = await provider.validate(std, raw_input=raw_input)
     except ProviderBadRequestError as exc:
