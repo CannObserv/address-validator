@@ -586,7 +586,7 @@ class TestReconLogging:
     """Issue #122 — recon logging of unsurfaced USPS top-level fields."""
 
     @pytest.fixture(autouse=True)
-    def _reset_recon_state(self) -> Generator[None, None, None]:
+    def _isolate_recon_state(self) -> Generator[None, None, None]:
         USPSClient._reset_recon_state()
         yield
         USPSClient._reset_recon_state()

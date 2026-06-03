@@ -25,7 +25,7 @@ To include it in formatted output, add `%(request_id)s` to the uvicorn log forma
 | USPS OAuth2 token fetch | `DEBUG` | `services.validation.usps_client` | `request_id` |
 | USPS 400 Bad Request | `WARNING` | `services.validation.usps_client` | `request_id` |
 | USPS 429 received | `WARNING` | `services.validation.usps_client` | `request_id` |
-| Recon: novel USPS response shape (issue #122) | `INFO` | `services.validation.usps_client` | `dpv=`, `extras=` (structural labels only, no values), `request_id` |
+| Recon: novel USPS response shape (issue #122) | `INFO` | `services.validation.usps_client` | `dpv=`, `extras=`, `request_id` |
 | Google API call start | `DEBUG` | `services.validation.google_provider` | `country=`, `request_id` |
 | Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
@@ -34,5 +34,7 @@ To include it in formatted output, add `%(request_id)s` to the uvicorn log forma
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
 
 Log level controlled by uvicorn `--log-level` (set in systemd unit). `DEBUG` off in production.
+
+Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
 
 New modules: one `getLogger(__name__)` per module; `caplog` assertions in corresponding unit tests.

@@ -60,14 +60,14 @@ def _normalise_flag(value: str | None) -> str | None:
 
 
 def _bucket_list_length(n: int) -> str:
-    """Bucket a list length so the recon signature collapses on variation.
+    """Bucket a non-empty list length so the recon signature collapses on variation.
 
-    Once we know a list can hold "many" entries the exact count adds no
-    structural information; bucketing prevents :data:`USPSClient._recon_seen_signatures`
+    Assumes ``n >= 1`` — the caller in :func:`_summarise_shape` short-circuits
+    the empty case (``"list[empty]"``) before delegating here. Once we know
+    a list can hold "many" entries the exact count adds no structural
+    information; bucketing prevents :data:`USPSClient._recon_seen_signatures`
     from growing one entry per distinct length over the process lifetime.
     """
-    if n == 0:
-        return "0"
     if n == 1:
         return "1"
     return "many"
@@ -121,6 +121,11 @@ class USPSClient:
         for rate limiting.
     """
 
+    # Class-level dedup set for recon logging (issue #122). Spans the
+    # process lifetime so each unique structural signature is logged at
+    # most once; reset via :meth:`_reset_recon_state` in tests.
+    _recon_seen_signatures: set[str] = set()  # noqa: RUF012
+
     def __init__(
         self,
         consumer_key: str,
@@ -134,6 +139,11 @@ class USPSClient:
         self._token: USPSToken | None = None
         self._token_lock = asyncio.Lock()
         self._rate_limiter = quota_guard
+
+    @classmethod
+    def _reset_recon_state(cls) -> None:
+        """Clear the recon dedup set — test-only hook (issue #122)."""
+        cls._recon_seen_signatures.clear()
 
     @property
     def quota_guard(self) -> QuotaGuard:
@@ -248,16 +258,6 @@ class USPSClient:
 
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("usps", retry_after_seconds=0.0)
-
-    # Tracks unique structural signatures already logged by the recon path
-    # (issue #122). Class-level so dedup spans the process lifetime; reset
-    # via _reset_recon_state() in tests.
-    _recon_seen_signatures: set[str] = set()  # noqa: RUF012
-
-    @classmethod
-    def _reset_recon_state(cls) -> None:
-        """Clear the dedup set for recon logging — test-only hook."""
-        cls._recon_seen_signatures.clear()
 
     @classmethod
     def _log_recon_shape(cls, raw: dict[str, Any], dpv_label: str | None) -> None:
