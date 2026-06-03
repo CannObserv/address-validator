@@ -395,7 +395,7 @@ def _standardize(
     country: str,
     warnings: list[str],
 ) -> StandardizeResponseV2:
-    """Internal implementation returning v1 response."""
+    """Internal standardize implementation returning a StandardizeResponseV2."""
     logger.debug("standardizing components count=%d country=%s", len(components), country)
     std: dict[str, str] = {}
 

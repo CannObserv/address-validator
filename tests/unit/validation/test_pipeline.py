@@ -17,7 +17,6 @@ from address_validator.models import (
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.validation.pipeline import (
     build_non_us_std,
-    run_non_us_pipeline_v1,
     run_non_us_pipeline_v2,
     run_us_pipeline,
 )
@@ -68,7 +67,7 @@ class TestBuildNonUsSd:
 
 
 # ---------------------------------------------------------------------------
-# run_non_us_pipeline_v1
+# run_non_us_pipeline_v2
 # ---------------------------------------------------------------------------
 
 
@@ -78,64 +77,6 @@ def _make_registry(supports_non_us: bool = True):
     registry = MagicMock()
     registry.get_provider.return_value = provider
     return registry, provider
-
-
-class TestRunNonUsPipeline:
-    @pytest.mark.asyncio
-    async def test_invalid_country_code_raises_422(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequest(address="1 Main St", country="XX")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "invalid_country_code"
-
-    @pytest.mark.asyncio
-    async def test_raw_string_non_us_raises_422(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequest(address="10 Downing St", country="GB")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "country_not_supported"
-
-    @pytest.mark.asyncio
-    async def test_provider_no_non_us_support_raises_422(self) -> None:
-        registry, _ = _make_registry(supports_non_us=False)
-        req = ValidateRequest(
-            components={"address_line_1": "10 Downing St", "city": "London"},
-            country="GB",
-        )
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "country_not_supported"
-
-    @pytest.mark.asyncio
-    async def test_valid_non_us_components_returns_pipeline_result(self) -> None:
-        registry, provider = _make_registry()
-        comps = {"address_line_1": "10 Downing St", "city": "London", "postal_code": "SW1A 2AA"}
-        req = ValidateRequest(components=comps, country="GB")
-        std, raw_input, returned_provider = await run_non_us_pipeline_v1(req, registry)
-
-        assert std.country == "GB"
-        assert std.components.spec == "raw"
-        assert raw_input is not None
-        assert json.loads(raw_input) == comps
-        assert returned_provider is provider
-
-    @pytest.mark.asyncio
-    async def test_error_message_mentions_us_only(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequest(address="10 Downing St", country="GB")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert "US" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# run_non_us_pipeline_v2
-# ---------------------------------------------------------------------------
 
 
 class TestRunNonUsPipelineV2:

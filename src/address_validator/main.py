@@ -75,10 +75,12 @@ def _load_custom_model() -> None:
 
 
 _DESCRIPTION = """
-Parse and standardize physical addresses.
+Parse, standardize, and validate physical addresses.
 
 Uses geography-neutral field names (`region`, `postal_code`).
-Supports **US** (USPS Publication 28) and **Canada** (Canada Post / libpostal).
+Supports **US** (USPS Publication 28 / USPS DPV / Google Address
+Validation) and **Canada** (Canada Post / libpostal / Google Address
+Validation).
 
 All routes live under `/api/v2/`.  Pass `?component_profile=usps-pub28`
 to return USPS Pub 28 component keys instead of the ISO 19160-4 default.

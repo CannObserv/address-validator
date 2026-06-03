@@ -1,16 +1,14 @@
 """Validation pipeline helpers — parse → standardize → provider selection.
 
-These functions contain the business logic that was previously inline in the
-v1 and v2 validate route handlers.  Routers call these functions and then
-handle only HTTP-level concerns (error codes, headers, response model
-construction).
+These functions contain the business logic that the validate route handler
+invokes.  The router calls these and then handles only HTTP-level concerns
+(error codes, headers, response model construction).
 
 Public API
 ----------
 ``build_non_us_std``          — build a passthrough StandardizedAddress for non-US components
 ``run_us_pipeline``           — US parse/standardize path; returns (std, raw_input, provider)
-``run_non_us_pipeline_v1``    — v1 non-US path (components only, no CA libpostal)
-``run_non_us_pipeline_v2``    — v2 non-US path (CA supports raw strings via libpostal)
+``run_non_us_pipeline_v2``    — non-US path (CA supports raw strings via libpostal)
 """
 
 from __future__ import annotations
@@ -84,8 +82,9 @@ async def run_us_pipeline(
         Active ``ProviderRegistry`` instance.
     component_profile:
         Component vocabulary to use when translating pre-parsed ``components``.
-        Defaults to ``"usps-pub28"`` (v1 behavior).  Pass ``"iso-19160-4"``
-        for the v2 default.
+        Defaults to ``"usps-pub28"`` so callers that pass USPS Pub 28 keys
+        directly need no extra ceremony.  The public ``/api/v2/*`` routes
+        override this to ``"iso-19160-4"`` to match their default contract.
 
     Returns
     -------
@@ -126,52 +125,6 @@ async def run_us_pipeline(
         )
 
     provider = registry.get_provider()
-    return std, raw_input, provider
-
-
-async def run_non_us_pipeline_v1(
-    req: ValidateRequest,
-    registry: ProviderRegistry,
-) -> PipelineResult:
-    """Run the v1 non-US validation setup and return (std, raw_input, provider).
-
-    v1 only supports pre-parsed ``components`` for non-US addresses.  Raw
-    address strings are rejected with 422 ``country_not_supported``.
-
-    Raises
-    ------
-    APIError
-        422 ``invalid_country_code`` — unrecognised ISO 3166-1 alpha-2 code.
-        422 ``country_not_supported`` — raw string supplied for non-US country.
-        422 ``country_not_supported`` — active provider does not support non-US.
-    """
-    if req.country not in VALID_ISO2:
-        raise APIError(
-            status_code=422,
-            error="invalid_country_code",
-            message=f"'{req.country}' is not a valid ISO 3166-1 alpha-2 country code.",
-        )
-    if not req.components:
-        raise APIError(
-            status_code=422,
-            error="country_not_supported",
-            message=(
-                "Raw address strings are only supported for US. "
-                "Supply pre-parsed 'components' for non-US addresses."
-            ),
-        )
-    provider = registry.get_provider()
-    if not provider.supports_non_us:
-        raise APIError(
-            status_code=422,
-            error="country_not_supported",
-            message=(
-                "Non-US address validation requires the Google provider. "
-                "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
-            ),
-        )
-    std: StandardizedAddress = build_non_us_std(req.components, req.country)
-    raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     return std, raw_input, provider
 
 

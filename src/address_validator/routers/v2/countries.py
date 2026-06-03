@@ -57,11 +57,5 @@ async def get_country_format_v2(code: str, response: Response) -> CountryFormatR
             message=f"No address format data available for country '{country}'.",
         )
 
-    # Convert v1 response to v2 by extracting fields and creating new response
-    response_v2 = CountryFormatResponseV2(
-        country=fmt.country,
-        fields=fmt.fields,
-    )
-
     response.headers["Cache-Control"] = _CACHE_CONTROL
-    return response_v2
+    return fmt

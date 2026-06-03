@@ -1,4 +1,4 @@
-"""Structured API error types shared across v1 and v2 routers."""
+"""Structured API error types used by the v2 routers."""
 
 from fastapi.responses import JSONResponse
 

@@ -2,7 +2,7 @@
 
 Maps ``google-i18n-address`` (i18naddress) ``ValidationRules`` to
 :class:`~models.CountryFormatResponseV2`.  Used by the
-``GET /api/v1/countries/{code}/format`` route.
+``GET /api/v2/countries/{code}/format`` route.
 """
 
 from i18naddress import ValidationRules, get_validation_rules

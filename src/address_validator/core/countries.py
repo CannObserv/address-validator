@@ -1,4 +1,4 @@
-"""Country validation constants and helpers shared across v1 and v2 routers."""
+"""Country validation constants and helpers used by the v2 routers."""
 
 import pycountry
 from fastapi import status

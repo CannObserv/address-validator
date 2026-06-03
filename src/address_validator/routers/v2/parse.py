@@ -44,7 +44,7 @@ router = APIRouter(
         "The `component_profile` query parameter controls the key vocabulary "
         "in `components.values`:\n"
         "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
-        "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
+        "- `usps-pub28` — USPS Publication 28 snake_case names\n"
         "- `canada-post` — reserved; currently identical to `iso-19160-4`"
     ),
 )
