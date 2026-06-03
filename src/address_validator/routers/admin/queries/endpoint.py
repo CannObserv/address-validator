@@ -26,8 +26,13 @@ if TYPE_CHECKING:
 
 
 async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
-    """Fetch stats for a specific endpoint."""
-    endpoint_path = f"/api/v1/{endpoint_name}"
+    """Fetch stats for a specific endpoint.
+
+    Matches both the legacy ``/api/v1/<name>`` and the current
+    ``/api/v2/<name>`` paths so historical audit_log rows from before
+    the v1 removal (#117) remain visible alongside fresh v2 traffic.
+    """
+    endpoint_paths = (f"/api/v1/{endpoint_name}", f"/api/v2/{endpoint_name}")
     tb = _time_boundaries()
 
     async with engine.connect() as conn:
@@ -51,7 +56,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                         .filter(audit_log.c.latency_ms.isnot(None))
                         .label("avg_latency"),
                     ],
-                    audit_log.c.endpoint == endpoint_path,
+                    audit_log.c.endpoint.in_(endpoint_paths),
                 )
             )
         ).one()
@@ -77,7 +82,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                             0,
                         ).label("rate_limited_all"),
                     ],
-                    audit_daily_stats.c.endpoint == endpoint_path,
+                    audit_daily_stats.c.endpoint.in_(endpoint_paths),
                 )
             )
         ).one()
@@ -88,7 +93,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                 audit_log.c.status_code,
                 sa.cast(func.count(), sa.Integer).label("cnt"),
             )
-            .where(audit_log.c.endpoint == endpoint_path)
+            .where(audit_log.c.endpoint.in_(endpoint_paths))
             .group_by(audit_log.c.status_code)
         )
         archived_status = (
@@ -97,7 +102,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                 sa.cast(func.sum(audit_daily_stats.c.request_count), sa.Integer).label("cnt"),
             )
             .where(
-                audit_daily_stats.c.endpoint == endpoint_path,
+                audit_daily_stats.c.endpoint.in_(endpoint_paths),
                 _ARCHIVED_DATE_GUARD,
             )
             .group_by(audit_daily_stats.c.status_code)
@@ -122,7 +127,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                     sa.cast(func.count(), sa.Integer).label("cnt"),
                 )
                 .where(
-                    audit_log.c.endpoint == endpoint_path,
+                    audit_log.c.endpoint.in_(endpoint_paths),
                     audit_log.c.timestamp >= tb["last_24h"],
                 )
                 .group_by(audit_log.c.status_code)
@@ -136,7 +141,7 @@ async def get_endpoint_stats(engine: AsyncEngine, endpoint_name: str) -> dict:
                     sa.cast(func.count(), sa.Integer).label("cnt"),
                 )
                 .where(
-                    audit_log.c.endpoint == endpoint_path,
+                    audit_log.c.endpoint.in_(endpoint_paths),
                     audit_log.c.timestamp >= tb["last_7d"],
                 )
                 .group_by(audit_log.c.status_code)

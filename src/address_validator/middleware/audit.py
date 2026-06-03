@@ -75,7 +75,7 @@ def _error_detail_from_status(status_code: int) -> str | None:
     return phrases.get(status_code, f"http_{status_code}")
 
 
-_VALIDATE_ENDPOINTS = frozenset({"/api/v1/validate", "/api/v2/validate"})
+_VALIDATE_ENDPOINTS = frozenset({"/api/v2/validate"})
 _2XX_MIN = 200
 _2XX_MAX = 300
 
@@ -90,7 +90,7 @@ def _check_validate_invariants(
     """Check that a successful /validate audit row has all expected fields.
 
     Returns True when invariants hold, False when violated (and logs WARNING).
-    Applies to /api/v1/validate and /api/v2/validate with 2xx status codes.
+    Applies to /api/v2/validate with 2xx status codes.
     """
     if endpoint not in _VALIDATE_ENDPOINTS:
         return True
@@ -186,11 +186,7 @@ def _emit_audit_artifacts(
     candidate = get_candidate_data()
     if candidate is None:
         return
-    api_version: str | None = None
-    if path.startswith("/api/v1/"):
-        api_version = "1"
-    elif path.startswith("/api/v2/"):
-        api_version = "2"
+    api_version: str | None = "2" if path.startswith("/api/v2/") else None
     candidate_task = asyncio.create_task(
         write_training_candidate(
             engine=engine,

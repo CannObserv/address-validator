@@ -6,7 +6,7 @@ from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
-    ValidateResponseV1,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.validation.google_client import GoogleClient
@@ -49,7 +49,7 @@ class GoogleProvider:
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
-    ) -> ValidateResponseV1:
+    ) -> ValidateResponseV2:
         logger.debug("GoogleProvider.validate: calling Google API, country=%s", std.country)
         raw = await self._client.validate_address(
             street_address=std.address_line_1,
@@ -62,11 +62,11 @@ class GoogleProvider:
         status = raw["status"]
         dpv = raw.get("dpv_match_code")
 
-        address_line_1 = raw.get("address_line_1") or None
-        address_line_2 = raw.get("address_line_2") or None
-        city = raw.get("city") or None
-        region = raw.get("region") or None
-        postal_code = raw.get("postal_code") or None
+        address_line_1 = raw.get("address_line_1") or ""
+        address_line_2 = raw.get("address_line_2") or ""
+        city = raw.get("city") or ""
+        region = raw.get("region") or ""
+        postal_code = raw.get("postal_code") or ""
         vacant = raw.get("vacant")
         latitude = raw.get("latitude")
         longitude = raw.get("longitude")
@@ -111,7 +111,7 @@ class GoogleProvider:
         if raw.get("has_unconfirmed_components"):
             warnings.append(_WARNING_UNCONFIRMED)
 
-        return ValidateResponseV1(
+        return ValidateResponseV2(
             address_line_1=address_line_1,
             address_line_2=address_line_2,
             city=city,

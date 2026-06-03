@@ -42,14 +42,6 @@ class TestV2StandardizeCA:
         assert body["region"] == "ON"
         assert body["postal_code"] == "M5V 2T6"
 
-    def test_ca_not_available_in_v1_standardize(self, client) -> None:
-        response = client.post(
-            "/api/v1/standardize",
-            json={"address": "123 Main St Toronto ON M5V 2T6", "country": "CA"},
-        )
-        assert response.status_code == 422
-        assert response.json()["error"] == "country_not_supported"
-
     def test_ca_standardize_with_components_input(self, client) -> None:
         response = client.post(
             "/api/v2/standardize",

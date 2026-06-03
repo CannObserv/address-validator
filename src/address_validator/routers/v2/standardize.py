@@ -8,7 +8,7 @@ from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     ErrorResponse,
-    StandardizeRequestV1,
+    StandardizeRequest,
     StandardizeResponseV2,
 )
 from address_validator.routers.deps import get_libpostal_client
@@ -64,7 +64,7 @@ router = APIRouter(
     ),
 )
 async def standardize_address_v2(
-    req: StandardizeRequestV1,
+    req: StandardizeRequest,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,

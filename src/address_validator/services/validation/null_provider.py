@@ -2,7 +2,7 @@
 
 import logging
 
-from address_validator.models import StandardizedAddress, ValidateResponseV1, ValidationResult
+from address_validator.models import StandardizedAddress, ValidateResponseV2, ValidationResult
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,9 @@ class NullProvider:
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
-    ) -> ValidateResponseV1:
+    ) -> ValidateResponseV2:
         logger.debug("NullProvider: returning unavailable for country=%s", std.country)
-        return ValidateResponseV1(
+        return ValidateResponseV2(
             country=std.country,
             validation=ValidationResult(status="unavailable"),
         )

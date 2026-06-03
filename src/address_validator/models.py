@@ -1,11 +1,11 @@
 """Shared Pydantic request and response models for the Address Validator API.
 
-All active models are served at ``/api/v1/`` and use geography-neutral
+All public models are served at ``/api/v2/`` and use geography-neutral
 field names (``region``, ``postal_code``).  Response models carry an
-``api_version`` field set to ``"1"``.
+``api_version`` field set to ``"2"``.
 
 Note: ``api_version`` in response bodies refers to the route namespace
-(``/api/v1/``), not the overall service version declared in ``main.py``.
+(``/api/v2/``), not the overall service version declared in ``main.py``.
 The two signals are intentionally decoupled.
 """
 
@@ -48,7 +48,7 @@ class ComponentSet(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Structured error payload returned by all /api/v1/* error responses."""
+    """Structured error payload returned by all /api/v2/* error responses."""
 
     error: str = Field(
         ...,
@@ -59,13 +59,10 @@ class ErrorResponse(BaseModel):
         ...,
         description="Human-readable error description.",
     )
-    api_version: Literal["1"] = Field(
-        default="1", description="API version that produced this error."
-    )
 
 
 # ---------------------------------------------------------------------------
-# Request models (shared across v1 routes)
+# Request models (shared across v2 routes)
 # ---------------------------------------------------------------------------
 
 
@@ -73,7 +70,7 @@ def _country_field() -> Field:  # type: ignore[valid-type]
     """Return a fresh ``FieldInfo`` for an ISO 3166-1 alpha-2 country field.
 
     Called as a default factory at class-definition time so each model
-    that uses it gets an independent ``FieldInfo`` instance.  Every v1
+    that uses it gets an independent ``FieldInfo`` instance.  Every
     request model that carries a ``country`` field must use both this
     factory *and* inherit from :class:`CountryRequestMixin` to pick up
     the normalisation validator.
@@ -82,19 +79,19 @@ def _country_field() -> Field:  # type: ignore[valid-type]
         default="US",
         min_length=2,
         max_length=2,
-        description="ISO 3166-1 alpha-2 country code. Only 'US' is supported in v1.",
-        examples=["US"],
+        description="ISO 3166-1 alpha-2 country code.",
+        examples=["US", "CA"],
     )
 
 
 class CountryRequestMixin(BaseModel):
-    """Mixin that adds a normalised ``country`` field to v1 request models.
+    """Mixin that adds a normalised ``country`` field to request models.
 
     Provides the ``country`` field (ISO 3166-1 alpha-2, default ``"US"``)
     and a ``mode='before'`` validator that uppercases and strips it so
     callers may pass ``"us"`` or ``" US "`` without error.
 
-    All v1 request models that accept a country code should inherit from
+    All request models that accept a country code should inherit from
     this mixin rather than duplicating the field declaration and validator.
     """
 
@@ -114,7 +111,7 @@ class CountryRequestMixin(BaseModel):
 
 
 class AddressInputMixin(BaseModel):
-    """Mixin that adds ``address``/``components`` input fields to v1 request models.
+    """Mixin that adds ``address``/``components`` input fields to request models.
 
     Enforces that at least one of ``address`` (non-blank string) or
     ``components`` (non-empty dict) is supplied.  When both are provided,
@@ -135,28 +132,26 @@ class AddressInputMixin(BaseModel):
         return self
 
 
-class ParseRequestV1(CountryRequestMixin):
+class ParseRequest(CountryRequestMixin):
+    """Request body for POST /api/v2/parse."""
+
     address: str = Field(..., max_length=1000)
 
 
-class StandardizeRequestV1(CountryRequestMixin, AddressInputMixin):
-    """Accept either a raw address string *or* pre-parsed components.
+class StandardizeRequest(CountryRequestMixin, AddressInputMixin):
+    """Request body for POST /api/v2/standardize.
 
+    Accept either a raw address string *or* pre-parsed components.
     When both ``address`` and ``components`` are provided, ``components``
     takes precedence and ``address`` is ignored.
     """
 
 
-# ---------------------------------------------------------------------------
-# Request models — v1 validate
-# ---------------------------------------------------------------------------
-
-
-class ValidateRequestV1(CountryRequestMixin, AddressInputMixin):
-    """Request body for POST /api/v1/validate.
+class ValidateRequest(CountryRequestMixin, AddressInputMixin):
+    """Request body for POST /api/v2/validate.
 
     Accepts either a raw address string *or* pre-parsed components — mirroring
-    :class:`StandardizeRequestV1`.  In both cases the input is run through the
+    :class:`StandardizeRequest`.  In both cases the input is run through the
     full parse → standardize pipeline before the validation provider is called,
     so providers always receive clean, USPS-formatted components.
 
@@ -167,14 +162,8 @@ class ValidateRequestV1(CountryRequestMixin, AddressInputMixin):
 
 
 # ---------------------------------------------------------------------------
-# Response models — v1
+# Response models
 # ---------------------------------------------------------------------------
-
-
-class HealthResponse(BaseModel):
-    status: Literal["ok", "degraded"] = "ok"
-    api_version: Literal["1"] = "1"
-    database: Literal["ok", "error", "unconfigured"] = "unconfigured"
 
 
 class ValidationResult(BaseModel):
@@ -214,49 +203,27 @@ class ValidationResult(BaseModel):
     )
 
 
-class ValidateResponseV1(BaseModel):
-    """Response body for POST /api/v1/validate.
-
-    Mirrors the structure of ``StandardizeResponseV1``.  Address fields are
-    ``str | None`` because corrected components are only present when the
-    provider returns a confirmed or corrected address.
-
-    ``postal_code`` is the jurisdiction-neutral postal identifier.  For US
-    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when the
-    provider returns it, or the 5-digit ZIP otherwise.
-
-    ``vacant`` and other USPS-specific indicators appear in
-    ``components.values`` when the provider returns them.
-    """
-
-    address_line_1: str | None = None
-    address_line_2: str | None = None
-    city: str | None = None
-    region: str | None = None
-    postal_code: str | None = None
-    country: str
-    validated: str | None = Field(
-        default=None,
-        description="Single-line canonical address using two-space separator convention.",
-    )
-    components: ComponentSet | None = None
-    validation: ValidationResult
-    latitude: float | None = None
-    longitude: float | None = None
-    warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["1"] = "1"
+class HealthResponseV2(BaseModel):
+    status: Literal["ok", "degraded"] = "ok"
+    api_version: Literal["2"] = "2"
+    database: Literal["ok", "error", "unconfigured"] = "unconfigured"
+    libpostal: Literal["ok", "unavailable"] = "unavailable"
 
 
-class ParseResponseV1(BaseModel):
+class ParseResponseV2(BaseModel):
+    """Response body for POST /api/v2/parse."""
+
     input: str
     country: str
     components: ComponentSet
     type: str
     warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["1"] = "1"
+    api_version: Literal["2"] = "2"
 
 
-class StandardizeResponseV1(BaseModel):
+class StandardizeResponseV2(BaseModel):
+    """Response body for POST /api/v2/standardize."""
+
     address_line_1: str
     address_line_2: str
     city: str
@@ -266,17 +233,51 @@ class StandardizeResponseV1(BaseModel):
     standardized: str
     components: ComponentSet
     warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["1"] = "1"
+    api_version: Literal["2"] = "2"
 
 
 #: Version-neutral alias for the internal standardized address representation.
-#: Use this name in service-layer and provider code; ``StandardizeResponseV1``
-#: remains the public v1 API response type.
-StandardizedAddress = StandardizeResponseV1
+#: Use this name in service-layer and provider code; ``StandardizeResponseV2``
+#: remains the public v2 API response type.
+StandardizedAddress = StandardizeResponseV2
+
+
+class ValidateResponseV2(BaseModel):
+    """Response body for POST /api/v2/validate.
+
+    Address fields default to empty strings (not ``None``) because they
+    are always present in the response shape.  When the validation provider
+    cannot confirm or correct an address, the fields hold the post-standardize
+    values; ``validation.status`` indicates the outcome.
+
+    ``postal_code`` is the jurisdiction-neutral postal identifier.  For US
+    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when the
+    provider returns it, or the 5-digit ZIP otherwise.
+
+    ``vacant`` and other USPS-specific indicators appear in
+    ``components.values`` when the provider returns them.
+    """
+
+    address_line_1: str = ""
+    address_line_2: str = ""
+    city: str = ""
+    region: str = ""
+    postal_code: str = ""
+    country: str
+    validated: str | None = Field(
+        default=None,
+        description="Single-line canonical address using two-space separator convention.",
+    )
+    validation: ValidationResult
+    components: ComponentSet | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    warnings: list[str] = Field(default_factory=list)
+    api_version: Literal["2"] = "2"
 
 
 # ---------------------------------------------------------------------------
-# Response models — v1 countries
+# Response models — countries
 # ---------------------------------------------------------------------------
 
 
@@ -323,81 +324,6 @@ class CountryFieldDefinition(BaseModel):
             "Absent when the country does not define one."
         ),
     )
-
-
-class CountryFormatResponse(BaseModel):
-    """Response body for GET /api/v1/countries/{code}/format.
-
-    ``fields`` lists only the address fields used in this country, in the
-    order they appear on a typical address form.  Fields absent from the
-    array should be hidden in the UI.
-    """
-
-    country: str = Field(..., description="ISO 3166-1 alpha-2 country code (uppercased).")
-    fields: list[CountryFieldDefinition] = Field(
-        ...,
-        description=(
-            "Address fields for this country, in form display order. "
-            "Fields absent from this list should be hidden in the UI."
-        ),
-    )
-    api_version: Literal["1"] = "1"
-
-
-# ---------------------------------------------------------------------------
-# Response models — v2
-# ---------------------------------------------------------------------------
-
-
-class HealthResponseV2(BaseModel):
-    status: Literal["ok", "degraded"] = "ok"
-    api_version: Literal["2"] = "2"
-    database: Literal["ok", "error", "unconfigured"] = "unconfigured"
-    libpostal: Literal["ok", "unavailable"] = "unavailable"
-
-
-class ParseResponseV2(BaseModel):
-    """Response body for POST /api/v2/parse."""
-
-    input: str
-    country: str
-    components: ComponentSet
-    type: str
-    warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["2"] = "2"
-
-
-class StandardizeResponseV2(BaseModel):
-    """Response body for POST /api/v2/standardize."""
-
-    address_line_1: str
-    address_line_2: str
-    city: str
-    region: str
-    postal_code: str
-    country: str
-    standardized: str
-    components: ComponentSet
-    warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["2"] = "2"
-
-
-class ValidateResponseV2(BaseModel):
-    """Response body for POST /api/v2/validate."""
-
-    address_line_1: str = ""
-    address_line_2: str = ""
-    city: str = ""
-    region: str = ""
-    postal_code: str = ""
-    country: str
-    validated: str | None = None
-    validation: ValidationResult
-    components: ComponentSet | None = None
-    latitude: float | None = None
-    longitude: float | None = None
-    warnings: list[str] = Field(default_factory=list)
-    api_version: Literal["2"] = "2"
 
 
 class CountryFormatResponseV2(BaseModel):

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.models import ComponentSet, StandardizeResponseV2
 from address_validator.services.validation.usps_provider import USPSProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -37,8 +37,8 @@ def _make_std(
     region: str = "IL",
     postal_code: str = "62701",
     country: str = "US",
-) -> StandardizeResponseV1:
-    return StandardizeResponseV1(
+) -> StandardizeResponseV2:
+    return StandardizeResponseV2(
         address_line_1=address_line_1,
         address_line_2="",
         city=city,

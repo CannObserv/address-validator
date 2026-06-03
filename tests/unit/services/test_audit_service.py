@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
-    ValidateResponseV1,
+    StandardizeResponseV2,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.audit import (
@@ -107,13 +107,13 @@ async def test_cache_provider_sets_audit_context_on_miss(db: AsyncEngine) -> Non
     inner = AsyncMock()
     provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
 
-    result = ValidateResponseV1(
+    result = ValidateResponseV2(
         country="US",
         validation=ValidationResult(status="confirmed", provider="usps"),
     )
     inner.validate.return_value = result
 
-    std = StandardizeResponseV1(
+    std = StandardizeResponseV2(
         address_line_1="123 MAIN ST",
         address_line_2="",
         city="ANYTOWN",

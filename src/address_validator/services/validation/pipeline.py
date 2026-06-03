@@ -26,7 +26,7 @@ from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
-    StandardizeResponseV1,  # alias can't be used as a constructor; needed for build_non_us_std
+    StandardizeResponseV2,  # alias can't be used as a constructor; needed for build_non_us_std
 )
 from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.libpostal_client import LibpostalUnavailableError
@@ -34,7 +34,7 @@ from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import standardize
 
 if TYPE_CHECKING:
-    from address_validator.models import ValidateRequestV1
+    from address_validator.models import ValidateRequest
     from address_validator.services.libpostal_client import LibpostalClient
     from address_validator.services.validation.registry import ProviderRegistry
 
@@ -57,7 +57,7 @@ def build_non_us_std(components: dict[str, str], country: str) -> StandardizedAd
     region = components.get("region", "")
     postal_code = components.get("postal_code", "")
     standardized = build_validated_string(address_line_1, address_line_2, city, region, postal_code)
-    return StandardizeResponseV1(
+    return StandardizeResponseV2(
         address_line_1=address_line_1,
         address_line_2=address_line_2,
         city=city,
@@ -70,7 +70,7 @@ def build_non_us_std(components: dict[str, str], country: str) -> StandardizedAd
 
 
 async def run_us_pipeline(
-    req: ValidateRequestV1,
+    req: ValidateRequest,
     registry: ProviderRegistry,
     component_profile: str = "usps-pub28",
 ) -> PipelineResult:
@@ -130,7 +130,7 @@ async def run_us_pipeline(
 
 
 async def run_non_us_pipeline_v1(
-    req: ValidateRequestV1,
+    req: ValidateRequest,
     registry: ProviderRegistry,
 ) -> PipelineResult:
     """Run the v1 non-US validation setup and return (std, raw_input, provider).
@@ -176,7 +176,7 @@ async def run_non_us_pipeline_v1(
 
 
 async def run_non_us_pipeline_v2(
-    req: ValidateRequestV1,
+    req: ValidateRequest,
     registry: ProviderRegistry,
     libpostal_client: LibpostalClient | None,
 ) -> PipelineResult:

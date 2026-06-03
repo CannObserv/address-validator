@@ -48,7 +48,7 @@ from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
-    ValidateResponseV1,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.audit import set_audit_context
@@ -79,7 +79,7 @@ def _make_pattern_key(std: StandardizedAddress) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _make_canonical_key(result: ValidateResponseV1) -> str:
+def _make_canonical_key(result: ValidateResponseV2) -> str:
     """SHA-256 of the provider-returned address fields.
 
     For ``not_confirmed`` results all address fields are empty, so all
@@ -110,19 +110,19 @@ def _now_utc() -> datetime:
 # ---------------------------------------------------------------------------
 
 
-def _row_to_response(row: RowMapping) -> ValidateResponseV1:
+def _row_to_response(row: RowMapping) -> ValidateResponseV2:
     components: ComponentSet | None = None
     if row["components_json"]:
         components = ComponentSet.model_validate(row["components_json"])
 
     warnings: list[str] = row["warnings_json"]
 
-    return ValidateResponseV1(
-        address_line_1=row["address_line_1"],
-        address_line_2=row["address_line_2"],
-        city=row["city"],
-        region=row["region"],
-        postal_code=row["postal_code"],
+    return ValidateResponseV2(
+        address_line_1=row["address_line_1"] or "",
+        address_line_2=row["address_line_2"] or "",
+        city=row["city"] or "",
+        region=row["region"] or "",
+        postal_code=row["postal_code"] or "",
         country=row["country"],
         validated=row["validated"],
         components=components,
@@ -146,7 +146,7 @@ async def _lookup(
     engine: AsyncEngine,
     pattern_key: str,
     ttl_days: int,
-) -> ValidateResponseV1 | None:
+) -> ValidateResponseV2 | None:
     async with engine.connect() as conn:
         qp_row = (
             (
@@ -229,7 +229,7 @@ async def _store(
     engine: AsyncEngine,
     pattern_key: str,
     canonical_key: str,
-    result: ValidateResponseV1,
+    result: ValidateResponseV2,
     *,
     raw_input: str | None,
 ) -> None:
@@ -372,7 +372,7 @@ class CachingProvider:
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
-    ) -> ValidateResponseV1:
+    ) -> ValidateResponseV2:
         """Check the cache; delegate to inner provider on miss; store the result.
 
         Fail-open: any database error during lookup or store is logged as a
@@ -415,7 +415,7 @@ class CachingProvider:
             except Exception:
                 logger.warning("cache_register: storage error — continuing", exc_info=True)
 
-        result: ValidateResponseV1 = await self._inner.validate(std, raw_input=raw_input)
+        result: ValidateResponseV2 = await self._inner.validate(std, raw_input=raw_input)
 
         set_audit_context(
             provider=result.validation.provider,

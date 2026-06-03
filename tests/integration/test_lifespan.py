@@ -51,5 +51,5 @@ class TestLifespanValidateConfig:
             patch("address_validator.middleware.audit.write_training_candidate", AsyncMock()),
             TestClient(app) as client,
         ):
-            resp = client.get("/api/v1/health")
+            resp = client.get("/api/v2/health")
         assert resp.status_code == 200

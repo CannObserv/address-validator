@@ -43,14 +43,6 @@ class TestV2ParseCA:
         assert body["api_version"] == "2"
         assert body["country"] == "CA"
 
-    def test_ca_not_available_in_v1(self, client) -> None:
-        response = client.post(
-            "/api/v1/parse",
-            json={"address": "123 Main St", "country": "CA"},
-        )
-        assert response.status_code == 422
-        assert response.json()["error"] == "country_not_supported"
-
     def test_libpostal_unavailable_returns_503(self, client) -> None:
         with patch(
             "address_validator.services.libpostal_client.LibpostalClient.parse",

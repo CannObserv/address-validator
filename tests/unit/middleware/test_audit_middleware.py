@@ -30,10 +30,10 @@ _ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
 
 
 def test_should_audit_api_routes() -> None:
-    assert _should_audit("/api/v1/parse") is True
-    assert _should_audit("/api/v1/validate") is True
-    assert _should_audit("/api/v1/standardize") is True
-    assert _should_audit("/api/v1/health") is True
+    assert _should_audit("/api/v2/parse") is True
+    assert _should_audit("/api/v2/validate") is True
+    assert _should_audit("/api/v2/standardize") is True
+    assert _should_audit("/api/v2/health") is True
 
 
 def test_should_not_audit_admin_routes() -> None:
@@ -68,7 +68,7 @@ def test_audit_row_receives_request_id(client: TestClient) -> None:
             mock_write,
         ):
             client.post(
-                "/api/v1/parse",
+                "/api/v2/parse",
                 json={"address": "123 Main St, Springfield, IL 62704"},
             )
     finally:
@@ -96,7 +96,7 @@ def test_audit_row_receives_validation_context_vars() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()  # non-None so audit writes
 
-    @mini.get("/api/v1/fake")
+    @mini.get("/api/v2/fake")
     async def _fake_endpoint() -> dict[str, str]:
         set_audit_context(provider="usps", validation_status="confirmed", cache_hit=False)
         return {"ok": "true"}
@@ -104,7 +104,7 @@ def test_audit_row_receives_validation_context_vars() -> None:
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini)
-        tc.get("/api/v1/fake")
+        tc.get("/api/v2/fake")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -123,29 +123,29 @@ def test_audit_row_receives_validation_context_vars() -> None:
 
 
 def test_invariants_pass_when_all_fields_present() -> None:
-    assert _check_validate_invariants("/api/v1/validate", 200, "usps", "confirmed", True) is True
+    assert _check_validate_invariants("/api/v2/validate", 200, "usps", "confirmed", True) is True
 
 
 def test_invariants_fail_on_null_provider() -> None:
-    assert _check_validate_invariants("/api/v1/validate", 200, None, "confirmed", False) is False
+    assert _check_validate_invariants("/api/v2/validate", 200, None, "confirmed", False) is False
 
 
 def test_invariants_fail_on_null_validation_status() -> None:
-    assert _check_validate_invariants("/api/v1/validate", 200, "usps", None, False) is False
+    assert _check_validate_invariants("/api/v2/validate", 200, "usps", None, False) is False
 
 
 def test_invariants_fail_on_null_cache_hit() -> None:
-    assert _check_validate_invariants("/api/v1/validate", 200, "usps", "confirmed", None) is False
+    assert _check_validate_invariants("/api/v2/validate", 200, "usps", "confirmed", None) is False
 
 
 def test_invariants_skip_non_2xx() -> None:
     """Non-2xx status codes are not checked — NULL fields are expected for 422, 500, etc."""
-    assert _check_validate_invariants("/api/v1/validate", 422, None, None, None) is True
+    assert _check_validate_invariants("/api/v2/validate", 422, None, None, None) is True
 
 
 def test_invariants_skip_non_validate_endpoint() -> None:
     """Non-validate endpoints are not checked even if all fields are NULL."""
-    assert _check_validate_invariants("/api/v1/parse", 200, None, None, None) is True
+    assert _check_validate_invariants("/api/v2/parse", 200, None, None, None) is True
 
 
 def test_invariants_apply_to_v2_validate() -> None:
@@ -167,7 +167,7 @@ def test_invariants_violation_sets_error_detail(
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.post("/api/v1/validate")
+    @mini.post("/api/v2/validate")
     async def _fake_validate() -> dict[str, str]:
         # Simulate broken ContextVar propagation — no set_audit_context call
         return {"ok": "true"}
@@ -178,7 +178,7 @@ def test_invariants_violation_sets_error_detail(
         caplog.at_level(logging.WARNING, logger="address_validator.middleware.audit"),
     ):
         tc = TestClient(mini)
-        tc.post("/api/v1/validate")
+        tc.post("/api/v2/validate")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -193,7 +193,7 @@ def test_invariants_no_override_when_fields_present() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.post("/api/v1/validate")
+    @mini.post("/api/v2/validate")
     async def _fake_validate() -> dict[str, str]:
         set_audit_context(provider="usps", validation_status="confirmed", cache_hit=False)
         return {"ok": "true"}
@@ -201,7 +201,7 @@ def test_invariants_no_override_when_fields_present() -> None:
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini)
-        tc.post("/api/v1/validate")
+        tc.post("/api/v2/validate")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -220,14 +220,14 @@ def test_audit_writes_row_when_endpoint_raises() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/boom")
+    @mini.get("/api/v2/boom")
     async def _boom() -> dict[str, str]:
         raise RuntimeError("kaboom")
 
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini, raise_server_exceptions=False)
-        resp = tc.get("/api/v1/boom")
+        resp = tc.get("/api/v2/boom")
 
     assert resp.status_code == 500
     mock_write.assert_called_once()
@@ -243,7 +243,7 @@ def test_audit_reraises_unhandled_exception() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/boom")
+    @mini.get("/api/v2/boom")
     async def _boom() -> dict[str, str]:
         raise RuntimeError("kaboom")
 
@@ -253,7 +253,7 @@ def test_audit_reraises_unhandled_exception() -> None:
         pytest.raises(RuntimeError, match="kaboom"),
     ):
         tc = TestClient(mini, raise_server_exceptions=True)
-        tc.get("/api/v1/boom")
+        tc.get("/api/v2/boom")
 
     mock_write.assert_called_once()
 
@@ -266,14 +266,14 @@ def test_audit_uses_exception_label_over_internal_error() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.post("/api/v1/validate")
+    @mini.post("/api/v2/validate")
     async def _fake_validate() -> dict[str, str]:
         raise ValueError("kaboom")
 
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini, raise_server_exceptions=False)
-        tc.post("/api/v1/validate")
+        tc.post("/api/v2/validate")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -299,7 +299,7 @@ def test_audit_writes_row_on_cancelled_error() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/boom")
+    @mini.get("/api/v2/boom")
     async def _boom() -> dict[str, str]:
         raise asyncio.CancelledError
 
@@ -309,7 +309,7 @@ def test_audit_writes_row_on_cancelled_error() -> None:
         pytest.raises(BaseException) as exc_info,
     ):
         tc = TestClient(mini, raise_server_exceptions=True)
-        tc.get("/api/v1/boom")
+        tc.get("/api/v2/boom")
 
     # Either the asyncio CancelledError or its anyio-portal-translated sibling.
     assert (
@@ -341,7 +341,7 @@ def test_audit_streaming_response_raises_mid_stream() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.post("/api/v1/validate")
+    @mini.post("/api/v2/validate")
     async def _stream_then_raise() -> StreamingResponse:
         async def _gen():
             yield b'{"partial":'
@@ -354,7 +354,7 @@ def test_audit_streaming_response_raises_mid_stream() -> None:
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini, raise_server_exceptions=False)
-        tc.post("/api/v1/validate")
+        tc.post("/api/v2/validate")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -373,7 +373,7 @@ def test_audit_skips_candidate_write_on_exception() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/boom")
+    @mini.get("/api/v2/boom")
     async def _boom() -> dict[str, str]:
         raise RuntimeError("kaboom")
 
@@ -384,7 +384,7 @@ def test_audit_skips_candidate_write_on_exception() -> None:
         patch("address_validator.middleware.audit.write_training_candidate", mock_candidate),
     ):
         tc = TestClient(mini, raise_server_exceptions=False)
-        tc.get("/api/v1/boom")
+        tc.get("/api/v2/boom")
 
     mock_write.assert_called_once()
     mock_candidate.assert_not_called()
@@ -397,7 +397,7 @@ def test_audit_row_receives_parse_type() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/fake")
+    @mini.get("/api/v2/fake")
     async def _fake_endpoint() -> dict[str, str]:
         set_audit_context(parse_type="Street Address")
         return {"ok": "true"}
@@ -405,7 +405,7 @@ def test_audit_row_receives_parse_type() -> None:
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini)
-        tc.get("/api/v1/fake")
+        tc.get("/api/v2/fake")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -421,7 +421,7 @@ def test_audit_row_receives_pattern_key() -> None:
     mini.add_middleware(RequestIdMiddleware)
     mini.state.engine = MagicMock()
 
-    @mini.get("/api/v1/fake")
+    @mini.get("/api/v2/fake")
     async def _fake_endpoint() -> dict[str, str]:
         set_audit_context(
             provider="usps",
@@ -434,7 +434,7 @@ def test_audit_row_receives_pattern_key() -> None:
     mock_write = AsyncMock()
     with patch("address_validator.middleware.audit.write_audit_row", mock_write):
         tc = TestClient(mini)
-        tc.get("/api/v1/fake")
+        tc.get("/api/v2/fake")
 
     mock_write.assert_called_once()
     kwargs = mock_write.call_args.kwargs
@@ -459,7 +459,7 @@ async def test_audit_writes_candidate_with_endpoint_and_version(db):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/api/v1/parse",
+                "/api/v2/parse",
                 json={"address": "995 9TH ST APT 201 ROOM 104", "country": "US"},
                 headers={"X-API-Key": TEST_API_KEY},
             )
@@ -477,8 +477,8 @@ async def test_audit_writes_candidate_with_endpoint_and_version(db):
                 )
             ).first()
         assert row is not None, "candidate row not written"
-        assert row.endpoint == "/api/v1/parse"
-        assert row.api_version == "1"
+        assert row.endpoint == "/api/v2/parse"
+        assert row.api_version == "2"
         assert row.failure_reason is not None
     finally:
         app.state.engine = saved_engine

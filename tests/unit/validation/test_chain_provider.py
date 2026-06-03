@@ -6,8 +6,8 @@ import pytest
 
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
-    ValidateResponseV1,
+    StandardizeResponseV2,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.validation.chain_provider import ChainProvider
@@ -19,18 +19,18 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
-_CONFIRMED = ValidateResponseV1(
+_CONFIRMED = ValidateResponseV2(
     country="US",
     validation=ValidationResult(status="confirmed", dpv_match_code="Y", provider="usps"),
 )
 
-_GOOGLE_CONFIRMED = ValidateResponseV1(
+_GOOGLE_CONFIRMED = ValidateResponseV2(
     country="US",
     validation=ValidationResult(status="confirmed", dpv_match_code="Y", provider="google"),
 )
 
 
-def _mock_provider(response: ValidateResponseV1) -> AsyncMock:
+def _mock_provider(response: ValidateResponseV2) -> AsyncMock:
     p = AsyncMock()
     p.validate = AsyncMock(return_value=response)
     return p
@@ -323,8 +323,8 @@ class TestChainProvider:
 
 @pytest.fixture()
 def std_address():
-    """Minimal StandardizeResponseV1 for use in ChainProvider tests."""
-    return StandardizeResponseV1(
+    """Minimal StandardizeResponseV2 for use in ChainProvider tests."""
+    return StandardizeResponseV2(
         address_line_1="123 MAIN ST",
         address_line_2="",
         city="SPRINGFIELD",
