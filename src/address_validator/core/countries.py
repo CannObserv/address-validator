@@ -1,4 +1,4 @@
-"""Country validation constants and helpers used by the v2 routers."""
+"""Country validation constants and helpers used by the API routers."""
 
 import pycountry
 from fastapi import status
@@ -19,7 +19,7 @@ VALID_ISO2: frozenset[str] = frozenset(c.alpha_2 for c in pycountry.countries)
 
 
 def check_country(country: str) -> str:
-    """Validate and normalise *country* for v2 endpoints (US, CA).
+    """Validate and normalise *country* for the API endpoints (US, CA).
 
     Returns the uppercased country code if valid and supported.
     Raises :class:`~address_validator.core.errors.APIError` otherwise.

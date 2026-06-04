@@ -4,7 +4,7 @@ Per-module risk table. Read before touching any of these files.
 
 | File/Module | Risk |
 |---|---|
-| `src/address_validator/routers/v2/parse.py`, `standardize.py` | Route handlers MUST be `async def` — sync `def` routes run in a threadpool via `run_in_threadpool()`, which copies the contextvars context; ContextVar writes (e.g. `set_candidate_data`) inside the copy are invisible to the outer ASGI audit middleware. Changing these back to `def` silently breaks training candidate collection. |
+| `src/address_validator/routers/v2/parse.py`, `standardize.py`, `validate.py`, `countries.py` | Route handlers MUST be `async def` — sync `def` routes run in a threadpool via `run_in_threadpool()`, which copies the contextvars context; ContextVar writes (e.g. `set_candidate_data`) inside the copy are invisible to the outer ASGI audit middleware. Changing these back to `def` silently breaks training candidate collection. |
 | `src/address_validator/services/parser.py` | `parse_address()` is now `async` — dispatches to libpostal for CA, usaddress for US; `_parse()` remains sync; all callers must `await parse_address()` |
 | `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect US parsing |
 | `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect US component assignment |
