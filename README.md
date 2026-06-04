@@ -1,11 +1,14 @@
 # Address Validator
 
-FastAPI service (v2.0.0) that parses and standardizes US physical
+FastAPI service (v3.0.0) that parses, standardizes, and validates US
 addresses per
-[USPS Publication 28](https://pe.usps.com/text/pub28/welcome.htm).
+[USPS Publication 28](https://pe.usps.com/text/pub28/welcome.htm) and
+CA addresses via libpostal.
 
-All API routes live under `/api/v1/` and return an `api_version` field
-in every response body plus an `API-Version: 1` response header.
+All API routes live under `/api/v2/` and return an `api_version` field
+in every response body plus an `API-Version: 2` response header.
+Components use ISO 19160-4 element names by default; pass
+`?component_profile=usps-pub28` for USPS Pub 28 snake_case names.
 
 ## Features
 
@@ -20,25 +23,25 @@ in every response body plus an `API-Version: 1` response header.
 - **Country validation** — requests accept an optional `country` field
   (ISO 3166-1 alpha-2, default `"US"`). Invalid codes are rejected
   using the `pycountry` library; only `US` is currently supported.
-- **API key authentication** — `/api/v1/*` endpoints require an
+- **API key authentication** — `/api/v2/*` endpoints require an
   `X-API-Key` header; docs remain open.
 - **CORS enabled** — cross-origin requests are allowed from any origin.
-- **Health check** — `GET /api/v1/health` for liveness probes.
+- **Health check** — `GET /api/v2/health` for liveness probes.
 
 ## Endpoints
 
 | Method | Path                 | Auth | Description                               |
 |--------|----------------------|------|-------------------------------------------|
-| `POST` | `/api/v1/parse`      | 🔒   | Parse raw address string into components  |
-| `POST` | `/api/v1/standardize`| 🔒   | Standardize address to USPS Pub 28 format |
-| `GET`  | `/api/v1/health`     |      | Service health check                      |
+| `POST` | `/api/v2/parse`      | 🔒   | Parse raw address string into components  |
+| `POST` | `/api/v2/standardize`| 🔒   | Standardize address to USPS Pub 28 format |
+| `GET`  | `/api/v2/health`     |      | Service health check                      |
 | `GET`  | `/docs`              |      | Interactive Swagger UI                    |
 | `GET`  | `/redoc`             |      | ReDoc API documentation                   |
 
 All `POST` endpoints accept and return `application/json`.  Address
 inputs are limited to **1000 characters**.
 
-### `POST /api/v1/parse`
+### `POST /api/v2/parse`
 
 **Request:**
 
@@ -90,7 +93,7 @@ The `components` field is a `ComponentSet` containing:
 - **`spec_version`** — edition of the spec the values conform to.
 - **`values`** — the labelled address component key/value pairs.
 
-### `POST /api/v1/standardize`
+### `POST /api/v2/standardize`
 
 Accepts **either** a raw address string or pre-parsed components.  When
 both are provided, `components` takes precedence and `address` is
@@ -158,7 +161,7 @@ and `postal_code` (not `zip_code`).  The `standardized` field uses
 two-space separators between address lines, matching the USPS
 single-line format convention.
 
-### `GET /api/v1/health`
+### `GET /api/v2/health`
 
 **Response:**
 
@@ -170,7 +173,7 @@ No authentication required.
 
 ## Authentication
 
-All `/api/v1/*` endpoints (except `/api/v1/health`) require an
+All `/api/v2/*` endpoints (except `/api/v2/health`) require an
 `X-API-Key` header.  Set the expected key via the `API_KEY` environment
 variable:
 
@@ -182,7 +185,7 @@ Requests without a valid key receive `401` or `403`.  Swagger (`/docs`)
 and ReDoc (`/redoc`) remain open.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/standardize \
+curl -X POST http://localhost:8000/api/v2/standardize \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: YOUR_KEY' \
   -d '{"address": "350 Fifth Ave, New York, NY 10118"}'
@@ -212,16 +215,15 @@ src/address_validator/
   models.py                    # Pydantic request/response models (API contract)
   logging_filter.py            # RequestIdFilter — injects request_id into logs
   middleware/
-    api_version.py             # Appends API-Version header on /api/v1/ and /api/v2/ responses
+    api_version.py             # Appends API-Version: 2 header on /api/v2/ responses
     audit.py                   # Records every API request to audit_log (fire-and-forget)
     request_id.py              # ULID generation, X-Request-ID header
   core/
     address_format.py          # Canonical single-line address string builder
-    countries.py               # SUPPORTED_COUNTRIES, check_country(), check_country_v2()
+    countries.py               # SUPPORTED_COUNTRIES (US+CA), VALID_ISO2, check_country()
     errors.py                  # APIError, api_error_response()
   routers/
     deps.py                    # Shared FastAPI dependencies (registry, libpostal client)
-    v1/                        # USPS Pub 28 surface (parse, standardize, validate, countries, health)
     v2/                        # ISO 19160-4 surface; component_profile query param
     admin/                     # Admin dashboard (Jinja2 + HTMX, exe.dev auth)
       queries/                 # SQLAlchemy Core query helpers (audit, candidates, batches, dashboard)

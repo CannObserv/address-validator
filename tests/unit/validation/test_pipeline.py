@@ -10,15 +10,14 @@ import pytest
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
-    ParseResponseV1,
-    StandardizeResponseV1,
-    ValidateRequestV1,
+    ParseResponseV2,
+    StandardizeResponseV2,
+    ValidateRequest,
 )
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.validation.pipeline import (
     build_non_us_std,
-    run_non_us_pipeline_v1,
-    run_non_us_pipeline_v2,
+    run_non_us_pipeline,
     run_us_pipeline,
 )
 
@@ -35,7 +34,7 @@ class TestBuildNonUsSd:
             "postal_code": "SW1A 2AA",
         }
         result = build_non_us_std(comps, "GB")
-        assert isinstance(result, StandardizeResponseV1)
+        assert isinstance(result, StandardizeResponseV2)
         assert result.country == "GB"
         assert result.address_line_1 == "10 Downing St"
         assert result.city == "London"
@@ -68,7 +67,7 @@ class TestBuildNonUsSd:
 
 
 # ---------------------------------------------------------------------------
-# run_non_us_pipeline_v1
+# run_non_us_pipeline
 # ---------------------------------------------------------------------------
 
 
@@ -80,100 +79,42 @@ def _make_registry(supports_non_us: bool = True):
     return registry, provider
 
 
-class TestRunNonUsPipelineV1:
+class TestRunNonUsPipeline:
     @pytest.mark.asyncio
     async def test_invalid_country_code_raises_422(self) -> None:
         registry, _ = _make_registry()
-        req = ValidateRequestV1(address="1 Main St", country="XX")
+        req = ValidateRequest(address="1 Main St", country="XX")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "invalid_country_code"
-
-    @pytest.mark.asyncio
-    async def test_raw_string_non_us_raises_422(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequestV1(address="10 Downing St", country="GB")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "country_not_supported"
-
-    @pytest.mark.asyncio
-    async def test_provider_no_non_us_support_raises_422(self) -> None:
-        registry, _ = _make_registry(supports_non_us=False)
-        req = ValidateRequestV1(
-            components={"address_line_1": "10 Downing St", "city": "London"},
-            country="GB",
-        )
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert exc_info.value.status_code == 422
-        assert exc_info.value.error == "country_not_supported"
-
-    @pytest.mark.asyncio
-    async def test_valid_non_us_components_returns_pipeline_result(self) -> None:
-        registry, provider = _make_registry()
-        comps = {"address_line_1": "10 Downing St", "city": "London", "postal_code": "SW1A 2AA"}
-        req = ValidateRequestV1(components=comps, country="GB")
-        std, raw_input, returned_provider = await run_non_us_pipeline_v1(req, registry)
-
-        assert std.country == "GB"
-        assert std.components.spec == "raw"
-        assert raw_input is not None
-        assert json.loads(raw_input) == comps
-        assert returned_provider is provider
-
-    @pytest.mark.asyncio
-    async def test_error_message_mentions_us_only(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequestV1(address="10 Downing St", country="GB")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v1(req, registry)
-        assert "US" in exc_info.value.message
-
-
-# ---------------------------------------------------------------------------
-# run_non_us_pipeline_v2
-# ---------------------------------------------------------------------------
-
-
-class TestRunNonUsPipelineV2:
-    @pytest.mark.asyncio
-    async def test_invalid_country_code_raises_422(self) -> None:
-        registry, _ = _make_registry()
-        req = ValidateRequestV1(address="1 Main St", country="XX")
-        with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "invalid_country_code"
 
     @pytest.mark.asyncio
     async def test_non_ca_raw_string_raises_422(self) -> None:
         registry, _ = _make_registry()
-        req = ValidateRequestV1(address="10 Downing St", country="GB")
+        req = ValidateRequest(address="10 Downing St", country="GB")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "country_not_supported"
 
     @pytest.mark.asyncio
     async def test_error_message_mentions_us_and_ca(self) -> None:
         registry, _ = _make_registry()
-        req = ValidateRequestV1(address="10 Downing St", country="GB")
+        req = ValidateRequest(address="10 Downing St", country="GB")
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert "CA" in exc_info.value.message
 
     @pytest.mark.asyncio
     async def test_provider_no_non_us_support_raises_422(self) -> None:
         registry, _ = _make_registry(supports_non_us=False)
-        req = ValidateRequestV1(
+        req = ValidateRequest(
             components={"address_line_1": "10 Downing St", "city": "London"},
             country="GB",
         )
         with pytest.raises(APIError) as exc_info:
-            await run_non_us_pipeline_v2(req, registry, libpostal_client=None)
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.status_code == 422
         assert exc_info.value.error == "country_not_supported"
 
@@ -181,8 +122,8 @@ class TestRunNonUsPipelineV2:
     async def test_valid_non_us_components_returns_pipeline_result(self) -> None:
         registry, provider = _make_registry()
         comps = {"address_line_1": "10 Downing St", "city": "London"}
-        req = ValidateRequestV1(components=comps, country="GB")
-        std, raw_input, returned_provider = await run_non_us_pipeline_v2(
+        req = ValidateRequest(components=comps, country="GB")
+        std, raw_input, returned_provider = await run_non_us_pipeline(
             req, registry, libpostal_client=None
         )
 
@@ -196,7 +137,7 @@ class TestRunNonUsPipelineV2:
     async def test_ca_raw_string_calls_libpostal(self) -> None:
         registry, provider = _make_registry()
         libpostal_client = AsyncMock()
-        parse_response = ParseResponseV1(
+        parse_response = ParseResponseV2(
             input="123 Main St, Toronto ON M5V 1A1",
             country="CA",
             components=ComponentSet(
@@ -216,8 +157,8 @@ class TestRunNonUsPipelineV2:
             "address_validator.services.validation.pipeline.parse_address",
             new=AsyncMock(return_value=parse_response),
         ):
-            req = ValidateRequestV1(address="123 Main St, Toronto ON M5V 1A1", country="CA")
-            _std, raw_input, returned_provider = await run_non_us_pipeline_v2(
+            req = ValidateRequest(address="123 Main St, Toronto ON M5V 1A1", country="CA")
+            _std, raw_input, returned_provider = await run_non_us_pipeline(
                 req, registry, libpostal_client=libpostal_client
             )
 
@@ -233,9 +174,9 @@ class TestRunNonUsPipelineV2:
             "address_validator.services.validation.pipeline.parse_address",
             new=AsyncMock(side_effect=LibpostalUnavailableError("sidecar down")),
         ):
-            req = ValidateRequestV1(address="123 Main St, Toronto ON M5V 1A1", country="CA")
+            req = ValidateRequest(address="123 Main St, Toronto ON M5V 1A1", country="CA")
             with pytest.raises(APIError) as exc_info:
-                await run_non_us_pipeline_v2(req, registry, libpostal_client=libpostal_client)
+                await run_non_us_pipeline(req, registry, libpostal_client=libpostal_client)
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.error == "parsing_unavailable"
@@ -250,7 +191,7 @@ class TestRunUsPipeline:
     @pytest.mark.asyncio
     async def test_raw_address_returns_std_and_raw_input(self) -> None:
         registry, provider = _make_registry()
-        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701", country="US")
+        req = ValidateRequest(address="123 Main St, Springfield, IL 62701", country="US")
         std, raw_input, returned_provider = await run_us_pipeline(req, registry)
 
         assert std.country == "US"
@@ -268,7 +209,7 @@ class TestRunUsPipeline:
             "region": "IL",
             "postal_code": "62701",
         }
-        req = ValidateRequestV1(components=comps, country="US")
+        req = ValidateRequest(components=comps, country="US")
         _std, raw_input, _ = await run_us_pipeline(req, registry)
 
         assert raw_input is not None
@@ -286,7 +227,7 @@ class TestRunUsPipeline:
             "region": "IL",
             "postal_code": "62701",
         }
-        req = ValidateRequestV1(components=comps, country="US")
+        req = ValidateRequest(components=comps, country="US")
         std, _, _ = await run_us_pipeline(req, registry)
         # USPS pipeline should produce a standardized city value
         assert std.city != ""
@@ -294,7 +235,7 @@ class TestRunUsPipeline:
     @pytest.mark.asyncio
     async def test_iso_profile_accepted(self) -> None:
         registry, _ = _make_registry()
-        req = ValidateRequestV1(
+        req = ValidateRequest(
             components={"address_line_1": "123 Main St", "city": "Springfield"},
             country="US",
         )
@@ -305,7 +246,7 @@ class TestRunUsPipeline:
     async def test_empty_street_line_raw_fallback(self) -> None:
         """GH-114: parser yields no street line for raw input → raw passes through."""
         registry, _ = _make_registry()
-        req = ValidateRequestV1(
+        req = ValidateRequest(
             address="Lynnwood City Hall, 44th Avenue West, Lynnwood, WA, USA",
             country="US",
         )
@@ -320,7 +261,7 @@ class TestRunUsPipeline:
     async def test_empty_street_line_collapses_internal_whitespace(self) -> None:
         """GH-114: raw fallback collapses internal whitespace to keep cache keys stable."""
         registry, _ = _make_registry()
-        req = ValidateRequestV1(address="Foo   Bar  Baz", country="US")
+        req = ValidateRequest(address="Foo   Bar  Baz", country="US")
         std, _, _ = await run_us_pipeline(req, registry)
         assert std.address_line_1 == "Foo Bar Baz"
 
@@ -328,7 +269,7 @@ class TestRunUsPipeline:
     async def test_empty_street_line_no_fallback_for_components_input(self) -> None:
         """Components-mode requests bypass the raw fallback."""
         registry, _ = _make_registry()
-        req = ValidateRequestV1(components={"city": "Lynnwood"}, country="US")
+        req = ValidateRequest(components={"city": "Lynnwood"}, country="US")
         std, _raw_input, _ = await run_us_pipeline(req, registry)
         assert std.address_line_1 == ""
 
@@ -336,7 +277,7 @@ class TestRunUsPipeline:
     async def test_well_parsed_address_unchanged(self) -> None:
         """The fallback must not alter normally-parseable addresses."""
         registry, _ = _make_registry()
-        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701", country="US")
+        req = ValidateRequest(address="123 Main St, Springfield, IL 62701", country="US")
         std, _, _ = await run_us_pipeline(req, registry)
         assert std.address_line_1 == "123 MAIN ST"
         assert not any("parseable street" in w.lower() for w in std.warnings)

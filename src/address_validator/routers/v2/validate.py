@@ -46,8 +46,7 @@ from address_validator.auth import require_api_key
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ErrorResponse,
-    ValidateRequestV1,
-    ValidateResponseV1,
+    ValidateRequest,
     ValidateResponseV2,
     ValidationResult,
 )
@@ -63,33 +62,12 @@ from address_validator.services.validation.errors import (
     ProviderRateLimitedError,
 )
 from address_validator.services.validation.pipeline import (
-    run_non_us_pipeline_v2,
+    run_non_us_pipeline,
     run_us_pipeline,
 )
 from address_validator.services.validation.registry import ProviderRegistry
 
 logger = logging.getLogger(__name__)
-
-
-def _v1_to_v2(v1: ValidateResponseV1) -> ValidateResponseV2:
-    """Convert a ValidateResponseV1 to ValidateResponseV2.
-
-    V2 uses empty strings (not None) for address fields.
-    """
-    return ValidateResponseV2(
-        address_line_1=v1.address_line_1 or "",
-        address_line_2=v1.address_line_2 or "",
-        city=v1.city or "",
-        region=v1.region or "",
-        postal_code=v1.postal_code or "",
-        country=v1.country,
-        validated=v1.validated,
-        validation=v1.validation,
-        components=v1.components,
-        latitude=v1.latitude,
-        longitude=v1.longitude,
-        warnings=v1.warnings,
-    )
 
 
 router = APIRouter(
@@ -142,12 +120,12 @@ router = APIRouter(
         "unavailable for raw string input. Provide pre-parsed `components` as a "
         "fallback.\n\n"
         "The `component_profile` query parameter selects the component key "
-        "vocabulary (`iso-19160-4` default, `usps-pub28` for v1 compat). "
+        "vocabulary (`iso-19160-4` default, `usps-pub28` for USPS Pub 28 names). "
         "It is validated but does not affect the validate response structure."
     ),
 )
-async def validate_address_v2(
-    req: ValidateRequestV1,
+async def validate_address(
+    req: ValidateRequest,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
@@ -166,15 +144,15 @@ async def validate_address_v2(
         )
 
     if req.country != "US":
-        std, raw_input, provider = await run_non_us_pipeline_v2(req, registry, libpostal_client)
+        std, raw_input, provider = await run_non_us_pipeline(req, registry, libpostal_client)
     else:
         std, raw_input, provider = await run_us_pipeline(
             req, registry, component_profile=component_profile
         )
 
-    logger.debug("validate_address_v2: provider=%s", type(provider).__name__)
+    logger.debug("validate_address: provider=%s", type(provider).__name__)
     try:
-        v1_result = await provider.validate(std, raw_input=raw_input)
+        result = await provider.validate(std, raw_input=raw_input)
     except ProviderBadRequestError as exc:
         logger.warning("Validation provider %s rejected request", exc.provider)
         set_audit_context(provider=exc.provider, validation_status="error", cache_hit=False)
@@ -193,7 +171,6 @@ async def validate_address_v2(
             headers={"Retry-After": str(math.ceil(exc.retry_after_seconds))},
         ) from None
 
-    result = _v1_to_v2(v1_result)
     if std.warnings:
         result = result.model_copy(update={"warnings": std.warnings + result.warnings})
 

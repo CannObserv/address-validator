@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.models import ComponentSet, StandardizeResponseV2
 from address_validator.services.validation.google_provider import GoogleProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -56,8 +56,8 @@ def _make_std(
     region: str = "IL",
     postal_code: str = "62701",
     country: str = "US",
-) -> StandardizeResponseV1:
-    return StandardizeResponseV1(
+) -> StandardizeResponseV2:
+    return StandardizeResponseV2(
         address_line_1=address_line_1,
         address_line_2="",
         city=city,
@@ -304,8 +304,8 @@ def _make_gb_std(
     city: str = "London",
     postal_code: str = "SW1A 2AA",
     country: str = "GB",
-) -> StandardizeResponseV1:
-    return StandardizeResponseV1(
+) -> StandardizeResponseV2:
+    return StandardizeResponseV2(
         address_line_1=address_line_1,
         address_line_2="",
         city=city,

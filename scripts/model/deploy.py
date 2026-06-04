@@ -107,8 +107,8 @@ def main() -> None:
     parser.add_argument("--smoke-test", action="store_true", help="Run health check after restart")
     parser.add_argument(
         "--health-url",
-        default="http://localhost:8000/api/v1/health",
-        help="Health check URL for --smoke-test (default: http://localhost:8000/api/v1/health)",
+        default="http://localhost:8000/api/v2/health",
+        help="Health check URL for --smoke-test (default: http://localhost:8000/api/v2/health)",
     )
     parser.add_argument(
         "--batch",

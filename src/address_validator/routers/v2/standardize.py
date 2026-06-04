@@ -3,12 +3,12 @@
 from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
-from address_validator.core.countries import check_country_v2
+from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
     ErrorResponse,
-    StandardizeRequestV1,
+    StandardizeRequest,
     StandardizeResponseV2,
 )
 from address_validator.routers.deps import get_libpostal_client
@@ -58,13 +58,13 @@ router = APIRouter(
         "The `component_profile` query parameter controls the key vocabulary "
         "in `components.values`:\n"
         "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
-        "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
+        "- `usps-pub28` — USPS Publication 28 snake_case names\n"
         "- `canada-post` — reserved; currently identical to `iso-19160-4`\n\n"
         "CA responses always use `components.spec='canada-post'` regardless of profile."
     ),
 )
-async def standardize_address_v2(
-    req: StandardizeRequestV1,
+async def standardize_address(
+    req: StandardizeRequest,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
@@ -80,7 +80,7 @@ async def standardize_address_v2(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    check_country_v2(req.country)
+    check_country(req.country)
 
     upstream_warnings: list[str] = []
 

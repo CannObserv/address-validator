@@ -10,7 +10,7 @@ from address_validator.canada_post_data.suffixes import CA_SUFFIX_MAP
 from address_validator.core.address_format import build_validated_string
 from address_validator.models import (  # alias can't be used as constructor
     ComponentSet,
-    StandardizeResponseV1,
+    StandardizeResponseV2,
 )
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -149,7 +149,7 @@ def _std_postal_code_ca(raw: str) -> str:
 def _standardize_ca(
     components: dict[str, str],
     upstream_warnings: list[str],
-) -> StandardizeResponseV1:
+) -> StandardizeResponseV2:
     """Standardise a Canadian address per Canada Post Addressing Guidelines.
 
     Normalises:
@@ -223,7 +223,7 @@ def _standardize_ca(
         address_line_1, address_line_2, locality, admin_area, postcode_out
     )
 
-    return StandardizeResponseV1(
+    return StandardizeResponseV2(
         address_line_1=address_line_1,
         address_line_2=address_line_2,
         city=locality,
@@ -244,7 +244,7 @@ def standardize(
     components: dict[str, str],
     country: str = "US",
     upstream_warnings: list[str] | None = None,
-) -> StandardizeResponseV1:
+) -> StandardizeResponseV2:
     """Return a standardized address from parsed *components*.
 
     Dispatches to ``_standardize_ca()`` for ``country="CA"`` and the
@@ -394,8 +394,8 @@ def _standardize(
     components: dict[str, str],
     country: str,
     warnings: list[str],
-) -> StandardizeResponseV1:
-    """Internal implementation returning v1 response."""
+) -> StandardizeResponseV2:
+    """Internal standardize implementation returning a StandardizeResponseV2."""
     logger.debug("standardizing components count=%d country=%s", len(components), country)
     std: dict[str, str] = {}
 
@@ -463,7 +463,7 @@ def _standardize(
     full_parts = [p for p in (line1, line2, last_line) if p]
     standardized = "  ".join(full_parts) if full_parts else ""
 
-    return StandardizeResponseV1(
+    return StandardizeResponseV2(
         address_line_1=line1,
         address_line_2=line2,
         city=city,

@@ -45,7 +45,11 @@ class TestRequestIdMiddleware:
         assert r1.headers["x-request-id"] != r2.headers["x-request-id"]
 
     def test_api_routes_also_include_x_request_id(self, client: TestClient) -> None:
-        response = client.post("/api/v1/parse", json={"address": "123 Main St"})
+        response = client.post(
+            "/api/v2/parse",
+            json={"address": "123 Main St"},
+            headers={"X-API-Key": "test-api-key-for-pytest"},
+        )
         assert "x-request-id" in response.headers
         assert _ULID_RE.match(response.headers["x-request-id"])
 

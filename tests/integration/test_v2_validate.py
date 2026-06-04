@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from address_validator.main import app
-from address_validator.models import ValidateResponseV1, ValidationResult
+from address_validator.models import ValidateResponseV2, ValidationResult
 from address_validator.services.validation.errors import ProviderBadRequestError
 
 pytestmark = pytest.mark.integration
@@ -57,7 +57,7 @@ class TestV2ValidateUnparseableInput:
     )
     def test_unparseable_input_returns_200_with_geocoded_response(self, client, addr) -> None:
         """Geocoded provider response → 200 with structured body."""
-        google_response = ValidateResponseV1(
+        google_response = ValidateResponseV2(
             address_line_1="Lynnwood City Hall",
             address_line_2="44th Ave W",
             city="Lynnwood",

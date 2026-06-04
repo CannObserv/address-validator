@@ -209,7 +209,7 @@ class TestParseAddress:
         assert result.components.spec_version != ""
 
     async def test_input_too_long_rejected_by_model(self) -> None:
-        """Pydantic enforces max_length=1000 on ParseRequestV1, not parse_address().
+        """Pydantic enforces max_length=1000 on ParseRequest, not parse_address().
 
         await parse_address() itself accepts any string; length gating is the
         router's responsibility.  This test documents that contract.

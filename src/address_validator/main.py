@@ -25,11 +25,6 @@ from address_validator.routers.admin._config import get_css_version
 from address_validator.routers.admin._config import templates as admin_templates
 from address_validator.routers.admin.deps import AdminAuthRequired, DatabaseUnavailable
 from address_validator.routers.admin.router import admin_router
-from address_validator.routers.v1 import countries as v1_countries
-from address_validator.routers.v1 import health as v1_health
-from address_validator.routers.v1 import parse as v1_parse
-from address_validator.routers.v1 import standardize as v1_standardize
-from address_validator.routers.v1 import validate as v1_validate
 from address_validator.routers.v2 import countries as v2_countries
 from address_validator.routers.v2 import health as v2_health
 from address_validator.routers.v2 import parse as v2_parse
@@ -80,27 +75,21 @@ def _load_custom_model() -> None:
 
 
 _DESCRIPTION = """
-Parse and standardize physical addresses.
+Parse, standardize, and validate physical addresses.
 
 Uses geography-neutral field names (`region`, `postal_code`).
-Supports **US** (USPS Publication 28) and **Canada** (Canada Post / libpostal).
+Supports **US** (USPS Publication 28 / USPS DPV / Google Address
+Validation) and **Canada** (Canada Post / libpostal / Google Address
+Validation).
 
-## Versioning
-
-| Prefix | Status |
-|---|---|
-| `/api/v2/` | **Current** — ISO 19160-4 component keys; US + CA |
-| `/api/v1/` | Stable — USPS Pub 28 component keys; US only |
+All routes live under `/api/v2/`.  Pass `?component_profile=usps-pub28`
+to return USPS Pub 28 component keys instead of the ISO 19160-4 default.
 """
 
 _TAGS = [
     {
         "name": "v2",
-        "description": "Current API — ISO 19160-4 component keys; US and CA addresses.",
-    },
-    {
-        "name": "v1",
-        "description": "Stable API — USPS Pub 28 component keys; US addresses only.",
+        "description": "ISO 19160-4 component keys; US and CA addresses.",
     },
     {
         "name": "health",
@@ -167,11 +156,10 @@ app = FastAPI(
     lifespan=lifespan,
     title="Address Validator API",
     description=_DESCRIPTION,
-    # Service version (semver). Bumped to 2.0.0 when unversioned /api/* routes
-    # were removed (issue #12). Note: this is distinct from the api_version
-    # field in response bodies, which tracks the /api/v1/ route namespace and
-    # will not change when the service version increments.
-    version="2.0.0",
+    # Service version (semver). Bumped to 3.0.0 with the /api/v1 removal
+    # (issue #117). The api_version field in response bodies tracks the
+    # /api/v2/ route namespace and is independent of this service version.
+    version="3.0.0",
     openapi_tags=_TAGS,
     contact={"name": "Cannabis Observer", "email": "greg@cannabis.observer"},
     license_info={"name": "Proprietary"},
@@ -221,9 +209,9 @@ async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
     """Serialise :class:`APIError` directly as the response body.
 
     Bypasses FastAPI's default ``HTTPException`` wrapping so the wire
-    format is ``{"error": "...", "message": "...", "api_version": "1"}``
-    rather than ``{"detail": {...}}``.  The ``API-Version`` response
-    header is appended by :class:`ApiVersionHeaderMiddleware`.
+    format is ``{"error": "...", "message": "..."}`` rather than
+    ``{"detail": {...}}``.  The ``API-Version: 2`` response header is
+    appended by :class:`ApiVersionHeaderMiddleware`.
     """
     return api_error_response(exc)
 
@@ -236,14 +224,14 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
     both field-level failures (e.g. ``max_length``) and model-level
     ``model_validator`` failures.  Without this handler FastAPI emits
     ``{"detail": [...]}``; this handler normalises all 422s to
-    ``{"error": "validation_error", "message": "...", "api_version": "1"}``.
+    ``{"error": "validation_error", "message": "..."}``.
 
     For ``ValueError``-based validators the human message is extracted from
     the exception context (``ctx["error"]``) to avoid the redundant
     ``"Value error, "`` prefix Pydantic v2 prepends to ``msg``.
 
-    The ``API-Version: 1`` response header is appended by
-    :class:`ApiVersionHeaderMiddleware` for all ``/api/v1/`` paths.
+    The ``API-Version: 2`` response header is appended by
+    :class:`ApiVersionHeaderMiddleware` for all ``/api/v2/`` paths.
     """
     messages: list[str] = []
     for err in exc.errors():
@@ -257,13 +245,6 @@ async def validation_error_handler(_request: Request, exc: RequestValidationErro
         ).model_dump(),
     )
 
-
-# v1 routes (current)
-app.include_router(v1_health.router)
-app.include_router(v1_parse.router)
-app.include_router(v1_standardize.router)
-app.include_router(v1_validate.router)
-app.include_router(v1_countries.router)
 
 # v2 routes
 app.include_router(v2_health.router)

@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 
 from address_validator.db.tables import audit_log  # noqa: E402
 
-_PARSE_ENDPOINTS = ("/api/v1/parse", "/api/v1/standardize", "/api/v1/validate")
+_PARSE_ENDPOINTS = ("/api/v2/parse", "/api/v2/standardize", "/api/v2/validate")
 
 
 def _parse_since(value: str) -> datetime:

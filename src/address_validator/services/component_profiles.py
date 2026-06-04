@@ -2,8 +2,8 @@
 
 The service layer uses strict ISO 19160-4 element names throughout.
 This module translates those keys into alternative vocabularies at the
-response boundary — e.g. the ``usps-pub28`` profile restores the
-snake_case USPS key names used by v1 clients.
+response boundary — e.g. the ``usps-pub28`` profile emits USPS
+Publication 28 snake_case key names.
 
 ``translate_components`` is a pure function: it does not modify the
 input dict and unknown keys always pass through unchanged.
@@ -60,7 +60,7 @@ VALID_PROFILES: frozenset[str] = frozenset(_PROFILES)
 COMPONENT_PROFILE_DESCRIPTION = (
     "Component key vocabulary. "
     "`iso-19160-4` (default): ISO 19160-4 element names. "
-    "`usps-pub28`: USPS Publication 28 snake_case names (v1 backward compat). "
+    "`usps-pub28`: USPS Publication 28 snake_case names. "
     "`canada-post`: reserved; currently identical to `iso-19160-4`."
 )
 

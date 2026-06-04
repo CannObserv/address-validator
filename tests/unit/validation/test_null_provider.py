@@ -2,13 +2,13 @@
 
 import pytest
 
-from address_validator.models import ComponentSet, StandardizeResponseV1
+from address_validator.models import ComponentSet, StandardizeResponseV2
 from address_validator.services.validation.null_provider import NullProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 
-def _make_std(country: str = "US") -> StandardizeResponseV1:
-    return StandardizeResponseV1(
+def _make_std(country: str = "US") -> StandardizeResponseV2:
+    return StandardizeResponseV2(
         address_line_1="123 MAIN ST",
         address_line_2="",
         city="SPRINGFIELD",
@@ -46,9 +46,14 @@ class TestNullProvider:
         assert result.validation.dpv_match_code is None
 
     @pytest.mark.asyncio
-    async def test_address_fields_are_none(self, provider: NullProvider) -> None:
+    async def test_address_fields_are_empty(self, provider: NullProvider) -> None:
         result = await provider.validate(_make_std())
-        assert result.address_line_1 is None
+        # V2 contract: top-level address fields default to "" (not None).
+        assert result.address_line_1 == ""
+        assert result.address_line_2 == ""
+        assert result.city == ""
+        assert result.region == ""
+        assert result.postal_code == ""
         assert result.components is None
         assert result.validated is None
 
@@ -64,9 +69,9 @@ class TestNullProvider:
         assert result.warnings == []
 
     @pytest.mark.asyncio
-    async def test_api_version_is_1(self, provider: NullProvider) -> None:
+    async def test_api_version_is_2(self, provider: NullProvider) -> None:
         result = await provider.validate(_make_std())
-        assert result.api_version == "1"
+        assert result.api_version == "2"
 
     @pytest.mark.asyncio
     async def test_country_passed_through(self, provider: NullProvider) -> None:

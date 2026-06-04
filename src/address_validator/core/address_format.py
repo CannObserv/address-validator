@@ -15,7 +15,7 @@ def build_validated_string(
     """Build a single-line canonical address string.
 
     Uses two-space separators between logical address lines, matching
-    the ``standardized`` field convention in ``StandardizeResponseV1``.
+    the ``standardized`` field convention in ``StandardizeResponseV2``.
 
     Example output: ``"123 MAIN ST  APT 4  SPRINGFIELD, IL 62701-1234"``
     """

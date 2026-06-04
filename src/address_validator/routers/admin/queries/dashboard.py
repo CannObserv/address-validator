@@ -83,7 +83,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                         func.count().filter(audit_log.c.cache_hit.is_(True)).label("hits"),
                         func.count().filter(audit_log.c.cache_hit.isnot(None)).label("total"),
                     ],
-                    audit_log.c.endpoint == "/api/v1/validate",
+                    audit_log.c.endpoint.in_(("/api/v1/validate", "/api/v2/validate")),
                     audit_log.c.timestamp >= last_7d,
                 )
             )
@@ -118,10 +118,15 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     error_rate = (row.errors_24h / row.api_24h * 100) if row.api_24h > 0 else None
     cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
+    # Both v1 and v2 paths map to the same friendly labels so historical
+    # audit_log rows from before the v1 removal (#117) still surface.
     known = {
         "/api/v1/parse": "/parse",
         "/api/v1/standardize": "/standardize",
         "/api/v1/validate": "/validate",
+        "/api/v2/parse": "/parse",
+        "/api/v2/standardize": "/standardize",
+        "/api/v2/validate": "/validate",
     }
     breakdown: dict[str, dict[str, int]] = {
         "all": {},
@@ -202,7 +207,7 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
                         func.count().filter(audit_log.c.cache_hit.is_(True)).label("hits"),
                         func.count().filter(audit_log.c.cache_hit.isnot(None)).label("total"),
                     ],
-                    audit_log.c.endpoint == "/api/v1/validate",
+                    audit_log.c.endpoint.in_(("/api/v1/validate", "/api/v2/validate")),
                     audit_log.c.timestamp >= start_7d,
                 )
                 .group_by(sa.literal_column("bucket"))

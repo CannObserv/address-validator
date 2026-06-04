@@ -3,9 +3,9 @@
 from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
-from address_validator.core.countries import check_country_v2
+from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError
-from address_validator.models import ComponentSet, ErrorResponse, ParseRequestV1, ParseResponseV2
+from address_validator.models import ComponentSet, ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
     COMPONENT_PROFILE_DESCRIPTION,
@@ -44,12 +44,12 @@ router = APIRouter(
         "The `component_profile` query parameter controls the key vocabulary "
         "in `components.values`:\n"
         "- `iso-19160-4` (default) — ISO 19160-4 element names\n"
-        "- `usps-pub28` — USPS Publication 28 snake_case names (v1 backward compat)\n"
+        "- `usps-pub28` — USPS Publication 28 snake_case names\n"
         "- `canada-post` — reserved; currently identical to `iso-19160-4`"
     ),
 )
 async def parse(
-    req: ParseRequestV1,
+    req: ParseRequest,
     component_profile: str = Query(
         default="iso-19160-4",
         description=COMPONENT_PROFILE_DESCRIPTION,
@@ -65,7 +65,7 @@ async def parse(
                 f"Valid values: {sorted(VALID_PROFILES)}."
             ),
         )
-    country = check_country_v2(req.country)
+    country = check_country(req.country)
     raw = req.address.strip()
     if not raw:
         raise APIError(

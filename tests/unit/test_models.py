@@ -5,58 +5,58 @@ from pydantic import ValidationError
 
 from address_validator.models import (
     CountryFieldDefinition,
-    CountryFormatResponse,
+    CountryFormatResponseV2,
     CountrySubdivision,
-    StandardizeRequestV1,
-    ValidateRequestV1,
+    StandardizeRequest,
+    ValidateRequest,
 )
 
 
-class TestStandardizeRequestV1Model:
+class TestStandardizeRequestModel:
     def test_accepts_raw_address_string(self) -> None:
-        req = StandardizeRequestV1(address="123 Main St, Springfield, IL 62701")
+        req = StandardizeRequest(address="123 Main St, Springfield, IL 62701")
         assert req.address == "123 Main St, Springfield, IL 62701"
         assert req.components is None
 
     def test_accepts_components_dict(self) -> None:
-        req = StandardizeRequestV1(components={"address_number": "123", "street_name": "MAIN"})
+        req = StandardizeRequest(components={"address_number": "123", "street_name": "MAIN"})
         assert req.components == {"address_number": "123", "street_name": "MAIN"}
         assert req.address is None
 
     def test_both_fields_none_raises_validation_error(self) -> None:
         with pytest.raises(ValidationError):
-            StandardizeRequestV1()
+            StandardizeRequest()
 
     def test_blank_address_raises_validation_error(self) -> None:
         with pytest.raises(ValidationError):
-            StandardizeRequestV1(address="   ")
+            StandardizeRequest(address="   ")
 
     def test_country_defaults_to_us(self) -> None:
-        req = StandardizeRequestV1(address="123 Main St")
+        req = StandardizeRequest(address="123 Main St")
         assert req.country == "US"
 
 
-class TestValidateRequestV1Model:
+class TestValidateRequestModel:
     def test_accepts_raw_address_string(self) -> None:
-        req = ValidateRequestV1(address="123 Main St, Springfield, IL 62701")
+        req = ValidateRequest(address="123 Main St, Springfield, IL 62701")
         assert req.address == "123 Main St, Springfield, IL 62701"
         assert req.components is None
 
     def test_accepts_components_dict(self) -> None:
-        req = ValidateRequestV1(components={"address_number": "123", "street_name": "MAIN"})
+        req = ValidateRequest(components={"address_number": "123", "street_name": "MAIN"})
         assert req.components == {"address_number": "123", "street_name": "MAIN"}
         assert req.address is None
 
     def test_both_fields_none_raises_validation_error(self) -> None:
         with pytest.raises(ValidationError):
-            ValidateRequestV1()
+            ValidateRequest()
 
     def test_blank_address_raises_validation_error(self) -> None:
         with pytest.raises(ValidationError):
-            ValidateRequestV1(address="   ")
+            ValidateRequest(address="   ")
 
     def test_country_defaults_to_us(self) -> None:
-        req = ValidateRequestV1(address="123 Main St")
+        req = ValidateRequest(address="123 Main St")
         assert req.country == "US"
 
 
@@ -77,6 +77,6 @@ def test_country_format_models_exist() -> None:
     )
     assert len(field_with_opts.options) == 1
 
-    resp = CountryFormatResponse(country="CA", fields=[field])
+    resp = CountryFormatResponseV2(country="CA", fields=[field])
     assert resp.country == "CA"
     assert len(resp.fields) == 1

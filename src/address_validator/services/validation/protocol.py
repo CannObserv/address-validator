@@ -2,7 +2,7 @@
 
 from typing import Protocol, runtime_checkable
 
-from address_validator.models import StandardizedAddress, ValidateResponseV1
+from address_validator.models import StandardizedAddress, ValidateResponseV2
 
 
 @runtime_checkable
@@ -23,7 +23,7 @@ class ValidationProvider(Protocol):
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
-    ) -> ValidateResponseV1:
+    ) -> ValidateResponseV2:
         """Validate the standardised address *std* and return an authoritative response.
 
         Args:

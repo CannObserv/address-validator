@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
-    StandardizeResponseV1,
-    ValidateResponseV1,
+    StandardizeResponseV2,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
@@ -40,7 +40,7 @@ def _make_std(
     region: str = "IL",
     postal_code: str = "62701",
     country: str = "US",
-) -> StandardizeResponseV1:
+) -> StandardizeResponseV2:
     values = {
         "premise_number": address_number,
         "thoroughfare_name": street_name,
@@ -49,7 +49,7 @@ def _make_std(
         "administrative_area": region,
         "postcode": postal_code,
     }
-    return StandardizeResponseV1(
+    return StandardizeResponseV2(
         address_line_1=f"{address_number} {street_name} {street_type}",
         address_line_2="",
         city=city,
@@ -68,10 +68,10 @@ def _make_std(
     )
 
 
-def _make_confirmed_response(country: str = "US") -> ValidateResponseV1:
-    return ValidateResponseV1(
+def _make_confirmed_response(country: str = "US") -> ValidateResponseV2:
+    return ValidateResponseV2(
         address_line_1="123 MAIN ST",
-        address_line_2=None,
+        address_line_2="",
         city="SPRINGFIELD",
         region="IL",
         postal_code="62701-1234",
@@ -93,21 +93,21 @@ def _make_confirmed_response(country: str = "US") -> ValidateResponseV1:
     )
 
 
-def _make_unavailable_response(country: str = "US") -> ValidateResponseV1:
-    return ValidateResponseV1(
+def _make_unavailable_response(country: str = "US") -> ValidateResponseV2:
+    return ValidateResponseV2(
         country=country,
         validation=ValidationResult(status="unavailable"),
     )
 
 
-def _make_not_confirmed_response(country: str = "US") -> ValidateResponseV1:
-    return ValidateResponseV1(
+def _make_not_confirmed_response(country: str = "US") -> ValidateResponseV2:
+    return ValidateResponseV2(
         country=country,
         validation=ValidationResult(status="not_confirmed", dpv_match_code="N", provider="usps"),
     )
 
 
-def _make_provider(response: ValidateResponseV1) -> AsyncMock:
+def _make_provider(response: ValidateResponseV2) -> AsyncMock:
     inner = AsyncMock()
     inner.validate = AsyncMock(return_value=response)
     return inner
@@ -243,7 +243,7 @@ class TestCacheHit:
         std1 = _make_std(street_name="MAIN")
 
         # std2 has extra postcode component — different pattern_key, same canonical result
-        std2 = StandardizeResponseV1(
+        std2 = StandardizeResponseV2(
             address_line_1="123 MAIN ST",
             address_line_2="",
             city="SPRINGFIELD",
@@ -310,7 +310,7 @@ class TestNotConfirmedCached:
 class TestWarnings:
     async def test_provider_warnings_stored_std_warnings_not(self, db: AsyncEngine) -> None:
         """Only provider-level warnings are persisted; std.warnings are not stored."""
-        response = ValidateResponseV1(
+        response = ValidateResponseV2(
             address_line_1="123 MAIN ST",
             city="SPRINGFIELD",
             region="IL",
@@ -323,7 +323,7 @@ class TestWarnings:
         provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
 
         std = _make_std()
-        std_with_warnings = StandardizeResponseV1(
+        std_with_warnings = StandardizeResponseV2(
             **{**std.model_dump(), "warnings": ["standardize: truncated"]}
         )
 
@@ -335,7 +335,7 @@ class TestWarnings:
 
 class TestLatLng:
     async def test_lat_lng_roundtrip(self, db: AsyncEngine) -> None:
-        response = ValidateResponseV1(
+        response = ValidateResponseV2(
             address_line_1="123 MAIN ST",
             city="SPRINGFIELD",
             region="IL",
@@ -563,7 +563,7 @@ class TestKeyHelpers:
 
     def test_different_address_fields_different_canonical_key(self) -> None:
         resp1 = _make_confirmed_response()
-        resp2 = ValidateResponseV1(
+        resp2 = ValidateResponseV2(
             address_line_1="456 ELM ST",
             city="SPRINGFIELD",
             region="IL",

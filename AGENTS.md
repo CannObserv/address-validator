@@ -35,7 +35,6 @@ See `docs/ARCHITECTURE.md` for the full module map.
 ```
 HTTP request
  └─ middleware: api_version → request_id → audit
- └─ routers/v1/   USPS Pub 28 vocabulary — parse, standardize, validate, countries
  └─ routers/v2/   ISO 19160-4 surface; component_profile param; CA via libpostal
  └─ routers/admin/  Jinja2 + HTMX dashboard (exe.dev auth)
  └─ services/validation/  provider pipeline (null/usps/google/chain + cache)
@@ -51,15 +50,14 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
 - `warnings: list[str]` on all response models; empty on clean input
 - `components` takes precedence over `address` when both supplied
-- All v1 request models accepting a country must inherit `CountryRequestMixin`
+- All request models accepting a country must inherit `CountryRequestMixin`
 
 ## Authentication
 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
 - Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
-- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v1/health`, `GET /api/v2/health`
-- `/api/v1/health` → `{"status": "ok"|"degraded", "api_version": "1", "database": "ok"|"error"|"unconfigured"}`; HTTP 503 when degraded
-- `/api/v2/health` → same shape plus `"libpostal": "ok"|"unavailable"`; libpostal state does NOT affect HTTP status
+- Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v2/health`
+- `/api/v2/health` → `{"status": "ok"|"degraded", "api_version": "2", "database": "ok"|"error"|"unconfigured", "libpostal": "ok"|"unavailable"}`; HTTP 503 when degraded (libpostal state does NOT affect HTTP status)
 - Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
 

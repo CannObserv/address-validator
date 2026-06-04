@@ -6,7 +6,7 @@ from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
-    ValidateResponseV1,
+    ValidateResponseV2,
     ValidationResult,
 )
 from address_validator.services.validation._helpers import _DPV_TO_STATUS
@@ -40,7 +40,7 @@ class USPSProvider:
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
-    ) -> ValidateResponseV1:
+    ) -> ValidateResponseV2:
         logger.debug("USPSProvider.validate: calling USPS API, country=%s", std.country)
         raw = await self._client.validate_address(
             street_address=std.address_line_1,
@@ -57,11 +57,11 @@ class USPSProvider:
         status = _DPV_TO_STATUS.get(dpv, "unavailable")
         dpv_for_response = dpv if dpv in _DPV_TO_STATUS else None
 
-        address_line_1 = raw.get("address_line_1") or None
-        address_line_2 = raw.get("address_line_2") or None
-        city = raw.get("city") or None
-        region = raw.get("region") or None
-        postal_code = raw.get("postal_code") or None
+        address_line_1 = raw.get("address_line_1") or ""
+        address_line_2 = raw.get("address_line_2") or ""
+        city = raw.get("city") or ""
+        region = raw.get("region") or ""
+        postal_code = raw.get("postal_code") or ""
         vacant = raw.get("vacant")
 
         # Only build components and validated string when we have a street.
@@ -89,7 +89,7 @@ class USPSProvider:
                 address_line_1, address_line_2, city, region, postal_code
             )
 
-        return ValidateResponseV1(
+        return ValidateResponseV2(
             address_line_1=address_line_1,
             address_line_2=address_line_2,
             city=city,

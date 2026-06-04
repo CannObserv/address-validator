@@ -5,13 +5,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from address_validator.main import app
-from address_validator.models import ValidateResponseV1, ValidationResult
+from address_validator.models import ValidateResponseV2, ValidationResult
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 
 pytestmark = pytest.mark.integration
 
 
-def _make_non_us_provider(response: ValidateResponseV1) -> AsyncMock:
+def _make_non_us_provider(response: ValidateResponseV2) -> AsyncMock:
     """Return a mock provider with supports_non_us=True."""
     provider = AsyncMock()
     provider.validate = AsyncMock(return_value=response)
@@ -25,7 +25,7 @@ def _mock_registry_with(provider):
     return patch.object(app.state, "registry", mock_reg)
 
 
-CA_UNAVAILABLE = ValidateResponseV1(
+CA_UNAVAILABLE = ValidateResponseV2(
     country="CA",
     validation=ValidationResult(status="unavailable"),
 )
@@ -60,14 +60,6 @@ class TestV2ValidateCA:
             )
         assert response.status_code == 200
         assert response.json()["api_version"] == "2"
-
-    def test_ca_not_available_in_v1_validate_with_raw_string(self, client) -> None:
-        response = client.post(
-            "/api/v1/validate",
-            json={"address": "123 Main St Toronto ON M5V 2T6", "country": "CA"},
-        )
-        assert response.status_code == 422
-        assert response.json()["error"] == "country_not_supported"
 
     def test_ca_components_input_accepted_in_v2(self, client) -> None:
         provider = _make_non_us_provider(CA_UNAVAILABLE)
@@ -140,7 +132,7 @@ class TestV2ValidateCA:
             "postcode": "M5V 2T6",
         }
         provider = _make_non_us_provider(
-            ValidateResponseV1(
+            ValidateResponseV2(
                 country="CA",
                 validation=ValidationResult(status="confirmed"),
                 latitude=43.6826,

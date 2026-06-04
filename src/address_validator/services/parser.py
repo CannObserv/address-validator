@@ -5,7 +5,7 @@ import re
 
 import usaddress
 
-from address_validator.models import ComponentSet, ParseResponseV1
+from address_validator.models import ComponentSet, ParseResponseV2
 from address_validator.services.audit import set_audit_context
 from address_validator.services.libpostal_client import (
     LibpostalClient,
@@ -379,7 +379,7 @@ async def parse_address(
     raw: str,
     country: str = "US",
     libpostal_client: LibpostalClient | None = None,
-) -> ParseResponseV1:
+) -> ParseResponseV2:
     """Parse *raw* address string into labelled components.
 
     For ``country="CA"``, delegates to the libpostal sidecar via
@@ -394,7 +394,7 @@ async def parse_address(
             raise LibpostalUnavailableError("No libpostal client configured")
         set_audit_context(parse_type="libpostal")
         components = await libpostal_client.parse(raw)
-        return ParseResponseV1(
+        return ParseResponseV2(
             input=raw,
             country=country,
             components=ComponentSet(
@@ -408,7 +408,7 @@ async def parse_address(
     return _parse(raw, country)
 
 
-def _parse(raw: str, country: str) -> ParseResponseV1:
+def _parse(raw: str, country: str) -> ParseResponseV2:
     """Parse *raw* address string into labelled components.
 
     Returns a :class:`ParseResponse` with:
@@ -452,7 +452,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
 
         logger.debug("parsed address type=Ambiguous country=%s", country)
         set_audit_context(parse_type="Ambiguous")
-        return ParseResponseV1(
+        return ParseResponseV2(
             input=raw,
             country=country,
             components=ComponentSet(
@@ -485,7 +485,7 @@ def _parse(raw: str, country: str) -> ParseResponseV1:
         )
 
     set_audit_context(parse_type=addr_type)
-    return ParseResponseV1(
+    return ParseResponseV2(
         input=raw,
         country=country,
         components=ComponentSet(

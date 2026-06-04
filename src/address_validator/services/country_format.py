@@ -1,15 +1,15 @@
 """Per-country address field format service.
 
 Maps ``google-i18n-address`` (i18naddress) ``ValidationRules`` to
-:class:`~models.CountryFormatResponse`.  Used by the
-``GET /api/v1/countries/{code}/format`` route.
+:class:`~models.CountryFormatResponseV2`.  Used by the
+``GET /api/v2/countries/{code}/format`` route.
 """
 
 from i18naddress import ValidationRules, get_validation_rules
 
 from address_validator.models import (
     CountryFieldDefinition,
-    CountryFormatResponse,
+    CountryFormatResponseV2,
     CountrySubdivision,
 )
 
@@ -63,7 +63,7 @@ _POSTAL_TYPE_LABELS: dict[str, str] = {
 }
 
 
-def get_country_format(country_code: str) -> CountryFormatResponse | None:
+def get_country_format(country_code: str) -> CountryFormatResponseV2 | None:
     """Return address field format for *country_code*, or ``None`` if unavailable.
 
     Returns ``None`` when the ``google-i18n-address`` library raises
@@ -90,7 +90,7 @@ def get_country_format(country_code: str) -> CountryFormatResponse | None:
                 )
             )
 
-    return CountryFormatResponse(country=country_code, fields=fields)
+    return CountryFormatResponseV2(country=country_code, fields=fields)
 
 
 def _parse_format_order(address_format: str) -> list[str]:

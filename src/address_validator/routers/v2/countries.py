@@ -7,7 +7,7 @@ from address_validator.auth import require_api_key
 from address_validator.core.countries import VALID_ISO2
 from address_validator.core.errors import APIError
 from address_validator.models import CountryFormatResponseV2, ErrorResponse
-from address_validator.services.country_format import get_country_format
+from address_validator.services.country_format import get_country_format as _lookup_country_format
 
 router = APIRouter(
     prefix="/api/v2",
@@ -39,7 +39,7 @@ _CACHE_CONTROL = "public, max-age=86400"
         "`pattern` is a postal code regex hint when the country defines one."
     ),
 )
-async def get_country_format_v2(code: str, response: Response) -> CountryFormatResponseV2:
+async def get_country_format(code: str, response: Response) -> CountryFormatResponseV2:
     country = code.strip().upper()
 
     if country not in VALID_ISO2:
@@ -49,7 +49,7 @@ async def get_country_format_v2(code: str, response: Response) -> CountryFormatR
             message=f"'{code}' is not a valid ISO 3166-1 alpha-2 country code.",
         )
 
-    fmt = get_country_format(country)
+    fmt = _lookup_country_format(country)
     if fmt is None:
         raise APIError(
             status_code=http_status.HTTP_404_NOT_FOUND,
@@ -57,11 +57,5 @@ async def get_country_format_v2(code: str, response: Response) -> CountryFormatR
             message=f"No address format data available for country '{country}'.",
         )
 
-    # Convert v1 response to v2 by extracting fields and creating new response
-    response_v2 = CountryFormatResponseV2(
-        country=fmt.country,
-        fields=fmt.fields,
-    )
-
     response.headers["Cache-Control"] = _CACHE_CONTROL
-    return response_v2
+    return fmt

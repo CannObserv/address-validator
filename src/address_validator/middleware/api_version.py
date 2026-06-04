@@ -1,15 +1,14 @@
 """API version header middleware.
 
-Pure ASGI implementation — appends ``API-Version: 1`` to all responses
-on ``/api/v1/`` routes and ``API-Version: 2`` to all responses on
-``/api/v2/`` routes.
+Pure ASGI implementation — appends ``API-Version: 2`` to all responses
+on ``/api/v2/`` routes.
 """
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
 class ApiVersionHeaderMiddleware:
-    """Append ``API-Version: 1`` or ``2`` to responses on matching routes."""
+    """Append ``API-Version: 2`` to responses on ``/api/v2/`` routes."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -20,20 +19,14 @@ class ApiVersionHeaderMiddleware:
             return
 
         path: str = scope.get("path", "")
-        version: int | None = None
-
-        if path.startswith("/api/v1/"):
-            version = 1
-        elif path.startswith("/api/v2/"):
-            version = 2
-        else:
+        if not path.startswith("/api/v2/"):
             await self.app(scope, receive, send)
             return
 
         async def send_with_api_version(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                headers.append((b"api-version", str(version).encode()))
+                headers.append((b"api-version", b"2"))
                 message = {**message, "headers": headers}
             await send(message)
 
