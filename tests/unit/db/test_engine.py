@@ -1,5 +1,7 @@
 """Unit tests for db.engine."""
 
+import logging
+import os
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -71,6 +73,96 @@ class TestInitEngine:
         assert engine_module._engine is None
         with pytest.raises(RuntimeError, match="init_engine"):
             get_engine()
+
+
+class TestMigrationsPreserveLoggingConfig:
+    """Regression for #124: alembic env.py must not clobber app logging.
+
+    alembic.ini's [logger_root] sets level=WARNING. Before #124 the embedded
+    migration run swapped the root logger out from under the app, silently
+    dropping every INFO log from address_validator.* for the rest of the
+    process.
+
+    Two layers of coverage:
+    - ``test_app_info_records_survive_migrations`` asserts the invariant
+      itself (INFO records propagate after migrations).
+    - ``test_skip_env_var_*`` lock in the ``ALEMBIC_SKIP_LOGGING_CONFIG``
+      handling contract that enforces the invariant: cleared after success,
+      cleared after failure, prior external value preserved.
+    """
+
+    async def test_app_info_records_survive_migrations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real invariant: an INFO record emitted by address_validator.* after
+        migrations must propagate to a root-level handler.
+
+        Mirrors the production pipeline: app sets root=INFO via basicConfig,
+        INFO records propagate from address_validator.* to a root handler.
+        Uses a private handler (rather than pytest's caplog) because
+        ``caplog.at_level`` forces a level on the target logger, which would
+        mask root-level clobbering — the exact failure mode #124 was about.
+        """
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        root = logging.getLogger()
+        original_level = root.level
+        records: list[logging.LogRecord] = []
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = _CaptureHandler(level=logging.NOTSET)
+        root.setLevel(logging.INFO)
+        root.addHandler(handler)
+        try:
+            await init_engine()
+            logging.getLogger("address_validator.test").info("post-migration probe")
+            assert any(
+                rec.name == "address_validator.test" and rec.getMessage() == "post-migration probe"
+                for rec in records
+            ), "INFO record from address_validator.* dropped after migrations"
+        finally:
+            if handler in root.handlers:
+                root.removeHandler(handler)
+            root.setLevel(original_level)
+
+    async def test_skip_env_var_is_unset_after_migrations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The guard var must not leak — standalone alembic invocations from
+        the same process must still pretty-print via alembic.ini."""
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.delenv("ALEMBIC_SKIP_LOGGING_CONFIG", raising=False)
+        await init_engine()
+        assert "ALEMBIC_SKIP_LOGGING_CONFIG" not in os.environ
+
+    async def test_skip_env_var_cleared_after_migration_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The try/finally in _run_migrations must clean up the guard var even
+        when command.upgrade() raises mid-flight.
+        """
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.delenv("ALEMBIC_SKIP_LOGGING_CONFIG", raising=False)
+        with (
+            patch(
+                "address_validator.db.engine.command.upgrade",
+                side_effect=RuntimeError("upgrade boom"),
+            ),
+            pytest.raises(RuntimeError, match="upgrade boom"),
+        ):
+            await init_engine()
+        assert "ALEMBIC_SKIP_LOGGING_CONFIG" not in os.environ
+
+    async def test_skip_env_var_prior_value_restored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If the var was set in the parent process (e.g. exported in the
+        launching shell), _run_migrations must restore it rather than pop.
+        """
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.setenv("ALEMBIC_SKIP_LOGGING_CONFIG", "external-sentinel")
+        await init_engine()
+        assert os.environ.get("ALEMBIC_SKIP_LOGGING_CONFIG") == "external-sentinel"
 
 
 class TestGetEngine:

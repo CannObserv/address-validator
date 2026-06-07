@@ -1,8 +1,15 @@
 """Alembic async migration environment.
 
-Reads the database URL from the VALIDATION_CACHE_DSN environment variable.
-Falls back to the sqlalchemy.url setting in alembic.ini when the env var is
-absent (useful for offline SQL generation).
+Environment variables
+---------------------
+VALIDATION_CACHE_DSN
+    Database URL. Falls back to the sqlalchemy.url setting in alembic.ini
+    when absent (useful for offline SQL generation).
+ALEMBIC_SKIP_LOGGING_CONFIG
+    When equal to "1", skip ``fileConfig`` so the embedded migration run
+    from ``db.engine._run_migrations`` does not clobber the app's logging
+    config. Standalone CLI invocations keep alembic.ini's formatter.
+    See issue #124.
 """
 
 import asyncio
@@ -16,7 +23,16 @@ from alembic import context
 
 config = context.config
 
-if config.config_file_name is not None:
+# Skip fileConfig when invoked embedded inside the FastAPI app (issue #124).
+# alembic.ini's [logger_root] sets level=WARNING, which would clobber the
+# app's logging.basicConfig(level=INFO) and silently drop every INFO log from
+# the address_validator.* tree for the rest of the process lifetime.
+# db.engine._run_migrations sets ALEMBIC_SKIP_LOGGING_CONFIG=1 around its
+# command.upgrade() call to suppress this path. Standalone `alembic ...`
+# invocations are unaffected. Exact-match "1" so any other value (e.g. "0",
+# "false") falls through to the default behaviour rather than silently
+# inverting intent.
+if config.config_file_name is not None and os.environ.get("ALEMBIC_SKIP_LOGGING_CONFIG") != "1":
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Override the URL from the environment variable when present.
