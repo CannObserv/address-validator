@@ -82,6 +82,13 @@ class TestMigrationsPreserveLoggingConfig:
     migration run swapped the root logger out from under the app, silently
     dropping every INFO log from address_validator.* for the rest of the
     process.
+
+    Two layers of coverage:
+    - ``test_app_info_records_survive_migrations`` asserts the invariant
+      itself (INFO records propagate after migrations).
+    - ``test_skip_env_var_*`` lock in the ``ALEMBIC_SKIP_LOGGING_CONFIG``
+      handling contract that enforces the invariant: cleared after success,
+      cleared after failure, prior external value preserved.
     """
 
     async def test_app_info_records_survive_migrations(
