@@ -8,8 +8,8 @@ VALIDATION_CACHE_DSN
 ALEMBIC_SKIP_LOGGING_CONFIG
     When equal to "1", skip ``fileConfig`` so the embedded migration run
     from ``db.engine._run_migrations`` does not clobber the app's logging
-    config. Standalone CLI invocations leave this unset and keep alembic
-    .ini's formatter. See issue #124.
+    config. Standalone CLI invocations keep alembic.ini's formatter.
+    See issue #124.
 """
 
 import asyncio

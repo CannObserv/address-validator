@@ -99,7 +99,6 @@ class TestMigrationsPreserveLoggingConfig:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
         root = logging.getLogger()
         original_level = root.level
-        original_handlers = list(root.handlers)
         records: list[logging.LogRecord] = []
 
         class _CaptureHandler(logging.Handler):
@@ -111,9 +110,6 @@ class TestMigrationsPreserveLoggingConfig:
         root.addHandler(handler)
         try:
             await init_engine()
-            # Re-attach in case fileConfig replaced the handler list.
-            if handler not in root.handlers:
-                root.addHandler(handler)
             logging.getLogger("address_validator.test").info("post-migration probe")
             assert any(
                 rec.name == "address_validator.test" and rec.getMessage() == "post-migration probe"
@@ -123,13 +119,6 @@ class TestMigrationsPreserveLoggingConfig:
             if handler in root.handlers:
                 root.removeHandler(handler)
             root.setLevel(original_level)
-            # Restore any handlers fileConfig may have swapped in.
-            for h in list(root.handlers):
-                if h not in original_handlers:
-                    root.removeHandler(h)
-            for h in original_handlers:
-                if h not in root.handlers:
-                    root.addHandler(h)
 
     async def test_skip_env_var_is_unset_after_migrations(
         self, monkeypatch: pytest.MonkeyPatch
