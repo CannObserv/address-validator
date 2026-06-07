@@ -78,13 +78,20 @@ async def _run_migrations(dsn: str) -> None:
     # [logger_root] sets level=WARNING and would clobber the app's
     # logging.basicConfig(level=INFO), silently dropping every INFO log from
     # address_validator.* for the rest of the process lifetime. See #124.
-    os.environ["ALEMBIC_SKIP_LOGGING_CONFIG"] = "1"
+    # Save/restore any prior value so an external export of the same var
+    # (e.g. from the launching shell) survives this call unchanged.
+    skip_var = "ALEMBIC_SKIP_LOGGING_CONFIG"
+    prior = os.environ.get(skip_var)
+    os.environ[skip_var] = "1"
     try:
         logger.debug("engine: running alembic upgrade head")
         await asyncio.get_running_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
         logger.debug("engine: schema up to date")
     finally:
-        os.environ.pop("ALEMBIC_SKIP_LOGGING_CONFIG", None)
+        if prior is None:
+            os.environ.pop(skip_var, None)
+        else:
+            os.environ[skip_var] = prior
 
 
 def _redact_dsn(dsn: str) -> str:

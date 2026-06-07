@@ -84,19 +84,52 @@ class TestMigrationsPreserveLoggingConfig:
     process.
     """
 
-    async def test_root_level_survives_migrations(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_app_info_records_survive_migrations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Real invariant: an INFO record emitted by address_validator.* after
+        migrations must propagate to a root-level handler.
+
+        Mirrors the production pipeline: app sets root=INFO via basicConfig,
+        INFO records propagate from address_validator.* to a root handler.
+        Uses a private handler (rather than pytest's caplog) because
+        ``caplog.at_level`` forces a level on the target logger, which would
+        mask root-level clobbering — the exact failure mode #124 was about.
+        """
         monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
         root = logging.getLogger()
         original_level = root.level
+        original_handlers = list(root.handlers)
+        records: list[logging.LogRecord] = []
+
+        class _CaptureHandler(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                records.append(record)
+
+        handler = _CaptureHandler(level=logging.NOTSET)
         root.setLevel(logging.INFO)
+        root.addHandler(handler)
         try:
             await init_engine()
-            assert root.level == logging.INFO, (
-                "alembic fileConfig clobbered root logger level — "
-                "ALEMBIC_SKIP_LOGGING_CONFIG guard not active"
-            )
+            # Re-attach in case fileConfig replaced the handler list.
+            if handler not in root.handlers:
+                root.addHandler(handler)
+            logging.getLogger("address_validator.test").info("post-migration probe")
+            assert any(
+                rec.name == "address_validator.test" and rec.getMessage() == "post-migration probe"
+                for rec in records
+            ), "INFO record from address_validator.* dropped after migrations"
         finally:
+            if handler in root.handlers:
+                root.removeHandler(handler)
             root.setLevel(original_level)
+            # Restore any handlers fileConfig may have swapped in.
+            for h in list(root.handlers):
+                if h not in original_handlers:
+                    root.removeHandler(h)
+            for h in original_handlers:
+                if h not in root.handlers:
+                    root.addHandler(h)
 
     async def test_skip_env_var_is_unset_after_migrations(
         self, monkeypatch: pytest.MonkeyPatch
@@ -107,6 +140,33 @@ class TestMigrationsPreserveLoggingConfig:
         monkeypatch.delenv("ALEMBIC_SKIP_LOGGING_CONFIG", raising=False)
         await init_engine()
         assert "ALEMBIC_SKIP_LOGGING_CONFIG" not in os.environ
+
+    async def test_skip_env_var_cleared_after_migration_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The try/finally in _run_migrations must clean up the guard var even
+        when command.upgrade() raises mid-flight.
+        """
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.delenv("ALEMBIC_SKIP_LOGGING_CONFIG", raising=False)
+        with (
+            patch(
+                "address_validator.db.engine.command.upgrade",
+                side_effect=RuntimeError("upgrade boom"),
+            ),
+            pytest.raises(RuntimeError, match="upgrade boom"),
+        ):
+            await init_engine()
+        assert "ALEMBIC_SKIP_LOGGING_CONFIG" not in os.environ
+
+    async def test_skip_env_var_prior_value_restored(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """If the var was set in the parent process (e.g. exported in the
+        launching shell), _run_migrations must restore it rather than pop.
+        """
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.setenv("ALEMBIC_SKIP_LOGGING_CONFIG", "external-sentinel")
+        await init_engine()
+        assert os.environ.get("ALEMBIC_SKIP_LOGGING_CONFIG") == "external-sentinel"
 
 
 class TestGetEngine:
