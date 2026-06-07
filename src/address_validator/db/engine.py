@@ -74,9 +74,17 @@ async def _run_migrations(dsn: str) -> None:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", dsn)
 
-    logger.debug("engine: running alembic upgrade head")
-    await asyncio.get_running_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
-    logger.debug("engine: schema up to date")
+    # Tell alembic/env.py to skip its fileConfig() call — alembic.ini's
+    # [logger_root] sets level=WARNING and would clobber the app's
+    # logging.basicConfig(level=INFO), silently dropping every INFO log from
+    # address_validator.* for the rest of the process lifetime. See #124.
+    os.environ["ALEMBIC_SKIP_LOGGING_CONFIG"] = "1"
+    try:
+        logger.debug("engine: running alembic upgrade head")
+        await asyncio.get_running_loop().run_in_executor(None, lambda: command.upgrade(cfg, "head"))
+        logger.debug("engine: schema up to date")
+    finally:
+        os.environ.pop("ALEMBIC_SKIP_LOGGING_CONFIG", None)
 
 
 def _redact_dsn(dsn: str) -> str:

@@ -1,5 +1,7 @@
 """Unit tests for db.engine."""
 
+import logging
+import os
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -71,6 +73,40 @@ class TestInitEngine:
         assert engine_module._engine is None
         with pytest.raises(RuntimeError, match="init_engine"):
             get_engine()
+
+
+class TestMigrationsPreserveLoggingConfig:
+    """Regression for #124: alembic env.py must not clobber app logging.
+
+    alembic.ini's [logger_root] sets level=WARNING. Before #124 the embedded
+    migration run swapped the root logger out from under the app, silently
+    dropping every INFO log from address_validator.* for the rest of the
+    process.
+    """
+
+    async def test_root_level_survives_migrations(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        root = logging.getLogger()
+        original_level = root.level
+        root.setLevel(logging.INFO)
+        try:
+            await init_engine()
+            assert root.level == logging.INFO, (
+                "alembic fileConfig clobbered root logger level — "
+                "ALEMBIC_SKIP_LOGGING_CONFIG guard not active"
+            )
+        finally:
+            root.setLevel(original_level)
+
+    async def test_skip_env_var_is_unset_after_migrations(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The guard var must not leak — standalone alembic invocations from
+        the same process must still pretty-print via alembic.ini."""
+        monkeypatch.setenv("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
+        monkeypatch.delenv("ALEMBIC_SKIP_LOGGING_CONFIG", raising=False)
+        await init_engine()
+        assert "ALEMBIC_SKIP_LOGGING_CONFIG" not in os.environ
 
 
 class TestGetEngine:
