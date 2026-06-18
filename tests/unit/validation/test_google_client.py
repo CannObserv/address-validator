@@ -687,3 +687,70 @@ class TestMapResponseUsPostalFallback:
         assert result["address_line_1"] == "123 MAIN ST"
         assert result["city"] == "SPRINGFIELD"
         assert result["postal_code"] == "62701-1234"
+
+
+# -- US non-CASS folded-unit recovery (GH #127) ----------------------------
+# Modeled on the live production capture for "9 BENNY DR LOT B, OKANOGAN, WA
+# 98840": USPS fell through to Google, which hit the non-CASS path
+# (dpvConfirmation absent) and echoed street + unit folded into a single
+# postalAddress.addressLines element rather than as a separate line.
+GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT = {
+    "result": {
+        "verdict": {
+            "inputGranularity": "PREMISE",
+            "validationGranularity": "PREMISE",
+            "geocodeGranularity": "PREMISE",
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "US",
+                "postalCode": "98840",
+                "administrativeArea": "WA",
+                "locality": "Okanogan",
+                "addressLines": ["9 BENNY DR LOT B"],
+            },
+        },
+        "geocode": {"location": {"latitude": 48.36, "longitude": -119.58}},
+        "uspsData": {"standardizedAddress": {}},
+    }
+}
+
+
+class TestMapResponseNonCassFoldedUnit:
+    """GH #127: recover the folded secondary unit into address_line_2 on the non-CASS path."""
+
+    def test_folded_unit_split_into_line_2(self) -> None:
+        result = GoogleClient._map_response(
+            GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT, secondary_address="LOT B"
+        )
+        assert result["address_line_1"] == "9 BENNY DR"
+        assert result["address_line_2"] == "LOT B"
+
+    def test_split_is_case_insensitive_preserves_echoed_casing(self) -> None:
+        result = GoogleClient._map_response(
+            GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT, secondary_address="lot b"
+        )
+        assert result["address_line_1"] == "9 BENNY DR"
+        assert result["address_line_2"] == "LOT B"
+
+    def test_no_secondary_sent_leaves_unit_folded(self) -> None:
+        """No unit was sent → nothing to split; line stays as Google returned it."""
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT)
+        assert result["address_line_1"] == "9 BENNY DR LOT B"
+        assert result["address_line_2"] == ""
+
+    def test_google_reformatted_unit_no_match_no_regression(self) -> None:
+        """If Google's echo doesn't end with the unit we sent, leave it in line 1."""
+        result = GoogleClient._map_response(
+            GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT, secondary_address="STE 200"
+        )
+        assert result["address_line_1"] == "9 BENNY DR LOT B"
+        assert result["address_line_2"] == ""
+
+    def test_separate_line_2_not_overwritten(self) -> None:
+        """When Google already returns the unit as a separate line, keep it untouched."""
+        result = GoogleClient._map_response(
+            GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL, secondary_address="LOT B"
+        )
+        assert result["address_line_1"] == "Lynnwood City Hall"
+        assert result["address_line_2"] == "44th Ave W"

@@ -71,6 +71,28 @@ def _read_postal_address(postal_addr: dict[str, Any]) -> _PostalFields:
     )
 
 
+def _split_folded_unit(line1: str, secondary: str | None) -> tuple[str, str]:
+    """Split a secondary-unit suffix back out of a folded street line (GH #127).
+
+    #126 folds the secondary-unit line into the Google request's single
+    ``addressLines[0]`` (e.g. ``"9 BENNY DR LOT B"``).  On the non-CASS response
+    path Google echoes the unit folded into one ``postalAddress.addressLines``
+    element rather than as a separate line, so ``address_line_2`` would come back
+    empty.  When *line1* ends with the unit we sent, strip it back into the
+    secondary slot.  Match is case-insensitive; the echoed casing is preserved.
+
+    Returns ``(street, unit)``; *unit* is ``""`` when there is no match (caller
+    falls back to leaving the unit in *line1* — no regression vs. pre-#127).
+    """
+    sec = (secondary or "").strip()
+    if not sec:
+        return line1, ""
+    if line1.lower().endswith(" " + sec.lower()):
+        cut = len(line1) - len(sec)
+        return line1[:cut].rstrip(), line1[cut:]
+    return line1, ""
+
+
 class GoogleClient:
     """Async Google Address Validation API client.
 
@@ -208,15 +230,20 @@ class GoogleClient:
 
             raw: dict[str, Any] = resp.json()
             if country == "US":
-                return self._map_response(raw)
+                return self._map_response(raw, secondary_address=secondary_address)
             return self._map_response_international(raw)
 
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("google", retry_after_seconds=0.0)
 
     @staticmethod
-    def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise US Google response; falls back to postalAddress when CASS produces no DPV."""
+    def _map_response(raw: dict[str, Any], secondary_address: str | None = None) -> dict[str, Any]:
+        """Normalise US Google response; falls back to postalAddress when CASS produces no DPV.
+
+        *secondary_address* is the unit line folded into the request (#126); on the
+        non-CASS path it is used to split a folded unit back into ``address_line_2``
+        (GH #127) when Google echoes street + unit as one ``addressLines`` element.
+        """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         usps = result.get("uspsData", {})
@@ -245,6 +272,12 @@ class GoogleClient:
             fields = _read_postal_address(postal_addr)
             address_line_1 = fields.address_line_1
             address_line_2 = fields.address_line_2
+            if not address_line_2:
+                # Google folded street + unit into one addressLines element;
+                # recover the unit we sent into the secondary slot (GH #127).
+                address_line_1, address_line_2 = _split_folded_unit(
+                    address_line_1, secondary_address
+                )
             city = fields.city
             region = fields.region
             postal_code = fields.postal_code
