@@ -83,6 +83,10 @@ def _split_folded_unit(line1: str, secondary: str | None) -> tuple[str, str]:
 
     Returns ``(street, unit)``; *unit* is ``""`` when there is no match (caller
     falls back to leaving the unit in *line1* — no regression vs. pre-#127).
+
+    The match is a trusted bare-suffix match (no unit-designator boundary check):
+    *secondary* is always the standardised unit line *we* sent, not arbitrary
+    text, so a coincidental street-name collision is implausible.
     """
     sec = (secondary or "").strip()
     if not sec:
@@ -231,7 +235,7 @@ class GoogleClient:
             raw: dict[str, Any] = resp.json()
             if country == "US":
                 return self._map_response(raw, secondary_address=secondary_address)
-            return self._map_response_international(raw)
+            return self._map_response_international(raw, secondary_address=secondary_address)
 
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("google", retry_after_seconds=0.0)
@@ -304,20 +308,31 @@ class GoogleClient:
         }
 
     @staticmethod
-    def _map_response_international(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise a non-US Google response; reads postalAddress + verdict (no USPS CASS)."""
+    def _map_response_international(
+        raw: dict[str, Any], secondary_address: str | None = None
+    ) -> dict[str, Any]:
+        """Normalise a non-US Google response; reads postalAddress + verdict (no USPS CASS).
+
+        Like the US non-CASS path, the unit line is folded into the request's
+        single ``addressLines[0]`` (#126); split it back into ``address_line_2``
+        when Google echoes it folded (GH #127).
+        """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         postal_addr = result.get("address", {}).get("postalAddress", {})
         location = result.get("geocode", {}).get("location", {})
 
         fields = _read_postal_address(postal_addr)
+        address_line_1 = fields.address_line_1
+        address_line_2 = fields.address_line_2
+        if not address_line_2:
+            address_line_1, address_line_2 = _split_folded_unit(address_line_1, secondary_address)
 
         return {
             "dpv_match_code": None,
             "status": _verdict_to_status(verdict),
-            "address_line_1": fields.address_line_1,
-            "address_line_2": fields.address_line_2,
+            "address_line_1": address_line_1,
+            "address_line_2": address_line_2,
             "city": fields.city,
             "region": fields.region,
             "postal_code": fields.postal_code,
