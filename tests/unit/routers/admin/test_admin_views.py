@@ -140,6 +140,41 @@ def test_audit_htmx_nonboosted_returns_partial(client: TestClient, admin_headers
     assert "<nav" not in response.text
 
 
+def test_audit_filter_form_blank_status_min(client: TestClient, admin_headers: dict) -> None:
+    """Blank "Min Status" must not 422.
+
+    The HTMX filter form submits every named input on each request, so leaving
+    Min Status empty sends ``status_min=`` (empty string). The handler must
+    coerce that to "no filter" rather than rejecting it as an invalid integer.
+    Mirrors the exact payload the form serializes when searching by Raw Input.
+    """
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get(
+        "/admin/audit/",
+        params={"client_ip": "", "endpoint": "", "status_min": "", "raw_input": "9 Benny Dr"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("400", 200),  # in range
+        ("50", 422),  # below ge=100
+        ("abc", 422),  # non-numeric
+    ],
+)
+def test_audit_filter_status_min_bounds_enforced(
+    client: TestClient, admin_headers: dict, value: str, expected: int
+) -> None:
+    """A real status_min outside 100-599 is still rejected; the blank-coercion
+    fix must not loosen the bounds on genuine integer input."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get("/admin/audit/", params={"status_min": value}, headers=headers)
+    assert response.status_code == expected
+
+
 def test_audit_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
     """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
     response = client.get("/admin/audit/", headers=admin_headers)

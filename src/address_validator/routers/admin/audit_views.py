@@ -1,9 +1,12 @@
 """Audit log view — paginated, filterable audit trail."""
 
 import math
+from typing import Annotated
 
+from annotated_types import Ge, Le
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
+from pydantic import BeforeValidator
 from starlette.responses import Response
 
 from address_validator.routers.admin._config import get_css_version, templates
@@ -15,13 +18,31 @@ router = APIRouter(prefix="/audit")
 _PER_PAGE = 50
 
 
+def _blank_to_none(value: object) -> object:
+    """Coerce an empty-string query param to None.
+
+    The HTMX filter form submits every named input on each request, so a blank
+    "Min Status" field arrives as ``status_min=`` (empty string). Without this,
+    Pydantic rejects empty string for ``int | None`` and the whole request 422s.
+    """
+    return None if value == "" else value
+
+
+# Optional HTTP-status filter that tolerates the empty string sent by blank form
+# fields. The Ge/Le bounds live on the int branch so they are skipped when the
+# coerced value is None (a union-level constraint would raise on None instead).
+OptionalStatusMin = Annotated[
+    Annotated[int, Ge(100), Le(599)] | None, BeforeValidator(_blank_to_none)
+]
+
+
 @router.get("/", response_class=HTMLResponse, response_model=None)
 async def audit_list(
     request: Request,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
     endpoint: str | None = Query(None),
-    status_min: int | None = Query(None, ge=100, le=599),
+    status_min: OptionalStatusMin = None,
     raw_input: str | None = Query(None),
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
