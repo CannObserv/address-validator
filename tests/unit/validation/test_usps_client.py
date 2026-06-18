@@ -305,6 +305,33 @@ class TestUSPSClient:
         assert kwargs["params"]["ZIPCode"] == "62701"
 
     @pytest.mark.asyncio
+    async def test_secondary_address_sent_as_param(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH #126: secondary_address must be sent as the secondaryAddress param."""
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address(
+            "9 BENNY DR", "OKANOGAN", "WA", zip_code="98840", secondary_address="LOT B"
+        )
+
+        _, kwargs = mock_http.get.call_args
+        assert kwargs["params"]["secondaryAddress"] == "LOT B"
+
+    @pytest.mark.asyncio
+    async def test_secondary_address_omitted_when_absent(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address("123 Main St", "Springfield", "IL")
+
+        _, kwargs = mock_http.get.call_args
+        assert "secondaryAddress" not in kwargs["params"]
+
+    @pytest.mark.asyncio
     async def test_zip5_passed_unchanged(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)

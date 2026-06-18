@@ -193,8 +193,13 @@ class USPSClient:
         city: str | None = None,
         state: str | None = None,
         zip_code: str | None = None,
+        secondary_address: str | None = None,
     ) -> dict[str, Any]:
         """Validate a single US address via the USPS Addresses API v3.
+
+        *secondary_address* carries the secondary-unit line (e.g. ``"LOT B"``,
+        ``"APT 4"``) and is sent as the ``secondaryAddress`` query param when
+        present; it is required for USPS to confirm the unit (GH #126).
 
         Retries up to :data:`~services.validation._rate_limit._RETRY_MAX` times
         on HTTP 429, honouring the ``Retry-After`` header when present and
@@ -214,6 +219,11 @@ class USPSClient:
         on HTTP 5xx or any unexpected non-2xx response.
         """
         params: dict[str, str] = {"streetAddress": street_address}
+        if secondary_address:
+            # Secondary-unit line (e.g. "LOT B", "APT 4", "STE 200"). USPS v3
+            # uses this for CASS secondary-match codes (DPV "S"/"D"); omitting it
+            # silently drops the unit from the validated result (GH #126).
+            params["secondaryAddress"] = secondary_address
         if city:
             params["city"] = city
         if state:

@@ -56,10 +56,11 @@ def _make_std(
     region: str = "IL",
     postal_code: str = "62701",
     country: str = "US",
+    address_line_2: str = "",
 ) -> StandardizeResponseV2:
     return StandardizeResponseV2(
         address_line_1=address_line_1,
-        address_line_2="",
+        address_line_2=address_line_2,
         city=city,
         region=region,
         postal_code=postal_code,
@@ -243,7 +244,28 @@ class TestGoogleProvider:
             state="IL",
             zip_code="62701",
             country="US",
+            secondary_address=None,
         )
+
+    @pytest.mark.asyncio
+    async def test_secondary_unit_forwarded_to_client(
+        self, provider: GoogleProvider, mock_client: AsyncMock
+    ) -> None:
+        """GH #126: std.address_line_2 (LOT/APT/STE) must reach the Google client."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        std = _make_std(address_line_1="9 BENNY DR", address_line_2="LOT B")
+        await provider.validate(std)
+        assert mock_client.validate_address.call_args.kwargs["secondary_address"] == "LOT B"
+
+    @pytest.mark.asyncio
+    async def test_whitespace_secondary_unit_normalised_to_none(
+        self, provider: GoogleProvider, mock_client: AsyncMock
+    ) -> None:
+        """A whitespace-only address_line_2 must not be sent as a blank unit."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        std = _make_std(address_line_1="9 BENNY DR", address_line_2="   ")
+        await provider.validate(std)
+        assert mock_client.validate_address.call_args.kwargs["secondary_address"] is None
 
     @pytest.mark.asyncio
     async def test_http_error_raises(
