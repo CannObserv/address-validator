@@ -228,6 +228,16 @@ class TestUSPSProvider:
         assert mock_client.validate_address.call_args.kwargs["secondary_address"] == "LOT B"
 
     @pytest.mark.asyncio
+    async def test_whitespace_secondary_unit_normalised_to_none(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        """A whitespace-only address_line_2 must not be sent as a blank unit."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        std = _make_std(address_line_1="9 BENNY DR", address_line_2="   ")
+        await provider.validate(std)
+        assert mock_client.validate_address.call_args.kwargs["secondary_address"] is None
+
+    @pytest.mark.asyncio
     async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):
