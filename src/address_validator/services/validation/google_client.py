@@ -118,8 +118,13 @@ class GoogleClient:
         state: str | None = None,
         zip_code: str | None = None,
         country: str = "US",
+        secondary_address: str | None = None,
     ) -> dict[str, Any]:
         """Validate a single address via the Google Address Validation API.
+
+        *secondary_address* carries the secondary-unit line (e.g. ``"LOT B"``);
+        when present it is folded into the street ``addressLines`` entry so the
+        unit reaches the API and is not dropped (GH #126).
 
         Retries up to :data:`~services.validation._rate_limit._RETRY_MAX` times
         on HTTP 429, honouring the ``Retry-After`` header when present and
@@ -143,7 +148,14 @@ class GoogleClient:
             ProviderTransientError: on HTTP 5xx or any other unexpected
                 non-2xx response.
         """
-        address_lines = [street_address]
+        # Fold the secondary-unit line into the street line so Google receives
+        # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
+        # the unit from the validated result (GH #126).
+        if secondary_address:
+            street_line = f"{street_address} {secondary_address}".strip()
+        else:
+            street_line = street_address
+        address_lines = [street_line]
         city_state_zip = " ".join(p for p in (city, state, zip_code) if p)
         if city_state_zip:
             address_lines.append(city_state_zip)

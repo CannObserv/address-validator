@@ -259,6 +259,27 @@ class TestGoogleClientValidateAddress:
         assert body.get("enableUspsCass") is True
 
     @pytest.mark.asyncio
+    async def test_secondary_address_folded_into_street_line(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        """GH #126: secondary_address must be folded into the street addressLine."""
+        mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
+        await client.validate_address(
+            "9 BENNY DR", "OKANOGAN", "WA", zip_code="98840", secondary_address="LOT B"
+        )
+        body = mock_http.post.call_args[1]["json"]
+        assert body["address"]["addressLines"][0] == "9 BENNY DR LOT B"
+
+    @pytest.mark.asyncio
+    async def test_street_line_unchanged_when_no_secondary(
+        self, client: GoogleClient, mock_http: AsyncMock
+    ) -> None:
+        mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
+        await client.validate_address("9 BENNY DR", "OKANOGAN", "WA", zip_code="98840")
+        body = mock_http.post.call_args[1]["json"]
+        assert body["address"]["addressLines"][0] == "9 BENNY DR"
+
+    @pytest.mark.asyncio
     async def test_http_error_raises(self, client: GoogleClient, mock_http: AsyncMock) -> None:
         mock_http.post.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):

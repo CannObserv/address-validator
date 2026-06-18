@@ -47,6 +47,7 @@ class USPSProvider:
             city=std.city,
             state=std.region,
             zip_code=std.postal_code,
+            secondary_address=std.address_line_2 or None,
         )
 
         # Map known DPV codes; any unrecognised value (a future USPS sentinel

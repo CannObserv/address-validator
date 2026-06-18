@@ -57,6 +57,7 @@ class GoogleProvider:
             state=std.region,
             zip_code=std.postal_code,
             country=std.country,
+            secondary_address=std.address_line_2 or None,
         )
 
         status = raw["status"]
