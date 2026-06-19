@@ -525,6 +525,37 @@ GOOGLE_RESPONSE_INTERNATIONAL_UNCONFIRMED = {
 }
 
 
+# GH #127: non-US response with street + unit folded into one addressLines element.
+GOOGLE_RESPONSE_INTERNATIONAL_FOLDED_UNIT = {
+    "result": {
+        "verdict": {"addressComplete": True, "validationGranularity": "PREMISE"},
+        "address": {
+            "postalAddress": {
+                "addressLines": ["10 Downing St FLAT 1"],
+                "locality": "London",
+                "postalCode": "SW1A 2AA",
+            }
+        },
+        "geocode": {},
+    }
+}
+
+# Non-US response where Google splits the unit into its own addressLines element.
+GOOGLE_RESPONSE_INTERNATIONAL_SEPARATE_UNIT = {
+    "result": {
+        "verdict": {"addressComplete": True, "validationGranularity": "PREMISE"},
+        "address": {
+            "postalAddress": {
+                "addressLines": ["Flat 1", "10 Downing St"],
+                "locality": "London",
+                "postalCode": "SW1A 2AA",
+            }
+        },
+        "geocode": {},
+    }
+}
+
+
 class TestMapResponseInternational:
     def test_confirmed_address(self) -> None:
         result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
@@ -581,39 +612,17 @@ class TestMapResponseInternational:
 
     def test_folded_unit_split_into_line_2(self) -> None:
         """GH #127: non-US path also recovers a folded unit into address_line_2."""
-        raw = {
-            "result": {
-                "verdict": {"addressComplete": True, "validationGranularity": "PREMISE"},
-                "address": {
-                    "postalAddress": {
-                        "addressLines": ["10 Downing St FLAT 1"],
-                        "locality": "London",
-                        "postalCode": "SW1A 2AA",
-                    }
-                },
-                "geocode": {},
-            }
-        }
-        result = GoogleClient._map_response_international(raw, secondary_address="FLAT 1")
+        result = GoogleClient._map_response_international(
+            GOOGLE_RESPONSE_INTERNATIONAL_FOLDED_UNIT, secondary_address="FLAT 1"
+        )
         assert result["address_line_1"] == "10 Downing St"
         assert result["address_line_2"] == "FLAT 1"
 
     def test_separate_line_2_not_overwritten(self) -> None:
         """When Google splits the unit into its own line, the sent unit must not clobber it."""
-        raw = {
-            "result": {
-                "verdict": {"addressComplete": True, "validationGranularity": "PREMISE"},
-                "address": {
-                    "postalAddress": {
-                        "addressLines": ["Flat 1", "10 Downing St"],
-                        "locality": "London",
-                        "postalCode": "SW1A 2AA",
-                    }
-                },
-                "geocode": {},
-            }
-        }
-        result = GoogleClient._map_response_international(raw, secondary_address="FLAT 1")
+        result = GoogleClient._map_response_international(
+            GOOGLE_RESPONSE_INTERNATIONAL_SEPARATE_UNIT, secondary_address="FLAT 1"
+        )
         assert result["address_line_1"] == "Flat 1"
         assert result["address_line_2"] == "10 Downing St"
 

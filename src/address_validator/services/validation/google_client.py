@@ -97,6 +97,23 @@ def _split_folded_unit(line1: str, secondary: str | None) -> tuple[str, str]:
     return line1, ""
 
 
+def _read_postal_address_with_unit(
+    postal_addr: dict[str, Any], secondary: str | None
+) -> _PostalFields:
+    """Read a postalAddress, recovering a folded secondary unit (GH #127).
+
+    Like :func:`_read_postal_address`, but when ``address_line_2`` comes back
+    empty (Google echoed street + unit folded into one ``addressLines`` element)
+    it splits the unit *we* sent back into the secondary slot via
+    :func:`_split_folded_unit`.  Shared by the US non-CASS and non-US mappers.
+    """
+    fields = _read_postal_address(postal_addr)
+    if fields.address_line_2:
+        return fields
+    line1, line2 = _split_folded_unit(fields.address_line_1, secondary)
+    return fields._replace(address_line_1=line1, address_line_2=line2)
+
+
 class GoogleClient:
     """Async Google Address Validation API client.
 
@@ -273,15 +290,9 @@ class GoogleClient:
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
             postal_addr = result.get("address", {}).get("postalAddress", {})
-            fields = _read_postal_address(postal_addr)
+            fields = _read_postal_address_with_unit(postal_addr, secondary_address)
             address_line_1 = fields.address_line_1
             address_line_2 = fields.address_line_2
-            if not address_line_2:
-                # Google folded street + unit into one addressLines element;
-                # recover the unit we sent into the secondary slot (GH #127).
-                address_line_1, address_line_2 = _split_folded_unit(
-                    address_line_1, secondary_address
-                )
             city = fields.city
             region = fields.region
             postal_code = fields.postal_code
@@ -322,17 +333,13 @@ class GoogleClient:
         postal_addr = result.get("address", {}).get("postalAddress", {})
         location = result.get("geocode", {}).get("location", {})
 
-        fields = _read_postal_address(postal_addr)
-        address_line_1 = fields.address_line_1
-        address_line_2 = fields.address_line_2
-        if not address_line_2:
-            address_line_1, address_line_2 = _split_folded_unit(address_line_1, secondary_address)
+        fields = _read_postal_address_with_unit(postal_addr, secondary_address)
 
         return {
             "dpv_match_code": None,
             "status": _verdict_to_status(verdict),
-            "address_line_1": address_line_1,
-            "address_line_2": address_line_2,
+            "address_line_1": fields.address_line_1,
+            "address_line_2": fields.address_line_2,
             "city": fields.city,
             "region": fields.region,
             "postal_code": fields.postal_code,
