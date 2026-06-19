@@ -68,6 +68,9 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
   and `GOOGLE_DAILY_LIMIT`.
 - 429 retry: same retry/backoff policy as USPS (up to 3 retries, `Retry-After` + exponential backoff).
 - Populates `latitude`/`longitude`. Surfaces three verdict flags as warnings.
+- Secondary unit (GH #126/#127): the unit line is folded into the request's single `addressLines[0]` (e.g. `"9 BENNY DR LOT B"`). On the response side:
+  - **CASS-confirmed** (`dpvConfirmation` present) → unit comes back in `uspsData.standardizedAddress.secondAddressLine`.
+  - **Non-CASS fallback** (`dpvConfirmation` absent) and **non-US** (`_map_response_international`) → Google echoes street + unit folded into one `postalAddress.addressLines` element. Both paths split the folded unit back into `address_line_2` (via `_split_folded_unit`) by matching the unit we sent (case-insensitive suffix; echoed casing preserved). If Google reformats the unit so the suffix no longer matches, the unit stays in `address_line_1` (no loss — it also survives in `validated`).
 - `GoogleProvider` is a module-level singleton in `factory.py` — reset in tests.
 
 ## Rate limit and quota env vars

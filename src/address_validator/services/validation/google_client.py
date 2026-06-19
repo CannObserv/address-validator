@@ -71,6 +71,49 @@ def _read_postal_address(postal_addr: dict[str, Any]) -> _PostalFields:
     )
 
 
+def _split_folded_unit(line1: str, secondary: str | None) -> tuple[str, str]:
+    """Split a secondary-unit suffix back out of a folded street line (GH #127).
+
+    #126 folds the secondary-unit line into the Google request's single
+    ``addressLines[0]`` (e.g. ``"9 BENNY DR LOT B"``).  On the non-CASS response
+    path Google echoes the unit folded into one ``postalAddress.addressLines``
+    element rather than as a separate line, so ``address_line_2`` would come back
+    empty.  When *line1* ends with the unit we sent, strip it back into the
+    secondary slot.  Match is case-insensitive; the echoed casing is preserved.
+
+    Returns ``(street, unit)``; *unit* is ``""`` when there is no match (caller
+    falls back to leaving the unit in *line1* — no regression vs. pre-#127).
+
+    The match is a trusted bare-suffix match (no unit-designator boundary check):
+    *secondary* is always the standardised unit line *we* sent, not arbitrary
+    text, so a coincidental street-name collision is implausible.
+    """
+    sec = (secondary or "").strip()
+    if not sec:
+        return line1, ""
+    if line1.lower().endswith(" " + sec.lower()):
+        cut = len(line1) - len(sec)
+        return line1[:cut].rstrip(), line1[cut:]
+    return line1, ""
+
+
+def _read_postal_address_with_unit(
+    postal_addr: dict[str, Any], secondary: str | None
+) -> _PostalFields:
+    """Read a postalAddress, recovering a folded secondary unit (GH #127).
+
+    Like :func:`_read_postal_address`, but when ``address_line_2`` comes back
+    empty (Google echoed street + unit folded into one ``addressLines`` element)
+    it splits the unit *we* sent back into the secondary slot via
+    :func:`_split_folded_unit`.  Shared by the US non-CASS and non-US mappers.
+    """
+    fields = _read_postal_address(postal_addr)
+    if fields.address_line_2:
+        return fields
+    line1, line2 = _split_folded_unit(fields.address_line_1, secondary)
+    return fields._replace(address_line_1=line1, address_line_2=line2)
+
+
 class GoogleClient:
     """Async Google Address Validation API client.
 
@@ -208,15 +251,20 @@ class GoogleClient:
 
             raw: dict[str, Any] = resp.json()
             if country == "US":
-                return self._map_response(raw)
-            return self._map_response_international(raw)
+                return self._map_response(raw, secondary_address=secondary_address)
+            return self._map_response_international(raw, secondary_address=secondary_address)
 
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("google", retry_after_seconds=0.0)
 
     @staticmethod
-    def _map_response(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise US Google response; falls back to postalAddress when CASS produces no DPV."""
+    def _map_response(raw: dict[str, Any], secondary_address: str | None = None) -> dict[str, Any]:
+        """Normalise US Google response; falls back to postalAddress when CASS produces no DPV.
+
+        *secondary_address* is the unit line folded into the request (#126); on the
+        non-CASS path it is used to split a folded unit back into ``address_line_2``
+        (GH #127) when Google echoes street + unit as one ``addressLines`` element.
+        """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         usps = result.get("uspsData", {})
@@ -242,7 +290,7 @@ class GoogleClient:
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
             postal_addr = result.get("address", {}).get("postalAddress", {})
-            fields = _read_postal_address(postal_addr)
+            fields = _read_postal_address_with_unit(postal_addr, secondary_address)
             address_line_1 = fields.address_line_1
             address_line_2 = fields.address_line_2
             city = fields.city
@@ -271,14 +319,21 @@ class GoogleClient:
         }
 
     @staticmethod
-    def _map_response_international(raw: dict[str, Any]) -> dict[str, Any]:
-        """Normalise a non-US Google response; reads postalAddress + verdict (no USPS CASS)."""
+    def _map_response_international(
+        raw: dict[str, Any], secondary_address: str | None = None
+    ) -> dict[str, Any]:
+        """Normalise a non-US Google response; reads postalAddress + verdict (no USPS CASS).
+
+        Like the US non-CASS path, the unit line is folded into the request's
+        single ``addressLines[0]`` (#126); split it back into ``address_line_2``
+        when Google echoes it folded (GH #127).
+        """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
         postal_addr = result.get("address", {}).get("postalAddress", {})
         location = result.get("geocode", {}).get("location", {})
 
-        fields = _read_postal_address(postal_addr)
+        fields = _read_postal_address_with_unit(postal_addr, secondary_address)
 
         return {
             "dpv_match_code": None,
