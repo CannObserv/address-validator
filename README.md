@@ -75,7 +75,7 @@ The `country` field is optional (defaults to `"US"`).
   },
   "type": "Street Address",
   "warnings": [],
-  "api_version": "1"
+  "api_version": "2"
 }
 ```
 
@@ -153,7 +153,7 @@ ignored.
     }
   },
   "warnings": [],
-  "api_version": "1"
+  "api_version": "2"
 }
 ```
 
@@ -167,7 +167,7 @@ single-line format convention.
 **Response:**
 
 ```json
-{"status": "ok", "api_version": "1"}
+{"status": "ok", "api_version": "2"}
 ```
 
 No authentication required.

@@ -36,3 +36,4 @@ This catalogue covers the **response `warnings` channel only**. Operational
 | `Provider inferred one or more address components not present in input` | `services/validation/google_provider.py` | The Google provider inferred components absent from the input. |
 | `Provider replaced one or more address components` | `services/validation/google_provider.py` | The Google provider replaced one or more input components. |
 | `One or more address components are unconfirmed` | `services/validation/google_provider.py` | The Google provider could not confirm one or more components. |
+| `Validation provider rejected the address as malformed` | `routers/v2/validate.py` | The validation provider raised a bad-request error (`ProviderBadRequestError`); the address is returned with `validation.status = "error"`. |

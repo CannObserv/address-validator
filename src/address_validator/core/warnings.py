@@ -11,6 +11,11 @@ channel and are intentionally NOT catalogued here.
 Keep this module and ``docs/WARNINGS.md`` in sync — the drift test
 ``tests/unit/test_warnings_catalogue.py`` fails on any divergence. After
 adding or changing a warning, update both.
+
+This module must contain **only** warning string constants (plus ``CATALOGUE``):
+the drift test treats every module-level upper-case ``str`` as a catalogued
+warning, so an incidental non-warning string constant here would be a false
+positive. Put unrelated constants elsewhere.
 """
 
 # --- Static warnings (no interpolation) ---
@@ -21,6 +26,7 @@ NO_PARSEABLE_STREET = "Address has no parseable street line; passing raw input t
 PROVIDER_INFERRED = "Provider inferred one or more address components not present in input"
 PROVIDER_REPLACED = "Provider replaced one or more address components"
 PROVIDER_UNCONFIRMED = "One or more address components are unconfirmed"
+PROVIDER_REJECTED_MALFORMED = "Validation provider rejected the address as malformed"
 
 # --- Parameterised warnings (str.format templates) ---
 
@@ -45,4 +51,5 @@ CATALOGUE: tuple[str, ...] = (
     PROVIDER_INFERRED,
     PROVIDER_REPLACED,
     PROVIDER_UNCONFIRMED,
+    PROVIDER_REJECTED_MALFORMED,
 )

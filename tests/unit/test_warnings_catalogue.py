@@ -42,27 +42,83 @@ def _module_string_constants() -> dict[str, str]:
     }
 
 
+def _is_str_literal(node: ast.AST) -> bool:
+    """A string ``Constant`` or an f-string (``JoinedStr``)."""
+    return isinstance(node, ast.JoinedStr) or (
+        isinstance(node, ast.Constant) and isinstance(node.value, str)
+    )
+
+
+def _contains_str_literal(node: ast.AST) -> bool:
+    """True if *node* is a str literal, or a list/tuple/set holding one."""
+    if _is_str_literal(node):
+        return True
+    if isinstance(node, ast.List | ast.Tuple | ast.Set):
+        return any(_is_str_literal(elt) for elt in node.elts)
+    return False
+
+
+def _targets_warnings(node: ast.AST) -> bool:
+    """True if *node* refers to a ``warnings`` list — either a bare name
+    ``warnings`` or any attribute access ending in ``.warnings`` (e.g.
+    ``result.warnings``, ``std.warnings``)."""
+    return (isinstance(node, ast.Name) and node.id == "warnings") or (
+        isinstance(node, ast.Attribute) and node.attr == "warnings"
+    )
+
+
 def _inline_warning_literals() -> list[str]:
-    """Find ``warnings.append(<str literal>)`` / ``.append(f"...")`` call sites
-    anywhere under ``src/`` — these bypass the catalogue and must not exist."""
+    """Find any string literal that flows into a ``warnings`` list anywhere
+    under ``src/`` — these bypass the catalogue and must not exist.
+
+    Covers the realistic vectors:
+    - ``warnings.append("...")`` / ``.append(f"...")``
+    - ``warnings.extend([...])``
+    - ``warnings = ["...", ...]`` (incl. annotated assignment)
+    - ``Response(warnings=["..."])`` keyword argument
+    - ``{"warnings": ["..."]}`` dict literal (e.g. ``model_copy`` update)
+    """
     violations: list[str] = []
     for path in SRC_ROOT.rglob("*.py"):
         if path == WARNINGS_MODULE:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "append"
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "warnings"
-                and node.args
-                and isinstance(node.args[0], ast.Constant | ast.JoinedStr)
-            ):
+            if _flows_str_literal_into_warnings(node):
                 rel = path.relative_to(REPO_ROOT)
                 violations.append(f"{rel}:{node.lineno}")
     return violations
+
+
+def _flows_str_literal_into_warnings(node: ast.AST) -> bool:
+    """True if *node* puts a string literal into a ``warnings`` list."""
+    # warnings.append(<literal>) / warnings.extend([<literal>, ...])
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in ("append", "extend")
+        and _targets_warnings(node.func.value)
+        and node.args
+    ):
+        return _contains_str_literal(node.args[0])
+    # The value bound to a `warnings` target, via the supported binding forms.
+    bound_value: ast.AST | None = None
+    if isinstance(node, ast.Assign) and any(_targets_warnings(t) for t in node.targets):
+        bound_value = node.value  # warnings = [<literal>, ...]
+    elif isinstance(node, ast.AnnAssign) and _targets_warnings(node.target):
+        bound_value = node.value  # warnings: list[str] = [<literal>, ...]
+    elif isinstance(node, ast.keyword) and node.arg == "warnings":
+        bound_value = node.value  # foo(warnings=[<literal>, ...])
+    if bound_value is not None:
+        return _contains_str_literal(bound_value)
+    # {"warnings": [<literal>, ...]} dict literal (e.g. model_copy update)
+    if isinstance(node, ast.Dict):
+        return any(
+            isinstance(k, ast.Constant) and k.value == "warnings" and _contains_str_literal(v)
+            for k, v in zip(node.keys, node.values, strict=True)
+            if k is not None
+        )
+    return False
 
 
 def test_doc_exists() -> None:
