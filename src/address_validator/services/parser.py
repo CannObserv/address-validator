@@ -163,9 +163,11 @@ def _collect_ambiguous_components(
       numbers are joined with a hyphen per USPS Pub 28 §232.
 
     - **Multiple secondary-unit designators** (``"BLDG 201 ROOM 104 T"``):
-      when a repeated unit-type label carries a known ``UNIT_MAP`` designator,
-      it is routed to the next free slot instead of being concatenated.
-      Subsequent mislabelled tokens (``AddressNumber``, ``StreetName``, …) are
+      when a repeated unit-type label carries a designator-shaped token
+      (a known ``UNIT_MAP`` entry, or any alphabetic token such as ``"SMP"``
+      that usaddress itself tagged as a unit type — GH #129), it is routed
+      to the next free slot instead of being concatenated.  Subsequent
+      mislabelled tokens (``AddressNumber``, ``StreetName``, …) are
       redirected into that slot's identifier until a city/state/zip token
       appears.
     """
@@ -192,12 +194,17 @@ def _collect_ambiguous_components(
                 continue  # don't emit the separator yet
             # True intersection separator — emit normally.
 
-        # Repeated unit-type label whose token is a known designator →
-        # route to the next free slot instead of concatenating.
+        # Repeated unit-type label → route to the next free slot instead of
+        # concatenating.  usaddress already tagged this token as a unit type,
+        # so we trust that signal even when the token is not one of the
+        # canonical UNIT_MAP designators (GH #129: e.g. "SMP").  We still
+        # require the token to *look* like a designator (alphabetic) so a
+        # mislabelled number or fragment is not promoted to a slot.
+        cleaned_unit_token = token.upper().replace(".", "").strip(",;")
         if (
             key in _UNIT_TYPE_KEYS
             and key in component_values
-            and token.upper().replace(".", "").strip(",;") in UNIT_MAP
+            and (cleaned_unit_token in UNIT_MAP or cleaned_unit_token.isalpha())
         ):
             slot = _next_free_unit_slot(component_values)
             if slot:

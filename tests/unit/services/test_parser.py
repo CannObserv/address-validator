@@ -13,6 +13,7 @@ from address_validator.services.parser import (
     _recover_unit_from_city,
     parse_address,
 )
+from address_validator.services.standardizer import standardize
 from address_validator.services.training_candidates import (
     get_candidate_data,
     reset_candidate_data,
@@ -278,6 +279,33 @@ class TestRepeatedLabelFallback:
         assert vals.get("sub_premise_number") == "104 T"
         # Locality should be clean.
         assert "SAN FRANCISCO" in vals.get("locality", "")
+
+    async def test_second_designator_not_in_unit_map_slotted(self) -> None:
+        """GH-129: a repeated OccupancyType whose token is not in UNIT_MAP
+        (e.g. 'SMP') must still route to the next free slot, not fold into
+        the first slot as 'STE SMP' / 'J, 2'.  usaddress already tagged it
+        as a second designator; we trust that signal over UNIT_MAP membership.
+        """
+        # Real usaddress output for this string is deterministic (two
+        # OccupancyType runs), so drive the live parser — no mock needed.
+        result = await parse_address("1210 N WENATCHEE AVE STE J, SMP - 2 WENATCHEE, WA 98801")
+        vals = result.components.values
+        # Street fields uncontaminated.
+        assert vals.get("premise_number") == "1210"
+        assert vals.get("thoroughfare_name") == "WENATCHEE"
+        # The two designators land in separate slots — NOT folded.
+        # ('J,' keeps the comma at parse layer; the standardizer strips it.)
+        assert vals.get("sub_premise_type") == "STE"
+        assert vals.get("sub_premise_number", "").rstrip(",") == "J"
+        assert vals.get("dependent_sub_premise_type") == "SMP"
+        assert vals.get("dependent_sub_premise_number") == "2"
+        # No fused 'STE SMP' designator anywhere.
+        assert "SMP" not in vals.get("sub_premise_type", "")
+        assert "WENATCHEE" in vals.get("locality", "")
+        # End-to-end: the standardized secondary line is no longer muddled.
+        std = standardize(vals, country="US", upstream_warnings=result.warnings)
+        assert std.address_line_2 == "SMP 2 STE J"
+        assert "STE SMP" not in std.standardized
 
 
 # ---------------------------------------------------------------------------
