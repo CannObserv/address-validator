@@ -53,6 +53,7 @@ models.py           API contract source of truth; StandardizedAddress = Standard
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
 core/countries.py  SUPPORTED_COUNTRIES (US+CA), VALID_ISO2 frozensets; check_country() — canonical home for country validation used by all v2 routes
 core/errors.py     APIError exception class; api_error_response() — serialises APIError to JSONResponse; registered in main.py exception handler; imported by all router layers
+core/warnings.py   single source of truth for response `warnings` strings (static constants + str.format templates + CATALOGUE tuple); catalogued in docs/WARNINGS.md, kept in sync by tests/unit/test_warnings_catalogue.py
 services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION); used by v2 routers; USPS Pub 28 identifiers remain in usps_data/spec.py
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
 services/validation/pipeline.py  parse → standardize → provider-selection pipeline; build_non_us_std() (shared passthrough std for non-US components), run_us_pipeline() (US path, accepts component_profile param), run_non_us_pipeline() (CA raw strings via libpostal, other non-US via components-only); all return (std, raw_input, provider); raises APIError on validation failures

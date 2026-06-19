@@ -43,6 +43,7 @@ import math
 from fastapi import APIRouter, Depends, Query
 
 from address_validator.auth import require_api_key
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ErrorResponse,
@@ -156,11 +157,10 @@ async def validate_address(
     except ProviderBadRequestError as exc:
         logger.warning("Validation provider %s rejected request", exc.provider)
         set_audit_context(provider=exc.provider, validation_status="error", cache_hit=False)
-        warnings = ["Validation provider rejected the address as malformed"]
         result = ValidateResponseV2(
             country=std.country,
             validation=ValidationResult(status="error", provider=exc.provider),
-            warnings=std.warnings + warnings,
+            warnings=[*std.warnings, warning_catalogue.PROVIDER_REJECTED_MALFORMED],
         )
         return result
     except ProviderRateLimitedError as exc:

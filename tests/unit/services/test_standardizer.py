@@ -379,7 +379,7 @@ class TestStandardizeCA:
             "postcode": "A1A 1A1",
         }
         result = standardize(comps, country="CA")
-        assert any("Unrecognised" in w for w in result.warnings)
+        assert any("Unrecognized" in w for w in result.warnings)
         assert result.components.values["administrative_area"] == "XX"
 
     def test_directional_normalised(self) -> None:

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.main import app
 from address_validator.models import ValidateResponseV2, ValidationResult
 from address_validator.services.validation.errors import ProviderBadRequestError
@@ -67,7 +68,7 @@ class TestV2ValidateUnparseableInput:
             latitude=47.8253139,
             longitude=-122.2936207,
             validation=ValidationResult(status="invalid", provider="google"),
-            warnings=["Provider inferred one or more address components not present in input"],
+            warnings=[warning_catalogue.PROVIDER_INFERRED],
         )
         provider = AsyncMock()
         provider.validate = AsyncMock(return_value=google_response)
@@ -105,3 +106,4 @@ class TestV2ValidateUnparseableInput:
         body = response.json()
         assert body["validation"]["status"] == "error"
         assert body["validation"]["provider"] == "google"
+        assert warning_catalogue.PROVIDER_REJECTED_MALFORMED in body["warnings"]

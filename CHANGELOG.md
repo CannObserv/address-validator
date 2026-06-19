@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project uses semantic versioning.
 
+## [Unreleased]
+
+### Changed (breaking)
+
+- **Response warning string spelling normalized to American English** ([#131](https://github.com/CannObserv/address-validator/issues/131)). The standardize warning `"Unrecognised province/territory: '...'"` is now `"Unrecognized province/territory: '...'"`. Consumers matching this string in the `warnings` channel must update. All response-warning strings are now defined in `core/warnings.py` and documented in the living catalogue [`docs/WARNINGS.md`](docs/WARNINGS.md); a drift test fails CI if the two diverge.
+
 ## [3.0.0] — 2026-06-03
 
 ### Removed (breaking)
