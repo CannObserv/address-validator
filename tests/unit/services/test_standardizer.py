@@ -199,6 +199,29 @@ class TestStandardize:
         assert "SMP" in result.address_line_2
         assert "2" in result.address_line_2
 
+    def test_split_dual_designators_with_unknown_type(self) -> None:
+        """GH-129: the post-parse component dict for
+        '… STE J, SMP - 2 …' standardizes to a clean two-designator line2.
+        The unknown 'SMP' designator is preserved; the comma the parser left
+        on 'J,' is stripped during line assembly.
+        """
+        comps = {
+            "premise_number": "1210",
+            "thoroughfare_pre_direction": "N",
+            "thoroughfare_name": "WENATCHEE",
+            "thoroughfare_trailing_type": "AVE",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "J,",
+            "dependent_sub_premise_type": "SMP",
+            "dependent_sub_premise_number": "2",
+            "locality": "WENATCHEE",
+            "administrative_area": "WA",
+            "postcode": "98801",
+        }
+        result = standardize(comps)
+        assert result.address_line_2 == "SMP 2 STE J"
+        assert "STE SMP" not in result.standardized
+
     def test_standardized_two_space_separator(self) -> None:
         comps = {
             "premise_number": "123",

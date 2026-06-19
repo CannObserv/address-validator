@@ -279,6 +279,56 @@ class TestRepeatedLabelFallback:
         # Locality should be clean.
         assert "SAN FRANCISCO" in vals.get("locality", "")
 
+    async def test_second_designator_not_in_unit_map_slotted(self) -> None:
+        """GH-129: a repeated OccupancyType whose token is not in UNIT_MAP
+        (e.g. 'SMP') must still route to the next free slot, not fold into
+        the first slot as 'STE SMP' / 'J, 2'.  usaddress already tagged it
+        as a second designator; we trust that signal over UNIT_MAP membership.
+        """
+        # Real usaddress output for this string is deterministic (two
+        # OccupancyType runs), so drive the live parser — no mock needed.
+        result = await parse_address("1210 N WENATCHEE AVE STE J, SMP - 2 WENATCHEE, WA 98801")
+        vals = result.components.values
+        # Street fields uncontaminated.
+        assert vals.get("premise_number") == "1210"
+        assert vals.get("thoroughfare_name") == "WENATCHEE"
+        # The two designators land in separate slots — NOT folded.
+        # ('J,' keeps the comma at parse layer; the standardizer strips it.)
+        assert vals.get("sub_premise_type") == "STE"
+        assert vals.get("sub_premise_number", "").rstrip(",") == "J"
+        assert vals.get("dependent_sub_premise_type") == "SMP"
+        assert vals.get("dependent_sub_premise_number") == "2"
+        # No fused 'STE SMP' designator anywhere.
+        assert "SMP" not in vals.get("sub_premise_type", "")
+        assert "WENATCHEE" in vals.get("locality", "")
+        # The non-canonical designator is preserved, with a warning.
+        assert any("Unrecognized unit designator preserved: 'SMP'" in w for w in result.warnings)
+
+    async def test_repeated_unit_type_non_alpha_not_slotted(self) -> None:
+        """GH-129 guard: a repeated unit-type label whose token is NOT
+        alphabetic (a stray number mis-tagged as OccupancyType) must not be
+        promoted to a second slot — the ``.isalpha()`` guard rejects it.
+        """
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("MAIN", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("STE", "OccupancyType"),
+            ("5", "OccupancyIdentifier"),
+            ("2", "OccupancyType"),  # non-alpha, mis-tagged — must not slot
+            ("SEATTLE,", "PlaceName"),
+            ("WA", "StateName"),
+            ("98101", "ZipCode"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = await parse_address("123 MAIN ST STE 5 2 SEATTLE, WA 98101")
+        vals = result.components.values
+        # The non-alpha "2" must NOT create a second designator slot.
+        assert not vals.get("dependent_sub_premise_type")
+        # And no spurious "unrecognized designator" warning for the rejected token.
+        assert not any("Unrecognized unit designator" in w for w in result.warnings)
+
 
 # ---------------------------------------------------------------------------
 # ZIP normalisation

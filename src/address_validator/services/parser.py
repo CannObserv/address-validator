@@ -163,11 +163,14 @@ def _collect_ambiguous_components(
       numbers are joined with a hyphen per USPS Pub 28 §232.
 
     - **Multiple secondary-unit designators** (``"BLDG 201 ROOM 104 T"``):
-      when a repeated unit-type label carries a known ``UNIT_MAP`` designator,
-      it is routed to the next free slot instead of being concatenated.
-      Subsequent mislabelled tokens (``AddressNumber``, ``StreetName``, …) are
-      redirected into that slot's identifier until a city/state/zip token
-      appears.
+      when a repeated unit-type label carries a designator-shaped token
+      (a known ``UNIT_MAP`` entry, or any alphabetic token such as ``"SMP"``
+      that usaddress itself tagged as a unit type — GH #129), it is routed
+      to the next free slot instead of being concatenated.  A routed token
+      that is not in ``UNIT_MAP`` adds an "Unrecognized unit designator
+      preserved" warning.  Subsequent mislabelled tokens (``AddressNumber``,
+      ``StreetName``, …) are redirected into that slot's identifier until a
+      city/state/zip token appears.
     """
     component_values: dict[str, str] = {}
     prev_key: str | None = None
@@ -192,20 +195,27 @@ def _collect_ambiguous_components(
                 continue  # don't emit the separator yet
             # True intersection separator — emit normally.
 
-        # Repeated unit-type label whose token is a known designator →
-        # route to the next free slot instead of concatenating.
-        if (
-            key in _UNIT_TYPE_KEYS
-            and key in component_values
-            and token.upper().replace(".", "").strip(",;") in UNIT_MAP
-        ):
-            slot = _next_free_unit_slot(component_values)
-            if slot:
-                component_values[slot[0]] = token
-                redirect_id_key = slot[1]
-                prev_key = key
-                separator_before = False
-                continue
+        # Repeated unit-type label → route to the next free slot instead of
+        # concatenating.  usaddress already tagged this token as a unit type,
+        # so we trust that signal even when the token is not one of the
+        # canonical UNIT_MAP designators (GH #129: e.g. "SMP").  We still
+        # require the token to *look* like a designator (alphabetic) so a
+        # mislabelled number or fragment is not promoted to a slot.
+        if key in _UNIT_TYPE_KEYS and key in component_values:
+            cleaned_unit_token = token.upper().replace(".", "").strip(",;")
+            known_designator = cleaned_unit_token in UNIT_MAP
+            if known_designator or cleaned_unit_token.isalpha():
+                slot = _next_free_unit_slot(component_values)
+                if slot:
+                    component_values[slot[0]] = token
+                    redirect_id_key = slot[1]
+                    if not known_designator:
+                        warnings.append(
+                            f"Unrecognized unit designator preserved: '{cleaned_unit_token}'"
+                        )
+                    prev_key = key
+                    separator_before = False
+                    continue
 
         # While redirecting, mislabelled tokens after a second designator
         # are really the identifier for that designator.
