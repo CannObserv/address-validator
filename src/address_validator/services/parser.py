@@ -166,10 +166,11 @@ def _collect_ambiguous_components(
       when a repeated unit-type label carries a designator-shaped token
       (a known ``UNIT_MAP`` entry, or any alphabetic token such as ``"SMP"``
       that usaddress itself tagged as a unit type — GH #129), it is routed
-      to the next free slot instead of being concatenated.  Subsequent
-      mislabelled tokens (``AddressNumber``, ``StreetName``, …) are
-      redirected into that slot's identifier until a city/state/zip token
-      appears.
+      to the next free slot instead of being concatenated.  A routed token
+      that is not in ``UNIT_MAP`` adds an "Unrecognized unit designator
+      preserved" warning.  Subsequent mislabelled tokens (``AddressNumber``,
+      ``StreetName``, …) are redirected into that slot's identifier until a
+      city/state/zip token appears.
     """
     component_values: dict[str, str] = {}
     prev_key: str | None = None
@@ -200,19 +201,21 @@ def _collect_ambiguous_components(
         # canonical UNIT_MAP designators (GH #129: e.g. "SMP").  We still
         # require the token to *look* like a designator (alphabetic) so a
         # mislabelled number or fragment is not promoted to a slot.
-        cleaned_unit_token = token.upper().replace(".", "").strip(",;")
-        if (
-            key in _UNIT_TYPE_KEYS
-            and key in component_values
-            and (cleaned_unit_token in UNIT_MAP or cleaned_unit_token.isalpha())
-        ):
-            slot = _next_free_unit_slot(component_values)
-            if slot:
-                component_values[slot[0]] = token
-                redirect_id_key = slot[1]
-                prev_key = key
-                separator_before = False
-                continue
+        if key in _UNIT_TYPE_KEYS and key in component_values:
+            cleaned_unit_token = token.upper().replace(".", "").strip(",;")
+            known_designator = cleaned_unit_token in UNIT_MAP
+            if known_designator or cleaned_unit_token.isalpha():
+                slot = _next_free_unit_slot(component_values)
+                if slot:
+                    component_values[slot[0]] = token
+                    redirect_id_key = slot[1]
+                    if not known_designator:
+                        warnings.append(
+                            f"Unrecognized unit designator preserved: '{cleaned_unit_token}'"
+                        )
+                    prev_key = key
+                    separator_before = False
+                    continue
 
         # While redirecting, mislabelled tokens after a second designator
         # are really the identifier for that designator.

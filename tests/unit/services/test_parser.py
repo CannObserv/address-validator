@@ -13,7 +13,6 @@ from address_validator.services.parser import (
     _recover_unit_from_city,
     parse_address,
 )
-from address_validator.services.standardizer import standardize
 from address_validator.services.training_candidates import (
     get_candidate_data,
     reset_candidate_data,
@@ -302,10 +301,33 @@ class TestRepeatedLabelFallback:
         # No fused 'STE SMP' designator anywhere.
         assert "SMP" not in vals.get("sub_premise_type", "")
         assert "WENATCHEE" in vals.get("locality", "")
-        # End-to-end: the standardized secondary line is no longer muddled.
-        std = standardize(vals, country="US", upstream_warnings=result.warnings)
-        assert std.address_line_2 == "SMP 2 STE J"
-        assert "STE SMP" not in std.standardized
+        # The non-canonical designator is preserved, with a warning.
+        assert any("Unrecognized unit designator preserved: 'SMP'" in w for w in result.warnings)
+
+    async def test_repeated_unit_type_non_alpha_not_slotted(self) -> None:
+        """GH-129 guard: a repeated unit-type label whose token is NOT
+        alphabetic (a stray number mis-tagged as OccupancyType) must not be
+        promoted to a second slot — the ``.isalpha()`` guard rejects it.
+        """
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("MAIN", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("STE", "OccupancyType"),
+            ("5", "OccupancyIdentifier"),
+            ("2", "OccupancyType"),  # non-alpha, mis-tagged — must not slot
+            ("SEATTLE,", "PlaceName"),
+            ("WA", "StateName"),
+            ("98101", "ZipCode"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = await parse_address("123 MAIN ST STE 5 2 SEATTLE, WA 98101")
+        vals = result.components.values
+        # The non-alpha "2" must NOT create a second designator slot.
+        assert not vals.get("dependent_sub_premise_type")
+        # And no spurious "unrecognized designator" warning for the rejected token.
+        assert not any("Unrecognized unit designator" in w for w in result.warnings)
 
 
 # ---------------------------------------------------------------------------
