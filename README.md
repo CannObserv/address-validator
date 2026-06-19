@@ -84,7 +84,8 @@ The `type` field is one of `"Street Address"`, `"Intersection"`, or
 silently modified during parsing — for example when parenthesized text
 is stripped, when repeated address numbers are joined into a range, or
 when a unit designator is recovered from a mis-tagged field.  It is
-empty on clean input.
+empty on clean input.  See [`docs/WARNINGS.md`](docs/WARNINGS.md) for the
+authoritative catalogue of every string that may appear in `warnings`.
 
 The `components` field is a `ComponentSet` containing:
 
