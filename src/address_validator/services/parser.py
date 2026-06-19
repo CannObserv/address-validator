@@ -5,6 +5,7 @@ import re
 
 import usaddress
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.models import ComponentSet, ParseResponseV2
 from address_validator.services.audit import set_audit_context
 from address_validator.services.libpostal_client import (
@@ -211,7 +212,9 @@ def _collect_ambiguous_components(
                     redirect_id_key = slot[1]
                     if not known_designator:
                         warnings.append(
-                            f"Unrecognized unit designator preserved: '{cleaned_unit_token}'"
+                            warning_catalogue.UNRECOGNIZED_UNIT_DESIGNATOR.format(
+                                designator=cleaned_unit_token
+                            )
                         )
                     prev_key = key
                     separator_before = False
@@ -235,9 +238,9 @@ def _collect_ambiguous_components(
         prev_key = key
 
     if dual_range is not None:
-        warnings.append(f"Ambiguous parse: repeated address numbers joined as range '{dual_range}'")
+        warnings.append(warning_catalogue.REPEATED_NUMBERS_RANGE.format(range=dual_range))
     else:
-        warnings.append("Ambiguous parse: repeated labels detected; parse may be inaccurate.")
+        warnings.append(warning_catalogue.REPEATED_LABELS)
 
     return component_values
 
@@ -249,7 +252,7 @@ def _warn_unit_recovered(warnings: list[str] | None, designator: str) -> None:
     defined in one place.  No-op when *warnings* is ``None``.
     """
     if warnings is not None:
-        warnings.append(f"Unit designator recovered from mis-tagged field: '{designator}'")
+        warnings.append(warning_catalogue.UNIT_RECOVERED_FROM_FIELD.format(designator=designator))
 
 
 def _recover_unit_phase1(
@@ -381,7 +384,7 @@ def _recover_identifier_fragment_from_city(
             components[key] += f" {fragment}"
             components["locality"] = rest
             if warnings is not None:
-                warnings.append("Unit identifier fragment recovered from city field")
+                warnings.append(warning_catalogue.UNIT_FRAGMENT_FROM_CITY)
             return
 
 
@@ -440,7 +443,7 @@ def _parse(raw: str, country: str) -> ParseResponseV2:
     for match in paren_matches:
         inner = match[1:-1].strip()
         if inner:
-            warnings.append(f"Parenthesized text removed: '{inner}'")
+            warnings.append(warning_catalogue.PARENTHESIZED_REMOVED.format(text=inner))
 
     try:
         tagged, addr_type = usaddress.tag(cleaned)

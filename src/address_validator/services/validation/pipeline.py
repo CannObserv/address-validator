@@ -18,6 +18,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
 from address_validator.core.countries import VALID_ISO2
 from address_validator.core.errors import APIError
@@ -111,7 +112,7 @@ async def run_us_pipeline(
         and req.address.strip()
         and not std.address_line_1.strip()
     ):
-        fallback_warning = "Address has no parseable street line; passing raw input to provider"
+        fallback_warning = warning_catalogue.NO_PARSEABLE_STREET
         raw_street = re.sub(r"\s+", " ", req.address).strip()
         std = std.model_copy(
             update={

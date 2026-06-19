@@ -1,5 +1,10 @@
 # Warnings Design — Issue #1
 
+> **Superseded (GH #131).** This is a point-in-time design snapshot. The living
+> catalogue of response-warning strings is now [`docs/WARNINGS.md`](../WARNINGS.md),
+> kept in sync with [`core/warnings.py`](../../src/address_validator/core/warnings.py)
+> by a drift test. Consult those, not this doc, for the current warning set.
+
 ## Summary
 
 Return a `warnings: list[str]` field on parse and standardize responses whenever

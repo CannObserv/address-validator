@@ -2,6 +2,7 @@
 
 import logging
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
 from address_validator.models import (
     ComponentSet,
@@ -13,10 +14,6 @@ from address_validator.services.validation.google_client import GoogleClient
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 logger = logging.getLogger(__name__)
-
-_WARNING_INFERRED = "Provider inferred one or more address components not present in input"
-_WARNING_REPLACED = "Provider replaced one or more address components"
-_WARNING_UNCONFIRMED = "One or more address components are unconfirmed"
 
 
 class GoogleProvider:
@@ -106,11 +103,11 @@ class GoogleProvider:
 
         warnings: list[str] = []
         if raw.get("has_inferred_components"):
-            warnings.append(_WARNING_INFERRED)
+            warnings.append(warning_catalogue.PROVIDER_INFERRED)
         if raw.get("has_replaced_components"):
-            warnings.append(_WARNING_REPLACED)
+            warnings.append(warning_catalogue.PROVIDER_REPLACED)
         if raw.get("has_unconfirmed_components"):
-            warnings.append(_WARNING_UNCONFIRMED)
+            warnings.append(warning_catalogue.PROVIDER_UNCONFIRMED)
 
         return ValidateResponseV2(
             address_line_1=address_line_1,

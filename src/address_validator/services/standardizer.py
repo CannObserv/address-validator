@@ -7,6 +7,7 @@ from address_validator.canada_post_data.directionals import CA_DIRECTIONAL_MAP
 from address_validator.canada_post_data.provinces import PROVINCE_MAP
 from address_validator.canada_post_data.spec import CANADA_POST_SPEC, CANADA_POST_SPEC_VERSION
 from address_validator.canada_post_data.suffixes import CA_SUFFIX_MAP
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
 from address_validator.models import (  # alias can't be used as constructor
     ComponentSet,
@@ -177,7 +178,7 @@ def _standardize_ca(
         if abbr:
             std["administrative_area"] = abbr
         else:
-            warnings.append(f"Unrecognised province/territory: '{region}'")
+            warnings.append(warning_catalogue.UNRECOGNIZED_REGION.format(region=region))
             std["administrative_area"] = region
 
     # --- postcode ---

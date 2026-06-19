@@ -48,7 +48,7 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - Response models use geography-neutral names: `region`, `postal_code`
 - `standardized` field: two-space separator between logical address lines (USPS single-line convention)
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
-- `warnings: list[str]` on all response models; empty on clean input
+- `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
 - `components` takes precedence over `address` when both supplied
 - All request models accepting a country must inherit `CountryRequestMixin`
 
