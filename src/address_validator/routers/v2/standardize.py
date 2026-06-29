@@ -6,19 +6,17 @@ from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError
 from address_validator.models import (
-    ComponentSet,
     ErrorResponse,
     StandardizeRequest,
     StandardizeResponseV2,
 )
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
-    translate_components,
+    build_output_component_set,
     valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
-from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 from address_validator.services.standardizer import standardize
 
 router = APIRouter(
@@ -93,17 +91,6 @@ async def standardize_address(
         upstream_warnings = parse_result.warnings
 
     result = standardize(comps, country=req.country, upstream_warnings=upstream_warnings)
-    translated = translate_components(result.components.values, component_profile)
-    if component_profile == "usps-pub28":
-        spec = result.components.spec
-        spec_version = result.components.spec_version
-    elif req.country == "CA":
-        # CA always uses canada-post spec regardless of component_profile
-        spec = result.components.spec
-        spec_version = result.components.spec_version
-    else:
-        spec = ISO_19160_4_SPEC
-        spec_version = ISO_19160_4_SPEC_VERSION
     return StandardizeResponseV2(
         address_line_1=result.address_line_1,
         address_line_2=result.address_line_2,
@@ -112,10 +99,6 @@ async def standardize_address(
         postal_code=result.postal_code,
         country=result.country,
         standardized=result.standardized,
-        components=ComponentSet(
-            spec=spec,
-            spec_version=spec_version,
-            values=translated,
-        ),
+        components=build_output_component_set(result.components, component_profile, req.country),
         warnings=result.warnings,
     )

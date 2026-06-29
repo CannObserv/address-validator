@@ -12,7 +12,9 @@ class TestV2ParseISO:
             json={"address": "123 Main St, Seattle, WA 98101"},
         )
         assert response.status_code == 200
-        values = response.json()["components"]["values"]
+        body = response.json()
+        assert body["components"]["spec"] == "iso-19160-4"
+        values = body["components"]["values"]
         assert values["premise_number"] == "123"
         assert values["thoroughfare_name"] == "Main"
         assert values["thoroughfare_trailing_type"] == "St"

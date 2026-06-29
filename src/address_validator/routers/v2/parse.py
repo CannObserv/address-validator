@@ -5,15 +5,14 @@ from fastapi import APIRouter, Depends
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError
-from address_validator.models import ComponentSet, ErrorResponse, ParseRequest, ParseResponseV2
+from address_validator.models import ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
-    translate_components,
+    build_output_component_set,
     valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
-from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
 router = APIRouter(
     prefix="/api/v2",
@@ -71,21 +70,10 @@ async def parse(
                 "Try again shortly or provide pre-parsed components via /validate."
             ),
         ) from exc
-    translated = translate_components(result.components.values, component_profile)
-    if component_profile == "usps-pub28":
-        spec = result.components.spec
-        spec_version = result.components.spec_version
-    else:
-        spec = ISO_19160_4_SPEC
-        spec_version = ISO_19160_4_SPEC_VERSION
     return ParseResponseV2(
         input=result.input,
         country=result.country,
-        components=ComponentSet(
-            spec=spec,
-            spec_version=spec_version,
-            values=translated,
-        ),
+        components=build_output_component_set(result.components, component_profile, result.country),
         type=result.type,
         warnings=result.warnings,
     )
