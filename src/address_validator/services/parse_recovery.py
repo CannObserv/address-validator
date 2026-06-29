@@ -354,6 +354,44 @@ def _recover_identifier_fragment_from_city(
             return
 
 
+def _normalize_unit_value(value: str) -> str:
+    """Normalize a unit type/identifier for duplicate comparison.
+
+    Upper-cases, drops periods, and strips surrounding punctuation/space so
+    ``"B,"`` (the RLE parse layer keeps the comma) compares equal to ``"B"``.
+    """
+    return value.upper().replace(".", "").strip(",;. ")
+
+
+def _dedupe_secondary_units(components: dict[str, str]) -> None:
+    """Collapse an identical-duplicate secondary unit into a single slot.
+
+    The RLE routing in :func:`collect_ambiguous_components` slots a repeated
+    designator into ``dependent_sub_premise`` without yet knowing its
+    identifier (the id token arrives later).  When the input simply repeats the
+    same unit verbatim (``"STE B, STE B"`` — a data-entry duplicate), both slots
+    end up identical and the address would standardize to ``"STE B STE B"``.
+
+    When the dependent unit's normalized (type, id) equals the primary's, drop
+    the dependent slot so only one unit survives.  Distinct second units
+    (``"STE J, SMP 2"``) differ in type or id and are left untouched.
+    """
+    primary_type = components.get("sub_premise_type")
+    dep_type = components.get("dependent_sub_premise_type")
+
+    # Nothing to fold when either slot lacks a type.
+    if not primary_type or not dep_type:
+        return
+
+    same_type = _normalize_unit_value(primary_type) == _normalize_unit_value(dep_type)
+    same_id = _normalize_unit_value(components.get("sub_premise_number", "")) == (
+        _normalize_unit_value(components.get("dependent_sub_premise_number", ""))
+    )
+    if same_type and same_id:
+        components.pop("dependent_sub_premise_type", None)
+        components.pop("dependent_sub_premise_number", None)
+
+
 def recover_components(
     component_values: dict[str, str],
     warnings: list[str] | None = None,
@@ -362,10 +400,12 @@ def recover_components(
 
     Mutates *component_values* (and appends to *warnings* when supplied):
     moves unit designators mis-tagged into the city back onto occupancy slots,
-    then repairs a stray single-letter identifier fragment at the city head.
+    repairs a stray single-letter identifier fragment at the city head, then
+    collapses an identical-duplicate secondary unit into a single slot.
 
     This is the single entry point the parser uses for both the clean and the
     ambiguous (RepeatedLabelError) US paths.
     """
     _recover_unit_from_city(component_values, warnings)
     _recover_identifier_fragment_from_city(component_values, warnings)
+    _dedupe_secondary_units(component_values)

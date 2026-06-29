@@ -336,6 +336,23 @@ class TestRepeatedLabelFallback:
         # And no spurious "unrecognized designator" warning for the rejected token.
         assert not any("Unrecognized unit designator" in w for w in result.warnings)
 
+    async def test_identical_duplicate_secondary_unit_collapsed(self) -> None:
+        """A secondary unit repeated verbatim ('STE B, STE B') is a data-entry
+        duplicate, not two distinct units.  The RLE routing slots the second
+        'STE' into dependent_sub_premise; an identical-duplicate collapse must
+        then drop it so the address standardizes to a single 'STE B' rather
+        than 'STE B STE B'.
+        """
+        outcome = await parse_address("17024 PACIFIC AVE S STE B, STE B SPANAWAY, WA 98387-8387")
+        vals = outcome.response.components.values
+        # Primary unit retained.
+        assert vals.get("sub_premise_type") == "STE"
+        assert vals.get("sub_premise_number", "").rstrip(",") == "B"
+        # Identical second unit dropped — not slotted into dependent_sub_premise.
+        assert not vals.get("dependent_sub_premise_type")
+        assert not vals.get("dependent_sub_premise_number")
+        assert "SPANAWAY" in vals.get("locality", "")
+
 
 # ---------------------------------------------------------------------------
 # ZIP normalisation
