@@ -1,10 +1,81 @@
 """Tests for component_profiles translation layer."""
 
+import pytest
+
+from address_validator.core.errors import APIError
+from address_validator.models import ComponentSet
 from address_validator.services.component_profiles import (
     VALID_PROFILES,
+    build_output_component_set,
     translate_components,
     translate_components_to_iso,
+    valid_component_profile,
 )
+
+
+class TestBuildOutputComponentSet:
+    def _src(self, spec: str = "usps-pub28", version: str = "60") -> ComponentSet:
+        return ComponentSet(
+            spec=spec,
+            spec_version=version,
+            values={"thoroughfare_name": "MAIN", "administrative_area": "WA"},
+        )
+
+    def test_iso_profile_us_relabels_iso(self) -> None:
+        result = build_output_component_set(self._src(), "iso-19160-4", "US")
+        assert result.spec == "iso-19160-4"
+        assert result.spec_version == "2020"
+        # identity translation
+        assert result.values["thoroughfare_name"] == "MAIN"
+
+    def test_usps_profile_us_keeps_source_spec_and_translates(self) -> None:
+        result = build_output_component_set(self._src(), "usps-pub28", "US")
+        assert result.spec == "usps-pub28"
+        assert result.spec_version == "60"
+        assert result.values["street_name"] == "MAIN"
+        assert result.values["state"] == "WA"
+
+    def test_ca_iso_profile_keeps_source_spec(self) -> None:
+        # standardize CA path: source spec is canada-post.
+        src = self._src(spec="canada-post", version="2025")
+        result = build_output_component_set(src, "iso-19160-4", "CA")
+        assert result.spec == "canada-post"
+        assert result.spec_version == "2025"
+        # ISO/canada-post profile is identity translation
+        assert result.values["thoroughfare_name"] == "MAIN"
+
+    def test_ca_parse_path_keeps_raw_spec(self) -> None:
+        # parse CA path: source spec is raw (libpostal, no standardization).
+        # This is the #134 convergence — parse now defers to source spec for CA
+        # instead of relabelling ISO.
+        src = self._src(spec="raw", version="1")
+        result = build_output_component_set(src, "iso-19160-4", "CA")
+        assert result.spec == "raw"
+        assert result.spec_version == "1"
+
+    def test_ca_usps_profile_keeps_source_spec_and_translates(self) -> None:
+        src = self._src(spec="raw", version="1")
+        result = build_output_component_set(src, "usps-pub28", "CA")
+        assert result.spec == "raw"
+        assert result.values["street_name"] == "MAIN"
+
+
+class TestValidComponentProfile:
+    def test_returns_valid_profile_unchanged(self) -> None:
+        for profile in VALID_PROFILES:
+            assert valid_component_profile(profile) == profile
+
+    def test_default_profile_is_valid(self) -> None:
+        # The dependency default must itself pass the guard.
+        assert valid_component_profile("iso-19160-4") == "iso-19160-4"
+
+    def test_invalid_profile_raises_apierror_422(self) -> None:
+        with pytest.raises(APIError) as exc_info:
+            valid_component_profile("bad-profile")
+        exc = exc_info.value
+        assert exc.status_code == 422
+        assert exc.error == "invalid_component_profile"
+        assert "bad-profile" in exc.message
 
 
 class TestTranslateComponents:

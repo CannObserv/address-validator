@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
 from address_validator.core.countries import VALID_ISO2
-from address_validator.core.errors import APIError
+from address_validator.core.errors import APIError, raise_parsing_unavailable
 from address_validator.models import ComponentSet, StandardizedAddress
 from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.libpostal_client import LibpostalUnavailableError
@@ -179,13 +179,7 @@ async def run_non_us_pipeline(
                 req.address.strip(), country="CA", libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
-            raise APIError(
-                status_code=503,
-                error="parsing_unavailable",
-                message=(
-                    "CA address parsing is currently unavailable. Provide pre-parsed components."
-                ),
-            ) from exc
+            raise_parsing_unavailable(req.country, exc)
         std = standardize(
             parse_result.components.values, country="CA", upstream_warnings=parse_result.warnings
         )

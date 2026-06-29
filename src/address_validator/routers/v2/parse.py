@@ -1,20 +1,18 @@
 """v2 parse endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
-from address_validator.core.errors import APIError
-from address_validator.models import ComponentSet, ErrorResponse, ParseRequest, ParseResponseV2
+from address_validator.core.errors import APIError, raise_parsing_unavailable
+from address_validator.models import ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
-    COMPONENT_PROFILE_DESCRIPTION,
-    VALID_PROFILES,
-    translate_components,
+    build_output_component_set,
+    valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
-from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
 
 router = APIRouter(
     prefix="/api/v2",
@@ -50,21 +48,9 @@ router = APIRouter(
 )
 async def parse(
     req: ParseRequest,
-    component_profile: str = Query(
-        default="iso-19160-4",
-        description=COMPONENT_PROFILE_DESCRIPTION,
-    ),
+    component_profile: str = Depends(valid_component_profile),
     libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> ParseResponseV2:
-    if component_profile not in VALID_PROFILES:
-        raise APIError(
-            status_code=422,
-            error="invalid_component_profile",
-            message=(
-                f"Unknown component_profile '{component_profile}'. "
-                f"Valid values: {sorted(VALID_PROFILES)}."
-            ),
-        )
     country = check_country(req.country)
     raw = req.address.strip()
     if not raw:
@@ -76,29 +62,11 @@ async def parse(
     try:
         result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
-        raise APIError(
-            status_code=503,
-            error="parsing_unavailable",
-            message=(
-                "Address parsing for CA is currently unavailable. "
-                "Try again shortly or provide pre-parsed components via /validate."
-            ),
-        ) from exc
-    translated = translate_components(result.components.values, component_profile)
-    if component_profile == "usps-pub28":
-        spec = result.components.spec
-        spec_version = result.components.spec_version
-    else:
-        spec = ISO_19160_4_SPEC
-        spec_version = ISO_19160_4_SPEC_VERSION
+        raise_parsing_unavailable(country, exc)
     return ParseResponseV2(
         input=result.input,
         country=result.country,
-        components=ComponentSet(
-            spec=spec,
-            spec_version=spec_version,
-            values=translated,
-        ),
+        components=build_output_component_set(result.components, component_profile, result.country),
         type=result.type,
         warnings=result.warnings,
     )

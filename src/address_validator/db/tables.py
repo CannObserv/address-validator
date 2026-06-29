@@ -9,7 +9,15 @@ from __future__ import annotations
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
+from address_validator.core.validation_status import VALIDATION_STATUSES
+
 metadata = sa.MetaData()
+
+# IN-list for the validated_addresses.status CheckConstraint, derived from the
+# single source of truth (core/validation_status.py). Keeps the DB constraint
+# in lockstep with the ValidationResult.status Literal; the drift test
+# tests/unit/test_validation_status_catalogue.py guards against divergence.
+_STATUS_IN_LIST = ", ".join(f"'{s}'" for s in VALIDATION_STATUSES)
 
 audit_log = sa.Table(
     "audit_log",
@@ -59,9 +67,7 @@ validated_addresses = sa.Table(
         "status",
         sa.Text(),
         sa.CheckConstraint(
-            "status IN ("
-            "'confirmed', 'confirmed_missing_secondary', 'confirmed_bad_secondary',"
-            " 'not_confirmed', 'not_found', 'invalid', 'unavailable')",
+            f"status IN ({_STATUS_IN_LIST})",
             name="ck_validated_addresses_status",
         ),
         nullable=False,

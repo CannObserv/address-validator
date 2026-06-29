@@ -1,0 +1,143 @@
+"""Shared field-cleanup and address-line assembly helpers.
+
+Used by both the US (USPS Pub 28) and CA (Canada Post) standardization
+paths so the line-1/line-2/last-line rules — including the two-space
+``standardized`` separator and unit ordering — have a single implementation.
+"""
+
+import re
+
+_ZIP5: int = 5  # digits in a USPS ZIP code
+_ZIP9: int = 9  # digits in a ZIP+4 code
+
+
+def _lookup(value: str, table: dict[str, str]) -> str:
+    """Return the USPS abbreviation for *value*, or *value* unchanged.
+
+    Performs its own defensive uppercasing / period-stripping so it is
+    safe to call with raw input as well as pre-cleaned values.
+    """
+    cleaned = value.upper().replace(".", "").replace("(", "").replace(")", "").strip().strip(",;")
+    return table.get(cleaned, cleaned)
+
+
+def _std_zip(raw: str) -> str:
+    """Normalise ZIP: keep 5 or 5+4 digits only.
+
+    Returns the cleaned digit string.  If the input does not contain at
+    least 5 digits a warning suffix is *not* added here — the caller is
+    responsible for any validation messaging.
+    """
+    digits = re.sub(r"[^\d]", "", raw)
+    if len(digits) >= _ZIP9:
+        return f"{digits[:_ZIP5]}-{digits[_ZIP5:_ZIP9]}"
+    if len(digits) >= _ZIP5:
+        return digits[:_ZIP5]
+    # Fewer than 5 digits — return what we have (may be empty).
+    return digits
+
+
+def _get(components: dict[str, str], key: str) -> str:
+    """Return the value for *key* after the full cleanup chain.
+
+    The chain is: strip surrounding whitespace → uppercase → remove
+    periods → remove parentheses → strip trailing commas/semicolons.
+
+    Returns ``""`` when the key is missing, ``None``, or blank.
+
+    Note: parenthesis stripping is redundant for values coming from the
+    parser (which removes parenthesized text pre-parse) but is retained
+    so that direct component input via ``/api/standardize`` is handled
+    correctly.
+    """
+    val = components.get(key, "")
+    if val is None:
+        return ""
+    val = val.strip().upper().replace(".", "")
+    # USPS Pub 28 §354: remove parentheses from address data.
+    val = val.replace("(", "").replace(")", "")
+    # usaddress keeps trailing commas/semicolons on tokens; strip them.
+    val = val.strip(",;")
+    return val
+
+
+# -- small helpers for assembling street fragments --------------------------
+
+
+def _street_parts(
+    std: dict[str, str],
+    prefix: str = "",
+) -> list[str]:
+    """Collect ordered street-line tokens from *std* using an optional key *prefix*.
+
+    When *prefix* is ``""`` the primary street keys are used; when it is
+    ``"second_"`` the intersection's second-street keys are used.
+    """
+    keys = (
+        f"{prefix}thoroughfare_pre_direction",
+        f"{prefix}thoroughfare_pre_modifier",
+        f"{prefix}thoroughfare_leading_type",
+        f"{prefix}thoroughfare_name",
+        f"{prefix}thoroughfare_trailing_type",
+        f"{prefix}thoroughfare_post_direction",
+        f"{prefix}thoroughfare_post_modifier",
+    )
+    return [std[k] for k in keys if std.get(k)]
+
+
+def _assemble_lines(
+    std: dict[str, str],
+    unit_type: str,
+    unit_id: str,
+    sub_type: str,
+    sub_id: str,
+) -> tuple[str, str, str]:
+    """Build the three address lines from the standardised component dict.
+
+    Returns ``(line1, line2, last_line)``:
+
+    - **line1** — street number + street name, or PO box.
+    - **line2** — secondary-unit designators (USPS Pub 28: larger container
+      before more specific unit, e.g. ``"BLDG C STE 120"``).
+    - **last_line** — city, state/region, and postal code in single-line
+      format (``"CITY, ST ZIP"``).
+    """
+    # --- address line 1 ---
+    number_parts: list[str] = [
+        std[k]
+        for k in ("premise_number_prefix", "premise_number", "premise_number_suffix")
+        if std.get(k)
+    ]
+    first_street = _street_parts(std)
+    second_street = _street_parts(std, prefix="second_")
+
+    if first_street and second_street:
+        line1 = " ".join([*number_parts, *first_street, "&", *second_street])
+    elif first_street or number_parts:
+        line1 = " ".join([*number_parts, *first_street])
+    elif std.get("general_delivery_type") or std.get("general_delivery"):
+        gd_parts = (std.get("general_delivery_type", ""), std.get("general_delivery", ""))
+        line1 = " ".join(p for p in gd_parts if p)
+    else:
+        line1 = ""
+
+    # --- address line 2 ---
+    # Larger container (sub) before more specific unit (occupancy).
+    line2 = " ".join(p for p in (sub_type, sub_id, unit_type, unit_id) if p)
+
+    # --- last line ---
+    city = std.get("locality", "")
+    state = std.get("administrative_area", "")
+    zip_code = std.get("postcode", "")
+
+    if city and state:
+        city_state = f"{city}, {state}"
+    elif city:
+        city_state = city
+    elif state:
+        city_state = state
+    else:
+        city_state = ""
+    last_line = " ".join(p for p in (city_state, zip_code) if p)
+
+    return line1, line2, last_line

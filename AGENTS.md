@@ -49,6 +49,7 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - `standardized` field: two-space separator between logical address lines (USPS single-line convention)
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
 - `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
+- `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
 - `components` takes precedence over `address` when both supplied
 - All request models accepting a country must inherit `CountryRequestMixin`
 
