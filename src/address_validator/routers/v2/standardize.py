@@ -16,7 +16,7 @@ from address_validator.services.component_profiles import (
     valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
-from address_validator.services.parser import parse_address
+from address_validator.services.parser import apply_parse_side_effects, parse_address
 from address_validator.services.standardizer import standardize
 
 router = APIRouter(
@@ -75,11 +75,13 @@ async def standardize_address(
     else:
         # model_validator guarantees address is non-blank when components is absent
         try:
-            parse_result = await parse_address(  # type: ignore[union-attr]
+            parse_outcome = await parse_address(  # type: ignore[union-attr]
                 req.address.strip(), country=req.country, libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
             raise_parsing_unavailable(req.country, exc)
+        apply_parse_side_effects(parse_outcome)
+        parse_result = parse_outcome.response
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 

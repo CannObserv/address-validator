@@ -2,6 +2,8 @@
 
 import logging
 import re
+from dataclasses import dataclass, field
+from typing import Any
 
 import usaddress
 
@@ -12,44 +14,41 @@ from address_validator.services.libpostal_client import (
     LibpostalClient,
     LibpostalUnavailableError,
 )
+from address_validator.services.parse_recovery import (
+    collect_ambiguous_components,
+    recover_components,
+)
 from address_validator.services.training_candidates import set_candidate_data
-from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
-from address_validator.usps_data.states import STATE_MAP
-from address_validator.usps_data.suffixes import SUFFIX_MAP
-from address_validator.usps_data.units import UNIT_MAP
 
 logger = logging.getLogger(__name__)
 
-# Combined lookup for tokens that are valid address vocabulary.
-_ADDRESS_VOCABULARY: set[str] = (
-    set(UNIT_MAP) | set(SUFFIX_MAP) | set(DIRECTIONAL_MAP) | set(STATE_MAP)
-)
 
-# Minimum city string length for identifier-fragment recovery to run.
-_MIN_CITY_LEN: int = 3
+@dataclass(frozen=True)
+class ParseOutcome:
+    """Result of :func:`parse_address`, plus request-scoped side-effect data.
 
-# Designators that never require an identifier (USPS Pub 28 Appendix H).
-# Only these are recognised as bare leading words in phase 2 of city
-# recovery.  Designators that require an identifier (KEY, LOT, UNIT,
-# STE …) are excluded to avoid false positives on city names like
-# KEY WEST or FRONT ROYAL.
-_NO_ID_DESIGNATORS: set[str] = {
-    "BASEMENT",
-    "BSMT",
-    "FRONT",
-    "FRNT",
-    "LOBBY",
-    "LBBY",
-    "LOWER",
-    "LOWR",
-    "PENTHOUSE",
-    "PH",
-    "REAR",
-    "SIDE",
-    "UPPER",
-    "UPPR",
-}
+    ``parse_address`` is a pure parse — it performs no ContextVar writes so it
+    is safe to call outside a live request (training scripts, batch tooling,
+    tests).  Callers running inside a request scope (routers, the validation
+    pipeline) use the extra fields here to replicate the audit /
+    training-candidate ContextVar writes the parser used to perform itself:
+
+    - ``parse_type`` → ``set_audit_context(parse_type=...)``.  This is the value
+      the parser previously fed to the audit context and is NOT always equal to
+      ``response.type`` (the CA/libpostal path sets ``"libpostal"`` while the
+      response type is ``"Street Address"``).
+    - ``candidate_data`` → ``set_candidate_data(**candidate_data)`` when not
+      ``None``.  ``None`` means no candidate should be recorded for this parse
+      (preserving the prior conditional behaviour on the clean US path).
+
+    ``candidate_data`` is deliberately kept off the public ``ParseResponseV2``
+    so training/candidate metadata never leaks into the API contract / OpenAPI.
+    """
+
+    response: ParseResponseV2
+    parse_type: str
+    candidate_data: dict[str, Any] | None = field(default=None)
 
 
 # Map usaddress tag names to friendlier keys.
@@ -92,308 +91,40 @@ TAG_NAMES: dict[str, str] = {
 }
 
 
-# Designator slots in priority order: primary unit first, then sub-unit.
-_UNIT_SLOT_PAIRS = (
-    ("sub_premise_type", "sub_premise_number"),
-    ("dependent_sub_premise_type", "dependent_sub_premise_number"),
-)
+def apply_parse_side_effects(outcome: ParseOutcome) -> None:
+    """Replay a :class:`ParseOutcome`'s request-scoped ContextVar writes.
 
-# Keys that represent unit-type fields (primary or sub-unit type).
-_UNIT_TYPE_KEYS: frozenset[str] = frozenset({"sub_premise_type", "dependent_sub_premise_type"})
+    ``parse_address`` no longer performs these writes itself (so it stays a pure
+    parse usable outside a request).  Request-scoped callers — the v2 routers and
+    the validation pipeline — call this immediately after ``parse_address`` so
+    the audit middleware sees exactly the same ContextVar state it saw before the
+    side effects were lifted out of the parser:
 
-# Keys that signal the end of the street portion of an address.
-_POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area", "postcode"})
+    - ``set_audit_context(parse_type=outcome.parse_type)`` — always.
+    - ``set_candidate_data(**outcome.candidate_data)`` — only when the parser
+      produced candidate data (``None`` on the clean US and CA paths).
 
-
-def _next_free_unit_slot(
-    components: dict[str, str],
-) -> tuple[str, str] | None:
-    """Return the first empty (type_key, id_key) pair, or *None*."""
-    for type_key, id_key in _UNIT_SLOT_PAIRS:
-        if not components.get(type_key) and not components.get(id_key):
-            return type_key, id_key
-    return None
-
-
-def _try_extract_designator(segment: str) -> tuple[str, str] | None:
-    """If *segment* starts with a UNIT_MAP key return (type, identifier).
-
-    Returns ``None`` when the leading word is not a known designator.
+    This helper is the single coupling point between the parser module and the
+    audit/training ContextVar machinery; ``parse_address`` itself touches
+    neither.
     """
-    segment = segment.strip()
-    if not segment:
-        return None
-    parts = segment.split(None, 1)
-    word = parts[0].upper().replace(".", "")
-    if word not in UNIT_MAP:
-        return None
-    identifier = parts[1] if len(parts) > 1 else ""
-    return parts[0], identifier
-
-
-def _emit_token(
-    component_values: dict[str, str],
-    key: str,
-    token: str,
-    separator_before: bool,
-) -> str | None:
-    """Write *token* into *component_values* under *key*; return a dual-range
-    string when a hyphen-joined range address is detected, else ``None``."""
-    if key in component_values:
-        if key == "premise_number" and separator_before:
-            merged = f"{component_values[key]}-{token}"
-            component_values[key] = merged
-            return merged
-        component_values[key] += f" {token}"
-    else:
-        component_values[key] = token
-    return None
-
-
-def _collect_ambiguous_components(
-    parsed_string: list[tuple[str, str]],
-    warnings: list[str],
-) -> dict[str, str]:
-    """Build a component dict from a usaddress ``RepeatedLabelError`` token list.
-
-    Handles two special cases beyond plain concatenation:
-
-    - **Dual/range addresses** (``"1804 & 1810 Main St"``): an
-      ``IntersectionSeparator`` immediately after an ``AddressNumber`` signals
-      that the second number is a range partner, not a new address.  The two
-      numbers are joined with a hyphen per USPS Pub 28 §232.
-
-    - **Multiple secondary-unit designators** (``"BLDG 201 ROOM 104 T"``):
-      when a repeated unit-type label carries a designator-shaped token
-      (a known ``UNIT_MAP`` entry, or any alphabetic token such as ``"SMP"``
-      that usaddress itself tagged as a unit type — GH #129), it is routed
-      to the next free slot instead of being concatenated.  A routed token
-      that is not in ``UNIT_MAP`` adds an "Unrecognized unit designator
-      preserved" warning.  Subsequent mislabelled tokens (``AddressNumber``,
-      ``StreetName``, …) are redirected into that slot's identifier until a
-      city/state/zip token appears.
-    """
-    component_values: dict[str, str] = {}
-    prev_key: str | None = None
-    separator_before: bool = False
-    dual_range: str | None = None
-    redirect_id_key: str | None = None
-
-    for token, label in parsed_string:
-        key = TAG_NAMES.get(label, label)
-
-        # Stop redirecting once we reach city/state/zip tokens.
-        if key in _POST_STREET_KEYS:
-            redirect_id_key = None
-
-        # Track whether an IntersectionSeparator appeared right before a
-        # repeated AddressNumber — that signals a dual/range address
-        # ("1804 & 1810"), not a true intersection.
-        if key == "intersection_separator":  # noqa: SIM102
-            if prev_key == "premise_number":
-                separator_before = True
-                prev_key = key
-                continue  # don't emit the separator yet
-            # True intersection separator — emit normally.
-
-        # Repeated unit-type label → route to the next free slot instead of
-        # concatenating.  usaddress already tagged this token as a unit type,
-        # so we trust that signal even when the token is not one of the
-        # canonical UNIT_MAP designators (GH #129: e.g. "SMP").  We still
-        # require the token to *look* like a designator (alphabetic) so a
-        # mislabelled number or fragment is not promoted to a slot.
-        if key in _UNIT_TYPE_KEYS and key in component_values:
-            cleaned_unit_token = token.upper().replace(".", "").strip(",;")
-            known_designator = cleaned_unit_token in UNIT_MAP
-            if known_designator or cleaned_unit_token.isalpha():
-                slot = _next_free_unit_slot(component_values)
-                if slot:
-                    component_values[slot[0]] = token
-                    redirect_id_key = slot[1]
-                    if not known_designator:
-                        warnings.append(
-                            warning_catalogue.UNRECOGNIZED_UNIT_DESIGNATOR.format(
-                                designator=cleaned_unit_token
-                            )
-                        )
-                    prev_key = key
-                    separator_before = False
-                    continue
-
-        # While redirecting, mislabelled tokens after a second designator
-        # are really the identifier for that designator.
-        if redirect_id_key is not None and key not in _POST_STREET_KEYS:
-            clean = token.strip(",;")
-            if clean:
-                existing = component_values.get(redirect_id_key)
-                component_values[redirect_id_key] = f"{existing} {clean}" if existing else clean
-            prev_key = key
-            separator_before = False
-            continue
-
-        # Normal token: concatenate into existing field or create new.
-        # Dual-range address numbers are joined with a hyphen (Pub 28 §232).
-        dual_range = _emit_token(component_values, key, token, separator_before) or dual_range
-        separator_before = False
-        prev_key = key
-
-    if dual_range is not None:
-        warnings.append(warning_catalogue.REPEATED_NUMBERS_RANGE.format(range=dual_range))
-    else:
-        warnings.append(warning_catalogue.REPEATED_LABELS)
-
-    return component_values
-
-
-def _warn_unit_recovered(warnings: list[str] | None, designator: str) -> None:
-    """Append a unit-recovered warning, including the designator token.
-
-    Shared by phase1/phase2 recovery helpers so the message format is
-    defined in one place.  No-op when *warnings* is ``None``.
-    """
-    if warnings is not None:
-        warnings.append(warning_catalogue.UNIT_RECOVERED_FROM_FIELD.format(designator=designator))
-
-
-def _recover_unit_phase1(
-    components: dict[str, str],
-    warnings: list[str] | None,
-) -> None:
-    """Phase 1: peel comma-separated leading unit designators from city."""
-    while True:
-        city = components.get("locality", "")
-        if not city or "," not in city:
-            break
-
-        before, _, after = city.partition(",")
-        before = before.strip()
-        after = after.strip()
-        if not before or not after:
-            break
-
-        result = _try_extract_designator(before)
-        if result is not None:
-            desig_type, desig_id = result
-            slot = _next_free_unit_slot(components)
-            if slot:
-                components[slot[0]] = desig_type
-                if desig_id:
-                    components[slot[1]] = desig_id
-            components["locality"] = after
-            _warn_unit_recovered(warnings, desig_type)
-            continue
-
-        # A single word before the comma that isn't in any address
-        # vocabulary is likely wayfinding text (e.g. "YARD", "GATE").
-        # Drop it.  Multi-word segments are left alone — they could
-        # be a real multi-word city name prefix.
-        word = before.upper().replace(".", "")
-        if " " not in before and word not in _ADDRESS_VOCABULARY:
-            components["locality"] = after
-            continue
-
-        break
-
-
-def _recover_unit_phase2(
-    components: dict[str, str],
-    warnings: list[str] | None,
-) -> None:
-    """Phase 2: strip bare leading unit designator (no comma) from city.
-
-    Only no-identifier designators (BSMT, FRNT, LOWR …) are stored
-    into a slot here.  Designators like KEY, LOT, UNIT always expect
-    an identifier, so a bare "KEY WEST" is almost certainly a city.
-    When all unit slots are full, orphaned designator words are dropped.
-    """
-    city = components.get("locality", "")
-    if not city or " " not in city:
-        return
-
-    first, _, rest = city.partition(" ")
-    word = first.upper().replace(".", "")
-    rest = rest.strip()
-    if not rest:
-        return
-
-    slot = _next_free_unit_slot(components)
-
-    if word in _NO_ID_DESIGNATORS:
-        if slot:
-            components[slot[0]] = first
-        components["locality"] = rest
-        _warn_unit_recovered(warnings, first)
-    elif word in UNIT_MAP and slot is None:
-        # All slots full — just strip the orphaned designator word.
-        components["locality"] = rest
-        _warn_unit_recovered(warnings, first)
-
-
-def _recover_unit_from_city(components: dict[str, str], warnings: list[str] | None = None) -> None:
-    """Move unit designators mis-tagged as part of city back to occupancy.
-
-    usaddress sometimes tags secondary designators that follow the street
-    line as ``PlaceName``, concatenating them with the real city.  An
-    address like ``"BLDG 1, LOWR LEVEL, UNIT  SEATTLE"`` can produce
-    ``city = "LOWR LEVEL, UNIT SEATTLE"`` (after usaddress already
-    extracted BLDG).
-
-    This function peels off comma-separated leading segments (Phase 1)
-    then checks for a bare leading designator word (Phase 2).
-    """
-    _recover_unit_phase1(components, warnings)
-    _recover_unit_phase2(components, warnings)
-
-
-def _recover_identifier_fragment_from_city(
-    components: dict[str, str],
-    warnings: list[str] | None = None,
-) -> None:
-    """Move a stray single-letter unit qualifier from the start of city.
-
-    usaddress sometimes splits a compound identifier like ``120 K`` and
-    absorbs the trailing letter into ``PlaceName``, producing a city of
-    ``"K WALLA WALLA"`` instead of ``"WALLA WALLA"``.  When the city
-    begins with a single letter followed by a space and an occupancy or
-    subaddress identifier already exists, move that letter back onto the
-    identifier.
-    """
-    city = components.get("locality", "")
-    if not city or len(city) < _MIN_CITY_LEN:
-        return
-
-    # Must start with exactly one letter then a space.  This is
-    # intentionally aggressive — a single leading letter is almost
-    # always a stray identifier fragment, not the start of a real city
-    # name.  The only guard is that an identifier field must already
-    # exist (so there is something to append to).  Edge cases like
-    # "O FALLON" (O'Fallon with dropped apostrophe) are theoretically
-    # possible but unlikely in practice with usaddress output.
-    if not city[0].isalpha() or city[1] != " ":
-        return
-
-    fragment = city[0]
-    rest = city[2:].strip()
-
-    if not rest:
-        return
-
-    # Append to whichever identifier field is present.
-    for key in ("sub_premise_number", "dependent_sub_premise_number"):
-        if components.get(key):
-            components[key] += f" {fragment}"
-            components["locality"] = rest
-            if warnings is not None:
-                warnings.append(warning_catalogue.UNIT_FRAGMENT_FROM_CITY)
-            return
+    set_audit_context(parse_type=outcome.parse_type)
+    if outcome.candidate_data is not None:
+        set_candidate_data(**outcome.candidate_data)
 
 
 async def parse_address(
     raw: str,
     country: str = "US",
     libpostal_client: LibpostalClient | None = None,
-) -> ParseResponseV2:
+) -> ParseOutcome:
     """Parse *raw* address string into labelled components.
+
+    This is a **pure parse**: it performs no request-scoped ContextVar writes,
+    so it is safe to call outside a live request.  It returns a
+    :class:`ParseOutcome` wrapping the public ``ParseResponseV2`` plus the data
+    a request-scoped caller needs to set the audit / training-candidate
+    ContextVars itself (``parse_type`` and ``candidate_data``).
 
     For ``country="CA"``, delegates to the libpostal sidecar via
     *libpostal_client*.  Raises ``LibpostalUnavailableError`` (→ 503)
@@ -405,9 +136,8 @@ async def parse_address(
     if country == "CA":
         if libpostal_client is None:
             raise LibpostalUnavailableError("No libpostal client configured")
-        set_audit_context(parse_type="libpostal")
         components = await libpostal_client.parse(raw)
-        return ParseResponseV2(
+        response = ParseResponseV2(
             input=raw,
             country=country,
             components=ComponentSet(
@@ -418,16 +148,23 @@ async def parse_address(
             type="Street Address",
             warnings=[],
         )
+        # parse_type differs from response.type on this path ("libpostal"
+        # vs "Street Address"); the CA path never collects a candidate.
+        return ParseOutcome(response=response, parse_type="libpostal", candidate_data=None)
     return _parse(raw, country)
 
 
-def _parse(raw: str, country: str) -> ParseResponseV2:
+def _parse(raw: str, country: str) -> ParseOutcome:
     """Parse *raw* address string into labelled components.
 
-    Returns a :class:`ParseResponse` with:
+    Returns a :class:`ParseOutcome` whose ``response`` is a
+    :class:`ParseResponseV2` with:
       - ``input``: the original string
       - ``components``: dict of component_name -> value
       - ``type``: ``"Street Address"``, ``"Intersection"``, or ``"Ambiguous"``
+
+    and whose ``parse_type`` / ``candidate_data`` carry the request-scoped
+    side-effect payloads for the caller to apply.
     """
     warnings: list[str] = []
 
@@ -449,23 +186,21 @@ def _parse(raw: str, country: str) -> ParseResponseV2:
         tagged, addr_type = usaddress.tag(cleaned)
     except usaddress.RepeatedLabelError as exc:
         logger.warning("ambiguous parse: repeated labels in input")
-        component_values: dict[str, str] = _collect_ambiguous_components(
-            exc.parsed_string, warnings
+        component_values: dict[str, str] = collect_ambiguous_components(
+            exc.parsed_string, warnings, TAG_NAMES
         )
-        _recover_unit_from_city(component_values, warnings)
-        _recover_identifier_fragment_from_city(component_values, warnings)
+        recover_components(component_values, warnings)
 
-        set_candidate_data(
-            raw_address=raw,
-            failure_type="repeated_label_error",
-            parsed_tokens=list(exc.parsed_string),
-            recovered_components=component_values,
-            failure_reason=f"usaddress.RepeatedLabelError: {exc}".replace("\n", " ")[:400],
-        )
+        candidate_data = {
+            "raw_address": raw,
+            "failure_type": "repeated_label_error",
+            "parsed_tokens": list(exc.parsed_string),
+            "recovered_components": component_values,
+            "failure_reason": f"usaddress.RepeatedLabelError: {exc}".replace("\n", " ")[:400],
+        }
 
         logger.debug("parsed address type=Ambiguous country=%s", country)
-        set_audit_context(parse_type="Ambiguous")
-        return ParseResponseV2(
+        response = ParseResponseV2(
             input=raw,
             country=country,
             components=ComponentSet(
@@ -476,29 +211,31 @@ def _parse(raw: str, country: str) -> ParseResponseV2:
             type="Ambiguous",
             warnings=warnings,
         )
+        return ParseOutcome(
+            response=response, parse_type="Ambiguous", candidate_data=candidate_data
+        )
 
     logger.debug("parsed address type=%s country=%s", addr_type, country)
     component_values = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
 
-    _recover_unit_from_city(component_values, warnings)
-    _recover_identifier_fragment_from_city(component_values, warnings)
+    recover_components(component_values, warnings)
 
+    candidate_data: dict[str, Any] | None = None
     if any(
         "Unit designator recovered" in w or "identifier fragment" in w.lower() for w in warnings
     ):
-        set_candidate_data(
-            raw_address=raw,
-            failure_type="post_parse_recovery",
-            parsed_tokens=[(v, k) for k, v in tagged.items()],
-            recovered_components=component_values,
-            failure_reason=(
+        candidate_data = {
+            "raw_address": raw,
+            "failure_type": "post_parse_recovery",
+            "parsed_tokens": [(v, k) for k, v in tagged.items()],
+            "recovered_components": component_values,
+            "failure_reason": (
                 "; ".join(w for w in warnings if "recovered" in w.lower())[:400]
                 or "post-parse recovery heuristics matched"
             ),
-        )
+        }
 
-    set_audit_context(parse_type=addr_type)
-    return ParseResponseV2(
+    response = ParseResponseV2(
         input=raw,
         country=country,
         components=ComponentSet(
@@ -509,3 +246,4 @@ def _parse(raw: str, country: str) -> ParseResponseV2:
         type=addr_type,
         warnings=warnings,
     )
+    return ParseOutcome(response=response, parse_type=addr_type, candidate_data=candidate_data)
