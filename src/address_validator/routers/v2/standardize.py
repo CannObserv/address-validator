@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
-from address_validator.core.errors import APIError
+from address_validator.core.errors import raise_parsing_unavailable
 from address_validator.models import (
     ErrorResponse,
     StandardizeRequest,
@@ -79,14 +79,7 @@ async def standardize_address(
                 req.address.strip(), country=req.country, libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
-            raise APIError(
-                status_code=503,
-                error="parsing_unavailable",
-                message=(
-                    "Address parsing for CA is currently unavailable. "
-                    "Try again shortly or provide pre-parsed components."
-                ),
-            ) from exc
+            raise_parsing_unavailable(exc)
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 

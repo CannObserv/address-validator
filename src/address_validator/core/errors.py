@@ -1,5 +1,7 @@
 """Structured API error types used by the API routers."""
 
+from typing import NoReturn
+
 from fastapi.responses import JSONResponse
 
 from address_validator.models import ErrorResponse
@@ -24,6 +26,24 @@ class APIError(Exception):
         self.error = error
         self.message = message
         self.headers = headers
+
+
+def raise_parsing_unavailable(cause: BaseException | None = None) -> NoReturn:
+    """Raise the canonical 503 ``parsing_unavailable`` :class:`APIError`.
+
+    Single source of truth for the libpostal-sidecar-down response shared by
+    the v2 parse/standardize routers and the validation pipeline.  Pass the
+    originating :class:`LibpostalUnavailableError` as *cause* to preserve the
+    exception chain.
+    """
+    raise APIError(
+        status_code=503,
+        error="parsing_unavailable",
+        message=(
+            "Address parsing for CA is currently unavailable. "
+            "Try again shortly or provide pre-parsed components."
+        ),
+    ) from cause
 
 
 def api_error_response(exc: "APIError") -> JSONResponse:

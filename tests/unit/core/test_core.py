@@ -2,7 +2,29 @@
 
 import json
 
-from address_validator.core.errors import APIError, api_error_response
+import pytest
+
+from address_validator.core.errors import (
+    APIError,
+    api_error_response,
+    raise_parsing_unavailable,
+)
+
+
+class TestRaiseParsingUnavailable:
+    def test_raises_canonical_503_apierror(self) -> None:
+        with pytest.raises(APIError) as exc_info:
+            raise_parsing_unavailable()
+        exc = exc_info.value
+        assert exc.status_code == 503
+        assert exc.error == "parsing_unavailable"
+        assert "currently unavailable" in exc.message
+
+    def test_preserves_cause_chain(self) -> None:
+        original = RuntimeError("sidecar down")
+        with pytest.raises(APIError) as exc_info:
+            raise_parsing_unavailable(original)
+        assert exc_info.value.__cause__ is original
 
 
 class TestApiErrorResponse:
