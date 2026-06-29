@@ -15,7 +15,10 @@ this tuple:
 
 Keep this module and ``docs/VALIDATION-STATUS.md`` in sync — the drift test
 ``tests/unit/test_validation_status_catalogue.py`` fails on any divergence.
-After adding or changing a status, update both.
+After adding or changing a status, update both — and add a new Alembic
+migration widening the ``ck_validated_addresses_status`` CHECK constraint.
+The DB constraint is immutable history, so the drift test cannot detect a
+missing migration; the live DB will reject an un-migrated status at insert.
 
 This mirrors the response-warning catalogue pattern (``core/warnings.py`` /
 ``docs/WARNINGS.md``, GH #131/#132).

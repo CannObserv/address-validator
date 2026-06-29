@@ -32,7 +32,7 @@ This catalogue covers the **response `warnings` channel only**. Operational
 | `Unit identifier fragment recovered from city field` | `services/parser.py` | A unit identifier fragment was found in the city/locality field and moved to the unit. |
 | `Unrecognized unit designator preserved: '{designator}'` | `services/parser.py` | A unit-type token not in `UNIT_MAP` was preserved as-is (GH #129); `{designator}` is the token. |
 | `Address has no parseable street line; passing raw input to provider` | `services/validation/pipeline.py` | No street line could be parsed; the raw input is forwarded to the validation provider. |
-| `Unrecognized province/territory: '{region}'` | `services/standardizer.py` | A Canadian province/territory value was not recognized and is passed through unchanged; `{region}` is the value. |
+| `Unrecognized province/territory: '{region}'` | `services/standardizer/ca.py` | A Canadian province/territory value was not recognized and is passed through unchanged; `{region}` is the value. |
 | `Provider inferred one or more address components not present in input` | `services/validation/google_provider.py` | The Google provider inferred components absent from the input. |
 | `Provider replaced one or more address components` | `services/validation/google_provider.py` | The Google provider replaced one or more input components. |
 | `One or more address components are unconfirmed` | `services/validation/google_provider.py` | The Google provider could not confirm one or more components. |

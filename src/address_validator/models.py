@@ -186,7 +186,7 @@ class ValidationResult(BaseModel):
     # The members below MUST equal ``VALIDATION_STATUSES`` (single source of
     # truth, ``core/validation_status.py``). Pydantic requires a literal
     # ``Literal[...]`` here — it cannot be built from a runtime tuple — so the
-    # module-level assertion after this class pins the two together, and the
+    # module-level guard after this class pins the two together, and the
     # drift test ``tests/unit/test_validation_status_catalogue.py`` guards it.
     status: Literal[
         "confirmed",
@@ -212,9 +212,11 @@ class ValidationResult(BaseModel):
 
 # Pin the ValidationResult.status Literal to the single source of truth.
 # Fails fast at import time if the two drift (also covered by the drift test).
-assert set(get_args(ValidationResult.model_fields["status"].annotation)) == set(
-    VALIDATION_STATUSES
-), "ValidationResult.status Literal diverges from core.validation_status.VALIDATION_STATUSES"
+# Uses an explicit raise, not assert, so the guard survives `python -O`.
+if set(get_args(ValidationResult.model_fields["status"].annotation)) != set(VALIDATION_STATUSES):
+    raise RuntimeError(
+        "ValidationResult.status Literal diverges from core.validation_status.VALIDATION_STATUSES"
+    )
 
 
 class HealthResponseV2(BaseModel):

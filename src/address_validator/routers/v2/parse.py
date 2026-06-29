@@ -62,7 +62,7 @@ async def parse(
     try:
         result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
-        raise_parsing_unavailable(exc)
+        raise_parsing_unavailable(country, exc)
     return ParseResponseV2(
         input=result.input,
         country=result.country,

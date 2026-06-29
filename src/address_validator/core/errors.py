@@ -28,19 +28,21 @@ class APIError(Exception):
         self.headers = headers
 
 
-def raise_parsing_unavailable(cause: BaseException | None = None) -> NoReturn:
+def raise_parsing_unavailable(country: str, cause: BaseException | None = None) -> NoReturn:
     """Raise the canonical 503 ``parsing_unavailable`` :class:`APIError`.
 
     Single source of truth for the libpostal-sidecar-down response shared by
-    the v2 parse/standardize routers and the validation pipeline.  Pass the
-    originating :class:`LibpostalUnavailableError` as *cause* to preserve the
-    exception chain.
+    the v2 parse/standardize routers and the validation pipeline.  *country* is
+    the ISO 3166-1 alpha-2 code whose parsing is unavailable — only CA routes
+    through libpostal today, but the message stays country-accurate if that
+    grows.  Pass the originating :class:`LibpostalUnavailableError` as *cause*
+    to preserve the exception chain.
     """
     raise APIError(
         status_code=503,
         error="parsing_unavailable",
         message=(
-            "Address parsing for CA is currently unavailable. "
+            f"Address parsing for {country} is currently unavailable. "
             "Try again shortly or provide pre-parsed components."
         ),
     ) from cause

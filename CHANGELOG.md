@@ -8,6 +8,7 @@ and the project uses semantic versioning.
 
 ### Changed (breaking)
 
+- **CA `POST /api/v2/parse` now reports its true source spec** ([#134](https://github.com/CannObserv/address-validator/issues/134)). For Canadian addresses, `components.spec` in the parse response is now `raw` (the honest spec for an unstandardized libpostal parse) instead of being silently relabelled `iso-19160-4`. This converges `parse` onto the same spec-selection rule `standardize` already used. Consumers keying on the parse-CA `components.spec` value must update; `standardize` CA responses are unchanged (`canada-post`).
 - **Response warning string spelling normalized to American English** ([#131](https://github.com/CannObserv/address-validator/issues/131)). The standardize warning `"Unrecognised province/territory: '...'"` is now `"Unrecognized province/territory: '...'"`. Consumers matching this string in the `warnings` channel must update. All response-warning strings are now defined in `core/warnings.py` and documented in the living catalogue [`docs/WARNINGS.md`](docs/WARNINGS.md); a drift test fails CI if the two diverge.
 
 ## [3.0.0] — 2026-06-03

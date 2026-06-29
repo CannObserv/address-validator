@@ -79,7 +79,7 @@ async def standardize_address(
                 req.address.strip(), country=req.country, libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
-            raise_parsing_unavailable(exc)
+            raise_parsing_unavailable(req.country, exc)
         comps = parse_result.components.values
         upstream_warnings = parse_result.warnings
 

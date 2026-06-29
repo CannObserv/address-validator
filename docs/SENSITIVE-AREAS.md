@@ -9,7 +9,7 @@ Per-module risk table. Read before touching any of these files.
 | `src/address_validator/services/parser.py` pre-processing | Regex strips parens before `usaddress` — changes affect US parsing |
 | `src/address_validator/services/parser.py` post-parse recovery | `_recover_*` and vocabulary sets — affect US component assignment |
 | `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
-| `src/address_validator/services/standardizer.py` `_get()` | Every component value flows through this; changes cascade everywhere |
+| `src/address_validator/services/standardizer/_lines.py` `_get()` | Every component value flows through this; changes cascade everywhere |
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
 | `src/address_validator/models.py` `AddressInputMixin` | Single enforcement point for address/components input validation across all endpoints — removing or weakening the `model_validator` silently removes the 422 guard for both `/standardize` and `/validate` |
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |

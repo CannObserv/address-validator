@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
@@ -133,7 +134,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     # Friendly endpoint labels derive from the single source of truth in
     # _shared (_API_ENDPOINT_LABELS); both v1 and v2 paths share a label so
     # historical audit_log rows from before the v1 removal (#117) still surface.
-    known = _API_ENDPOINT_LABELS
+    known = MappingProxyType(_API_ENDPOINT_LABELS)
     breakdown: dict[str, dict[str, int]] = {
         "all": {},
         "7d": {},

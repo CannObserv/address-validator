@@ -114,7 +114,7 @@ The USPS API also returns:
 | Section | Topic | Referenced in |
 |---|---|---|
 | §232 | Dual/range addresses | `services/parser.py` |
-| §354 | Parentheses not valid in standardized addresses | `services/parser.py`, `services/standardizer.py` |
+| §354 | Parentheses not valid in standardized addresses | `services/parser.py`, `services/standardizer/` |
 | Appendix B | Street suffix abbreviations | `usps_data/suffixes.py` |
 | Appendix C | Secondary unit designators | `usps_data/units.py` |
 | Appendix D | State abbreviations | `usps_data/states.py` |

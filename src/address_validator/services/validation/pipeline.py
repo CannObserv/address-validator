@@ -179,7 +179,7 @@ async def run_non_us_pipeline(
                 req.address.strip(), country="CA", libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
-            raise_parsing_unavailable(exc)
+            raise_parsing_unavailable(req.country, exc)
         std = standardize(
             parse_result.components.values, country="CA", upstream_warnings=parse_result.warnings
         )
