@@ -12,6 +12,9 @@ _PKG_DIR = Path(__file__).resolve().parent.parent.parent  # src/address_validato
 templates = Jinja2Templates(directory=str(_PKG_DIR / "templates"))
 
 # Validation-status display metadata — used by templates via Jinja2 global "vs_meta".
+# Keys MUST equal VALIDATION_STATUSES (single source of truth,
+# core/validation_status.py); the drift test
+# tests/unit/test_validation_status_catalogue.py guards against divergence.
 VS_META: dict[str, dict[str, str]] = {
     "confirmed": {"symbol": "\u2713", "label": "Confirmed", "color": "green"},
     "confirmed_missing_secondary": {
@@ -25,7 +28,10 @@ VS_META: dict[str, dict[str, str]] = {
         "color": "yellow",
     },
     "not_confirmed": {"symbol": "\u2717", "label": "Not Confirmed", "color": "red"},
+    "not_found": {"symbol": "\u2717", "label": "Not Found", "color": "gray"},
     "invalid": {"symbol": "\u2717", "label": "Invalid", "color": "red"},
+    "unavailable": {"symbol": "?", "label": "Unavailable", "color": "gray"},
+    "error": {"symbol": "\u2717", "label": "Error", "color": "red"},
 }
 
 templates.env.globals["vs_meta"] = VS_META
