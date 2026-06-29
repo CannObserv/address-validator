@@ -9,6 +9,10 @@ Publication 28 snake_case key names.
 input dict and unknown keys always pass through unchanged.
 """
 
+from fastapi import Query
+
+from address_validator.core.errors import APIError
+
 # Keys in this mapping are ISO 19160-4 element names.
 # Values are the target vocabulary keys for that profile.
 _USPS_PUB28: dict[str, str] = {
@@ -63,6 +67,30 @@ COMPONENT_PROFILE_DESCRIPTION = (
     "`usps-pub28`: USPS Publication 28 snake_case names. "
     "`canada-post`: reserved; currently identical to `iso-19160-4`."
 )
+
+
+def valid_component_profile(
+    component_profile: str = Query(
+        default="iso-19160-4",
+        description=COMPONENT_PROFILE_DESCRIPTION,
+    ),
+) -> str:
+    """FastAPI dependency: validate the ``component_profile`` query param.
+
+    Returns the profile unchanged when valid; raises ``APIError`` with the
+    canonical ``invalid_component_profile`` contract (HTTP 422) otherwise.
+    Single source of truth for the guard previously inlined in every v2 route.
+    """
+    if component_profile not in VALID_PROFILES:
+        raise APIError(
+            status_code=422,
+            error="invalid_component_profile",
+            message=(
+                f"Unknown component_profile '{component_profile}'. "
+                f"Valid values: {sorted(VALID_PROFILES)}."
+            ),
+        )
+    return component_profile
 
 
 def translate_components(values: dict[str, str], profile: str) -> dict[str, str]:

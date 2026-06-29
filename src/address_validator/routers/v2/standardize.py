@@ -1,6 +1,6 @@
 """v2 standardize endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
@@ -13,9 +13,8 @@ from address_validator.models import (
 )
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
-    COMPONENT_PROFILE_DESCRIPTION,
-    VALID_PROFILES,
     translate_components,
+    valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
@@ -65,21 +64,9 @@ router = APIRouter(
 )
 async def standardize_address(
     req: StandardizeRequest,
-    component_profile: str = Query(
-        default="iso-19160-4",
-        description=COMPONENT_PROFILE_DESCRIPTION,
-    ),
+    component_profile: str = Depends(valid_component_profile),
     libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> StandardizeResponseV2:
-    if component_profile not in VALID_PROFILES:
-        raise APIError(
-            status_code=422,
-            error="invalid_component_profile",
-            message=(
-                f"Unknown component_profile '{component_profile}'. "
-                f"Valid values: {sorted(VALID_PROFILES)}."
-            ),
-        )
     check_country(req.country)
 
     upstream_warnings: list[str] = []

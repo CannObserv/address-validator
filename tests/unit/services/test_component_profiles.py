@@ -1,10 +1,32 @@
 """Tests for component_profiles translation layer."""
 
+import pytest
+
+from address_validator.core.errors import APIError
 from address_validator.services.component_profiles import (
     VALID_PROFILES,
     translate_components,
     translate_components_to_iso,
+    valid_component_profile,
 )
+
+
+class TestValidComponentProfile:
+    def test_returns_valid_profile_unchanged(self) -> None:
+        for profile in VALID_PROFILES:
+            assert valid_component_profile(profile) == profile
+
+    def test_default_profile_is_valid(self) -> None:
+        # The dependency default must itself pass the guard.
+        assert valid_component_profile("iso-19160-4") == "iso-19160-4"
+
+    def test_invalid_profile_raises_apierror_422(self) -> None:
+        with pytest.raises(APIError) as exc_info:
+            valid_component_profile("bad-profile")
+        exc = exc_info.value
+        assert exc.status_code == 422
+        assert exc.error == "invalid_component_profile"
+        assert "bad-profile" in exc.message
 
 
 class TestTranslateComponents:

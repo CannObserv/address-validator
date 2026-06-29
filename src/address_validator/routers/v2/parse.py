@@ -1,6 +1,6 @@
 """v2 parse endpoint — ISO 19160-4 component keys by default."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core.countries import check_country
@@ -8,9 +8,8 @@ from address_validator.core.errors import APIError
 from address_validator.models import ComponentSet, ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
 from address_validator.services.component_profiles import (
-    COMPONENT_PROFILE_DESCRIPTION,
-    VALID_PROFILES,
     translate_components,
+    valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
 from address_validator.services.parser import parse_address
@@ -50,21 +49,9 @@ router = APIRouter(
 )
 async def parse(
     req: ParseRequest,
-    component_profile: str = Query(
-        default="iso-19160-4",
-        description=COMPONENT_PROFILE_DESCRIPTION,
-    ),
+    component_profile: str = Depends(valid_component_profile),
     libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> ParseResponseV2:
-    if component_profile not in VALID_PROFILES:
-        raise APIError(
-            status_code=422,
-            error="invalid_component_profile",
-            message=(
-                f"Unknown component_profile '{component_profile}'. "
-                f"Valid values: {sorted(VALID_PROFILES)}."
-            ),
-        )
     country = check_country(req.country)
     raw = req.address.strip()
     if not raw:

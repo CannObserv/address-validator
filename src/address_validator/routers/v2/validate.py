@@ -40,7 +40,7 @@ validate response structure — provider components are returned as-is.
 import logging
 import math
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
 from address_validator.auth import require_api_key
 from address_validator.core import warnings as warning_catalogue
@@ -53,10 +53,7 @@ from address_validator.models import (
 )
 from address_validator.routers.deps import get_libpostal_client, get_registry
 from address_validator.services.audit import set_audit_context
-from address_validator.services.component_profiles import (
-    COMPONENT_PROFILE_DESCRIPTION,
-    VALID_PROFILES,
-)
+from address_validator.services.component_profiles import valid_component_profile
 from address_validator.services.libpostal_client import LibpostalClient
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -127,23 +124,10 @@ router = APIRouter(
 )
 async def validate_address(
     req: ValidateRequest,
-    component_profile: str = Query(
-        default="iso-19160-4",
-        description=COMPONENT_PROFILE_DESCRIPTION,
-    ),
+    component_profile: str = Depends(valid_component_profile),
     registry: ProviderRegistry = Depends(get_registry),
     libpostal_client: LibpostalClient | None = Depends(get_libpostal_client),
 ) -> ValidateResponseV2:
-    if component_profile not in VALID_PROFILES:
-        raise APIError(
-            status_code=422,
-            error="invalid_component_profile",
-            message=(
-                f"Unknown component_profile '{component_profile}'. "
-                f"Valid values: {sorted(VALID_PROFILES)}."
-            ),
-        )
-
     if req.country != "US":
         std, raw_input, provider = await run_non_us_pipeline(req, registry, libpostal_client)
     else:
