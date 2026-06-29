@@ -23,6 +23,7 @@ from address_validator.core.address_format import build_validated_string
 from address_validator.core.countries import VALID_ISO2
 from address_validator.core.errors import APIError, raise_parsing_unavailable
 from address_validator.models import ComponentSet, StandardizedAddress
+from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import translate_components_to_iso
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import apply_parse_side_effects, parse_address
@@ -181,6 +182,10 @@ async def run_non_us_pipeline(
                 req.address.strip(), country="CA", libpostal_client=libpostal_client
             )
         except LibpostalUnavailableError as exc:
+            # Stamp the audit parse_type even on libpostal failure, matching the
+            # pre-#138 behaviour (set before the parse await). Success paths get
+            # it via apply_parse_side_effects below.
+            set_audit_context(parse_type="libpostal")
             raise_parsing_unavailable(req.country, exc)
         apply_parse_side_effects(parse_outcome)
         parse_result = parse_outcome.response
