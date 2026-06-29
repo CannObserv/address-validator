@@ -7,12 +7,13 @@ from address_validator.core.countries import check_country
 from address_validator.core.errors import APIError, raise_parsing_unavailable
 from address_validator.models import ErrorResponse, ParseRequest, ParseResponseV2
 from address_validator.routers.deps import get_libpostal_client
+from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import (
     build_output_component_set,
     valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
-from address_validator.services.parser import parse_address
+from address_validator.services.parser import apply_parse_side_effects, parse_address
 
 router = APIRouter(
     prefix="/api/v2",
@@ -60,9 +61,15 @@ async def parse(
             message="address is required and must not be blank.",
         )
     try:
-        result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
+        outcome = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
+        # Stamp the audit parse_type even on libpostal failure, matching the
+        # pre-#138 behaviour (set before the parse await). Success paths get
+        # it via apply_parse_side_effects below.
+        set_audit_context(parse_type="libpostal")
         raise_parsing_unavailable(country, exc)
+    apply_parse_side_effects(outcome)
+    result = outcome.response
     return ParseResponseV2(
         input=result.input,
         country=result.country,

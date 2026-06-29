@@ -10,7 +10,7 @@ HTTP request
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
  └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
  └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
-     ├─ parse            →   services/parser.py — US: usaddress wrapper + post-parse recovery; CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
+     ├─ parse            →   services/parser.py — US: usaddress wrapper (post-parse recovery in services/parse_recovery.py); CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
      ├─ standardize      →   services/standardizer/ (package: us.py / ca.py / shared _lines.py) — US: ISO keys via USPS pipeline (Pub 28 abbrev tables from usps_data/); CA: ISO keys via ca.standardize_ca() (canada-post spec); enabled via check_country
      ├─ validate         →   parse → standardize → services/validation/  — US: USPS pipeline; CA raw string: libpostal parse → ca.standardize_ca() → provider; other non-US: components-only
      │                              config.py         pydantic-settings models (USPSConfig, GoogleConfig, ValidationConfig) + validate_config()

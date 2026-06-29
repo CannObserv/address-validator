@@ -7,10 +7,14 @@ from unittest.mock import AsyncMock
 import pytest
 import usaddress
 
+from address_validator.services.audit import get_audit_parse_type, reset_audit_context
 from address_validator.services.libpostal_client import LibpostalUnavailableError
-from address_validator.services.parser import (
+from address_validator.services.parse_recovery import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
+)
+from address_validator.services.parser import (
+    apply_parse_side_effects,
     parse_address,
 )
 from address_validator.services.training_candidates import (
@@ -110,7 +114,7 @@ class TestRecoverIdentifierFragmentFromCity:
 
 class TestParseAddress:
     async def test_basic_street_address(self) -> None:
-        result = await parse_address("123 Main St, Springfield, IL 62701")
+        result = (await parse_address("123 Main St, Springfield, IL 62701")).response
         v = result.components.values
         assert v["premise_number"] == "123"
         assert v["thoroughfare_name"] == "Main"
@@ -119,22 +123,22 @@ class TestParseAddress:
         assert v["postcode"] == "62701"
 
     async def test_country_propagated(self) -> None:
-        result = await parse_address("123 Main St", country="US")
+        result = (await parse_address("123 Main St", country="US")).response
         assert result.country == "US"
 
     async def test_input_preserved(self) -> None:
         raw = "123 Main St, Springfield, IL 62701"
-        result = await parse_address(raw)
+        result = (await parse_address(raw)).response
         assert result.input == raw
 
     async def test_parenthesized_wayfinding_stripped(self) -> None:
-        result = await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
+        result = (await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")).response
         v = result.components.values
         assert v["premise_number"] == "123"
         assert v["locality"] == "Springfield"
 
     async def test_unmatched_paren_stripped(self) -> None:
-        result = await parse_address("123 Main) St, Springfield, IL")
+        result = (await parse_address("123 Main) St, Springfield, IL")).response
         assert "(" not in str(result.components.values)
         assert ")" not in str(result.components.values)
 
@@ -151,15 +155,16 @@ class TestParseAddress:
             "administrative_area": "ON",
             "postcode": "M5V 2T6",
         }
-        result = await parse_address(
+        outcome = await parse_address(
             "123 Main St Toronto ON", country="CA", libpostal_client=mock_client
         )
+        result = outcome.response
         mock_client.parse.assert_awaited_once()
         assert result.country == "CA"
         assert result.components.values["locality"] == "TORONTO"
 
     async def test_intersection_parsed(self) -> None:
-        result = await parse_address("1st St & 2nd Ave, Seattle, WA")
+        result = (await parse_address("1st St & 2nd Ave, Seattle, WA")).response
         v = result.components.values
         assert "second_thoroughfare_name" in v
 
@@ -194,17 +199,17 @@ class TestParseAddress:
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
 
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("1804 & 1810 Main St")
+            result = (await parse_address("1804 & 1810 Main St")).response
 
         assert result.components.values["premise_number"] == "1804-1810"
         assert result.type == "Ambiguous"
 
     async def test_no_warnings_on_clean_address(self) -> None:
-        result = await parse_address("456 Oak Ave, Portland, OR 97201")
+        result = (await parse_address("456 Oak Ave, Portland, OR 97201")).response
         assert result.warnings == []
 
     async def test_components_have_spec(self) -> None:
-        result = await parse_address("123 Main St")
+        result = (await parse_address("123 Main St")).response
         assert result.components.spec == "usps-pub28"
         assert result.components.spec_version != ""
 
@@ -216,7 +221,7 @@ class TestParseAddress:
         """
         long_input = "A" * 1001
         # parse_address should not raise; it's the model that enforces length.
-        result = await parse_address(long_input)
+        result = (await parse_address(long_input)).response
         assert result is not None
 
 
@@ -231,13 +236,13 @@ class TestRepeatedLabelFallback:
         the parser should fall back gracefully with type='Ambiguous'.
         """
         # This specific string reliably triggers RepeatedLabelError in usaddress.
-        result = await parse_address("123 Main St Rear 456 Oak Ave")
+        result = (await parse_address("123 Main St Rear 456 Oak Ave")).response
         # Either it parsed normally or hit the fallback — both are acceptable;
         # the important thing is no exception is raised.
         assert result.type in {"Street Address", "Intersection", "Ambiguous"}
 
     async def test_warnings_set_on_fallback(self) -> None:
-        result = await parse_address("123 Main St Rear 456 Oak Ave")
+        result = (await parse_address("123 Main St Rear 456 Oak Ave")).response
         if result.type == "Ambiguous":
             assert len(result.warnings) > 0
 
@@ -261,9 +266,10 @@ class TestRepeatedLabelFallback:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address(
+            outcome = await parse_address(
                 "995 9TH ST BLDG 201 ROOM 104 T, SAN FRANCISCO, CA 94130-2107"
             )
+            result = outcome.response
         vals = result.components.values
         # Primary street fields should not be contaminated.
         assert vals.get("premise_number") == "995"
@@ -287,7 +293,8 @@ class TestRepeatedLabelFallback:
         """
         # Real usaddress output for this string is deterministic (two
         # OccupancyType runs), so drive the live parser — no mock needed.
-        result = await parse_address("1210 N WENATCHEE AVE STE J, SMP - 2 WENATCHEE, WA 98801")
+        outcome = await parse_address("1210 N WENATCHEE AVE STE J, SMP - 2 WENATCHEE, WA 98801")
+        result = outcome.response
         vals = result.components.values
         # Street fields uncontaminated.
         assert vals.get("premise_number") == "1210"
@@ -322,7 +329,7 @@ class TestRepeatedLabelFallback:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("123 MAIN ST STE 5 2 SEATTLE, WA 98101")
+            result = (await parse_address("123 MAIN ST STE 5 2 SEATTLE, WA 98101")).response
         vals = result.components.values
         # The non-alpha "2" must NOT create a second designator slot.
         assert not vals.get("dependent_sub_premise_type")
@@ -345,7 +352,7 @@ class TestZipNormalization:
         ],
     )
     async def test_zip_parsed(self, raw: str, expected_zip: str) -> None:
-        result = await parse_address(raw)
+        result = (await parse_address(raw)).response
         assert result.components.values.get("postcode", "").startswith(expected_zip[:5])
 
 
@@ -361,12 +368,12 @@ class TestZipNormalization:
 
 class TestParseWarnings:
     async def test_parenthesized_text_warning(self) -> None:
-        result = await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")
+        result = (await parse_address("123 Main St (UPPER LEVEL), Springfield, IL 62701")).response
         assert any("Parenthesized text removed" in w for w in result.warnings)
         assert any("UPPER LEVEL" in w for w in result.warnings)
 
     async def test_no_paren_warning_on_clean_address(self) -> None:
-        result = await parse_address("123 Main St, Springfield, IL 62701")
+        result = (await parse_address("123 Main St, Springfield, IL 62701")).response
         assert not any("Parenthesized" in w for w in result.warnings)
 
     async def test_dual_address_merge_warning(self) -> None:
@@ -379,7 +386,7 @@ class TestParseWarnings:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("1804 & 1810 Main St")
+            result = (await parse_address("1804 & 1810 Main St")).response
         assert any("1804-1810" in w for w in result.warnings)
 
     async def test_ambiguous_parse_warning_general(self) -> None:
@@ -392,7 +399,7 @@ class TestParseWarnings:
             "AddressNumber",
         )
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("123 Main 456")
+            result = (await parse_address("123 Main 456")).response
         assert any("Ambiguous parse" in w for w in result.warnings)
         assert not any("joined as range" in w for w in result.warnings)
 
@@ -409,7 +416,7 @@ class TestParseWarnings:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("123 Main St BSMT, Springfield")
+            result = (await parse_address("123 Main St BSMT, Springfield")).response
         # BSMT should have been recovered and a warning emitted.
         assert any("Unit designator recovered" in w for w in result.warnings)
 
@@ -443,7 +450,7 @@ class TestParserLogging:
             mock.patch("usaddress.tag", side_effect=exc),
             caplog.at_level(logging.DEBUG, logger="address_validator.services.parser"),
         ):
-            result = await parse_address("1804 & 1810 Main St")
+            result = (await parse_address("1804 & 1810 Main St")).response
         assert result.type == "Ambiguous"
         assert "parsed address type=Ambiguous" in caplog.text
 
@@ -464,16 +471,23 @@ class TestParserLogging:
 
 
 # ---------------------------------------------------------------------------
-# Candidate data collection
+# Candidate data collection (now returned via ParseOutcome, not ContextVars)
 # ---------------------------------------------------------------------------
 
 
 class TestCandidateCollection:
+    """``parse_address`` is now a pure parse — it sets no ContextVars and
+    instead RETURNS ``parse_type`` and ``candidate_data`` on its
+    :class:`ParseOutcome`.  The request-scoped writes are replayed by
+    ``apply_parse_side_effects`` (covered in :class:`TestApplyParseSideEffects`).
+    """
+
     def setup_method(self) -> None:
         reset_candidate_data()
 
-    async def test_repeated_label_sets_candidate_data(self) -> None:
-        """RepeatedLabelError path should set candidate ContextVar."""
+    async def test_repeated_label_returns_candidate_data(self) -> None:
+        """RepeatedLabelError path returns candidate data — without touching the
+        ContextVar (parse_address is side-effect free)."""
         fake_tokens = [
             ("995", "AddressNumber"),
             ("9TH", "StreetName"),
@@ -485,15 +499,17 @@ class TestCandidateCollection:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            await parse_address("995 9TH ST BLDG 201 ROOM 104")
+            outcome = await parse_address("995 9TH ST BLDG 201 ROOM 104")
 
-        candidate = get_candidate_data()
-        assert candidate is not None
-        assert candidate["failure_type"] == "repeated_label_error"
-        assert candidate["raw_address"] == "995 9TH ST BLDG 201 ROOM 104"
+        # Pure parse: ContextVar must NOT have been written.
+        assert get_candidate_data() is None
+        assert outcome.parse_type == "Ambiguous"
+        assert outcome.candidate_data is not None
+        assert outcome.candidate_data["failure_type"] == "repeated_label_error"
+        assert outcome.candidate_data["raw_address"] == "995 9TH ST BLDG 201 ROOM 104"
 
-    async def test_post_parse_recovery_sets_candidate_data(self) -> None:
-        """When _recover_unit_from_city fires, candidate data should be set."""
+    async def test_post_parse_recovery_returns_candidate_data(self) -> None:
+        """When _recover_unit_from_city fires, candidate data is returned."""
         fake_tokens = [
             ("123", "AddressNumber"),
             ("Main", "StreetName"),
@@ -503,14 +519,67 @@ class TestCandidateCollection:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
         with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
-            result = await parse_address("123 Main St BSMT, Springfield")
+            outcome = await parse_address("123 Main St BSMT, Springfield")
 
-        candidate = get_candidate_data()
-        if any("Unit designator recovered" in w for w in result.warnings):
-            assert candidate is not None
+        assert get_candidate_data() is None
+        if any("Unit designator recovered" in w for w in outcome.response.warnings):
+            assert outcome.candidate_data is not None
 
     async def test_clean_parse_no_candidate_data(self) -> None:
-        """Normal successful parse should not set candidate data."""
-        await parse_address("123 Main St, Springfield, IL 62701")
+        """Normal successful parse returns no candidate data and writes nothing."""
+        outcome = await parse_address("123 Main St, Springfield, IL 62701")
+        assert outcome.candidate_data is None
+        assert get_candidate_data() is None
+
+
+# ---------------------------------------------------------------------------
+# apply_parse_side_effects — caller-side ContextVar replay
+# ---------------------------------------------------------------------------
+
+
+class TestApplyParseSideEffects:
+    """The request-scoped writes lifted out of ``parse_address`` must be
+    replicated exactly by ``apply_parse_side_effects`` for every parse path."""
+
+    def setup_method(self) -> None:
+        reset_candidate_data()
+        reset_audit_context()
+
+    async def test_clean_us_path_sets_parse_type_only(self) -> None:
+        outcome = await parse_address("123 Main St, Springfield, IL 62701")
+        apply_parse_side_effects(outcome)
+        assert get_audit_parse_type() == outcome.parse_type
+        assert get_audit_parse_type() in {"Street Address", "Intersection"}
+        # Clean parse → no candidate write.
+        assert get_candidate_data() is None
+
+    async def test_ca_path_sets_libpostal_parse_type(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.parse.return_value = {"locality": "TORONTO"}
+        outcome = await parse_address("123 Main St", country="CA", libpostal_client=mock_client)
+        apply_parse_side_effects(outcome)
+        # parse_type is "libpostal" even though response.type is "Street Address".
+        assert outcome.parse_type == "libpostal"
+        assert outcome.response.type == "Street Address"
+        assert get_audit_parse_type() == "libpostal"
+        assert get_candidate_data() is None
+
+    async def test_repeated_label_path_sets_both_contextvars(self) -> None:
+        fake_tokens = [
+            ("995", "AddressNumber"),
+            ("9TH", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("BLDG", "SubaddressType"),
+            ("201", "SubaddressIdentifier"),
+            ("ROOM", "SubaddressType"),
+            ("104", "AddressNumber"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            outcome = await parse_address("995 9TH ST BLDG 201 ROOM 104")
+        apply_parse_side_effects(outcome)
+        assert get_audit_parse_type() == "Ambiguous"
         candidate = get_candidate_data()
-        assert candidate is None
+        assert candidate is not None
+        assert candidate["failure_type"] == "repeated_label_error"
+        assert candidate["raw_address"] == "995 9TH ST BLDG 201 ROOM 104"
