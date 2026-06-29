@@ -9,9 +9,11 @@ import usaddress
 
 from address_validator.services.audit import get_audit_parse_type, reset_audit_context
 from address_validator.services.libpostal_client import LibpostalUnavailableError
-from address_validator.services.parser import (
+from address_validator.services.parse_recovery import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
+)
+from address_validator.services.parser import (
     apply_parse_side_effects,
     parse_address,
 )
