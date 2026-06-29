@@ -42,6 +42,9 @@ class TestV2ParseCA:
         assert values["postcode"] == "G1L 1B6"
         assert body["api_version"] == "2"
         assert body["country"] == "CA"
+        # #134 convergence: parse CA now reports its true source spec (the
+        # libpostal parse is unstandardized → "raw") instead of relabelling ISO.
+        assert body["components"]["spec"] == "raw"
 
     def test_libpostal_unavailable_returns_503(self, client) -> None:
         with patch(

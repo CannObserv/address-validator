@@ -9,6 +9,12 @@ Publication 28 snake_case key names.
 input dict and unknown keys always pass through unchanged.
 """
 
+from fastapi import Query
+
+from address_validator.core.errors import APIError
+from address_validator.models import ComponentSet
+from address_validator.services.spec import ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION
+
 # Keys in this mapping are ISO 19160-4 element names.
 # Values are the target vocabulary keys for that profile.
 _USPS_PUB28: dict[str, str] = {
@@ -65,6 +71,30 @@ COMPONENT_PROFILE_DESCRIPTION = (
 )
 
 
+def valid_component_profile(
+    component_profile: str = Query(
+        default="iso-19160-4",
+        description=COMPONENT_PROFILE_DESCRIPTION,
+    ),
+) -> str:
+    """FastAPI dependency: validate the ``component_profile`` query param.
+
+    Returns the profile unchanged when valid; raises ``APIError`` with the
+    canonical ``invalid_component_profile`` contract (HTTP 422) otherwise.
+    Single source of truth for the guard previously inlined in every v2 route.
+    """
+    if component_profile not in VALID_PROFILES:
+        raise APIError(
+            status_code=422,
+            error="invalid_component_profile",
+            message=(
+                f"Unknown component_profile '{component_profile}'. "
+                f"Valid values: {sorted(VALID_PROFILES)}."
+            ),
+        )
+    return component_profile
+
+
 def translate_components(values: dict[str, str], profile: str) -> dict[str, str]:
     """Return *values* with keys renamed per *profile*.
 
@@ -75,6 +105,34 @@ def translate_components(values: dict[str, str], profile: str) -> dict[str, str]
     if not mapping:
         return values
     return {mapping.get(k, k): v for k, v in values.items()}
+
+
+def build_output_component_set(
+    result_components: ComponentSet, profile: str, country: str
+) -> ComponentSet:
+    """Assemble the response ``ComponentSet`` for the parse/standardize tail.
+
+    Owns the spec / spec_version / key-translation decision shared by the v2
+    ``parse`` and ``standardize`` routers:
+
+    - ``usps-pub28`` → keep the source spec (the pipeline already produced
+      USPS Pub 28 keys) and translate values into the USPS vocabulary.
+    - ``country == "CA"`` → keep the source spec (e.g. ``canada-post`` from the
+      standardizer, or ``raw`` from a libpostal parse) regardless of profile.
+    - otherwise → relabel as ISO 19160-4.
+
+    The CA branch was previously present only in ``standardize``; centralising
+    it here converges ``parse`` onto the same rule so a CA parse reports its
+    true source spec instead of being silently relabelled ISO.
+    """
+    translated = translate_components(result_components.values, profile)
+    if profile == "usps-pub28" or country == "CA":
+        spec = result_components.spec
+        spec_version = result_components.spec_version
+    else:
+        spec = ISO_19160_4_SPEC
+        spec_version = ISO_19160_4_SPEC_VERSION
+    return ComponentSet(spec=spec, spec_version=spec_version, values=translated)
 
 
 def translate_components_to_iso(values: dict[str, str], profile: str) -> dict[str, str]:
