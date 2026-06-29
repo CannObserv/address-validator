@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from address_validator.db.tables import (
 
 from ._shared import (
     _API_ENDPOINT_FILTER,
+    _API_ENDPOINT_LABELS,
     _from_archived,
     _from_live,
     _time_boundaries,
@@ -32,10 +34,12 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     last_7d = tb["last_7d"]
     last_24h = tb["last_24h"]
 
-    async with engine.connect() as conn:
-        # Live counts
-        row = (
-            await conn.execute(
+    # The five queries below are mutually independent read-only SELECTs with no
+    # data dependency or shared transaction. Run them concurrently, each on its
+    # own pooled connection — a single AsyncConnection cannot multiplex queries.
+    async def _live_counts() -> sa.Row:
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 _from_live(
                     [
                         func.count().label("total"),
@@ -64,20 +68,20 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     ],
                 )
             )
-        ).one()
+            return result.one()
 
-        # Archived totals — only dates before earliest live row
-        archived_total = (
-            await conn.execute(
+    async def _archived_total() -> int:
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 _from_archived(
                     [func.coalesce(func.sum(audit_daily_stats.c.request_count), 0)],
                 )
             )
-        ).scalar()
+            return result.scalar()
 
-        # Cache hit rate — live only, validate endpoint, last 7 days
-        cache_row = (
-            await conn.execute(
+    async def _cache_counts() -> sa.Row:
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 _from_live(
                     [
                         func.count().filter(audit_log.c.cache_hit.is_(True)).label("hits"),
@@ -87,11 +91,11 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     audit_log.c.timestamp >= last_7d,
                 )
             )
-        ).one()
+            return result.one()
 
-        # Live endpoint breakdown
-        ep_rows = (
-            await conn.execute(
+    async def _live_endpoint_breakdown() -> list[sa.Row]:
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 _from_live(
                     [
                         audit_log.c.endpoint,
@@ -101,11 +105,11 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     ],
                 ).group_by(audit_log.c.endpoint)
             )
-        ).fetchall()
+            return result.fetchall()
 
-        # Archived endpoint breakdown
-        archived_ep_rows = (
-            await conn.execute(
+    async def _archived_endpoint_breakdown() -> list[sa.Row]:
+        async with engine.connect() as conn:
+            result = await conn.execute(
                 _from_archived(
                     [
                         audit_daily_stats.c.endpoint,
@@ -113,21 +117,23 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
                     ],
                 ).group_by(audit_daily_stats.c.endpoint)
             )
-        ).fetchall()
+            return result.fetchall()
+
+    row, archived_total, cache_row, ep_rows, archived_ep_rows = await asyncio.gather(
+        _live_counts(),
+        _archived_total(),
+        _cache_counts(),
+        _live_endpoint_breakdown(),
+        _archived_endpoint_breakdown(),
+    )
 
     error_rate = (row.errors_24h / row.api_24h * 100) if row.api_24h > 0 else None
     cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
-    # Both v1 and v2 paths map to the same friendly labels so historical
-    # audit_log rows from before the v1 removal (#117) still surface.
-    known = {
-        "/api/v1/parse": "/parse",
-        "/api/v1/standardize": "/standardize",
-        "/api/v1/validate": "/validate",
-        "/api/v2/parse": "/parse",
-        "/api/v2/standardize": "/standardize",
-        "/api/v2/validate": "/validate",
-    }
+    # Friendly endpoint labels derive from the single source of truth in
+    # _shared (_API_ENDPOINT_LABELS); both v1 and v2 paths share a label so
+    # historical audit_log rows from before the v1 removal (#117) still surface.
+    known = _API_ENDPOINT_LABELS
     breakdown: dict[str, dict[str, int]] = {
         "all": {},
         "7d": {},

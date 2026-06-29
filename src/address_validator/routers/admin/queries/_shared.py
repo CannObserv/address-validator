@@ -23,14 +23,19 @@ if TYPE_CHECKING:
 # Shared expressions
 # ---------------------------------------------------------------------------
 
-_API_ENDPOINTS = (
-    "/api/v1/parse",
-    "/api/v1/standardize",
-    "/api/v1/validate",
-    "/api/v2/parse",
-    "/api/v2/standardize",
-    "/api/v2/validate",
-)
+# Single source of truth for the v1/v2 API endpoint surface. Maps each audit
+# path to its friendly display label. Both v1 and v2 paths map to the same
+# label so historical audit_log rows from before the v1 removal (#117) still
+# surface. Ordering is significant — it drives display order in consumers.
+_API_ENDPOINT_LABELS = {
+    "/api/v1/parse": "/parse",
+    "/api/v1/standardize": "/standardize",
+    "/api/v1/validate": "/validate",
+    "/api/v2/parse": "/parse",
+    "/api/v2/standardize": "/standardize",
+    "/api/v2/validate": "/validate",
+}
+_API_ENDPOINTS = tuple(_API_ENDPOINT_LABELS)
 _API_ENDPOINT_FILTER = audit_log.c.endpoint.in_(_API_ENDPOINTS)
 
 # ---------------------------------------------------------------------------
