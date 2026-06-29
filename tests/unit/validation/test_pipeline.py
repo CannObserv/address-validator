@@ -15,6 +15,7 @@ from address_validator.models import (
     ValidateRequest,
 )
 from address_validator.services.libpostal_client import LibpostalUnavailableError
+from address_validator.services.parser import ParseOutcome
 from address_validator.services.validation.pipeline import (
     build_non_us_std,
     run_non_us_pipeline,
@@ -152,10 +153,13 @@ class TestRunNonUsPipeline:
             ),
             type="Street Address",
         )
+        parse_outcome = ParseOutcome(
+            response=parse_response, parse_type="libpostal", candidate_data=None
+        )
 
         with patch(
             "address_validator.services.validation.pipeline.parse_address",
-            new=AsyncMock(return_value=parse_response),
+            new=AsyncMock(return_value=parse_outcome),
         ):
             req = ValidateRequest(address="123 Main St, Toronto ON M5V 1A1", country="CA")
             _std, raw_input, returned_provider = await run_non_us_pipeline(

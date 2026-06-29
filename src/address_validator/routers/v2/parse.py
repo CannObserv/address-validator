@@ -12,7 +12,7 @@ from address_validator.services.component_profiles import (
     valid_component_profile,
 )
 from address_validator.services.libpostal_client import LibpostalClient, LibpostalUnavailableError
-from address_validator.services.parser import parse_address
+from address_validator.services.parser import apply_parse_side_effects, parse_address
 
 router = APIRouter(
     prefix="/api/v2",
@@ -60,9 +60,11 @@ async def parse(
             message="address is required and must not be blank.",
         )
     try:
-        result = await parse_address(raw, country=country, libpostal_client=libpostal_client)
+        outcome = await parse_address(raw, country=country, libpostal_client=libpostal_client)
     except LibpostalUnavailableError as exc:
         raise_parsing_unavailable(country, exc)
+    apply_parse_side_effects(outcome)
+    result = outcome.response
     return ParseResponseV2(
         input=result.input,
         country=result.country,
