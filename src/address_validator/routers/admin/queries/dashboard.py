@@ -15,6 +15,7 @@ from address_validator.db.tables import (
 
 from ._shared import (
     _API_ENDPOINT_FILTER,
+    _API_ENDPOINT_LABELS,
     _from_archived,
     _from_live,
     _time_boundaries,
@@ -118,16 +119,10 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
     error_rate = (row.errors_24h / row.api_24h * 100) if row.api_24h > 0 else None
     cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
-    # Both v1 and v2 paths map to the same friendly labels so historical
-    # audit_log rows from before the v1 removal (#117) still surface.
-    known = {
-        "/api/v1/parse": "/parse",
-        "/api/v1/standardize": "/standardize",
-        "/api/v1/validate": "/validate",
-        "/api/v2/parse": "/parse",
-        "/api/v2/standardize": "/standardize",
-        "/api/v2/validate": "/validate",
-    }
+    # Friendly endpoint labels derive from the single source of truth in
+    # _shared (_API_ENDPOINT_LABELS); both v1 and v2 paths share a label so
+    # historical audit_log rows from before the v1 removal (#117) still surface.
+    known = _API_ENDPOINT_LABELS
     breakdown: dict[str, dict[str, int]] = {
         "all": {},
         "7d": {},
