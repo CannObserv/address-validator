@@ -73,3 +73,46 @@ async def test_sweep_deletes_expired_and_keeps_fresh(db: AsyncEngine) -> None:
             await conn.execute(text("SELECT canonical_key FROM validated_addresses"))
         ).scalar_one()
     assert remaining == "fresh-ck"
+
+
+@pytest.mark.asyncio
+async def test_sweep_is_idempotent(db: AsyncEngine) -> None:
+    """Second sweep deletes nothing — safe to re-run."""
+    old = datetime.now(UTC) - timedelta(days=100)
+    await _insert_validated(db, canonical_key="old-ck", validated_at=old)
+    await _insert_pattern(db, pattern_key="old-pk", canonical_key="old-ck")
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+
+    first = await sweep_expired(db, cutoff)
+    assert first == (1, 1)
+
+    second = await sweep_expired(db, cutoff)
+    assert second == (0, 0)
+
+
+@pytest.mark.asyncio
+async def test_sweep_batches_across_multiple_rounds(db: AsyncEngine) -> None:
+    """batch_size smaller than the expired set still deletes everything."""
+    old = datetime.now(UTC) - timedelta(days=100)
+    for i in range(5):
+        await _insert_validated(db, canonical_key=f"old-{i}", validated_at=old)
+        await _insert_pattern(db, pattern_key=f"pk-{i}", canonical_key=f"old-{i}")
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+
+    qp_deleted, va_deleted = await sweep_expired(db, cutoff, batch_size=2)
+
+    assert (qp_deleted, va_deleted) == (5, 5)
+    assert await _count(db, "validated_addresses") == 0
+    assert await _count(db, "query_patterns") == 0
+
+
+@pytest.mark.asyncio
+async def test_sweep_ignores_null_canonical_key_patterns(db: AsyncEngine) -> None:
+    """Partial-registration rows (canonical_key NULL) are untouched."""
+    await _insert_pattern(db, pattern_key="orphan-pk", canonical_key=None)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+
+    qp_deleted, va_deleted = await sweep_expired(db, cutoff)
+
+    assert (qp_deleted, va_deleted) == (0, 0)
+    assert await _count(db, "query_patterns") == 1
