@@ -6,7 +6,7 @@ import pytest
 import sweep_cache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sweep_cache import sweep_expired
+from sweep_cache import count_expired, sweep_expired
 
 
 async def _insert_validated(
@@ -142,3 +142,21 @@ def test_get_config_exits_without_dsn(monkeypatch) -> None:
     with pytest.raises(SystemExit) as exc:
         sweep_cache._get_config()
     assert exc.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_count_expired_counts_only_expired_and_does_not_delete(
+    db: AsyncEngine,
+) -> None:
+    """count_expired (dry-run path) reports expired rows without deleting them."""
+    old = datetime.now(UTC) - timedelta(days=100)
+    fresh = datetime.now(UTC)
+    await _insert_validated(db, canonical_key="old-ck", validated_at=old)
+    await _insert_validated(db, canonical_key="fresh-ck", validated_at=fresh)
+    cutoff = datetime.now(UTC) - timedelta(days=30)
+
+    expired = await count_expired(db, cutoff)
+
+    assert expired == 1
+    # Dry-run count must not delete anything.
+    assert await _count(db, "validated_addresses") == 2

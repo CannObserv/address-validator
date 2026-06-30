@@ -164,8 +164,11 @@ async def main() -> None:
             qp_deleted,
         )
 
-        await vacuum_cache_tables(engine)
-        logger.info("VACUUM ANALYZE complete.")
+        if va_deleted:
+            await vacuum_cache_tables(engine)
+            logger.info("VACUUM ANALYZE complete.")
+        else:
+            logger.info("Nothing swept — skipping VACUUM.")
     finally:
         await engine.dispose()
 
