@@ -12,6 +12,7 @@ from address_validator.services.libpostal_client import LibpostalUnavailableErro
 from address_validator.services.parse_recovery import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
+    recover_components,
 )
 from address_validator.services.parser import (
     apply_parse_side_effects,
@@ -81,6 +82,54 @@ class TestRecoverUnitFromCity:
         }
         _recover_unit_from_city(c)
         assert c["locality"] == "SEATTLE"
+
+
+class TestDedupeSecondaryUnits:
+    """recover_components collapses an identical-duplicate secondary unit but
+    leaves genuinely distinct second units intact."""
+
+    async def test_identical_type_and_id_collapsed(self) -> None:
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B,",  # RLE layer leaves the comma
+            "dependent_sub_premise_type": "STE",
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["sub_premise_type"] == "STE"
+        assert c.get("sub_premise_number", "").rstrip(",") == "B"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+
+    async def test_same_type_different_id_kept(self) -> None:
+        """Two real same-type suites (STE 1, STE 2) must NOT collapse —
+        dropping one would silently merge two distinct units."""
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+            "dependent_sub_premise_type": "STE",
+            "dependent_sub_premise_number": "2",
+        }
+        recover_components(c)
+        assert c["sub_premise_number"] == "1"
+        assert c["dependent_sub_premise_type"] == "STE"
+        assert c["dependent_sub_premise_number"] == "2"
+
+    async def test_different_type_same_id_kept(self) -> None:
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["dependent_sub_premise_type"] == "BLDG"
+        assert c["dependent_sub_premise_number"] == "B"
+
+    async def test_no_dependent_slot_is_noop(self) -> None:
+        c: dict[str, str] = {"sub_premise_type": "STE", "sub_premise_number": "B"}
+        recover_components(c)
+        assert c == {"sub_premise_type": "STE", "sub_premise_number": "B"}
 
 
 class TestRecoverIdentifierFragmentFromCity:
@@ -335,6 +384,23 @@ class TestRepeatedLabelFallback:
         assert not vals.get("dependent_sub_premise_type")
         # And no spurious "unrecognized designator" warning for the rejected token.
         assert not any("Unrecognized unit designator" in w for w in result.warnings)
+
+    async def test_identical_duplicate_secondary_unit_collapsed(self) -> None:
+        """A secondary unit repeated verbatim ('STE B, STE B') is a data-entry
+        duplicate, not two distinct units.  The RLE routing slots the second
+        'STE' into dependent_sub_premise; an identical-duplicate collapse must
+        then drop it so the address standardizes to a single 'STE B' rather
+        than 'STE B STE B'.
+        """
+        outcome = await parse_address("17024 PACIFIC AVE S STE B, STE B SPANAWAY, WA 98387-8387")
+        vals = outcome.response.components.values
+        # Primary unit retained.
+        assert vals.get("sub_premise_type") == "STE"
+        assert vals.get("sub_premise_number", "").rstrip(",") == "B"
+        # Identical second unit dropped — not slotted into dependent_sub_premise.
+        assert not vals.get("dependent_sub_premise_type")
+        assert not vals.get("dependent_sub_premise_number")
+        assert "SPANAWAY" in vals.get("locality", "")
 
 
 # ---------------------------------------------------------------------------
