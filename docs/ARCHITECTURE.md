@@ -78,7 +78,7 @@ package.json        Node dev-only deps (vitest, jsdom); type: "module"
 vitest.config.js    Vitest config — jsdom environment, tests/js/ scope
 static/admin/images/ Cannabis Observer brand SVGs
 
-scripts/db/          DB maintenance + one-time migration scripts (backfill_audit_log, backfill_pattern_key, migrate_sqlite_to_postgres)
+scripts/db/          DB maintenance + one-time migration scripts (backfill_audit_log, backfill_pattern_key, backfill_audit_raw_input, migrate_sqlite_to_postgres)
 scripts/model/       Training pipeline scripts (identify, label, train, test_model, deploy, performance, contribute)
 skills/train-model/  /train-model skill — interactive 7-step pipeline orchestration
 training/batches/    Per-batch training artifacts (timestamped dirs)

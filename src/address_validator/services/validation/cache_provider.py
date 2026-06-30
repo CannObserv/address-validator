@@ -397,6 +397,7 @@ class CachingProvider:
                 validation_status=cached.validation.status,
                 cache_hit=True,
                 pattern_key=pattern_key,
+                raw_input=raw_input,
             )
             logger.info(
                 "validate: provider=%s status=%s cache_hit=true",
@@ -405,9 +406,11 @@ class CachingProvider:
             )
             return cached
 
-        # Set pattern_key before calling the inner provider so the audit row
-        # carries it even when the provider raises (e.g. rate-limited 429).
-        set_audit_context(pattern_key=pattern_key)
+        # Set pattern_key + raw_input before calling the inner provider so the
+        # audit row carries them even when the provider raises (e.g. rate-limited
+        # 429). raw_input is denormalized onto audit_log so it survives the full
+        # audit retention window independent of cache TTL / sweeps (#147).
+        set_audit_context(pattern_key=pattern_key, raw_input=raw_input)
 
         # Register the query pattern eagerly so rate-limited requests still
         # produce a joinable row (with raw_input) in the admin audit view.

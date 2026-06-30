@@ -18,6 +18,7 @@ from address_validator.services.audit import (
     get_audit_parse_type,
     get_audit_pattern_key,
     get_audit_provider,
+    get_audit_raw_input,
     get_audit_validation_status,
     reset_audit_context,
     set_audit_context,
@@ -214,3 +215,75 @@ async def test_write_audit_row_stores_parse_type(db: AsyncEngine) -> None:
         result = await conn.execute(text("SELECT parse_type FROM audit_log"))
         row = result.fetchone()
     assert row.parse_type == "Street Address"
+
+
+def test_raw_input_defaults_to_none() -> None:
+    reset_audit_context()
+    assert get_audit_raw_input() is None
+
+
+def test_set_audit_context_sets_raw_input() -> None:
+    set_audit_context(raw_input="123 Main St, Anytown WA 98101")
+    assert get_audit_raw_input() == "123 Main St, Anytown WA 98101"
+    reset_audit_context()
+
+
+def test_reset_clears_raw_input() -> None:
+    set_audit_context(raw_input="123 Main St")
+    reset_audit_context()
+    assert get_audit_raw_input() is None
+
+
+@pytest.mark.asyncio
+async def test_write_audit_row_stores_raw_input(db: AsyncEngine) -> None:
+    await write_audit_row(
+        db,
+        timestamp=datetime.now(UTC),
+        request_id="01TESTULID",
+        client_ip="127.0.0.1",
+        method="POST",
+        endpoint="/api/v1/validate",
+        status_code=200,
+        latency_ms=10,
+        provider="usps",
+        validation_status="confirmed",
+        cache_hit=False,
+        error_detail=None,
+        raw_input="123 Main St, Anytown WA 98101",
+    )
+    async with db.connect() as conn:
+        result = await conn.execute(text("SELECT raw_input FROM audit_log"))
+        row = result.fetchone()
+    assert row.raw_input == "123 Main St, Anytown WA 98101"
+
+
+@pytest.mark.asyncio
+async def test_cache_provider_sets_raw_input_on_miss(db: AsyncEngine) -> None:
+    """CachingProvider denormalizes raw_input into the audit ContextVar on miss."""
+    reset_audit_context()
+
+    inner = AsyncMock()
+    provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=30)
+    inner.validate.return_value = ValidateResponseV2(
+        country="US",
+        validation=ValidationResult(status="confirmed", provider="usps"),
+    )
+    std = StandardizeResponseV2(
+        address_line_1="123 MAIN ST",
+        address_line_2="",
+        city="ANYTOWN",
+        region="WA",
+        postal_code="98101",
+        country="US",
+        standardized="123 MAIN ST  ANYTOWN WA 98101",
+        components=ComponentSet(
+            spec="usps-pub28",
+            spec_version=USPS_PUB28_SPEC_VERSION,
+            values={"PlaceName": "ANYTOWN", "StateName": "WA", "ZipCode": "98101"},
+        ),
+        warnings=[],
+    )
+
+    await provider.validate(std, raw_input="123 Main St, Anytown WA 98101")
+    assert get_audit_raw_input() == "123 Main St, Anytown WA 98101"
+    reset_audit_context()
