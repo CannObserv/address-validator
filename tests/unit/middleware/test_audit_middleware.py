@@ -443,6 +443,35 @@ def test_audit_row_receives_pattern_key() -> None:
     )
 
 
+def test_audit_row_receives_raw_input() -> None:
+    """raw_input ContextVar set during the endpoint must appear in the audit row."""
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.state.engine = MagicMock()
+
+    @mini.get("/api/v2/fake")
+    async def _fake_endpoint() -> dict[str, str]:
+        set_audit_context(
+            provider="usps",
+            validation_status="confirmed",
+            cache_hit=False,
+            raw_input="123 Main St, Anytown WA 98101",
+        )
+        return {"ok": "true"}
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini)
+        tc.get("/api/v2/fake")
+
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["raw_input"] == "123 Main St, Anytown WA 98101", (
+        f"raw_input should be the submitted text, got {kwargs.get('raw_input')!r}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_audit_writes_candidate_with_endpoint_and_version(db):
     """Post an ambiguous address; candidate row should capture endpoint + api_version."""

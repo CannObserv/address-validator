@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
-from address_validator.db.tables import audit_log, query_patterns
+from address_validator.db.tables import audit_log
 
 if TYPE_CHECKING:
     from sqlalchemy import ColumnElement
@@ -49,15 +49,10 @@ async def get_audit_rows(
     if validation_statuses:
         conditions.append(audit_log.c.validation_status.in_(validation_statuses))
     if raw_input:
-        conditions.append(query_patterns.c.raw_input.ilike(f"%{raw_input}%"))
-
-    joined = audit_log.outerjoin(
-        query_patterns,
-        audit_log.c.pattern_key == query_patterns.c.pattern_key,
-    )
+        conditions.append(audit_log.c.raw_input.ilike(f"%{raw_input}%"))
 
     async with engine.connect() as conn:
-        count_stmt = select(func.count()).select_from(joined)
+        count_stmt = select(func.count()).select_from(audit_log)
         for cond in conditions:
             count_stmt = count_stmt.where(cond)
         total = (await conn.execute(count_stmt)).scalar()
@@ -75,8 +70,8 @@ async def get_audit_rows(
             audit_log.c.validation_status,
             audit_log.c.cache_hit,
             audit_log.c.error_detail,
-            query_patterns.c.raw_input,
-        ).select_from(joined)
+            audit_log.c.raw_input,
+        ).select_from(audit_log)
         for cond in conditions:
             row_stmt = row_stmt.where(cond)
         row_stmt = (

@@ -20,6 +20,7 @@ from address_validator.services.audit import (
     get_audit_parse_type,
     get_audit_pattern_key,
     get_audit_provider,
+    get_audit_raw_input,
     get_audit_validation_status,
     reset_audit_context,
     write_audit_row,
@@ -141,6 +142,7 @@ def _emit_audit_artifacts(
     cache_hit = get_audit_cache_hit()
     pattern_key = get_audit_pattern_key()
     parse_type = get_audit_parse_type()
+    raw_input = get_audit_raw_input()
 
     error_detail: str | None
     if exc_info is not None:
@@ -174,6 +176,7 @@ def _emit_audit_artifacts(
             error_detail=error_detail,
             pattern_key=pattern_key,
             parse_type=parse_type,
+            raw_input=raw_input,
         )
     )
     _background_tasks.add(task)

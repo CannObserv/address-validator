@@ -28,6 +28,7 @@ _audit_validation_status: ContextVar[str | None] = ContextVar(
 _audit_cache_hit: ContextVar[bool | None] = ContextVar("audit_cache_hit", default=None)
 _audit_pattern_key: ContextVar[str | None] = ContextVar("audit_pattern_key", default=None)
 _audit_parse_type: ContextVar[str | None] = ContextVar("audit_parse_type", default=None)
+_audit_raw_input: ContextVar[str | None] = ContextVar("audit_raw_input", default=None)
 
 
 def get_audit_provider() -> str | None:
@@ -50,6 +51,10 @@ def get_audit_parse_type() -> str | None:
     return _audit_parse_type.get()
 
 
+def get_audit_raw_input() -> str | None:
+    return _audit_raw_input.get()
+
+
 def reset_audit_context() -> None:
     """Reset all audit ContextVars to their defaults (None).
 
@@ -61,6 +66,7 @@ def reset_audit_context() -> None:
     _audit_cache_hit.set(None)
     _audit_pattern_key.set(None)
     _audit_parse_type.set(None)
+    _audit_raw_input.set(None)
 
 
 def set_audit_context(
@@ -70,6 +76,7 @@ def set_audit_context(
     cache_hit: bool | None = None,
     pattern_key: str | None = None,
     parse_type: str | None = None,
+    raw_input: str | None = None,
 ) -> None:
     """Set audit ContextVars for the current request."""
     if provider is not None:
@@ -82,6 +89,8 @@ def set_audit_context(
         _audit_pattern_key.set(pattern_key)
     if parse_type is not None:
         _audit_parse_type.set(parse_type)
+    if raw_input is not None:
+        _audit_raw_input.set(raw_input)
 
 
 async def write_audit_row(
@@ -100,6 +109,7 @@ async def write_audit_row(
     error_detail: str | None,
     pattern_key: str | None = None,
     parse_type: str | None = None,
+    raw_input: str | None = None,
 ) -> None:
     """Insert a single audit_log row. Logs and swallows all errors (fail-open)."""
     try:
@@ -119,6 +129,7 @@ async def write_audit_row(
                     error_detail=error_detail,
                     pattern_key=pattern_key,
                     parse_type=parse_type,
+                    raw_input=raw_input,
                 )
             )
     except Exception:
