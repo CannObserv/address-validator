@@ -807,6 +807,9 @@ class TestPatternKeyContextVar:
 
         await provider.validate(std, raw_input="123 MAIN STREET")  # hit — different surface form
 
+        # Prove the second call was served from cache (inner not re-invoked), so the
+        # recorded raw_input came from the hit path — not a second miss.
+        inner.validate.assert_awaited_once()
         assert get_audit_raw_input() == "123 MAIN STREET"
         reset_audit_context()
 
