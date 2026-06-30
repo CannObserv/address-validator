@@ -17,29 +17,20 @@ Env vars:
 
 from __future__ import annotations
 
-import argparse  # noqa: F401  # consumed by main() in a later task
-import asyncio  # noqa: F401  # consumed by main() in a later task
+import argparse
+import asyncio
 import logging
-import os  # noqa: F401  # consumed by config helper in a later task
-import sys  # noqa: F401  # consumed by config helper in a later task
-from datetime import UTC, timedelta  # noqa: F401  # consumed by main() in a later task
+import os
+import sys
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (  # noqa: F401  # text used by VACUUM in a later task
-    delete,
-    func,
-    select,
-    text,
-)
-from sqlalchemy.ext.asyncio import (
-    create_async_engine,  # noqa: F401  # consumed by main() in a later task
-)
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from address_validator.db.tables import query_patterns, validated_addresses
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from sqlalchemy.ext.asyncio import AsyncEngine
     from sqlalchemy.sql.elements import ColumnElement
 
@@ -101,3 +92,83 @@ async def sweep_expired(
         logger.info("Swept %d cache rows so far...", total_va)
 
     return total_qp, total_va
+
+
+def _get_config() -> tuple[str, int]:
+    """Read and validate env vars. Returns (dsn, ttl_days). Exits 1 if DSN missing."""
+    dsn = os.environ.get("VALIDATION_CACHE_DSN", "").strip()
+    if not dsn:
+        logger.error("VALIDATION_CACHE_DSN not set")
+        sys.exit(1)
+    ttl_days = int(os.environ.get("VALIDATION_CACHE_TTL_DAYS", str(DEFAULT_TTL_DAYS)))
+    return dsn, ttl_days
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Sweep expired validation-cache rows.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report how many rows would be swept without deleting.",
+    )
+    return parser.parse_args()
+
+
+async def count_expired(engine: AsyncEngine, cutoff: datetime) -> int:
+    """Count validated_addresses rows that would be swept (for --dry-run)."""
+    async with engine.connect() as conn:
+        return (
+            await conn.execute(
+                select(func.count())
+                .select_from(validated_addresses)
+                .where(_expiry_column() < cutoff)
+            )
+        ).scalar_one()
+
+
+async def vacuum_cache_tables(engine: AsyncEngine) -> None:
+    """VACUUM ANALYZE the swept tables. Must run outside a transaction."""
+    async with engine.execution_options(isolation_level="AUTOCOMMIT").connect() as conn:
+        await conn.execute(text("VACUUM ANALYZE validated_addresses"))
+        await conn.execute(text("VACUUM ANALYZE query_patterns"))
+
+
+async def main() -> None:
+    args = _parse_args()
+    dsn, ttl_days = _get_config()
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    if ttl_days <= 0:
+        logger.info("VALIDATION_CACHE_TTL_DAYS=%d — sweeping disabled. Done.", ttl_days)
+        return
+
+    engine = create_async_engine(dsn)
+    cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
+
+    try:
+        if args.dry_run:
+            expired = await count_expired(engine, cutoff)
+            logger.info(
+                "Dry run: %d validated_addresses rows older than %s would be swept.",
+                expired,
+                cutoff.date(),
+            )
+            return
+
+        logger.info("Sweeping cache rows older than %s...", cutoff.date())
+        qp_deleted, va_deleted = await sweep_expired(engine, cutoff)
+        logger.info(
+            "Swept %d validated_addresses rows and %d query_patterns pointers.",
+            va_deleted,
+            qp_deleted,
+        )
+
+        await vacuum_cache_tables(engine)
+        logger.info("VACUUM ANALYZE complete.")
+    finally:
+        await engine.dispose()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import sweep_cache
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sweep_cache import sweep_expired
@@ -116,3 +117,28 @@ async def test_sweep_ignores_null_canonical_key_patterns(db: AsyncEngine) -> Non
 
     assert (qp_deleted, va_deleted) == (0, 0)
     assert await _count(db, "query_patterns") == 1
+
+
+def test_get_config_defaults(monkeypatch) -> None:
+    """TTL defaults to 30 when the env var is unset."""
+    monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://x/y")
+    monkeypatch.delenv("VALIDATION_CACHE_TTL_DAYS", raising=False)
+    dsn, ttl_days = sweep_cache._get_config()
+    assert dsn == "postgresql+asyncpg://x/y"
+    assert ttl_days == 30
+
+
+def test_get_config_reads_ttl(monkeypatch) -> None:
+    """TTL is read from VALIDATION_CACHE_TTL_DAYS."""
+    monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://x/y")
+    monkeypatch.setenv("VALIDATION_CACHE_TTL_DAYS", "7")
+    _, ttl_days = sweep_cache._get_config()
+    assert ttl_days == 7
+
+
+def test_get_config_exits_without_dsn(monkeypatch) -> None:
+    """Missing DSN aborts with exit code 1."""
+    monkeypatch.delenv("VALIDATION_CACHE_DSN", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        sweep_cache._get_config()
+    assert exc.value.code == 1
