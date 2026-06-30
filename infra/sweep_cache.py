@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Delete validation-cache rows older than the TTL window.
 
-Deletes ``validated_addresses`` rows whose ``COALESCE(validated_at, created_at)``
-is older than ``VALIDATION_CACHE_TTL_DAYS``, plus their dangling
-``query_patterns`` pointers. TTL semantics match the lookup-time check in
-``cache_provider._lookup`` exactly.
+Deletes ``validated_addresses`` rows whose ``validated_at`` is older than
+``VALIDATION_CACHE_TTL_DAYS``, plus their dangling ``query_patterns`` pointers.
+TTL semantics match the lookup-time check in ``cache_provider._lookup``.
 
 Usage:
     uv run python infra/sweep_cache.py             # sweep expired rows
@@ -41,11 +40,14 @@ DEFAULT_BATCH_SIZE = 10_000
 
 
 def _expiry_column() -> ColumnElement:
-    """Match cache_provider._lookup: expire on validated_at, fall back to created_at."""
-    return func.coalesce(
-        validated_addresses.c.validated_at,
-        validated_addresses.c.created_at,
-    )
+    """Expire on validated_at.
+
+    ``validated_at`` is ``NOT NULL`` in the schema, so a plain column reference is
+    behaviourally identical to ``cache_provider._lookup``'s defensive
+    ``validated_at or created_at`` while remaining index-friendly (a COALESCE
+    expression would foreclose use of ``idx_validated_addresses_validated_at``).
+    """
+    return validated_addresses.c.validated_at
 
 
 async def sweep_expired(
@@ -100,7 +102,12 @@ def _get_config() -> tuple[str, int]:
     if not dsn:
         logger.error("VALIDATION_CACHE_DSN not set")
         sys.exit(1)
-    ttl_days = int(os.environ.get("VALIDATION_CACHE_TTL_DAYS", str(DEFAULT_TTL_DAYS)))
+    raw_ttl = os.environ.get("VALIDATION_CACHE_TTL_DAYS", str(DEFAULT_TTL_DAYS))
+    try:
+        ttl_days = int(raw_ttl)
+    except ValueError:
+        logger.error("VALIDATION_CACHE_TTL_DAYS must be an integer, got %r", raw_ttl)
+        sys.exit(1)
     return dsn, ttl_days
 
 
@@ -134,10 +141,10 @@ async def vacuum_cache_tables(engine: AsyncEngine) -> None:
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     args = _parse_args()
     dsn, ttl_days = _get_config()
-
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     if ttl_days <= 0:
         logger.info("VALIDATION_CACHE_TTL_DAYS=%d — sweeping disabled. Done.", ttl_days)

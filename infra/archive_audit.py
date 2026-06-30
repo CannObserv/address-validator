@@ -107,7 +107,12 @@ def _get_config() -> tuple[str, int, str | None, str]:
     if not dsn:
         logger.error("VALIDATION_CACHE_DSN not set")
         sys.exit(1)
-    retention_days = int(os.environ.get("AUDIT_RETENTION_DAYS", "90"))
+    raw_retention = os.environ.get("AUDIT_RETENTION_DAYS", "90")
+    try:
+        retention_days = int(raw_retention)
+    except ValueError:
+        logger.error("AUDIT_RETENTION_DAYS must be an integer, got %r", raw_retention)
+        sys.exit(1)
     bucket = os.environ.get("AUDIT_ARCHIVE_BUCKET", "").strip() or None
     prefix = os.environ.get("AUDIT_ARCHIVE_PREFIX", "audit/").strip()
     return dsn, retention_days, bucket, prefix
@@ -240,10 +245,10 @@ async def vacuum_audit_log(engine: AsyncEngine) -> None:
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
     args = _parse_args()
     dsn, retention_days, bucket, prefix = _get_config()
-
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     engine = create_async_engine(dsn)
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
