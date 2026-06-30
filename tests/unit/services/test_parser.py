@@ -12,6 +12,7 @@ from address_validator.services.libpostal_client import LibpostalUnavailableErro
 from address_validator.services.parse_recovery import (
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
+    recover_components,
 )
 from address_validator.services.parser import (
     apply_parse_side_effects,
@@ -81,6 +82,54 @@ class TestRecoverUnitFromCity:
         }
         _recover_unit_from_city(c)
         assert c["locality"] == "SEATTLE"
+
+
+class TestDedupeSecondaryUnits:
+    """recover_components collapses an identical-duplicate secondary unit but
+    leaves genuinely distinct second units intact."""
+
+    async def test_identical_type_and_id_collapsed(self) -> None:
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B,",  # RLE layer leaves the comma
+            "dependent_sub_premise_type": "STE",
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["sub_premise_type"] == "STE"
+        assert c.get("sub_premise_number", "").rstrip(",") == "B"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+
+    async def test_same_type_different_id_kept(self) -> None:
+        """Two real same-type suites (STE 1, STE 2) must NOT collapse —
+        dropping one would silently merge two distinct units."""
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+            "dependent_sub_premise_type": "STE",
+            "dependent_sub_premise_number": "2",
+        }
+        recover_components(c)
+        assert c["sub_premise_number"] == "1"
+        assert c["dependent_sub_premise_type"] == "STE"
+        assert c["dependent_sub_premise_number"] == "2"
+
+    async def test_different_type_same_id_kept(self) -> None:
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["dependent_sub_premise_type"] == "BLDG"
+        assert c["dependent_sub_premise_number"] == "B"
+
+    async def test_no_dependent_slot_is_noop(self) -> None:
+        c: dict[str, str] = {"sub_premise_type": "STE", "sub_premise_number": "B"}
+        recover_components(c)
+        assert c == {"sub_premise_type": "STE", "sub_premise_number": "B"}
 
 
 class TestRecoverIdentifierFragmentFromCity:
