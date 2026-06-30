@@ -29,12 +29,22 @@ sudo cp infra/audit-archive.service infra/audit-archive.timer /etc/systemd/syste
 # Docker hygiene timer (weekly prune, Sun 03:30 UTC)
 sudo cp infra/docker-prune.service infra/docker-prune.timer /etc/systemd/system/ \
   && sudo systemctl daemon-reload && sudo systemctl enable --now docker-prune.timer
+
+# Validation-cache TTL sweep timer (daily 04:00 UTC)
+sudo cp infra/cache-sweep.service infra/cache-sweep.timer /etc/systemd/system/ \
+  && sudo systemctl daemon-reload && sudo systemctl enable --now cache-sweep.timer
 ```
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 
 ```bash
 journalctl -t docker-prune -p warning
+```
+
+The cache sweep deletes `validated_addresses` rows (and their `query_patterns` pointers) older than `VALIDATION_CACHE_TTL_DAYS`. Dry-run any time with `uv run python infra/sweep_cache.py --dry-run`. Logs swept counts to the journal:
+
+```bash
+journalctl -u cache-sweep -p info
 ```
 
 ## Database maintenance scripts

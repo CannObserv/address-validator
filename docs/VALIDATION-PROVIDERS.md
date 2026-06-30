@@ -91,6 +91,8 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 The TTL is checked against `validated_addresses.validated_at`, which records when a live provider last returned and stored this canonical result. This timestamp is **not** refreshed by cache hits — a frequently-queried entry still expires after `VALIDATION_CACHE_TTL_DAYS` days.
 
+The TTL is enforced both at lookup time (expired rows treated as a miss) and by the daily `cache-sweep` timer, which physically deletes rows older than this window (`infra/sweep_cache.py`). Set to `0` to disable expiry and sweeping entirely.
+
 `last_seen_at` continues to track query frequency for observability and is unrelated to expiry.
 
 **Schema migrations**: Managed by Alembic. `get_engine()` runs `alembic upgrade head` automatically on first call at startup. To migrate data from a prior SQLite cache, run `scripts/db/migrate_sqlite_to_postgres.py` after applying migrations.
