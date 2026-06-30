@@ -15,7 +15,11 @@ from address_validator.models import (
     ValidateResponseV2,
     ValidationResult,
 )
-from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
+from address_validator.services.audit import (
+    get_audit_pattern_key,
+    get_audit_raw_input,
+    reset_audit_context,
+)
 from address_validator.services.validation.cache_provider import (
     CachingProvider,
     _lookup,
@@ -769,6 +773,41 @@ class TestPatternKeyContextVar:
 
         expected = _make_pattern_key(std)
         assert get_audit_pattern_key() == expected
+        reset_audit_context()
+
+    async def test_raw_input_set_on_cache_miss(self, db: AsyncEngine) -> None:
+        """The cache-miss path records the current request's raw_input in the audit ctx."""
+        reset_audit_context()
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        await provider.validate(_make_std(), raw_input="123 Main St, Springfield IL")
+
+        assert get_audit_raw_input() == "123 Main St, Springfield IL"
+        reset_audit_context()
+
+    async def test_raw_input_on_cache_hit_is_current_request_not_first_seen(
+        self, db: AsyncEngine
+    ) -> None:
+        """A cache hit records *this* request's raw_input, not the first-seen text.
+
+        Regression guard for #147: pattern_key normalizes away surface differences,
+        so two distinct raw inputs map to the same cache entry. The audit row must
+        carry the text the caller actually submitted, not whatever was stored on the
+        initial miss (the old query_patterns outer join showed the first-seen value).
+        """
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std, raw_input="123 Main St")  # miss — stores "123 Main St"
+        reset_audit_context()
+
+        await provider.validate(std, raw_input="123 MAIN STREET")  # hit — different surface form
+
+        assert get_audit_raw_input() == "123 MAIN STREET"
         reset_audit_context()
 
     async def test_pattern_key_set_even_on_store_failure(self, db: AsyncEngine) -> None:

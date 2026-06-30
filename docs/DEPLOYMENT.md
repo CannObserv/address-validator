@@ -60,6 +60,10 @@ uv run python scripts/db/backfill_audit_log.py
 # Backfill pattern_key column (dry-run by default; add --apply)
 uv run python scripts/db/backfill_pattern_key.py
 
+# Backfill audit_log.raw_input from query_patterns (dry-run by default; add --apply)
+# One-off after the #147 deploy; rows whose query_patterns parent was already swept stay NULL
+uv run python scripts/db/backfill_audit_raw_input.py
+
 # Archive audit log to GCS + delete archived rows
 uv run python infra/archive_audit.py
 
