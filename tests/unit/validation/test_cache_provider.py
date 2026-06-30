@@ -514,6 +514,20 @@ class TestTTLExpiry:
 
         inner.validate.assert_not_awaited()
 
+    async def test_negative_ttl_disables_expiry(self, db: AsyncEngine) -> None:
+        """ttl_days < 0 disables expiry; a negative value is not a future cutoff."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db), ttl_days=-1)
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        await _backdate_validated_at(db, days_ago=365)
+        inner.validate.reset_mock()
+        await provider.validate(std)  # should still be a hit
+
+        inner.validate.assert_not_awaited()
+
     async def test_one_day_short_of_ttl_is_a_hit(self, db: AsyncEngine) -> None:
         """An entry 29 days old is not expired when ttl_days=30."""
         response = _make_confirmed_response()

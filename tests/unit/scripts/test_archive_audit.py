@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pyarrow.parquet as pq
 import pytest
 from archive_audit import (
+    _get_config,
     aggregate,
     delete_expired_rows,
     export_parquet,
@@ -256,3 +257,12 @@ async def test_full_archive_cycle(db: AsyncEngine, tmp_path) -> None:
         stats_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_daily_stats"))).scalar()
     assert live_count == 2  # Only recent rows
     assert stats_count > 0  # Rollups exist
+
+
+def test_get_config_exits_on_non_integer_retention(monkeypatch) -> None:
+    """A non-integer AUDIT_RETENTION_DAYS aborts with exit code 1, not a traceback."""
+    monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://x/y")
+    monkeypatch.setenv("AUDIT_RETENTION_DAYS", "not-a-number")
+    with pytest.raises(SystemExit) as exc:
+        _get_config()
+    assert exc.value.code == 1

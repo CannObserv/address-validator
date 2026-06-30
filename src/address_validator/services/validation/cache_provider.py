@@ -198,7 +198,10 @@ async def _lookup(
                 )
             return None
 
-        if ttl_days:
+        # Non-positive ttl_days disables expiry entirely (matches sweep_cache.py,
+        # which skips sweeping when ttl_days <= 0). A negative value must not be
+        # read as a future cutoff that expires every row.
+        if ttl_days > 0:
             cutoff = datetime.now(UTC) - timedelta(days=ttl_days)
             validated_at = va_row["validated_at"] or va_row["created_at"]
             if validated_at < cutoff:
