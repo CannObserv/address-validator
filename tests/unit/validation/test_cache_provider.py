@@ -757,7 +757,7 @@ class TestSchemaConstraints:
         so a regression that reverts the column to nullable must fail loudly here rather
         than silently reintroduce NULL-canonical_key rows.
         """
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError) as exc_info:
             async with db.begin() as conn:
                 await conn.execute(
                     query_patterns.insert().values(
@@ -767,6 +767,11 @@ class TestSchemaConstraints:
                         raw_input="123 Main St",
                     )
                 )
+
+        # Assert specifically a NOT-NULL violation (SQLSTATE 23502) on canonical_key —
+        # not merely any IntegrityError (a FK/unique failure would be a different bug).
+        assert exc_info.value.orig.sqlstate == "23502"
+        assert "canonical_key" in str(exc_info.value)
 
 
 class TestPatternKeyContextVar:
