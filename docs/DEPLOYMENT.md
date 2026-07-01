@@ -41,7 +41,7 @@ Docker prune does **not** use `-a` (active images are safe). Logs a journal warn
 journalctl -t docker-prune -p warning
 ```
 
-The cache sweep deletes `validated_addresses` rows (and their `query_patterns` pointers) older than `VALIDATION_CACHE_TTL_DAYS`. Dry-run any time with `uv run python infra/sweep_cache.py --dry-run`. Logs swept counts to the journal:
+The cache sweep deletes `validated_addresses` rows (and their `query_patterns` pointers) older than `VALIDATION_CACHE_TTL_DAYS`. Dry-run any time with `PYTHONPATH=src uv run python infra/sweep_cache.py --dry-run` (`PYTHONPATH=src` is required — the package is not installed editable). Logs swept counts to the journal:
 
 ```bash
 journalctl -u cache-sweep -p info
@@ -53,6 +53,9 @@ journalctl -u cache-sweep -p info
 
 ```bash
 source /etc/address-validator/.env
+# PYTHONPATH=src is required for every command below — the package is not
+# installed editable, so `address_validator` is only importable from src/.
+export PYTHONPATH=src
 
 # Backfill audit_log rows missing structured fields
 uv run python scripts/db/backfill_audit_log.py
