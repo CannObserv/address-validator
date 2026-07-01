@@ -144,24 +144,6 @@ async def _fetch_one(engine: AsyncEngine, table, *where):
         return (await conn.execute(stmt)).mappings().fetchone()
 
 
-async def _insert_legacy_null_row(engine: AsyncEngine, pattern_key: str, raw_input: str) -> None:
-    """Seed a NULL-canonical_key query_patterns row.
-
-    Simulates a legacy row left over from before #150 (when the validation path
-    eagerly registered patterns before the provider call). Used to exercise
-    _lookup's defensive NULL-canonical_key-as-miss guard.
-    """
-    async with engine.begin() as conn:
-        await conn.execute(
-            query_patterns.insert().values(
-                pattern_key=pattern_key,
-                canonical_key=None,
-                created_at=datetime.now(UTC),
-                raw_input=raw_input,
-            )
-        )
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -426,37 +408,6 @@ class TestFailOpen:
             await provider.validate(_make_std())
 
         assert await _count_rows(db, "validated_addresses") == 0
-
-    async def test_lookup_null_canonical_key_is_a_miss(self, db: AsyncEngine) -> None:
-        """_lookup treats a NULL canonical_key row as a cache miss, not an orphan.
-
-        Defensive guard for legacy rows (pre-#150): _lookup must not misidentify a
-        NULL-canonical_key row as orphaned and must return None (miss) without
-        deleting the row.
-        """
-        std = _make_std()
-        pattern_key = _make_pattern_key(std)
-        await _insert_legacy_null_row(db, pattern_key, raw_input="123 Main St")
-
-        result = await _lookup(db, pattern_key, ttl_days=30)
-
-        assert result is None
-
-    async def test_lookup_null_canonical_key_does_not_delete_row(self, db: AsyncEngine) -> None:
-        """A NULL canonical_key row is preserved across a _lookup call.
-
-        _lookup must not delete a legacy NULL-canonical_key row (deletion is
-        reserved for genuinely orphaned pointers).
-        """
-        std = _make_std()
-        pattern_key = _make_pattern_key(std)
-        await _insert_legacy_null_row(db, pattern_key, raw_input="123 Main St")
-
-        await _lookup(db, pattern_key, ttl_days=30)
-
-        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
-        assert row is not None
-        assert row["raw_input"] == "123 Main St"
 
     async def test_lookup_internal_error_fails_open(self, db: AsyncEngine) -> None:
         """A _lookup exception (e.g. corrupt row) fails open — inner provider is called."""
@@ -764,6 +715,37 @@ class TestRawInput:
 
         row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
         assert row["raw_input"] == "456 Elm Ave"
+
+
+class TestRevalidationRepoint:
+    async def test_revalidation_repoints_to_latest_canonical(self, db: AsyncEngine) -> None:
+        """Re-validating a pattern to a new canonical address repoints the pattern.
+
+        Latest-wins (#151): when the provider returns a different canonical address for
+        an existing pattern_key (e.g. provider swap or upstream data drift), _store must
+        repoint query_patterns.canonical_key to the freshly validated row — not keep the
+        stale first-seen canonical.
+        """
+        std = _make_std()
+        pattern_key = _make_pattern_key(std)
+
+        first = _make_confirmed_response()
+        first_ck = _make_canonical_key(first)
+        await _store(db, pattern_key, first_ck, first, raw_input="123 Main St")
+
+        # Same pattern, a materially different validated address → different canonical_key.
+        second = first.model_copy(update={"postal_code": "62704-9999"})
+        second_ck = _make_canonical_key(second)
+        assert second_ck != first_ck
+        await _store(db, pattern_key, second_ck, second, raw_input="123 Main St")
+
+        row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
+        assert row["canonical_key"] == second_ck, "pattern must repoint to the latest canonical"
+
+        # A subsequent lookup serves the repointed (fresh) address.
+        result = await _lookup(db, pattern_key, ttl_days=30)
+        assert result is not None
+        assert result.postal_code == "62704-9999"
 
 
 class TestPatternKeyContextVar:

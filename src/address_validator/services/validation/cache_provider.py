@@ -5,10 +5,8 @@ Lookup algorithm
 1. Hash the standardised input components → ``pattern_key``
 2. SELECT from ``query_patterns`` WHERE ``pattern_key = $1``
    a. Row missing → miss
-   b. Row found, ``canonical_key`` IS NULL → treat as miss (defensive guard for legacy
-      rows; the validation path no longer writes NULL-``canonical_key`` rows)
-   c. Row found, ``canonical_key`` IS NOT NULL but no matching ``validated_addresses`` row
-      → orphaned pointer (external DB modification); delete and treat as miss
+   b. Row found but no matching ``validated_addresses`` row → orphaned pointer
+      (external DB modification); delete and treat as miss
 3. HIT  → fetch the linked ``validated_addresses`` row
    a. TTL check: if ``ttl_days > 0`` and ``validated_at`` older than threshold → treat as miss
    b. Update ``last_seen_at``; return deserialised row
@@ -26,8 +24,10 @@ Store algorithm (after successful inner provider call)
 1. Skip entirely when ``result.validation.status == "unavailable"``
 2. Hash the provider-returned address fields → ``canonical_key``
 3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at and validated_at)
-4. INSERT/upsert into ``query_patterns`` ON CONFLICT: back-fill ``raw_input`` when NULL.
-   A ``query_patterns`` row is only ever written here, on a successful validation.
+4. INSERT/upsert into ``query_patterns`` ON CONFLICT: repoint ``canonical_key`` to the
+   freshly validated address (latest-wins) and back-fill ``raw_input`` when NULL.
+   A ``query_patterns`` row is only ever written here, on a successful validation, and
+   is always born with a non-NULL ``canonical_key`` (enforced NOT NULL, migration 018).
 
 The parse → standardise pipeline already normalises casing, abbreviations, and
 whitespace before this module is called, so ``pattern_key`` naturally collapses
@@ -164,14 +164,7 @@ async def _lookup(
             logger.debug("cache_lookup: miss pattern_key=%s", pattern_key)
             return None
 
-        canonical_key: str | None = qp_row["canonical_key"]
-
-        if canonical_key is None:
-            # Defensive guard for legacy rows: the validation path no longer writes
-            # NULL-canonical_key rows, but any left over from before #150 can never
-            # produce a hit — treat as a miss without deleting the row.
-            logger.debug("cache_lookup: miss pattern_key=%s canonical_key=NULL", pattern_key)
-            return None
+        canonical_key: str = qp_row["canonical_key"]
 
         va_row = (
             (
@@ -279,12 +272,13 @@ async def _store(
             qp_insert.on_conflict_do_update(
                 index_elements=[query_patterns.c.pattern_key],
                 set_={
-                    # Re-validation of an existing pattern: keep the existing
-                    # canonical_key, back-fill raw_input if it was NULL.
-                    "canonical_key": func.coalesce(
-                        query_patterns.c.canonical_key,
-                        qp_insert.excluded.canonical_key,
-                    ),
+                    # Re-validation of an existing pattern: repoint to the freshly
+                    # validated canonical address (latest-wins). Its validated_addresses
+                    # row was just upserted with a fresh validated_at, so the pattern
+                    # serves current data instead of a stale first-seen canonical.
+                    # raw_input is back-filled only when NULL — preserve the first
+                    # observed raw input for audit provenance.
+                    "canonical_key": qp_insert.excluded.canonical_key,
                     "raw_input": func.coalesce(
                         query_patterns.c.raw_input,
                         qp_insert.excluded.raw_input,
