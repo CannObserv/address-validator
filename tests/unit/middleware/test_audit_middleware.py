@@ -14,6 +14,8 @@ from httpx import ASGITransport, AsyncClient
 from starlette.responses import StreamingResponse
 from starlette.testclient import TestClient
 
+from address_validator.core.errors import APIError, api_error_response
+from address_validator.db.tables import audit_log
 from address_validator.db.tables import model_training_candidates as mtc
 from address_validator.main import app
 from address_validator.middleware.audit import (
@@ -22,7 +24,10 @@ from address_validator.middleware.audit import (
     _should_audit,
 )
 from address_validator.middleware.request_id import RequestIdMiddleware
+from address_validator.routers.deps import get_registry
 from address_validator.services.audit import set_audit_context
+from address_validator.services.validation.cache_provider import CachingProvider
+from address_validator.services.validation.errors import ProviderRateLimitedError
 from tests.conftest import TEST_API_KEY
 
 # ULID: 26 Crockford base-32 characters.
@@ -472,6 +477,49 @@ def test_audit_row_receives_raw_input() -> None:
     )
 
 
+def test_audit_row_carries_raw_input_on_rate_limit_429() -> None:
+    """A rate-limited (429) request must still land raw_input on the audit row.
+
+    Acceptance guard for #150: after removing the eager query_patterns registration,
+    a rate-limited request no longer writes a joinable query_patterns row. The admin
+    audit view instead reads raw_input directly off audit_log (#147). This test
+    mirrors the real /api/v2/validate 429 path: CachingProvider sets raw_input in the
+    audit ContextVar *before* the provider raises, the endpoint re-raises APIError(429),
+    and the middleware must persist that raw_input on the audit row.
+    """
+    mini = FastAPI()
+    mini.add_middleware(AuditMiddleware)
+    mini.add_middleware(RequestIdMiddleware)
+    mini.add_exception_handler(APIError, lambda _request, exc: api_error_response(exc))
+    mini.state.engine = MagicMock()
+
+    @mini.post("/api/v2/validate")
+    async def _rate_limited_validate() -> dict[str, str]:
+        # CachingProvider sets pattern_key + raw_input before calling the inner
+        # provider, so they survive even when the provider is rate-limited.
+        set_audit_context(pattern_key="cafebabe1234", raw_input="123 Main St, Springfield IL")
+        raise APIError(
+            status_code=429,
+            error="provider_rate_limited",
+            message="All configured validation providers are currently rate-limited.",
+        )
+
+    mock_write = AsyncMock()
+    with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+        tc = TestClient(mini)
+        resp = tc.post("/api/v2/validate")
+
+    assert resp.status_code == 429
+    mock_write.assert_called_once()
+    kwargs = mock_write.call_args.kwargs
+    assert kwargs["status_code"] == 429
+    assert kwargs["error_detail"] == "rate_limited"
+    assert kwargs["raw_input"] == "123 Main St, Springfield IL", (
+        f"raw_input must survive to the audit row on 429, got {kwargs.get('raw_input')!r}"
+    )
+    assert kwargs["pattern_key"] == "cafebabe1234"
+
+
 @pytest.mark.asyncio
 async def test_audit_writes_candidate_with_endpoint_and_version(db):
     """Post an ambiguous address; candidate row should capture endpoint + api_version."""
@@ -510,5 +558,85 @@ async def test_audit_writes_candidate_with_endpoint_and_version(db):
         assert row.api_version == "2"
         assert row.failure_reason is not None
     finally:
+        app.state.engine = saved_engine
+        app.state.api_key = saved_api_key
+
+
+class _RateLimitedInner:
+    """Inner provider that always reports rate-limited (no cache of its own)."""
+
+    supports_non_us = False
+
+    async def validate(self, std, *, raw_input=None):
+        raise ProviderRateLimitedError("usps", retry_after_seconds=1.0)
+
+
+class _FakeRegistry:
+    def __init__(self, provider) -> None:
+        self._provider = provider
+
+    def get_provider(self):
+        return self._provider
+
+
+@pytest.mark.asyncio
+async def test_rate_limited_validate_endpoint_lands_raw_input_on_audit_log(db):
+    """End-to-end #150 acceptance: a rate-limited /api/v2/validate request writes
+    raw_input to audit_log and creates NO query_patterns row.
+
+    Drives the real endpoint → pipeline → CachingProvider path. The registry is
+    overridden to return a CachingProvider wrapping a rate-limited inner, so
+    CachingProvider sets raw_input in the audit ctx before the inner raises; the
+    endpoint translates ProviderRateLimitedError into APIError(429); and the audit
+    middleware must persist raw_input on the audit_log row (read directly by the
+    admin audit view since #147 — no query_patterns join).
+    """
+    address = "123 Main St, Springfield IL 62701"
+
+    provider = CachingProvider(inner=_RateLimitedInner(), get_engine=lambda: db)
+
+    saved_engine = getattr(app.state, "engine", None)
+    saved_api_key = getattr(app.state, "api_key", None)
+    app.state.engine = db
+    app.state.api_key = TEST_API_KEY
+    app.dependency_overrides[get_registry] = lambda: _FakeRegistry(provider)
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v2/validate",
+                json={"address": address, "country": "US"},
+                headers={"X-API-Key": TEST_API_KEY},
+            )
+        assert resp.status_code == 429
+
+        await asyncio.sleep(0.3)  # let the fire-and-forget audit task complete
+
+        async with db.connect() as conn:
+            row = (
+                await conn.execute(
+                    sa.select(
+                        audit_log.c.raw_input,
+                        audit_log.c.status_code,
+                        audit_log.c.error_detail,
+                        audit_log.c.pattern_key,
+                    )
+                    .where(audit_log.c.endpoint == "/api/v2/validate")
+                    .order_by(audit_log.c.id.desc())
+                    .limit(1)
+                )
+            ).first()
+            qp_count = (
+                await conn.execute(sa.text("SELECT count(*) FROM query_patterns"))
+            ).scalar_one()
+
+        assert row is not None, "audit_log row not written for the 429"
+        assert row.status_code == 429
+        assert row.error_detail == "rate_limited"
+        assert row.raw_input == address, "raw_input must reach audit_log on the rate-limited path"
+        assert row.pattern_key is not None, "cache-miss path should still set pattern_key"
+        assert qp_count == 0, "rate-limited request must not create a query_patterns row (#150)"
+    finally:
+        app.dependency_overrides.pop(get_registry, None)
         app.state.engine = saved_engine
         app.state.api_key = saved_api_key
