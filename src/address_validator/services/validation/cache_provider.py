@@ -5,8 +5,8 @@ Lookup algorithm
 1. Hash the standardised input components → ``pattern_key``
 2. SELECT from ``query_patterns`` WHERE ``pattern_key = $1``
    a. Row missing → miss
-   b. Row found, ``canonical_key`` IS NULL → partial registration (rate-limited request
-      registered raw_input before the provider was called); treat as miss without deleting
+   b. Row found, ``canonical_key`` IS NULL → treat as miss (defensive guard for legacy
+      rows; the validation path no longer writes NULL-``canonical_key`` rows)
    c. Row found, ``canonical_key`` IS NOT NULL but no matching ``validated_addresses`` row
       → orphaned pointer (external DB modification); delete and treat as miss
 3. HIT  → fetch the linked ``validated_addresses`` row
@@ -16,18 +16,18 @@ Lookup algorithm
 
 Cache-miss path (before inner provider call)
 --------------------------------------------
-1. Set ``pattern_key`` in audit ContextVar so the audit row carries it even if the
-   provider raises (e.g. rate-limited 429)
-2. INSERT into ``query_patterns`` (``canonical_key`` NULL, ``raw_input`` set) so that
-   rate-limited audit rows can join to find raw input — ``_register_query_pattern()``
+Set ``pattern_key`` and ``raw_input`` in the audit ContextVar so the audit row carries
+them even if the provider raises (e.g. rate-limited 429). ``raw_input`` is denormalized
+onto ``audit_log`` (#147), so no ``query_patterns`` row is needed for rate-limited
+requests to surface raw input in the admin audit view.
 
 Store algorithm (after successful inner provider call)
 ------------------------------------------------------
 1. Skip entirely when ``result.validation.status == "unavailable"``
 2. Hash the provider-returned address fields → ``canonical_key``
 3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at and validated_at)
-4. INSERT/upsert into ``query_patterns`` ON CONFLICT: back-fill ``canonical_key`` when NULL
-   (set by the prior eager registration) and back-fill ``raw_input`` when NULL
+4. INSERT/upsert into ``query_patterns`` ON CONFLICT: back-fill ``raw_input`` when NULL.
+   A ``query_patterns`` row is only ever written here, on a successful validation.
 
 The parse → standardise pipeline already normalises casing, abbreviations, and
 whitespace before this module is called, so ``pattern_key`` naturally collapses
@@ -167,9 +167,9 @@ async def _lookup(
         canonical_key: str | None = qp_row["canonical_key"]
 
         if canonical_key is None:
-            # Partial registration: _register_query_pattern created this row
-            # before the inner provider was called (e.g. request was rate-limited).
-            # canonical_key not yet set — treat as a miss without deleting the row.
+            # Defensive guard for legacy rows: the validation path no longer writes
+            # NULL-canonical_key rows, but any left over from before #150 can never
+            # produce a hit — treat as a miss without deleting the row.
             logger.debug("cache_lookup: miss pattern_key=%s canonical_key=NULL", pattern_key)
             return None
 
@@ -279,8 +279,8 @@ async def _store(
             qp_insert.on_conflict_do_update(
                 index_elements=[query_patterns.c.pattern_key],
                 set_={
-                    # Back-fill canonical_key when a prior rate-limited request
-                    # registered the pattern with canonical_key=NULL.
+                    # Re-validation of an existing pattern: keep the existing
+                    # canonical_key, back-fill raw_input if it was NULL.
                     "canonical_key": func.coalesce(
                         query_patterns.c.canonical_key,
                         qp_insert.excluded.canonical_key,
@@ -299,41 +299,6 @@ async def _store(
         canonical_key,
         result.validation.status,
     )
-
-
-async def _register_query_pattern(
-    engine: AsyncEngine,
-    pattern_key: str,
-    raw_input: str | None,
-) -> None:
-    """Eagerly register a query pattern before the inner provider is called.
-
-    Inserts a query_patterns row with canonical_key=NULL so that rate-limited
-    requests still produce a joinable row in the audit view.  _store() will
-    back-fill canonical_key via ON CONFLICT when validation later succeeds.
-    """
-    now = _now_utc()
-    qp_insert = pg_insert(query_patterns).values(
-        pattern_key=pattern_key,
-        canonical_key=None,
-        created_at=now,
-        raw_input=raw_input,
-    )
-    async with engine.begin() as conn:
-        await conn.execute(
-            qp_insert.on_conflict_do_update(
-                index_elements=[query_patterns.c.pattern_key],
-                set_={
-                    # canonical_key intentionally absent: if this conflicts against a
-                    # row that already has canonical_key set (i.e. a prior successful
-                    # validation), we must not overwrite it with NULL.
-                    "raw_input": func.coalesce(
-                        query_patterns.c.raw_input,
-                        qp_insert.excluded.raw_input,
-                    ),
-                },
-            ),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -409,17 +374,10 @@ class CachingProvider:
         # Set pattern_key + raw_input before calling the inner provider so the
         # audit row carries them even when the provider raises (e.g. rate-limited
         # 429). raw_input is denormalized onto audit_log so it survives the full
-        # audit retention window independent of cache TTL / sweeps (#147).
+        # audit retention window independent of cache TTL / sweeps (#147). No
+        # query_patterns row is written here — one is created only by _store() on
+        # a successful validation (#150).
         set_audit_context(pattern_key=pattern_key, raw_input=raw_input)
-
-        # Register the query pattern eagerly so rate-limited requests still
-        # produce a joinable row (with raw_input) in the admin audit view.
-        # canonical_key is NULL until _store() fills it in on success.
-        if engine is not None:
-            try:
-                await _register_query_pattern(engine, pattern_key, raw_input)
-            except Exception:
-                logger.warning("cache_register: storage error — continuing", exc_info=True)
 
         result: ValidateResponseV2 = await self._inner.validate(std, raw_input=raw_input)
 

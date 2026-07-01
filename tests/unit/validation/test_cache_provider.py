@@ -25,7 +25,6 @@ from address_validator.services.validation.cache_provider import (
     _lookup,
     _make_canonical_key,
     _make_pattern_key,
-    _register_query_pattern,
     _store,
 )
 from address_validator.services.validation.errors import ProviderRateLimitedError
@@ -143,6 +142,24 @@ async def _fetch_one(engine: AsyncEngine, table, *where):
     async with engine.connect() as conn:
         stmt = select(table).where(*where) if where else select(table)
         return (await conn.execute(stmt)).mappings().fetchone()
+
+
+async def _insert_legacy_null_row(engine: AsyncEngine, pattern_key: str, raw_input: str) -> None:
+    """Seed a NULL-canonical_key query_patterns row.
+
+    Simulates a legacy row left over from before #150 (when the validation path
+    eagerly registered patterns before the provider call). Used to exercise
+    _lookup's defensive NULL-canonical_key-as-miss guard.
+    """
+    async with engine.begin() as conn:
+        await conn.execute(
+            query_patterns.insert().values(
+                pattern_key=pattern_key,
+                canonical_key=None,
+                created_at=datetime.now(UTC),
+                raw_input=raw_input,
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -413,13 +430,13 @@ class TestFailOpen:
     async def test_lookup_null_canonical_key_is_a_miss(self, db: AsyncEngine) -> None:
         """_lookup treats a NULL canonical_key row as a cache miss, not an orphan.
 
-        _register_query_pattern creates rows with canonical_key=NULL before the
-        inner provider is called.  _lookup must not misidentify these as orphaned
-        rows and must return None (miss) without deleting the row.
+        Defensive guard for legacy rows (pre-#150): _lookup must not misidentify a
+        NULL-canonical_key row as orphaned and must return None (miss) without
+        deleting the row.
         """
         std = _make_std()
         pattern_key = _make_pattern_key(std)
-        await _register_query_pattern(db, pattern_key, raw_input="123 Main St")
+        await _insert_legacy_null_row(db, pattern_key, raw_input="123 Main St")
 
         result = await _lookup(db, pattern_key, ttl_days=30)
 
@@ -428,12 +445,12 @@ class TestFailOpen:
     async def test_lookup_null_canonical_key_does_not_delete_row(self, db: AsyncEngine) -> None:
         """A NULL canonical_key row is preserved across a _lookup call.
 
-        The row must survive so that _store() can back-fill canonical_key when
-        the provider later succeeds, and so the admin audit view keeps raw_input.
+        _lookup must not delete a legacy NULL-canonical_key row (deletion is
+        reserved for genuinely orphaned pointers).
         """
         std = _make_std()
         pattern_key = _make_pattern_key(std)
-        await _register_query_pattern(db, pattern_key, raw_input="123 Main St")
+        await _insert_legacy_null_row(db, pattern_key, raw_input="123 Main St")
 
         await _lookup(db, pattern_key, ttl_days=30)
 
@@ -668,13 +685,16 @@ class TestRawInput:
         row = await _fetch_one(db, query_patterns)
         assert row["raw_input"] is None
 
-    async def test_raw_input_registered_on_rate_limit(self, db: AsyncEngine) -> None:
-        """raw_input is written to query_patterns even when inner raises ProviderRateLimitedError.
+    async def test_rate_limit_sets_raw_input_ctx_but_writes_no_query_patterns_row(
+        self, db: AsyncEngine
+    ) -> None:
+        """A rate-limited request writes NO query_patterns row (#150).
 
-        The query_patterns row is created eagerly before the inner provider is
-        called, so rate-limited audit rows can join to find the raw input.
-        canonical_key is NULL at this stage — _store fills it in on success.
+        raw_input lands in the audit ContextVar (denormalized onto audit_log by the
+        middleware, #147) so the admin audit view still surfaces it — the obsolete
+        eager query_patterns registration is gone.
         """
+        reset_audit_context()
         inner = AsyncMock()
         inner.validate = AsyncMock(side_effect=ProviderRateLimitedError("usps"))
         provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
@@ -683,41 +703,44 @@ class TestRawInput:
         with pytest.raises(ProviderRateLimitedError):
             await provider.validate(std, raw_input="123 Main St, Springfield IL 62701")
 
+        # raw_input set in the audit ctx before the provider raised
+        assert get_audit_raw_input() == "123 Main St, Springfield IL 62701"
+
+        # No query_patterns row created by the rate-limited path
         pattern_key = _make_pattern_key(std)
         row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
-        assert row is not None
-        assert row["raw_input"] == "123 Main St, Springfield IL 62701"
-        assert row["canonical_key"] is None
+        assert row is None
+        assert await _count_rows(db, "query_patterns") == 0
+        reset_audit_context()
 
-    async def test_canonical_key_backfilled_on_subsequent_success(self, db: AsyncEngine) -> None:
-        """After a rate-limited registration, a successful validate fills in canonical_key.
+    async def test_query_patterns_row_created_only_on_success_after_rate_limit(
+        self, db: AsyncEngine
+    ) -> None:
+        """First (rate-limited) call writes no row; a later success creates a complete one.
 
-        The first request is rate-limited — query_patterns row exists with
-        canonical_key=NULL.  The second request succeeds; _store must update
-        canonical_key via ON CONFLICT so the cache is fully usable afterwards.
+        The success path's _store writes the query_patterns row with canonical_key
+        already set — there is no NULL-canonical_key intermediate state (#150).
         """
         response = _make_confirmed_response()
         std = _make_std()
+        pattern_key = _make_pattern_key(std)
 
-        # First call: rate-limited — registers pattern with NULL canonical_key
+        # First call: rate-limited — no query_patterns row written
         inner_rl = AsyncMock()
         inner_rl.validate = AsyncMock(side_effect=ProviderRateLimitedError("usps"))
         provider_rl = CachingProvider(inner=inner_rl, get_engine=MagicMock(return_value=db))
         with pytest.raises(ProviderRateLimitedError):
             await provider_rl.validate(std, raw_input="123 Main St")
 
-        # Verify the partial row exists with NULL canonical_key before the success
-        pattern_key = _make_pattern_key(std)
-        partial = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
-        assert partial is not None, "rate-limited call should register a query_patterns row"
-        assert partial["canonical_key"] is None
+        assert await _count_rows(db, "query_patterns") == 0, (
+            "rate-limited call must not register a query_patterns row"
+        )
 
-        # Second call: success — should back-fill canonical_key
+        # Second call: success — _store writes a complete row (canonical_key set)
         inner_ok = _make_provider(response)
         provider_ok = CachingProvider(inner=inner_ok, get_engine=MagicMock(return_value=db))
         await provider_ok.validate(std, raw_input="123 Main St")
 
-        pattern_key = _make_pattern_key(std)
         row = await _fetch_one(db, query_patterns, query_patterns.c.pattern_key == pattern_key)
         assert row["canonical_key"] == _make_canonical_key(response)
         assert row["raw_input"] == "123 Main St"
