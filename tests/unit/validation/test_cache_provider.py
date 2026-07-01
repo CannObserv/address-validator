@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from address_validator.db.tables import query_patterns, validated_addresses
@@ -746,6 +747,26 @@ class TestRevalidationRepoint:
         result = await _lookup(db, pattern_key, ttl_days=30)
         assert result is not None
         assert result.postal_code == "62704-9999"
+
+
+class TestSchemaConstraints:
+    async def test_query_patterns_canonical_key_not_null(self, db: AsyncEngine) -> None:
+        """query_patterns.canonical_key rejects NULL (migration 018).
+
+        Pins the invariant _lookup/_store rely on: the NULL-as-miss guard was retired,
+        so a regression that reverts the column to nullable must fail loudly here rather
+        than silently reintroduce NULL-canonical_key rows.
+        """
+        with pytest.raises(IntegrityError):
+            async with db.begin() as conn:
+                await conn.execute(
+                    query_patterns.insert().values(
+                        pattern_key="pk-null-canonical",
+                        canonical_key=None,
+                        created_at=datetime.now(UTC),
+                        raw_input="123 Main St",
+                    )
+                )
 
 
 class TestPatternKeyContextVar:

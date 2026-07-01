@@ -37,9 +37,9 @@ async def _insert_pattern(
     engine: AsyncEngine,
     *,
     pattern_key: str,
-    canonical_key: str | None,
+    canonical_key: str,
 ) -> None:
-    """Insert one query_patterns row pointing at canonical_key (may be NULL)."""
+    """Insert one query_patterns row pointing at canonical_key (NOT NULL since migration 018)."""
     now = datetime.now(UTC)
     async with engine.begin() as conn:
         await conn.execute(
