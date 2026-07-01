@@ -67,10 +67,8 @@ uv run python scripts/db/backfill_pattern_key.py
 # One-off after the #147 deploy; rows whose query_patterns parent was already swept stay NULL
 uv run python scripts/db/backfill_audit_raw_input.py
 
-# Delete obsolete NULL-canonical_key query_patterns rows (dry-run by default; add --apply)
-# One-off after the #150 deploy — run AFTER deploying the code that stops creating them,
-# else they re-accumulate. Safe: nothing reads these rows.
-uv run python scripts/db/delete_null_canonical_key_patterns.py
+# (Removed in #151) The one-off NULL-canonical_key cleanup script has been retired;
+# migration 018 makes query_patterns.canonical_key NOT NULL, so the rows can no longer exist.
 
 # Archive audit log to GCS + delete archived rows
 uv run python infra/archive_audit.py

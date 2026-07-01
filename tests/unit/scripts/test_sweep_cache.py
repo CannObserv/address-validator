@@ -37,9 +37,9 @@ async def _insert_pattern(
     engine: AsyncEngine,
     *,
     pattern_key: str,
-    canonical_key: str | None,
+    canonical_key: str,
 ) -> None:
-    """Insert one query_patterns row pointing at canonical_key (may be NULL)."""
+    """Insert one query_patterns row pointing at canonical_key (NOT NULL since migration 018)."""
     now = datetime.now(UTC)
     async with engine.begin() as conn:
         await conn.execute(
@@ -108,18 +108,6 @@ async def test_sweep_batches_across_multiple_rounds(db: AsyncEngine) -> None:
     assert (qp_deleted, va_deleted) == (5, 5)
     assert await _count(db, "validated_addresses") == 0
     assert await _count(db, "query_patterns") == 0
-
-
-@pytest.mark.asyncio
-async def test_sweep_ignores_null_canonical_key_patterns(db: AsyncEngine) -> None:
-    """Partial-registration rows (canonical_key NULL) are untouched."""
-    await _insert_pattern(db, pattern_key="orphan-pk", canonical_key=None)
-    cutoff = datetime.now(UTC) - timedelta(days=30)
-
-    qp_deleted, va_deleted = await sweep_expired(db, cutoff)
-
-    assert (qp_deleted, va_deleted) == (0, 0)
-    assert await _count(db, "query_patterns") == 1
 
 
 def test_get_config_defaults(monkeypatch) -> None:

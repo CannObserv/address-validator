@@ -102,7 +102,9 @@ query_patterns = sa.Table(
             "validated_addresses.canonical_key",
             name="fk_query_patterns_canonical_key",
         ),
-        nullable=True,
+        # NOT NULL since migration 018 — the validation path only writes a row via
+        # _store on a successful validation, always with a non-NULL canonical_key.
+        nullable=False,
     ),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("raw_input", sa.Text(), nullable=True),
