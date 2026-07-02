@@ -320,6 +320,61 @@ async def test_get_audit_rows_raw_input_not_set_excluded(db: AsyncEngine) -> Non
 
 
 @pytest.mark.asyncio
+async def test_get_audit_rows_raw_input_window_excludes_old(db: AsyncEngine) -> None:
+    """raw_input_days bounds the substring scan to a recent window (#152)."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO audit_log (timestamp, client_ip, method, endpoint,
+                    status_code, raw_input)
+                VALUES
+                    (:recent, '1.1.1.1', 'POST', '/api/v2/validate', 200, :raw),
+                    (:old,    '1.1.1.1', 'POST', '/api/v2/validate', 200, :raw)
+            """),
+            {
+                "recent": now - timedelta(days=1),
+                "old": now - timedelta(days=40),
+                "raw": "123 Main St, Springfield IL",
+            },
+        )
+
+    rows, total = await get_audit_rows(db, raw_input="Springfield", raw_input_days=7)
+    assert total == 1
+    assert all((now - r["timestamp"]).days < 7 for r in rows)
+
+    # Widening the window pulls the older row back in.
+    _rows, total_90 = await get_audit_rows(db, raw_input="Springfield", raw_input_days=90)
+    assert total_90 == 2
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_window_ignored_without_raw_input(db: AsyncEngine) -> None:
+    """raw_input_days is a no-op when no raw_input filter is active."""
+    await _seed_rows(db)
+    rows, total = await get_audit_rows(db, raw_input_days=7)
+    assert total == 6
+    assert len(rows) == 6
+
+
+@pytest.mark.asyncio
+async def test_get_audit_rows_raw_input_none_days_unbounded(db: AsyncEngine) -> None:
+    """raw_input_days=None leaves the substring filter unbounded (full history)."""
+    now = datetime.now(UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO audit_log (timestamp, client_ip, method, endpoint,
+                    status_code, raw_input)
+                VALUES (:old, '2.2.2.2', 'POST', '/api/v2/validate', 200, :raw)
+            """),
+            {"old": now - timedelta(days=200), "raw": "999 Old Rd, Ancient IL"},
+        )
+    _rows, total = await get_audit_rows(db, raw_input="Ancient", raw_input_days=None)
+    assert total == 1
+
+
+@pytest.mark.asyncio
 async def test_get_audit_rows_includes_raw_input_column(db: AsyncEngine) -> None:
     """Each returned row dict contains a 'raw_input' key (NULL when unset)."""
     await _seed_rows(db)

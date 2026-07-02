@@ -17,6 +17,11 @@ router = APIRouter(prefix="/audit")
 
 _PER_PAGE = 50
 
+# Recent-window options (days) for the raw_input substring filter. Bounding the
+# scan keeps the admin view responsive as audit_log grows (#152).
+_RAW_INPUT_WINDOWS = (7, 30, 90)
+_DEFAULT_RAW_INPUT_DAYS = 7
+
 
 def _blank_to_none(value: object) -> object:
     """Coerce an empty-string query param to None.
@@ -35,6 +40,10 @@ OptionalStatusMin = Annotated[
     Annotated[int, Ge(100), Le(599)] | None, BeforeValidator(_blank_to_none)
 ]
 
+# raw_input window (days). Tolerates a blank submit (coerced to None → default by
+# the membership check below); out-of-range ints likewise fall back to the default.
+OptionalRawInputDays = Annotated[int | None, BeforeValidator(_blank_to_none)]
+
 
 @router.get("/", response_class=HTMLResponse, response_model=None)
 async def audit_list(
@@ -44,8 +53,14 @@ async def audit_list(
     endpoint: str | None = Query(None),
     status_min: OptionalStatusMin = None,
     raw_input: str | None = Query(None),
+    raw_input_days: OptionalRawInputDays = _DEFAULT_RAW_INPUT_DAYS,
     ctx: AdminContext = Depends(get_admin_context),
 ) -> Response:
+    # Constrain to the offered windows; a substring scan over the hot audit_log
+    # table must stay bounded (#152). Blank/unknown values fall back to the default.
+    if raw_input_days not in _RAW_INPUT_WINDOWS:
+        raw_input_days = _DEFAULT_RAW_INPUT_DAYS
+
     rows, total = await get_audit_rows(
         ctx.engine,
         page=page,
@@ -54,6 +69,7 @@ async def audit_list(
         client_ip=client_ip,
         status_min=status_min,
         raw_input=raw_input,
+        raw_input_days=raw_input_days,
     )
 
     total_pages = max(1, math.ceil(total / _PER_PAGE))
@@ -62,6 +78,7 @@ async def audit_list(
         "endpoint": endpoint,
         "status_min": status_min,
         "raw_input": raw_input,
+        "raw_input_days": raw_input_days,
     }
 
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
@@ -81,6 +98,7 @@ async def audit_list(
             "page": page,
             "total_pages": total_pages,
             "filters": filters,
+            "raw_input_windows": _RAW_INPUT_WINDOWS,
             "show_result": False,
             "show_provider": True,
         },
