@@ -44,6 +44,10 @@ note "--- canary run"
 # process argv and no shell-quoting of their content is involved.
 KEY_FILE=$(mktemp /tmp/usps_canary_key.XXXXXX) && TMPFILES+=("$KEY_FILE")
 SECRET_FILE=$(mktemp /tmp/usps_canary_secret.XXXXXX) && TMPFILES+=("$SECRET_FILE")
+if [ -z "${KEY_FILE:-}" ] || [ -z "${SECRET_FILE:-}" ]; then
+  note "mktemp failed — /tmp unusable; aborting run"
+  exit 1
+fi
 printf '%s' "$(getvar USPS_CONSUMER_KEY "$PROD_ENV")" >"$KEY_FILE"
 printf '%s' "$(getvar USPS_CONSUMER_SECRET "$PROD_ENV")" >"$SECRET_FILE"
 TOKEN=$(curl -s -m 20 -X POST https://apis.usps.com/oauth2/v3/token \
