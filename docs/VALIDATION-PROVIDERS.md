@@ -71,7 +71,7 @@ sudo sed -i 's/^VALIDATION_PROVIDER=.*/VALIDATION_PROVIDER=google/' /etc/address
 sudo systemctl restart address-validator
 
 # 2. Verify
-curl -s https://localhost:8000/api/v2/health -k | jq .
+curl -s http://localhost:8000/api/v2/health | jq .
 ```
 
 Restore `VALIDATION_PROVIDER=usps,google` (and restart) once the license is
