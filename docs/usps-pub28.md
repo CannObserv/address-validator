@@ -28,11 +28,12 @@ Attempts to determine the exact edition:
    of research.
 
 3. **Cross-reference against USPS Addresses API v3** — The USPS Addresses API
-   v3.2.2 OpenAPI spec (now archived as `usps-addresses-v3r2_4.yaml`, API
-   version 3.2.3 — same content for this purpose) links to
-   `pe.usps.com/text/pub28/28c2_003.htm` for secondary unit designator
-   definitions, confirming Pub 28 is the normative reference for the API.  The
-   spec's `version: 3.2.2` refers to the API revision, not the Pub 28 edition.
+   OpenAPI spec (v3.2.2 at research time; the archived
+   `usps-addresses-v3r2_4.yaml` copy is v3.2.3, identical for this purpose)
+   links to `pe.usps.com/text/pub28/28c2_003.htm` for secondary unit
+   designator definitions, confirming Pub 28 is the normative reference for
+   the API.  The spec `version` refers to the API revision, not the Pub 28
+   edition.
 
 ### Current `spec_version` value
 

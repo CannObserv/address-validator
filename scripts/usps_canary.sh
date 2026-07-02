@@ -13,6 +13,7 @@
 #
 # Logs to scratch/usps-canary.log (gitignored). Comments on GH #155 when any
 # probe fails or drifts — and unconditionally on July 12 (switch day).
+# Exits 1 when any probe recorded an anomaly, 0 otherwise.
 set -u
 
 REPO="/home/exedev/address-validator"
@@ -28,11 +29,13 @@ getvar() { grep "^$1=" "$2" | head -1 | cut -d= -f2-; }
 mkdir -p "$(dirname "$LOG")"
 note "--- canary run"
 
-# 1. OAuth token probe
+# 1. OAuth token probe — creds passed via a curl config file on stdin-style
+# process substitution so they never appear in the process argv.
 KEY=$(getvar USPS_CONSUMER_KEY "$PROD_ENV")
 SECRET=$(getvar USPS_CONSUMER_SECRET "$PROD_ENV")
 TOKEN=$(curl -s -m 20 -X POST https://apis.usps.com/oauth2/v3/token \
-  -d grant_type=client_credentials -d "client_id=$KEY" -d "client_secret=$SECRET" |
+  -d grant_type=client_credentials \
+  --config <(printf 'data-urlencode = "client_id=%s"\ndata-urlencode = "client_secret=%s"\n' "$KEY" "$SECRET") |
   python3 -c 'import json,sys;print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)
 if [ -n "$TOKEN" ]; then
   note "oauth: ok"
@@ -43,11 +46,11 @@ fi
 
 # 2. Direct address validation (USPS HQ; public address, no PII)
 if [ -n "$TOKEN" ]; then
-  BODY=/tmp/usps_canary_addr.json
+  BODY=$(mktemp /tmp/usps_canary_addr.XXXXXX)
   HTTP=$(curl -s -m 20 -o "$BODY" -w '%{http_code}' \
     -H "Authorization: Bearer $TOKEN" \
     "https://apis.usps.com/addresses/v3/address?streetAddress=475%20LENFANT%20PLZ%20SW&city=WASHINGTON&state=DC")
-  DPV=$(python3 -c 'import json;print(json.load(open("/tmp/usps_canary_addr.json")).get("additionalInfo",{}).get("DPVConfirmation",""))' 2>/dev/null)
+  DPV=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("additionalInfo",{}).get("DPVConfirmation",""))' "$BODY" 2>/dev/null)
   if [ "$HTTP" = "200" ] && [ -n "$DPV" ]; then
     note "address: ok (dpv=$DPV)"
   else
@@ -61,7 +64,7 @@ fi
 for SPEC in addresses-v3r2_4:usps-addresses-v3r2_4 enhanced-addresses-v3r2:usps-enhanced-addresses-v3r2; do
   REMOTE="${SPEC%%:*}.yaml"
   LOCAL="$REPO/docs/${SPEC##*:}.yaml"
-  TMP="/tmp/usps_canary_spec.yaml"
+  TMP=$(mktemp /tmp/usps_canary_spec.XXXXXX)
   if curl -s -m 20 -o "$TMP" "$SPEC_BASE/$REMOTE" && [ -s "$TMP" ] && head -1 "$TMP" | grep -q openapi; then
     if cmp -s "$TMP" "$LOCAL"; then
       note "spec $REMOTE: ok"
@@ -103,3 +106,5 @@ if [ ${#ANOMALIES[@]} -gt 0 ] || [ "$(date -u +%m-%d)" = "07-12" ]; then
   } | gh --repo CannObserv/address-validator issue comment 155 --body-file - >/dev/null &&
     note "report: commented on #155" || note "report: gh comment FAILED"
 fi
+
+[ ${#ANOMALIES[@]} -eq 0 ]

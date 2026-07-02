@@ -121,9 +121,9 @@ class USPSClient:
         A :class:`~services.validation._rate_limit.QuotaGuard` instance
         for rate limiting.
     api_base:
-        Scheme+host prefix for the USPS API (no trailing slash). Defaults to
-        production; override via ``USPS_API_BASE`` for TEM or an endpoint
-        host switch (GH #155).
+        Scheme+host prefix for the USPS API (trailing slash tolerated).
+        Defaults to production; override via ``USPS_API_BASE`` for TEM or an
+        endpoint host switch (GH #155).
     """
 
     # Class-level dedup set for recon logging (issue #122). Spans the
@@ -145,6 +145,7 @@ class USPSClient:
         self._token: USPSToken | None = None
         self._token_lock = asyncio.Lock()
         self._rate_limiter = quota_guard
+        api_base = api_base.rstrip("/")
         self._token_url = f"{api_base}{_TOKEN_PATH}"
         self._address_url = f"{api_base}{_ADDRESS_PATH}"
 
