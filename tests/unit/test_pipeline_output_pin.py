@@ -126,3 +126,4 @@ def _force_bundled_model():
     usaddress.TAGGER = bundled
     yield
     usaddress.TAGGER = original
+    bundled.close()
