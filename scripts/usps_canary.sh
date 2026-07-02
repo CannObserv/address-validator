@@ -26,17 +26,32 @@ ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 note() { echo "$(ts) $*" >>"$LOG"; }
 getvar() { grep "^$1=" "$2" | head -1 | cut -d= -f2-; }
 
+# All temp files are registered in TMPFILES (in the parent shell — an append
+# inside $(...) would land in a subshell and be lost) and cleaned on any exit.
+# Signals are converted to exits because bash does not run the EXIT trap when
+# killed by a default-disposition signal.
+TMPFILES=()
+trap 'rm -f "${TMPFILES[@]}"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 mkdir -p "$(dirname "$LOG")"
 note "--- canary run"
 
-# 1. OAuth token probe — creds passed via a curl config file on stdin-style
-# process substitution so they never appear in the process argv.
-KEY=$(getvar USPS_CONSUMER_KEY "$PROD_ENV")
-SECRET=$(getvar USPS_CONSUMER_SECRET "$PROD_ENV")
+# 1. OAuth token probe — creds written (no trailing newline; mktemp mode 600)
+# to temp files read via --data-urlencode @file, so they never appear in
+# process argv and no shell-quoting of their content is involved.
+KEY_FILE=$(mktemp /tmp/usps_canary_key.XXXXXX) && TMPFILES+=("$KEY_FILE")
+SECRET_FILE=$(mktemp /tmp/usps_canary_secret.XXXXXX) && TMPFILES+=("$SECRET_FILE")
+printf '%s' "$(getvar USPS_CONSUMER_KEY "$PROD_ENV")" >"$KEY_FILE"
+printf '%s' "$(getvar USPS_CONSUMER_SECRET "$PROD_ENV")" >"$SECRET_FILE"
 TOKEN=$(curl -s -m 20 -X POST https://apis.usps.com/oauth2/v3/token \
   -d grant_type=client_credentials \
-  --config <(printf 'data-urlencode = "client_id=%s"\ndata-urlencode = "client_secret=%s"\n' "$KEY" "$SECRET") |
+  --data-urlencode "client_id@$KEY_FILE" \
+  --data-urlencode "client_secret@$SECRET_FILE" |
   python3 -c 'import json,sys;print(json.load(sys.stdin).get("access_token",""))' 2>/dev/null)
+rm -f "$KEY_FILE" "$SECRET_FILE"
 if [ -n "$TOKEN" ]; then
   note "oauth: ok"
 else
@@ -46,7 +61,7 @@ fi
 
 # 2. Direct address validation (USPS HQ; public address, no PII)
 if [ -n "$TOKEN" ]; then
-  BODY=$(mktemp /tmp/usps_canary_addr.XXXXXX)
+  BODY=$(mktemp /tmp/usps_canary_addr.XXXXXX) && TMPFILES+=("$BODY")
   HTTP=$(curl -s -m 20 -o "$BODY" -w '%{http_code}' \
     -H "Authorization: Bearer $TOKEN" \
     "https://apis.usps.com/addresses/v3/address?streetAddress=475%20LENFANT%20PLZ%20SW&city=WASHINGTON&state=DC")
@@ -64,7 +79,7 @@ fi
 for SPEC in addresses-v3r2_4:usps-addresses-v3r2_4 enhanced-addresses-v3r2:usps-enhanced-addresses-v3r2; do
   REMOTE="${SPEC%%:*}.yaml"
   LOCAL="$REPO/docs/${SPEC##*:}.yaml"
-  TMP=$(mktemp /tmp/usps_canary_spec.XXXXXX)
+  TMP=$(mktemp /tmp/usps_canary_spec.XXXXXX) && TMPFILES+=("$TMP")
   if curl -s -m 20 -o "$TMP" "$SPEC_BASE/$REMOTE" && [ -s "$TMP" ] && head -1 "$TMP" | grep -q openapi; then
     if cmp -s "$TMP" "$LOCAL"; then
       note "spec $REMOTE: ok"

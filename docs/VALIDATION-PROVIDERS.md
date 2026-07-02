@@ -89,8 +89,8 @@ Restore `VALIDATION_PROVIDER=usps,google` (and restart) once the license is
 active and a canary run comes back clean (exit 0; reads prod creds itself):
 
 ```bash
-scripts/usps_canary.sh && echo "USPS probes OK"
-# per-probe detail in scratch/usps-canary.log
+/home/exedev/address-validator/scripts/usps_canary.sh && echo "USPS probes OK"
+# per-probe detail in /home/exedev/address-validator/scratch/usps-canary.log
 ```
 
 During a Google-only gap: `validation.provider="google"` on all rows,
