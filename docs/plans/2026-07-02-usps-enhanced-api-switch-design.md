@@ -100,3 +100,21 @@ Daily 07-10 → 07-20:
   becomes binding limit during gap.
 - **Fees/tier unknown** → operator reviews order form; `USPS_DAILY_LIMIT`
   may need lowering to fit purchased tier.
+
+## Addendum (2026-07-02, post-implementation)
+
+Two design assumptions were overtaken by events the same day:
+
+- **The Enhanced Addresses API spec IS published** — v3.3.1, linked from the
+  portal as `enhanced-addresses-v3r2.yaml`; vendored at
+  `docs/usps-enhanced-addresses-v3r2.yaml` (PR #157). Same servers and
+  `/address` path; `DPVConfirmation` (Y/D/S/N) and `vacant` retained →
+  **current provider needs no code change for the switch**. `state` request
+  param now optional; `business` deprecated (not consumed). New
+  `additionalInfo` indicators catalogued on #122.
+- **Canary is a crontab shell script**, not a scheduled agent:
+  `scripts/usps_canary.sh`, crontab `23 14 10-20 7 *`. Cloud agents cannot
+  reach the production creds or this VM; session-local scheduling does not
+  survive to the window. Script exits non-zero on anomaly and comments on
+  GH #155.
+- `USPS_API_BASE` shipped in PR #156.

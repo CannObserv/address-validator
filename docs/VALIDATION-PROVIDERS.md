@@ -86,14 +86,11 @@ curl -s http://localhost:8000/api/v2/health | jq .
 ```
 
 Restore `VALIDATION_PROVIDER=usps,google` (and restart) once the license is
-active and a manual token probe succeeds:
+active and a canary run comes back clean (exit 0; reads prod creds itself):
 
 ```bash
-# Token probe (uses prod creds; run from a shell that has NOT sourced .env into pytest scope)
-curl -s -X POST https://apis.usps.com/oauth2/v3/token \
-  -d "grant_type=client_credentials" \
-  -d "client_id=$USPS_CONSUMER_KEY" \
-  -d "client_secret=$USPS_CONSUMER_SECRET" | jq 'has("access_token")'
+scripts/usps_canary.sh && echo "USPS probes OK"
+# per-probe detail in scratch/usps-canary.log
 ```
 
 During a Google-only gap: `validation.provider="google"` on all rows,
