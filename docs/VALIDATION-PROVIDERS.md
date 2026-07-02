@@ -47,13 +47,47 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 ## USPS provider
 
-- API: USPS Addresses API v3. Spec archived at `docs/usps-addresses-v3r2_3.yaml`.
+- API: USPS Addresses API v3. Spec archived at `docs/usps-addresses-v3r2_4.yaml`.
 - Auth: OAuth2 client credentials. Token cached 55 min in-process (`asyncio.Lock` prevents concurrent refresh races).
 - Rate limit: multi-window quota guard — per-second soft window (default 5 req/s), per-day soft
   window (default 10 000/day). Configurable via `USPS_RATE_LIMIT_RPS` and `USPS_DAILY_LIMIT`.
 - 429 retry: up to 3 retries with `Retry-After` header support; falls back to exponential backoff (1 s base, ×2 per attempt + jitter).
 - Register at https://developer.usps.com.
 - `USPSProvider` and its `_http_client` are module-level singletons in `factory.py` — reset in tests.
+
+### Enhanced Addresses API switch — gap runbook (July 12, 2026)
+
+Effective 2026-07-12 USPS requires a signed Addressing API License Agreement +
+Order Form + Enterprise Payment System (EPS) account, with consumption
+tier-based fees. Design doc: `docs/plans/2026-07-02-usps-enhanced-api-switch-design.md`.
+
+If USPS starts rejecting our OAuth credentials (401/403 → `ProviderBadRequestError`,
+logged as operator-action-required) before the license is executed:
+
+```bash
+# 1. Flip production to Google-only
+sudo sed -i 's/^VALIDATION_PROVIDER=.*/VALIDATION_PROVIDER=google/' /etc/address-validator/.env
+sudo systemctl restart address-validator
+
+# 2. Verify
+curl -s https://localhost:8000/api/v2/health -k | jq .
+```
+
+Restore `VALIDATION_PROVIDER=usps,google` (and restart) once the license is
+active and a manual token probe succeeds:
+
+```bash
+# Token probe (uses prod creds; run from a shell that has NOT sourced .env into pytest scope)
+curl -s -X POST https://apis.usps.com/oauth2/v3/token \
+  -d "grant_type=client_credentials" \
+  -d "client_id=$USPS_CONSUMER_KEY" \
+  -d "client_secret=$USPS_CONSUMER_SECRET" | jq 'has("access_token")'
+```
+
+During a Google-only gap: `validation.provider="google"` on all rows,
+DPV codes still populated via CASS (`enableUspsCass: true`), Google daily
+quota (default 160/day) becomes the binding limit — watch for
+`ProviderAtCapacityError` 429s.
 
 ## Google provider
 

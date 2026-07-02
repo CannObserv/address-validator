@@ -6,7 +6,7 @@ info:
     
     The Addresses API validates and corrects address information to improve package delivery service and pricing. This suite of APIs provides different utilities for addressing components. The ZIP Code&#8482; lookup finds valid ZIP Code&#8482;(s) for a City and State. The City/State lookup provides the valid cities and states for a provided ZIP Code&#8482;. The Address Standardization API validates and standardizes USPS&#174; domestic addresses, city and state names, and ZIP Code&#8482; in accordance with USPS&#174; addressing standards. The USPS&#174; address standard includes the ZIP + 4&#174;, signifying a USPS&#174; delivery point, given a street address, a city and a state.
     
-  version: 3.2.2
+  version: 3.2.3
 servers:
   - url: https://apis.usps.com/addresses/v3
     description: Production Environment Endpoint
@@ -94,19 +94,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
-              examples:
-                Invalid State Code:
-                  $ref: '#/components/examples/Invalid-State-Code'
-                Invalid City:
-                  $ref: '#/components/examples/Invalid-City'
-                Unverifiable City and State:
-                  $ref: '#/components/examples/Unverifiable-City-and-State'
-                Insufficient Address Data:
-                  $ref: '#/components/examples/Insufficient-Adddress-Data'
-                Invalid Delivery Address:
-                  $ref: '#/components/examples/Invalid-Delivery-Address'
-                Multiple Addresses Found:
-                  $ref: '#/components/examples/Multiple-Addresses-Found'
             application/xml:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
@@ -142,6 +129,18 @@ paths:
                   $ref: '#/components/examples/Address-Not-Found'
                 No Match:
                   $ref: '#/components/examples/No-Match'
+                Invalid State Code:
+                  $ref: '#/components/examples/Invalid-State-Code'
+                Invalid City:
+                  $ref: '#/components/examples/Invalid-City'
+                Unverifiable City and State:
+                  $ref: '#/components/examples/Unverifiable-City-and-State'
+                Insufficient Address Data:
+                  $ref: '#/components/examples/Insufficient-Adddress-Data'
+                Invalid Delivery Address:
+                  $ref: '#/components/examples/Invalid-Delivery-Address'
+                Multiple Addresses Found:
+                  $ref: '#/components/examples/Multiple-Addresses-Found'
             application/xml:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
@@ -770,34 +769,34 @@ components:
       summary: The city is missing or invalid.
       description: The city is missing or invalid.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
-          code: "400"
+          code: "404"
           message: The city in the request is missing or invalid.
           errors: []
     Invalid-State-Code:
       summary: The two-letter state code is missing or invalid.
       description: The two-letter state code is missing or invalid.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
-          code: "400"
+          code: "404"
           message: The state code in the request is missing or invalid.
           errors: []
     Unverifiable-City-and-State:
       summary: The city and state are missing or together unverifiable.
       description: The city and state are missing or together unverifiable.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
-          code: "400"
+          code: "404"
           message: The city and state are missing or together unverifiable.
           errors: []
     Insufficient-Adddress-Data:
       summary: The address information in the request is insufficient to match.
       description: The address information in the request is insufficient to match.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
           code: "404"
           message: The address information in the request is insufficient to match.
@@ -806,7 +805,7 @@ components:
       summary: The address requested could not be found.
       description: "There is no match for the specified address, try adding as much information as possible."
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
           code: "404"
           message: There is no match for the address requested.
@@ -815,7 +814,7 @@ components:
       summary: Could not find any matching address.
       description: "There is no match for the specified address, try adding as much information as possible."
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
           code: "404"
           message: There is no match for the address requested.
@@ -824,7 +823,7 @@ components:
       summary: The address requested is an invalid delivery address.
       description: The address requested is an invalid delivery address.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
           code: "404"
           message: The address requested is an invalid delivery address.
@@ -833,7 +832,7 @@ components:
       summary: More than one address was found matching the requested address.
       description: More than one address was found matching the requested address.
       value:
-        apiVersion: v1
+        apiVersion: v3
         error:
           code: "404"
           message: More than one address was found matching the requested address.

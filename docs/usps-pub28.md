@@ -28,7 +28,8 @@ Attempts to determine the exact edition:
    of research.
 
 3. **Cross-reference against USPS Addresses API v3** — The USPS Addresses API
-   v3.2.2 OpenAPI spec (see `usps-addresses-v3r2_3.yaml`) links to
+   v3.2.2 OpenAPI spec (now archived as `usps-addresses-v3r2_4.yaml`, API
+   version 3.2.3 — same content for this purpose) links to
    `pe.usps.com/text/pub28/28c2_003.htm` for secondary unit designator
    definitions, confirming Pub 28 is the normative reference for the API.  The
    spec's `version: 3.2.2` refers to the API revision, not the Pub 28 edition.
@@ -61,9 +62,10 @@ No missing or incorrect abbreviations found.
 
 ## USPS Addresses API v3 — model notes
 
-Archived: `docs/usps-addresses-v3r2_3.yaml` (OpenAPI 3.0.1, API version 3.2.2)
-Source: `https://developers.usps.com/sites/default/files/apidoc_specs/addresses-v3r2_3.yaml`
-Retrieved: 2026-03-03
+Archived: `docs/usps-addresses-v3r2_4.yaml` (OpenAPI 3.0.1, API version 3.2.3)
+Source: `https://developers.usps.com/sites/default/files/apidoc_specs/addresses-v3r2_4.yaml`
+Retrieved: 2026-07-02 (r2_3/v3.2.2 retrieved 2026-03-03; r2_3→r2_4 diff is
+doc-example fixes only — no endpoint/param/schema changes)
 
 ### Key fields in the USPS API response (`DomesticAddress` / `Address`)
 
