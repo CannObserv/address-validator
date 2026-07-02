@@ -93,6 +93,34 @@ The TTL is checked against `validated_addresses.validated_at`, which records whe
 
 The TTL is enforced both at lookup time (expired rows treated as a miss) and by the daily `cache-sweep` timer, which physically deletes rows older than this window (`infra/sweep_cache.py`). Set to `0` to disable expiry and sweeping entirely.
 
+## Pipeline-version invalidation (#145)
+
+Each `validated_addresses` row is stamped with the composite pipeline version
+(`{PIPELINE_CODE_VERSION}+{model fingerprint}`, see
+`src/address_validator/core/pipeline_version.py`) that produced it. At lookup time a
+mismatched (or NULL) stamp is treated as a miss — the row is lazily re-validated via the
+live provider, independent of TTL. Re-validation that reproduces the same canonical
+output rescues the row with a fresh stamp; otherwise the stale row's `validated_at`
+stops advancing and the daily sweep reaps it.
+
+Invalidation triggers:
+
+- **Code changes** to parse/standardize output — hand-bump `PIPELINE_CODE_VERSION`
+  (the golden-corpus drift test `tests/unit/test_pipeline_output_pin.py` fails if you
+  forget).
+- **CRF model redeployment** via `CUSTOM_MODEL_PATH` — automatic; the fingerprint is a
+  sha256 prefix of the loaded `.crfsuite` file, so retrains invalidate with zero code
+  change. The bundled model fingerprints as `bundled-<usaddress version>`.
+
+Granularity is deliberately coarse: any bump lazily invalidates **all** cached rows
+(re-validated on next access; never-accessed rows just age out). No bump → zero
+hit-rate impact.
+
+**Deploy note:** migration 019 leaves existing rows NULL (= mismatch everything). Run
+`uv run python scripts/db/backfill_pipeline_version.py --apply` once at deploy — with
+the same `CUSTOM_MODEL_PATH` the service uses — to stamp existing rows and avoid a
+day-one hit-rate cliff.
+
 `last_seen_at` continues to track query frequency for observability and is unrelated to expiry.
 
 **Schema migrations**: Managed by Alembic. `get_engine()` runs `alembic upgrade head` automatically on first call at startup. To migrate data from a prior SQLite cache, run `scripts/db/migrate_sqlite_to_postgres.py` after applying migrations.

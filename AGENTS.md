@@ -50,6 +50,7 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
 - `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
 - `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
+- Pipeline version (`core/pipeline_version.py`, single source of truth) stamps every cached `validated_addresses` row; code changes that alter parse/standardize output must bump `PIPELINE_CODE_VERSION` — drift test `tests/unit/test_pipeline_output_pin.py` enforces (re-pin hash + bump together). CRF model swaps via `CUSTOM_MODEL_PATH` invalidate automatically (fingerprint)
 - `components` takes precedence over `address` when both supplied
 - All request models accepting a country must inherit `CountryRequestMixin`
 
@@ -163,6 +164,7 @@ Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
 - **`AddressInputMixin.model_validator`** — sole 422 guard for address/components input across all endpoints; do not weaken
 - **Middleware order is load-bearing** — `request_id` must wrap `audit`; `reset_audit_context()` + `reset_candidate_data()` must fire at request start
 - **Cache key changes** (`_make_pattern_key`, `_make_canonical_key`) silently orphan all existing cache entries
+- **`PIPELINE_CODE_VERSION` bump discipline** — parse/standardize output changes without a bump silently serve stale cached results; `_store()`'s ON CONFLICT must keep refreshing `pipeline_version`
 - **`except Exception` in fail-open writes** — intentional in `write_audit_row`, `write_training_candidate`, `cache_provider.validate()`; do not narrow
 - **`ALLOWED_TRANSITIONS`** in `training_batches.py` — single source of truth for batch status; all transitions go through it
 

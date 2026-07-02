@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.core.pipeline_version import get_pipeline_version
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
@@ -747,6 +748,112 @@ class TestRevalidationRepoint:
         result = await _lookup(db, pattern_key, ttl_days=30)
         assert result is not None
         assert result.postal_code == "62704-9999"
+
+
+async def _set_pipeline_version(engine: AsyncEngine, value: str | None) -> None:
+    """Set pipeline_version on all validated_addresses rows (simulates a pipeline change)."""
+    async with engine.begin() as conn:
+        await conn.execute(update(validated_addresses).values(pipeline_version=value))
+
+
+class TestPipelineVersionStamp:
+    """#145 — targeted cache invalidation on pipeline-output change."""
+
+    async def test_store_stamps_current_version(self, db: AsyncEngine) -> None:
+        """Every stored row carries the current composite pipeline version."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+
+        await provider.validate(_make_std())
+
+        row = await _fetch_one(db, validated_addresses)
+        assert row["pipeline_version"] == get_pipeline_version()
+
+    async def test_version_mismatch_treated_as_miss(self, db: AsyncEngine) -> None:
+        """A row stamped by an older pipeline is re-validated via the inner provider."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores with current version
+        await _set_pipeline_version(db, "0+stale-fingerprint")
+        inner.validate.reset_mock()
+
+        await provider.validate(std)  # stale stamp — must call inner
+
+        inner.validate.assert_awaited_once()
+
+    async def test_null_version_treated_as_miss(self, db: AsyncEngine) -> None:
+        """Pre-#145 rows (NULL stamp) are re-validated, not served."""
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+        await _set_pipeline_version(db, None)
+        inner.validate.reset_mock()
+
+        await provider.validate(std)
+
+        inner.validate.assert_awaited_once()
+
+    async def test_version_mismatch_lookup_does_not_touch_last_seen(self, db: AsyncEngine) -> None:
+        """A mismatch is a miss at lookup time — it must not refresh last_seen_at."""
+        response = _make_confirmed_response()
+        std = _make_std()
+        pattern_key = _make_pattern_key(std)
+        await _store(db, pattern_key, _make_canonical_key(response), response, raw_input=None)
+        await _set_pipeline_version(db, "0+stale-fingerprint")
+
+        row_before = await _fetch_one(db, validated_addresses)
+
+        result = await _lookup(db, pattern_key, ttl_days=30)
+
+        row_after = await _fetch_one(db, validated_addresses)
+        assert result is None
+        assert row_after["last_seen_at"] == row_before["last_seen_at"]
+
+    async def test_revalidation_rescues_row_with_fresh_stamp(self, db: AsyncEngine) -> None:
+        """Same provider output after a stale stamp → same canonical row, re-stamped current.
+
+        The upsert's ON CONFLICT must refresh pipeline_version, or a rescued row
+        stays permanently stale and every subsequent lookup becomes a miss.
+        """
+        response = _make_confirmed_response()
+        inner = _make_provider(response)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)  # miss — stores
+        await _set_pipeline_version(db, "0+stale-fingerprint")
+
+        await provider.validate(std)  # stale → re-validate → rescue via upsert
+
+        row = await _fetch_one(db, validated_addresses)
+        assert row["pipeline_version"] == get_pipeline_version()
+        assert await _count_rows(db, "validated_addresses") == 1
+
+        inner.validate.reset_mock()
+        await provider.validate(std)  # fresh stamp → hit
+        inner.validate.assert_not_awaited()
+
+    async def test_version_mismatch_logs_debug(
+        self, db: AsyncEngine, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Mismatch is observable via a distinct DEBUG event (docs/LOGGING.md)."""
+        response = _make_confirmed_response()
+        std = _make_std()
+        pattern_key = _make_pattern_key(std)
+        await _store(db, pattern_key, _make_canonical_key(response), response, raw_input=None)
+        await _set_pipeline_version(db, "0+stale-fingerprint")
+
+        with caplog.at_level(logging.DEBUG, logger=_CACHE_LOGGER):
+            await _lookup(db, pattern_key, ttl_days=30)
+
+        assert any("version_mismatch" in r.message for r in caplog.records)
 
 
 class TestSchemaConstraints:
