@@ -70,6 +70,12 @@ uv run python scripts/db/backfill_audit_raw_input.py
 # (Removed in #151) The one-off NULL-canonical_key cleanup script has been retired;
 # migration 018 makes query_patterns.canonical_key NOT NULL, so the rows can no longer exist.
 
+# Stamp pre-#145 validated_addresses rows with the current pipeline version
+# (dry-run by default; add --apply). One-off after the #145 deploy — unstamped
+# NULL rows mismatch every lookup and lazily re-validate (hit-rate cliff).
+# Must run with the same CUSTOM_MODEL_PATH the service uses.
+uv run python scripts/db/backfill_pipeline_version.py --apply
+
 # Archive audit log to GCS + delete archived rows
 uv run python infra/archive_audit.py
 

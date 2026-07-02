@@ -88,6 +88,12 @@ validated_addresses = sa.Table(
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False),
     sa.Column("validated_at", sa.DateTime(timezone=True), nullable=False),
+    # Composite parse/standardize pipeline version that produced this row (#145).
+    # Mismatch against core.pipeline_version.get_pipeline_version() at lookup time
+    # → treated as a cache miss and lazily re-validated; NULL (pre-#145 rows not
+    # yet backfilled) mismatches everything. Nullable so the migration is instant;
+    # scripts/db/backfill_pipeline_version.py stamps existing rows at deploy.
+    sa.Column("pipeline_version", sa.Text(), nullable=True),
 )
 
 query_patterns = sa.Table(

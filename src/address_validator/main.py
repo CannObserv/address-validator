@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from address_validator.core.errors import APIError, api_error_response
+from address_validator.core.pipeline_version import load_custom_model
 from address_validator.db import engine as db_engine
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.api_version import ApiVersionHeaderMiddleware
@@ -41,37 +42,6 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message
 logging.getLogger().addFilter(RequestIdFilter())
 
 logger = logging.getLogger(__name__)
-
-
-def _load_custom_model() -> None:
-    """Swap usaddress.TAGGER with a custom .crfsuite model if configured.
-
-    Reads CUSTOM_MODEL_PATH from environment. No-op when unset.
-    Logs warning and falls back to bundled model if path is invalid.
-    """
-    import pycrfsuite  # noqa: PLC0415
-    import usaddress  # noqa: PLC0415
-
-    custom_path = os.environ.get("CUSTOM_MODEL_PATH", "").strip()
-    if not custom_path:
-        return
-
-    path = Path(custom_path)
-    if not path.exists():
-        logging.getLogger(__name__).warning(
-            "CUSTOM_MODEL_PATH=%s not found, using bundled model", path
-        )
-        return
-
-    try:
-        tagger = pycrfsuite.Tagger()
-        tagger.open(str(path))
-        usaddress.TAGGER = tagger
-        logging.getLogger(__name__).info("loaded custom usaddress model: %s", path)
-    except Exception:
-        logging.getLogger(__name__).warning(
-            "CUSTOM_MODEL_PATH=%s failed to load, using bundled model", path, exc_info=True
-        )
 
 
 _DESCRIPTION = """
@@ -102,7 +72,7 @@ _TAGS = [
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — set API key, validate config, and close DB on shutdown."""
     app.state.api_key = os.environ.get("API_KEY", "").strip() or None
-    _load_custom_model()
+    load_custom_model()
 
     await db_engine.init_engine()
     try:

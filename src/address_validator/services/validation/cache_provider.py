@@ -8,8 +8,13 @@ Lookup algorithm
    b. Row found but no matching ``validated_addresses`` row → orphaned pointer
       (external DB modification); delete and treat as miss
 3. HIT  → fetch the linked ``validated_addresses`` row
-   a. TTL check: if ``ttl_days > 0`` and ``validated_at`` older than threshold → treat as miss
-   b. Update ``last_seen_at``; return deserialised row
+   a. Pipeline-version check (#145): if ``pipeline_version`` differs from the
+      current ``core.pipeline_version.get_pipeline_version()`` (NULL always
+      differs) → treat as miss; the row is lazily re-validated and either
+      rescued by the upsert (same canonical output → fresh stamp) or left for
+      the #144 TTL sweeper to reap (``validated_at`` stops advancing)
+   b. TTL check: if ``ttl_days > 0`` and ``validated_at`` older than threshold → treat as miss
+   c. Update ``last_seen_at``; return deserialised row
 4. MISS → delegate to ``inner.validate(std)``
 
 Cache-miss path (before inner provider call)
@@ -23,7 +28,8 @@ Store algorithm (after successful inner provider call)
 ------------------------------------------------------
 1. Skip entirely when ``result.validation.status == "unavailable"``
 2. Hash the provider-returned address fields → ``canonical_key``
-3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at and validated_at)
+3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at,
+   validated_at, and pipeline_version — the stamp refresh rescues stale rows)
 4. INSERT/upsert into ``query_patterns`` ON CONFLICT: repoint ``canonical_key`` to the
    freshly validated address (latest-wins) and back-fill ``raw_input`` when NULL.
    A ``query_patterns`` row is only ever written here, on a successful validation, and
@@ -44,6 +50,7 @@ from sqlalchemy import RowMapping, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.core.pipeline_version import get_pipeline_version
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
@@ -191,6 +198,22 @@ async def _lookup(
                 )
             return None
 
+        # Pipeline-version check (#145) before the TTL check and before the
+        # last_seen_at touch: a stale-stamped row is a miss, and must not look
+        # recently-used to the sweeper. NULL never matches — pre-#145 rows that
+        # were not backfilled re-validate lazily.
+        current_version = get_pipeline_version()
+        if va_row["pipeline_version"] != current_version:
+            logger.debug(
+                "cache_lookup: version_mismatch pattern_key=%s canonical_key=%s "
+                "row_version=%s current_version=%s; treating as miss",
+                pattern_key,
+                canonical_key,
+                va_row["pipeline_version"],
+                current_version,
+            )
+            return None
+
         # Non-positive ttl_days disables expiry entirely (matches sweep_cache.py,
         # which skips sweeping when ttl_days <= 0). A negative value must not be
         # read as a future cutoff that expires every row.
@@ -255,10 +278,17 @@ async def _store(
                 created_at=now,
                 last_seen_at=now,
                 validated_at=now,
+                pipeline_version=get_pipeline_version(),
             )
             .on_conflict_do_update(
                 index_elements=[validated_addresses.c.canonical_key],
-                set_={"last_seen_at": now, "validated_at": now},
+                # pipeline_version refreshed on conflict too: a re-validation that
+                # reproduces the same canonical output rescues a stale-stamped row.
+                set_={
+                    "last_seen_at": now,
+                    "validated_at": now,
+                    "pipeline_version": get_pipeline_version(),
+                },
             ),
         )
 
