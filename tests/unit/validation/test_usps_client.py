@@ -108,6 +108,35 @@ class TestUSPSClient:
         assert mock_http.get.call_count == 1  # address call
 
     @pytest.mark.asyncio
+    async def test_default_api_base_urls(self, client: USPSClient, mock_http: AsyncMock) -> None:
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address("123 Main St", "Springfield", "IL")
+
+        assert mock_http.post.call_args[0][0] == "https://apis.usps.com/oauth2/v3/token"
+        assert mock_http.get.call_args[0][0] == "https://apis.usps.com/addresses/v3/address"
+
+    @pytest.mark.asyncio
+    async def test_custom_api_base_urls(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        client = USPSClient(
+            consumer_key="key",
+            consumer_secret="secret",
+            http_client=mock_http,
+            quota_guard=_default_guard,
+            api_base="https://apis-tem.usps.com",
+        )
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)
+
+        await client.validate_address("123 Main St", "Springfield", "IL")
+
+        assert mock_http.post.call_args[0][0] == "https://apis-tem.usps.com/oauth2/v3/token"
+        assert mock_http.get.call_args[0][0] == "https://apis-tem.usps.com/addresses/v3/address"
+
+    @pytest.mark.asyncio
     async def test_reuses_cached_token(self, client: USPSClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.return_value = self._make_response(VALID_ADDRESS_RESPONSE)

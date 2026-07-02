@@ -147,6 +147,7 @@ class ProviderRegistry:
                 consumer_secret=cfg.consumer_secret,
                 http_client=self._get_http_client(),
                 quota_guard=guard,
+                api_base=cfg.api_base,
             )
         )
         return self._usps_provider

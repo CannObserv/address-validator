@@ -46,6 +46,17 @@ class USPSConfig(BaseSettings):
     consumer_secret: str
     rate_limit_rps: float = 5.0
     daily_limit: int = 10000
+    # Override for TEM (apis-tem.usps.com) or the Enhanced Addresses API
+    # host switch (GH #155); path suffixes stay fixed in usps_client.py.
+    api_base: str = "https://apis.usps.com"
+
+    @field_validator("api_base")
+    @classmethod
+    def _api_base_is_http_url(cls, v: str) -> str:
+        v = v.rstrip("/")
+        if not v.startswith(("https://", "http://")):
+            raise ValueError("USPS_API_BASE must be an http(s) URL (e.g. 'https://apis.usps.com')")
+        return v
 
     @field_validator("rate_limit_rps")
     @classmethod

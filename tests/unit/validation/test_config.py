@@ -66,6 +66,34 @@ class TestUSPSConfig:
         cfg = USPSConfig()
         assert cfg.daily_limit == 5000
 
+    def test_default_api_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "k")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "s")
+        monkeypatch.delenv("USPS_API_BASE", raising=False)
+        cfg = USPSConfig()
+        assert cfg.api_base == "https://apis.usps.com"
+
+    def test_custom_api_base(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "k")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "s")
+        monkeypatch.setenv("USPS_API_BASE", "https://apis-tem.usps.com")
+        cfg = USPSConfig()
+        assert cfg.api_base == "https://apis-tem.usps.com"
+
+    def test_api_base_trailing_slash_stripped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "k")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "s")
+        monkeypatch.setenv("USPS_API_BASE", "https://apis-tem.usps.com/")
+        cfg = USPSConfig()
+        assert cfg.api_base == "https://apis-tem.usps.com"
+
+    def test_api_base_without_scheme_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("USPS_CONSUMER_KEY", "k")
+        monkeypatch.setenv("USPS_CONSUMER_SECRET", "s")
+        monkeypatch.setenv("USPS_API_BASE", "apis.usps.com")
+        with pytest.raises(ValueError, match="USPS_API_BASE"):
+            USPSConfig()
+
 
 class TestGoogleConfig:
     def test_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:

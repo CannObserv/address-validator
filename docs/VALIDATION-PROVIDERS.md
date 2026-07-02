@@ -9,6 +9,7 @@
 | `USPS_CONSUMER_SECRET` | string | — | USPS OAuth2 client secret |
 | `USPS_RATE_LIMIT_RPS` | float ≥ 1 | `5.0` | USPS per-second soft window |
 | `USPS_DAILY_LIMIT` | positive int | `10000` | USPS per-day soft window |
+| `USPS_API_BASE` | http(s) URL | `https://apis.usps.com` | Scheme+host for USPS API; override for TEM (`https://apis-tem.usps.com`) or Enhanced API host switch (#155). Paths (`/oauth2/v3/token`, `/addresses/v3/address`) are fixed. |
 | `GOOGLE_PROJECT_ID` | string | — | GCP project; auto-discovered from ADC if unset |
 | `GOOGLE_RATE_LIMIT_RPM` | positive int | `5` | Google per-minute soft window |
 | `GOOGLE_DAILY_LIMIT` | positive int | `160` | Auto-discovered from Cloud Quotas; env var is fallback |

@@ -35,8 +35,9 @@ _ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"  # noqa: S105
-_ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
+_DEFAULT_API_BASE = "https://apis.usps.com"
+_TOKEN_PATH = "/oauth2/v3/token"  # noqa: S105
+_ADDRESS_PATH = "/addresses/v3/address"
 
 # Token is refreshed 60 s before it actually expires to avoid races.
 _TOKEN_REFRESH_BUFFER_S = 60
@@ -119,6 +120,10 @@ class USPSClient:
     quota_guard:
         A :class:`~services.validation._rate_limit.QuotaGuard` instance
         for rate limiting.
+    api_base:
+        Scheme+host prefix for the USPS API (no trailing slash). Defaults to
+        production; override via ``USPS_API_BASE`` for TEM or an endpoint
+        host switch (GH #155).
     """
 
     # Class-level dedup set for recon logging (issue #122). Spans the
@@ -132,6 +137,7 @@ class USPSClient:
         consumer_secret: str,
         http_client: httpx.AsyncClient,
         quota_guard: QuotaGuard,
+        api_base: str = _DEFAULT_API_BASE,
     ) -> None:
         self._consumer_key = consumer_key
         self._consumer_secret = consumer_secret
@@ -139,6 +145,8 @@ class USPSClient:
         self._token: USPSToken | None = None
         self._token_lock = asyncio.Lock()
         self._rate_limiter = quota_guard
+        self._token_url = f"{api_base}{_TOKEN_PATH}"
+        self._address_url = f"{api_base}{_ADDRESS_PATH}"
 
     @classmethod
     def _reset_recon_state(cls) -> None:
@@ -163,7 +171,7 @@ class USPSClient:
 
             logger.debug("USPSClient: fetching new OAuth2 token")
             resp = await self._http.post(
-                _TOKEN_URL,
+                self._token_url,
                 data={
                     "grant_type": "client_credentials",
                     "client_id": self._consumer_key,
@@ -238,7 +246,7 @@ class USPSClient:
             await self._rate_limiter.acquire()
             token = await self._get_token()
             resp = await self._http.get(
-                _ADDRESS_URL,
+                self._address_url,
                 headers={"Authorization": f"Bearer {token}"},
                 params=params,
             )
