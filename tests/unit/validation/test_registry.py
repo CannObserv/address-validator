@@ -56,6 +56,19 @@ class TestGetProvider:
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, USPSProvider)
 
+    def test_usps_api_base_reaches_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        reg = _make_registry(
+            monkeypatch,
+            VALIDATION_PROVIDER="usps",
+            USPS_CONSUMER_KEY="key",
+            USPS_CONSUMER_SECRET="secret",
+            USPS_API_BASE="https://apis-tem.usps.com",
+        )
+        result = reg.get_provider()
+        client = result._inner.client
+        assert client._address_url == "https://apis-tem.usps.com/addresses/v3/address"
+        assert client._token_url == "https://apis-tem.usps.com/oauth2/v3/token"
+
     def test_usps_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
         reg = _make_registry(
             monkeypatch,
