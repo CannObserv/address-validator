@@ -62,6 +62,17 @@ Effective 2026-07-12 USPS requires a signed Addressing API License Agreement +
 Order Form + Enterprise Payment System (EPS) account, with consumption
 tier-based fees. Design doc: `docs/plans/2026-07-02-usps-enhanced-api-switch-design.md`.
 
+**Enhanced Addresses spec is published** (v3.3.1, vendored at
+`docs/usps-enhanced-addresses-v3r2.yaml`): same servers and `/address` path,
+`DPVConfirmation`/`vacant` retained — current provider works unchanged. New
+`additionalInfo` indicators are recon targets (GH #122).
+
+**Canary:** `scripts/usps_canary.sh` runs daily 14:23 UTC July 10–20 via
+crontab (`23 14 10-20 7 *`). Probes OAuth, a live `/address` call (cache
+bypassed, no DB writes), both vendored spec checksums, and portal spec links;
+comments on GH #155 on anomaly (always on July 12). Remove the crontab entry
+after July 20.
+
 If USPS starts rejecting our OAuth credentials (401/403 → `ProviderBadRequestError`,
 logged as operator-action-required) before the license is executed:
 
