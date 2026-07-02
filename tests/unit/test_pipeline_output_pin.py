@@ -20,7 +20,9 @@ by the runtime model fingerprint instead (see core/pipeline_version.py docstring
 import hashlib
 import json
 
+import pycrfsuite
 import pytest
+import usaddress
 
 from address_validator.core.pipeline_version import PIPELINE_CODE_VERSION
 from address_validator.services.parser import parse_address
@@ -109,7 +111,18 @@ class TestPipelineOutputPin:
 
 
 @pytest.fixture(autouse=True)
-def _no_custom_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin the corpus to the bundled model — a custom CUSTOM_MODEL_PATH in the
-    environment must not change what this test measures."""
-    monkeypatch.delenv("CUSTOM_MODEL_PATH", raising=False)
+def _force_bundled_model():
+    """Pin the corpus to the bundled model regardless of session state.
+
+    Deleting CUSTOM_MODEL_PATH is not enough: ``parse_address`` reads the
+    module-global ``usaddress.TAGGER``, and any earlier lifespan-running test
+    (``with TestClient(...)`` → ``load_custom_model()``) may have swapped it
+    for the session when the env var was exported. Force a tagger opened on
+    the bundled model for the duration of this module's tests.
+    """
+    original = usaddress.TAGGER
+    bundled = pycrfsuite.Tagger()
+    bundled.open(usaddress.MODEL_PATH)
+    usaddress.TAGGER = bundled
+    yield
+    usaddress.TAGGER = original
