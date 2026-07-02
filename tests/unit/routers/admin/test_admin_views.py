@@ -175,6 +175,88 @@ def test_audit_filter_status_min_bounds_enforced(
     assert response.status_code == expected
 
 
+@pytest.mark.parametrize("value", ["abc", "7.5"])
+def test_audit_raw_input_days_non_integer_rejected(
+    client: TestClient, admin_headers: dict, value: str
+) -> None:
+    """A non-integer raw_input_days 422s (unreachable via the select, but pins the
+    contract for symmetry with status_min; blank/out-of-range still fall back, #152)."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    response = client.get(
+        "/admin/audit/",
+        params={"raw_input": "foo", "raw_input_days": value},
+        headers=headers,
+    )
+    assert response.status_code == 422
+
+
+def test_audit_forwards_default_window_to_query(client: TestClient, admin_headers: dict) -> None:
+    """Omitting raw_input_days forwards the default 7-day bound to get_audit_rows (#152).
+
+    Guards the regression where the window arg is dropped from the call and the
+    substring scan silently reverts to unbounded / full-history.
+    """
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get("/admin/audit/", params={"raw_input": "foo"}, headers=admin_headers)
+    assert response.status_code == 200
+    assert mock_rows.await_args.kwargs["raw_input"] == "foo"
+    assert mock_rows.await_args.kwargs["raw_input_days"] == 7
+
+
+def test_audit_forwards_selected_window_to_query(client: TestClient, admin_headers: dict) -> None:
+    """A chosen in-range window is forwarded verbatim to get_audit_rows (#152)."""
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/audit/",
+            params={"raw_input": "foo", "raw_input_days": "30"},
+            headers=admin_headers,
+        )
+    assert response.status_code == 200
+    assert mock_rows.await_args.kwargs["raw_input_days"] == 30
+
+
+def test_audit_raw_input_window_out_of_range_falls_back(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """A valid int outside the offered windows falls back to the default (#152).
+
+    Must not 422, and must forward the default — not the rejected value — to the query.
+    """
+    headers = {**admin_headers, "HX-Request": "true"}
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/audit/",
+            params={"raw_input": "9 Benny Dr", "raw_input_days": "15"},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert mock_rows.await_args.kwargs["raw_input_days"] == 7
+
+
+def test_audit_blank_window_falls_back_to_default(client: TestClient, admin_headers: dict) -> None:
+    """A blank raw_input_days (empty-string submit) coerces to the default, not a 422 (#152)."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    mock_rows = AsyncMock(return_value=([], 0))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/audit/",
+            params={"raw_input": "foo", "raw_input_days": ""},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert mock_rows.await_args.kwargs["raw_input_days"] == 7
+
+
+def test_audit_list_renders_window_select(client: TestClient, admin_headers: dict) -> None:
+    """The audit filter form exposes the raw_input window selector (#152)."""
+    response = client.get("/admin/audit/", headers=admin_headers)
+    assert response.status_code == 200
+    assert 'name="raw_input_days"' in response.text
+
+
 def test_audit_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
     """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
     response = client.get("/admin/audit/", headers=admin_headers)

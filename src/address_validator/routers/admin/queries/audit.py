@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
@@ -25,8 +26,17 @@ async def get_audit_rows(
     status_codes: list[int] | None = None,
     validation_statuses: list[str] | None = None,
     raw_input: str | None = None,
+    raw_input_days: int | None = None,
 ) -> tuple[list[dict], int]:
-    """Fetch paginated, filtered audit_log rows. Returns (rows, total_count)."""
+    """Fetch paginated, filtered audit_log rows. Returns (rows, total_count).
+
+    The ``raw_input`` filter is a leading-wildcard ILIKE (unindexable by a plain
+    btree) over ``audit_log`` — the hottest write table in the service. When
+    ``raw_input`` is set, ``raw_input_days`` bounds the scan to a recent window
+    (``timestamp >= now - raw_input_days``) so the planner uses ``idx_audit_ts``
+    to constrain the range before the substring filter runs (#152). The window
+    applies only alongside ``raw_input``; other filters are cheap/indexed.
+    """
     conditions: list[ColumnElement] = []
 
     if endpoint:
@@ -50,6 +60,9 @@ async def get_audit_rows(
         conditions.append(audit_log.c.validation_status.in_(validation_statuses))
     if raw_input:
         conditions.append(audit_log.c.raw_input.ilike(f"%{raw_input}%"))
+        if raw_input_days is not None:
+            cutoff = datetime.now(UTC) - timedelta(days=raw_input_days)
+            conditions.append(audit_log.c.timestamp >= cutoff)
 
     async with engine.connect() as conn:
         count_stmt = select(func.count()).select_from(audit_log)

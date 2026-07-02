@@ -35,6 +35,16 @@
                class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100"
                placeholder="address substring…">
     </div>
+    <div>
+        <label for="raw_input_days" class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Within</label>
+        <select name="raw_input_days" id="raw_input_days"
+                class="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100"
+                title="Bounds the raw-input substring search to a recent window (keeps the scan fast)">
+            {% for d in raw_input_windows %}
+            <option value="{{ d }}" {% if filters.raw_input_days == d %}selected{% endif %}>{{ d }}d</option>
+            {% endfor %}
+        </select>
+    </div>
     <button type="submit"
             class="bg-co-purple text-white px-4 py-1 rounded text-sm font-medium hover:bg-co-purple-700 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100 focus:ring-offset-1 dark:ring-offset-gray-800 min-h-[32px]">
         Filter
@@ -58,12 +68,12 @@
 {% if total_pages > 1 %}
 <nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}{% endif %}"
+    <a href="?page={{ page - 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}&raw_input_days={{ filters.raw_input_days | urlencode }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">&laquo; Prev</a>
     {% endif %}
     <span class="text-gray-500 dark:text-gray-400">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}{% endif %}"
+    <a href="?page={{ page + 1 }}{% if filters.client_ip %}&client_ip={{ filters.client_ip | urlencode }}{% endif %}{% if filters.endpoint %}&endpoint={{ filters.endpoint | urlencode }}{% endif %}{% if filters.status_min %}&status_min={{ filters.status_min | urlencode }}{% endif %}{% if filters.raw_input %}&raw_input={{ filters.raw_input | urlencode }}&raw_input_days={{ filters.raw_input_days | urlencode }}{% endif %}"
        class="px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100">Next &raquo;</a>
     {% endif %}
 </nav>
