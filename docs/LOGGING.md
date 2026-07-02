@@ -19,7 +19,7 @@ To include it in formatted output, add `%(request_id)s` to the uvicorn log forma
 | Auth rejection — invalid key (403) | `INFO` | `auth` | `path=`, `request_id` |
 | Cache lookup miss | `DEBUG` | `services.validation.cache_provider` | `pattern_key=`, `request_id` |
 | Cache lookup hit | `DEBUG` | `services.validation.cache_provider` | `request_id` |
-| Cache pipeline-version mismatch (treated as miss, #145) | `DEBUG` | `services.validation.cache_provider` | `pattern_key=`, `row_version=`, `current_version=`, `request_id` |
+| Cache pipeline-version mismatch (treated as miss, #145) | `INFO` | `services.validation.cache_provider` | `pattern_key=`, `row_version=`, `current_version=`, `request_id` — INFO so post-bump invalidation waves are visible in prod logs; keys are hashes, no PII |
 | Cache store | `DEBUG` | `services.validation.cache_provider` | `request_id` |
 | Cache storage error (fail-open) | `WARNING` | `services.validation.cache_provider` | `request_id` |
 | USPS API call start | `DEBUG` | `services.validation.usps_provider` | `country=`, `request_id` |

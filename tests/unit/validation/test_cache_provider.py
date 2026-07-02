@@ -840,20 +840,25 @@ class TestPipelineVersionStamp:
         await provider.validate(std)  # fresh stamp → hit
         inner.validate.assert_not_awaited()
 
-    async def test_version_mismatch_logs_debug(
+    async def test_version_mismatch_logs_info(
         self, db: AsyncEngine, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """Mismatch is observable via a distinct DEBUG event (docs/LOGGING.md)."""
+        """Mismatch is observable at INFO (docs/LOGGING.md) — prod runs at INFO, and
+        this is the only signal distinguishing an expected post-bump invalidation
+        wave from a cache regression. Keys are hashes, versions are constants — no
+        PII at INFO+ holds."""
         response = _make_confirmed_response()
         std = _make_std()
         pattern_key = _make_pattern_key(std)
         await _store(db, pattern_key, _make_canonical_key(response), response, raw_input=None)
         await _set_pipeline_version(db, "0+stale-fingerprint")
 
-        with caplog.at_level(logging.DEBUG, logger=_CACHE_LOGGER):
+        with caplog.at_level(logging.INFO, logger=_CACHE_LOGGER):
             await _lookup(db, pattern_key, ttl_days=30)
 
-        assert any("version_mismatch" in r.message for r in caplog.records)
+        assert any(
+            "version_mismatch" in r.message and r.levelno == logging.INFO for r in caplog.records
+        )
 
 
 class TestSchemaConstraints:

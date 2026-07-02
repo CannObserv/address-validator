@@ -204,7 +204,10 @@ async def _lookup(
         # were not backfilled re-validate lazily.
         current_version = get_pipeline_version()
         if va_row["pipeline_version"] != current_version:
-            logger.debug(
+            # INFO, not DEBUG: prod runs at INFO and this is the only signal that
+            # distinguishes an expected post-bump invalidation wave from a cache
+            # regression. Keys are hashes and versions are constants — no PII.
+            logger.info(
                 "cache_lookup: version_mismatch pattern_key=%s canonical_key=%s "
                 "row_version=%s current_version=%s; treating as miss",
                 pattern_key,
@@ -253,6 +256,7 @@ async def _store(
     raw_input: str | None,
 ) -> None:
     now = _now_utc()
+    pipeline_version = get_pipeline_version()
     components_json = result.components.model_dump(mode="python") if result.components else None
     warnings_json = result.warnings
 
@@ -278,7 +282,7 @@ async def _store(
                 created_at=now,
                 last_seen_at=now,
                 validated_at=now,
-                pipeline_version=get_pipeline_version(),
+                pipeline_version=pipeline_version,
             )
             .on_conflict_do_update(
                 index_elements=[validated_addresses.c.canonical_key],
@@ -287,7 +291,7 @@ async def _store(
                 set_={
                     "last_seen_at": now,
                     "validated_at": now,
-                    "pipeline_version": get_pipeline_version(),
+                    "pipeline_version": pipeline_version,
                 },
             ),
         )

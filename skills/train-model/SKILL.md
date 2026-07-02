@@ -253,6 +253,15 @@ echo 'CUSTOM_MODEL_PATH=/path/to/src/address_validator/custom_model/usaddr-custo
   | sudo tee -a /etc/address-validator/env
 ```
 
+**Cache invalidation side effect (#145):** the deployed model's fingerprint
+becomes part of the pipeline version stamped on `validated_addresses` rows, so a
+model swap automatically invalidates the entire US validation cache. Every cached
+row lazily re-validates on next access — expect a cache-hit-rate dip and a
+USPS/Google quota spike immediately after deploy, self-healing as hot inputs
+re-validate. This is intentional: the new model changes parse output, so cached
+results from the old model are suspect. No manual `PIPELINE_CODE_VERSION` bump is
+needed for model deploys.
+
 **Commit the deployed model:**
 ```bash
 git add -f src/address_validator/custom_model/usaddr-custom.crfsuite \
@@ -280,9 +289,14 @@ Resume this step with /train-model --step observe when you have sufficient data.
 
 **Check current metrics:**
 ```bash
-source /etc/address-validator/.env
+set -a && source /etc/address-validator/.env && set +a
 uv run python scripts/model/performance.py summary --since <deploy-date>
 ```
+
+**Expected post-deploy artifacts (#145):** the admin dashboard cache-hit rate dips
+and provider usage rises for the first days after deploy while the cache
+re-validates under the new model fingerprint (`cache_lookup: version_mismatch`
+INFO events in the journal). Don't read this as a parser regression.
 
 **Generate performance report** (when sufficient data collected):
 ```bash

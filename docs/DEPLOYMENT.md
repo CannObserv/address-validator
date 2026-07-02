@@ -52,7 +52,9 @@ journalctl -u cache-sweep -p info
 **NEVER** source `/etc/address-validator/.env` before `uv run pytest`. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. For one-off scripts only:
 
 ```bash
-source /etc/address-validator/.env
+# set -a is required: the env file is systemd KEY=VALUE format with no `export`
+# statements, so a plain `source` sets shell-local vars the child python never sees.
+set -a && source /etc/address-validator/.env && set +a
 # PYTHONPATH=src is required for every command below — the package is not
 # installed editable, so `address_validator` is only importable from src/.
 export PYTHONPATH=src
