@@ -1,6 +1,8 @@
 """SQLAlchemy Core table definitions for audit and cache tables.
 
-These mirror the schemas created by Alembic migrations 001-006.
+These mirror the schema at Alembic head; tests/unit/db/test_schema_drift.py
+enforces the match (nullability, generated-ness, identity, types) against a
+migrated database. Never used for DDL — Alembic owns the schema.
 No ORM / DeclarativeBase — plain Table objects for type-safe query composition.
 """
 
@@ -63,7 +65,10 @@ validated_addresses = sa.Table(
     metadata,
     sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
     sa.Column("canonical_key", sa.Text(), nullable=False, unique=True),
-    sa.Column("provider", sa.Text(), nullable=True),
+    # NOT NULL since migration 001 (#154). Migration 006 stated the intent to
+    # relax ('' → NULL data cleanup) but never ran the ALTER; rows only exist
+    # after a successful provider call, so a provider name is always known.
+    sa.Column("provider", sa.Text(), nullable=False),
     sa.Column(
         "status",
         sa.Text(),
@@ -129,7 +134,13 @@ model_training_candidates = sa.Table(
     metadata,
     sa.Column("id", sa.BigInteger(), sa.Identity(), primary_key=True),
     sa.Column("raw_address", sa.Text(), nullable=False),
-    sa.Column("raw_address_hash", sa.Text(), nullable=False),
+    # GENERATED ALWAYS ... STORED since migration 012 — never write this column.
+    sa.Column(
+        "raw_address_hash",
+        sa.Text(),
+        sa.Computed("encode(sha256(raw_address::bytea), 'hex')", persisted=True),
+        nullable=False,
+    ),
     sa.Column("failure_type", sa.Text(), nullable=False),
     sa.Column("parsed_tokens", JSONB(), nullable=False),
     sa.Column("recovered_components", JSONB(), nullable=True),
