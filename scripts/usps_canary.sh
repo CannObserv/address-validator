@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # USPS Enhanced Addresses API switch canary — GH #155.
 #
-# Daily crontab probe for the 2026-07-12 licensing switch (window Jul 10-20):
-#   23 14 10-20 7 * /home/exedev/address-validator/scripts/usps_canary.sh
+# Daily crontab probe for the 2026-07-12 licensing switch (window Jul 10-20;
+# cutover 2026-07-12 15:00 UTC — 16:23 runs land post-cutover on switch day):
+#   23 16 10-20 7 * /home/exedev/address-validator/scripts/usps_canary.sh
 #
 # Probes (all bypass the service cache; nothing is written to the prod DB):
 #   1. OAuth2 token endpoint with production creds
