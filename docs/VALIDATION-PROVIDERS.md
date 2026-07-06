@@ -60,15 +60,17 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 Effective 2026-07-12 USPS requires a signed Addressing API License Agreement +
 Order Form + Enterprise Payment System (EPS) account, with consumption
-tier-based fees. Design doc: `docs/plans/2026-07-02-usps-enhanced-api-switch-design.md`.
+tier-based fees. **Cutover: 2026-07-12 10:00 CT (15:00 UTC). License executed
+2026-07-06.** Design doc: `docs/plans/2026-07-02-usps-enhanced-api-switch-design.md`.
 
 **Enhanced Addresses spec is published** (v3.3.1, vendored at
 `docs/usps-enhanced-addresses-v3r2.yaml`): same servers and `/address` path,
 `DPVConfirmation`/`vacant` retained — current provider works unchanged. New
 `additionalInfo` indicators are recon targets (GH #122).
 
-**Canary:** `scripts/usps_canary.sh` runs daily 14:23 UTC July 10–20 via
-crontab (`23 14 10-20 7 *`). Probes OAuth, a live `/address` call (cache
+**Canary:** `scripts/usps_canary.sh` runs daily 16:23 UTC July 10–20 via
+crontab (`23 16 10-20 7 *`) — after the 15:00 UTC cutover on switch day, so
+the July 12 run probes the post-cutover API. Probes OAuth, a live `/address` call (cache
 bypassed, no DB writes), both vendored spec checksums, and portal spec links;
 comments on GH #155 on anomaly (always on July 12). Remove the crontab entry
 after July 20.
