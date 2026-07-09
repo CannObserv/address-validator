@@ -118,3 +118,11 @@ Two design assumptions were overtaken by events the same day:
   survive to the window. Script exits non-zero on anomaly and comments on
   GH #155.
 - `USPS_API_BASE` shipped in PR #156.
+
+## Addendum 2 (2026-07-09, timeline slip)
+
+USPS moved the launch from 2026-07-12 to **2026-08-01** (time unannounced;
+canary assumes the prior 10:00 CT / 15:00 UTC carries over). License agreement
+executed 2026-07-06. Canary window shifted to **Jul 30 – Aug 9**, crontab
+`23 16 30-31 7 *` + `23 16 1-9 8 *`; script switch-day literal now `08-01`.
+Remove both crontab entries after 2026-08-09.
