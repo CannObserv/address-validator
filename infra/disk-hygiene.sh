@@ -29,7 +29,9 @@ remove_path() {
     log "would remove: $path (${size})"
   else
     log "removing: $path (${size})"
-    rm -rf -- "$path"
+    # Fail-open: a permission error (e.g. root-owned strays) must not abort
+    # the remaining hygiene sections under set -e
+    rm -rf -- "$path" 2>/dev/null || log "WARNING: could not fully remove ${path} — check ownership"
   fi
 }
 
