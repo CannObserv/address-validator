@@ -111,7 +111,7 @@ if command -v npm >/dev/null 2>&1; then
   if ((DRY_RUN)); then
     log "would run: npm cache clean --force"
   else
-    npm cache clean --force 2>/dev/null || log "npm cache clean failed (non-fatal)"
+    npm cache clean --force 2>/dev/null || warn "npm cache clean failed (non-fatal)"
   fi
 fi
 if [[ -d "${HOME}/.npm/_npx" ]]; then
@@ -125,7 +125,7 @@ if command -v uv >/dev/null 2>&1; then
   if ((DRY_RUN)); then
     log "would run: uv cache prune"
   else
-    uv cache prune 2>/dev/null || log "uv cache prune failed (non-fatal)"
+    uv cache prune 2>/dev/null || warn "uv cache prune failed (non-fatal)"
   fi
 fi
 
@@ -134,7 +134,7 @@ if [[ -x "${REPO}/.venv/bin/pre-commit" ]]; then
   if ((DRY_RUN)); then
     log "would run: pre-commit gc"
   else
-    "${REPO}/.venv/bin/pre-commit" gc 2>/dev/null || log "pre-commit gc failed (non-fatal)"
+    "${REPO}/.venv/bin/pre-commit" gc 2>/dev/null || warn "pre-commit gc failed (non-fatal)"
   fi
 fi
 
@@ -142,7 +142,7 @@ fi
 if ((!DRY_RUN)); then
   git -C "$REPO" worktree prune
 fi
-registered=$(git -C "$REPO" worktree list --porcelain | awk '/^worktree /{print $2}')
+registered=$(git -C "$REPO" worktree list --porcelain | sed -n 's/^worktree //p')
 for base in "${REPO}/.claude/worktrees" "${REPO}/.worktrees"; do
   [[ -d "$base" ]] || continue
   for dir in "$base"/*/; do
