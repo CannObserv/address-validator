@@ -7,6 +7,3 @@ User=exedev
 Environment=HOME=/home/exedev
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/exedev/address-validator/infra/disk-hygiene.sh
-
-[Install]
-WantedBy=multi-user.target
