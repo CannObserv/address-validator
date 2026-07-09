@@ -134,6 +134,7 @@ npm run format:js               # admin JS format write
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
+bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests
 ```
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff, plus ESLint + Prettier when admin JS is touched).

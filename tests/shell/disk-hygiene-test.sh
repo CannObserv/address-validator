@@ -22,6 +22,10 @@ check() {
   fi
 }
 
+# Hook-safe: under a git hook (pre-commit), exported GIT_* vars would point
+# sandbox git calls at the outer repo and recursively fire its hooks
+unset "${!GIT_@}" 2>/dev/null || true
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 sandbox="$(cd "$(mktemp -d)" && pwd -P)"
 cleanup() {
@@ -36,16 +40,20 @@ trap cleanup EXIT
 mkdir -p "$sandbox/repo/infra"
 cp "$repo_root/infra/disk-hygiene.sh" "$sandbox/repo/infra/"
 git -C "$sandbox/repo" init -q
-git -C "$sandbox/repo" -c user.name=test -c user.email=test@test commit -q --allow-empty -m init
+git -C "$sandbox/repo" -c user.name=test -c user.email=test@test commit -q --no-verify --allow-empty -m init
 SCRIPT="$sandbox/repo/infra/disk-hygiene.sh"
 OUT="$sandbox/out.log"
 
+# Per-run-unique server names: the hygiene script pgrep-matches
+# "cli/servers/<name>/" against ALL process cmdlines, so a concurrent
+# run using identical fixture names would suppress removals here
+uniq="dhtest$$"
 fake="$sandbox/home"
 servers="$fake/.vscode-server/cli/servers"
 ext="$fake/.vscode-server/extensions"
 vsix="$fake/.vscode-server/data/CachedExtensionVSIXs"
-mkdir -p "$servers"/Stable-dhtest-{keep1,keep2,old} "$ext"/dhtest.ext-1.0.{9,10} "$vsix" "$fake/.npm/_npx"/{fresh,stale}
-echo '["Stable-dhtest-keep1","Stable-dhtest-keep2"]' >"$servers/lru.json"
+mkdir -p "$servers"/Stable-${uniq}-{keep1,keep2,old} "$ext"/dhtest.ext-1.0.{9,10} "$vsix" "$fake/.npm/_npx"/{fresh,stale}
+echo "[\"Stable-${uniq}-keep1\",\"Stable-${uniq}-keep2\"]" >"$servers/lru.json"
 touch -d "2 days ago" "$ext/dhtest.ext-1.0.10"      # newer version, older mtime
 touch "$vsix/fresh.vsix"
 touch -d "20 days ago" "$vsix/stale.vsix"
@@ -57,9 +65,9 @@ mkdir -p "$sandbox/repo/.worktrees/orphan-young" "$sandbox/repo/.worktrees/orpha
 touch -d "2 hours ago" "$sandbox/repo/.worktrees/orphan-old"
 
 # du/rm fail-open fixture: unreadable subdir inside a doomed server build
-mkdir -p "$servers/Stable-dhtest-old/locked"
-touch "$servers/Stable-dhtest-old/locked/f"
-chmod 000 "$servers/Stable-dhtest-old/locked"
+mkdir -p "$servers/Stable-${uniq}-old/locked"
+touch "$servers/Stable-${uniq}-old/locked/f"
+chmod 000 "$servers/Stable-${uniq}-old/locked"
 
 # --- argument rejection ---
 rc=0
@@ -72,8 +80,8 @@ HOME=$fake "$SCRIPT" >"$OUT" 2>&1 || rc=$?
 
 check "run completes despite unremovable path" test "$rc" -eq 0
 check "unremovable path warned, not fatal" /bin/grep -q "WARNING: could not fully remove" "$OUT"
-check "kept lru server 1 survives" test -d "$servers/Stable-dhtest-keep1"
-check "kept lru server 2 survives" test -d "$servers/Stable-dhtest-keep2"
+check "kept lru server 1 survives" test -d "$servers/Stable-${uniq}-keep1"
+check "kept lru server 2 survives" test -d "$servers/Stable-${uniq}-keep2"
 check "higher extension version survives despite older mtime" test -d "$ext/dhtest.ext-1.0.10"
 check "lower extension version removed" test ! -d "$ext/dhtest.ext-1.0.9"
 check "fresh VSIX survives" test -e "$vsix/fresh.vsix"
@@ -90,7 +98,7 @@ rc=0
 HOME=$fake "$SCRIPT" >"$OUT" 2>&1 || rc=$?
 check "corrupt lru.json run exits 0" test "$rc" -eq 0
 check "corrupt lru.json warns and skips" /bin/grep -q "skipping server-build prune" "$OUT"
-check "servers untouched under corrupt lru.json" test -d "$servers/Stable-dhtest-keep1"
+check "servers untouched under corrupt lru.json" test -d "$servers/Stable-${uniq}-keep1"
 
 # --- empty lru.json also skips ---
 echo '[]' >"$servers/lru.json"

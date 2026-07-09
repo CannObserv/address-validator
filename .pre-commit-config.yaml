@@ -12,6 +12,12 @@ repos:
         files: ^(infra|tests/shell)/.*\.sh$
   - repo: local
     hooks:
+      - id: disk-hygiene-test
+        name: disk-hygiene sandbox tests
+        language: system
+        entry: bash tests/shell/disk-hygiene-test.sh
+        files: '^(infra/disk-hygiene\.sh|tests/shell/disk-hygiene-test\.sh)$'
+        pass_filenames: false
       - id: build-tailwind-css
         name: Build Tailwind CSS
         language: system
