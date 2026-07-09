@@ -6,7 +6,12 @@
 # Usage: disk-hygiene.sh [--dry-run]
 
 set -euo pipefail
+shopt -s nullglob
 
+if [[ $# -gt 1 || ($# -eq 1 && $1 != "--dry-run") ]]; then
+  echo "usage: ${0##*/} [--dry-run]" >&2
+  exit 2
+fi
 DRY_RUN=0
 if [[ "${1:-}" == "--dry-run" ]]; then
   DRY_RUN=1
@@ -18,20 +23,27 @@ USAGE_WARN_PCT=75
 VSIX_MAX_AGE_DAYS=14
 NPX_MAX_AGE_DAYS=30
 SERVER_KEEP_COUNT=2
+WORKTREE_MIN_AGE_MIN=30
 
 log() { echo "disk-hygiene: $*"; }
+
+warn() {
+  log "WARNING: $*"
+  # Real journal warning priority so `journalctl -p warning` and alerting see it
+  logger -p user.warning -t disk-hygiene "$*" 2>/dev/null || true
+}
 
 remove_path() {
   local path=$1 size
   [[ -e "$path" ]] || return 0
-  size=$(du -sh "$path" 2>/dev/null | cut -f1)
+  size=$(du -sh -- "$path" 2>/dev/null | cut -f1) || size="?"
   if ((DRY_RUN)); then
     log "would remove: $path (${size})"
   else
     log "removing: $path (${size})"
     # Fail-open: a permission error (e.g. root-owned strays) must not abort
     # the remaining hygiene sections under set -e
-    rm -rf -- "$path" 2>/dev/null || log "WARNING: could not fully remove ${path} — check ownership"
+    rm -rf -- "$path" 2>/dev/null || warn "could not fully remove ${path} — check ownership"
   fi
 }
 
@@ -40,23 +52,29 @@ log "start: $(df -h --output=used,avail,pcent / | tail -1 | xargs)"
 # --- VS Code server builds: keep N most-recent per lru.json + any running ---
 servers_dir="${VSCODE_DIR}/cli/servers"
 if [[ -d "$servers_dir" && -f "${servers_dir}/lru.json" ]]; then
-  keep=$(jq -r ".[0:${SERVER_KEEP_COUNT}][]" "${servers_dir}/lru.json")
-  for dir in "$servers_dir"/*/; do
-    dir="${dir%/}"
-    name=$(basename "$dir")
-    if grep -qxF "$name" <<<"$keep"; then
-      continue
-    fi
-    # Never delete a build with a live server process, regardless of LRU age
-    if pgrep -f "cli/servers/${name}/" >/dev/null 2>&1; then
-      log "keeping (running): $name"
-      continue
-    fi
-    remove_path "$dir"
-  done
+  keep=$(jq -r ".[0:${SERVER_KEEP_COUNT}][]" "${servers_dir}/lru.json" 2>/dev/null) || keep=""
+  if [[ -z "$keep" ]]; then
+    # An empty keep-list would delete every non-running build, including the
+    # newest — treat unreadable/empty lru.json as "skip this section"
+    warn "could not read keep-list from ${servers_dir}/lru.json — skipping server-build prune"
+  else
+    for dir in "$servers_dir"/*/; do
+      dir="${dir%/}"
+      name=$(basename "$dir")
+      if grep -qxF "$name" <<<"$keep"; then
+        continue
+      fi
+      # Never delete a build with a live server process, regardless of LRU age
+      if pgrep -f "cli/servers/${name}/" >/dev/null 2>&1; then
+        log "keeping (running): $name"
+        continue
+      fi
+      remove_path "$dir"
+    done
+  fi
 fi
 
-# --- VS Code extensions: keep newest version dir per extension id ---
+# --- VS Code extensions: keep highest version dir per extension id ---
 ext_dir="${VSCODE_DIR}/extensions"
 if [[ -d "$ext_dir" ]]; then
   while IFS= read -r old; do
@@ -66,14 +84,15 @@ import re
 import sys
 from pathlib import Path
 
-groups: dict[str, list[Path]] = {}
+groups: dict[str, list[tuple[tuple[int, ...], float, Path]]] = {}
 for d in Path(sys.argv[1]).iterdir():
     # publisher.name-1.2.3 or publisher.name-1.2.3-linux-x64
-    if d.is_dir() and (m := re.match(r"^(.+?)-(\d+\.\d+\.\d+.*)$", d.name)):
-        groups.setdefault(m.group(1), []).append(d)
-for dirs in groups.values():
-    dirs.sort(key=lambda p: p.stat().st_mtime)
-    for old in dirs[:-1]:
+    if d.is_dir() and (m := re.match(r"^(.+?)-(\d+\.\d+\.\d+)", d.name)):
+        version = tuple(int(x) for x in m.group(2).split("."))
+        groups.setdefault(m.group(1), []).append((version, d.stat().st_mtime, d))
+for entries in groups.values():
+    entries.sort()  # version first, mtime as tiebreak
+    for _, _, old in entries[:-1]:
         print(old)
 PY
   )
@@ -129,16 +148,23 @@ for base in "${REPO}/.claude/worktrees" "${REPO}/.worktrees"; do
   for dir in "$base"/*/; do
     dir="${dir%/}"
     [[ -d "$dir" ]] || continue
-    if ! grep -qxF "$dir" <<<"$registered"; then
-      remove_path "$dir"
+    if grep -qxF "$dir" <<<"$registered"; then
+      continue
     fi
+    # In-flight creation window: the dir can exist moments before git
+    # registers it — never sweep anything this young
+    if [[ -n "$(find "$dir" -maxdepth 0 -mmin "-${WORKTREE_MIN_AGE_MIN}")" ]]; then
+      log "keeping (recent, <${WORKTREE_MIN_AGE_MIN}min): $dir"
+      continue
+    fi
+    remove_path "$dir"
   done
 done
 
 # --- usage threshold warning ---
 pct=$(df --output=pcent / | tail -1 | tr -dc '0-9')
 if ((pct >= USAGE_WARN_PCT)); then
-  log "WARNING: root filesystem at ${pct}% (threshold ${USAGE_WARN_PCT}%)"
+  warn "root filesystem at ${pct}% (threshold ${USAGE_WARN_PCT}%)"
 fi
 
 log "end: $(df -h --output=used,avail,pcent / | tail -1 | xargs)"
