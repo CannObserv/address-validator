@@ -33,12 +33,22 @@ sudo cp infra/docker-prune.service infra/docker-prune.timer /etc/systemd/system/
 # Validation-cache TTL sweep timer (daily 04:00 UTC)
 sudo cp infra/cache-sweep.service infra/cache-sweep.timer /etc/systemd/system/ \
   && sudo systemctl daemon-reload && sudo systemctl enable --now cache-sweep.timer
+
+# Disk hygiene timer (weekly, Sun 05:00 UTC)
+sudo cp infra/disk-hygiene.service infra/disk-hygiene.timer /etc/systemd/system/ \
+  && sudo systemctl daemon-reload && sudo systemctl enable --now disk-hygiene.timer
 ```
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 
 ```bash
 journalctl -t docker-prune -p warning
+```
+
+Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d, uv/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Warns in journal at ≥75% root-FS usage:
+
+```bash
+journalctl -u disk-hygiene -p info
 ```
 
 The cache sweep deletes `validated_addresses` rows (and their `query_patterns` pointers) older than `VALIDATION_CACHE_TTL_DAYS`. Dry-run any time with `PYTHONPATH=src uv run python infra/sweep_cache.py --dry-run` (`PYTHONPATH=src` is required — the package is not installed editable). Logs swept counts to the journal:
