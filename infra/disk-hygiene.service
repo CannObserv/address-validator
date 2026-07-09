@@ -4,6 +4,8 @@ Description=Prune stale VS Code server builds, dev caches, orphaned worktrees
 [Service]
 Type=oneshot
 User=exedev
+Nice=10
+IOSchedulingClass=idle
 Environment=HOME=/home/exedev
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/exedev/address-validator/infra/disk-hygiene.sh
