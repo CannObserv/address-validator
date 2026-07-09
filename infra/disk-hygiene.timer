@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly disk hygiene (Sun 05:00 UTC)
+
+[Timer]
+OnCalendar=Sun 05:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

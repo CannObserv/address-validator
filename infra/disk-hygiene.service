@@ -1,0 +1,12 @@
+[Unit]
+Description=Prune stale VS Code server builds, dev caches, orphaned worktrees
+
+[Service]
+Type=oneshot
+User=exedev
+Environment=HOME=/home/exedev
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/exedev/address-validator/infra/disk-hygiene.sh
+
+[Install]
+WantedBy=multi-user.target

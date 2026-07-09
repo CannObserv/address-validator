@@ -20,7 +20,9 @@ Fixed/required: `/usr` 3.9G, Docker 2.7G (libpostal image 2.49G required for CA 
 
 ## Design
 
-### `scripts/ops/disk-hygiene.sh`
+### `infra/disk-hygiene.sh`
+
+(Moved from `scripts/ops/` at implementation time — `infra/` is the established home for timer helper scripts: `docker-prune-check.sh`, `sweep_cache.py`, `archive_audit.py`.)
 
 Idempotent, `--dry-run` flag (prints deletion list, deletes nothing). Logs before/after `df -h /` line each run.
 
