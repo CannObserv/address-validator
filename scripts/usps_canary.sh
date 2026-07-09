@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # USPS Enhanced Addresses API switch canary — GH #155.
 #
-# Daily crontab probe for the 2026-07-12 licensing switch (window Jul 10-20;
-# cutover 2026-07-12 15:00 UTC — 16:23 runs land post-cutover on switch day):
-#   23 16 10-20 7 * /home/exedev/address-validator/scripts/usps_canary.sh
+# Daily crontab probe for the 2026-08-01 licensing switch (window Jul 30 -
+# Aug 9; launch time unannounced — 16:23 UTC runs land post-cutover if the
+# prior 10:00 CT (15:00 UTC) time carries over):
+#   23 16 30-31 7 * /home/exedev/address-validator/scripts/usps_canary.sh
+#   23 16 1-9 8 * /home/exedev/address-validator/scripts/usps_canary.sh
 #
 # Probes (all bypass the service cache; nothing is written to the prod DB):
 #   1. OAuth2 token endpoint with production creds
@@ -13,7 +15,7 @@
 #   5. Developer-portal pages for spec files beyond the two known ones
 #
 # Logs to scratch/usps-canary.log (gitignored). Comments on GH #155 when any
-# probe fails or drifts — and unconditionally on July 12 (switch day).
+# probe fails or drifts — and unconditionally on August 1 (switch day).
 # Exits 1 when any probe recorded an anomaly, 0 otherwise.
 set -u
 
@@ -111,7 +113,7 @@ else
 fi
 
 # Report — on any anomaly, and unconditionally on switch day
-if [ ${#ANOMALIES[@]} -gt 0 ] || [ "$(date -u +%m-%d)" = "07-12" ]; then
+if [ ${#ANOMALIES[@]} -gt 0 ] || [ "$(date -u +%m-%d)" = "08-01" ]; then
   GH_TOKEN=$(getvar GH_TOKEN "$REPO/.env")
   export GH_TOKEN
   {
