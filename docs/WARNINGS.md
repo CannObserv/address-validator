@@ -26,11 +26,11 @@ This catalogue covers the **response `warnings` channel only**. Operational
 | Template | Emitting module | Trigger condition |
 |---|---|---|
 | `Parenthesized text removed: '{text}'` | `services/parser.py` | Parenthetical content stripped from the input before parsing; `{text}` is the removed inner text. |
-| `Ambiguous parse: repeated address numbers joined as range '{range}'` | `services/parser.py` | Two address numbers were detected and joined into a single range; `{range}` is the joined value. |
-| `Ambiguous parse: repeated labels detected; parse may be inaccurate.` | `services/parser.py` | usaddress emitted duplicate component labels; the parse may be unreliable. |
-| `Unit designator recovered from mis-tagged field: '{designator}'` | `services/parser.py` | A unit designator was found in a mis-tagged field and reassigned; `{designator}` is the recovered token. |
-| `Unit identifier fragment recovered from city field` | `services/parser.py` | A unit identifier fragment was found in the city/locality field and moved to the unit. |
-| `Unrecognized unit designator preserved: '{designator}'` | `services/parser.py` | A unit-type token not in `UNIT_MAP` was preserved as-is (GH #129); `{designator}` is the token. |
+| `Ambiguous parse: repeated address numbers joined as range '{range}'` | `services/parse_recovery.py` | Two address numbers were detected and joined into a single range; `{range}` is the joined value. |
+| `Ambiguous parse: repeated labels detected; parse may be inaccurate.` | `services/parse_recovery.py` | usaddress emitted duplicate component labels; the parse may be unreliable. |
+| `Unit designator recovered from mis-tagged field: '{designator}'` | `services/parse_recovery.py` | A unit designator was found in a mis-tagged field and reassigned; `{designator}` is the recovered token. |
+| `Unit identifier fragment recovered from city field` | `services/parse_recovery.py` | A unit identifier fragment was found in the city/locality field and moved to the unit. |
+| `Unrecognized unit designator preserved: '{designator}'` | `services/parse_recovery.py` | A unit-type token not in `UNIT_MAP` was preserved as-is (GH #129); `{designator}` is the token. |
 | `Duplicate secondary unit collapsed into '{designator} {identifier}'` | `services/parse_recovery.py` | A bare `#` unit phrase restated the same unit as a named designator (`#1, UNIT 1` — GH #170); the `#` phrase was dropped and the named unit kept. |
 | `Address has no parseable street line; passing raw input to provider` | `services/validation/pipeline.py` | No street line could be parsed; the raw input is forwarded to the validation provider. |
 | `Unrecognized province/territory: '{region}'` | `services/standardizer/ca.py` | A Canadian province/territory value was not recognized and is passed through unchanged; `{region}` is the value. |

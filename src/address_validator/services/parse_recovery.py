@@ -421,10 +421,12 @@ def _dedupe_secondary_units(
             components.pop("dependent_sub_premise_number", None)
             # Input content is being dropped — signal it, especially on the
             # clean parse path where no "Ambiguous parse" warning exists.
+            # Tokens are normalized so warning text is casing-independent.
             if warnings is not None:
                 warnings.append(
                     warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
-                        designator=dep_type, identifier=kept_id
+                        designator=_normalize_unit_value(dep_type),
+                        identifier=_normalize_unit_value(kept_id),
                     )
                 )
             return

@@ -32,7 +32,7 @@ from address_validator.services.standardizer import standardize
 # Pins — update together with PIPELINE_CODE_VERSION (see module docstring)
 # ---------------------------------------------------------------------------
 
-_PINNED_CODE_VERSION = 4
+_PINNED_CODE_VERSION = 5
 _PINNED_CORPUS_HASH = "ef9874185c970deafc6f0dba6e4d3b7f23b0b5df80337a8818194a198cc729d6"
 
 # Fixed corpus — exercises the pipeline surfaces most likely to change output:

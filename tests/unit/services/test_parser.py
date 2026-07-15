@@ -460,6 +460,17 @@ class TestRepeatedLabelFallback:
         assert vals.get("sub_premise_number") == "2"
         assert any("Duplicate secondary unit collapsed" in w for w in result.warnings)
 
+    async def test_duplicate_unit_collapse_warning_is_normalized(self) -> None:
+        """GH-170 CR round 2: the collapse warning interpolates normalized
+        (uppercased, punctuation-stripped) tokens so the same address in any
+        casing yields identical warning text.
+        """
+        outcome = await parse_address("19315 bothell everett hwy #1, unit 1 bothell, wa 98012")
+        assert any(
+            "Duplicate secondary unit collapsed into 'UNIT 1'" in w
+            for w in outcome.response.warnings
+        ), outcome.response.warnings
+
     async def test_distinct_hash_unit_and_named_unit_both_kept(self) -> None:
         """GH-170 guard: '#108 STE B' is two distinct units — no collapse.
 
