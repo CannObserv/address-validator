@@ -34,6 +34,7 @@ PARENTHESIZED_REMOVED = "Parenthesized text removed: '{text}'"
 REPEATED_NUMBERS_RANGE = "Ambiguous parse: repeated address numbers joined as range '{range}'"
 UNIT_RECOVERED_FROM_FIELD = "Unit designator recovered from mis-tagged field: '{designator}'"
 UNRECOGNIZED_UNIT_DESIGNATOR = "Unrecognized unit designator preserved: '{designator}'"
+DUPLICATE_UNIT_COLLAPSED = "Duplicate secondary unit collapsed into '{designator} {identifier}'"
 UNRECOGNIZED_REGION = "Unrecognized province/territory: '{region}'"
 
 # Authoritative list of every catalogued response warning. The drift test
@@ -46,6 +47,7 @@ CATALOGUE: tuple[str, ...] = (
     UNIT_RECOVERED_FROM_FIELD,
     UNIT_FRAGMENT_FROM_CITY,
     UNRECOGNIZED_UNIT_DESIGNATOR,
+    DUPLICATE_UNIT_COLLAPSED,
     NO_PARSEABLE_STREET,
     UNRECOGNIZED_REGION,
     PROVIDER_INFERRED,
