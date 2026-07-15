@@ -62,7 +62,10 @@ def _get(components: dict[str, str], key: str) -> str:
 
 
 # Container designators (USPS Pub 28 secondary-unit hierarchy): these render
-# before the specific unit on line 2 regardless of source order.
+# before the specific unit on line 2 regardless of source order.  Other
+# arguably-hierarchical Pub 28 designators (PIER, SLIP, STOP) were considered
+# and deliberately excluded — pairs like "PIER 5 SLIP 3" have no dominant
+# container convention, so they follow source order (GH #170 CR round 2).
 _CONTAINER_DESIGNATORS: frozenset[str] = frozenset({"BLDG", "FL"})
 
 
