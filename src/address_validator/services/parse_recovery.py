@@ -62,6 +62,9 @@ _UNIT_SLOT_PAIRS = (
 # Keys that represent unit-type fields (primary or sub-unit type).
 _UNIT_TYPE_KEYS: frozenset[str] = frozenset({"sub_premise_type", "dependent_sub_premise_type"})
 
+# type-key → paired identifier-key (derived from the slot pairs).
+_UNIT_TYPE_TO_ID: dict[str, str] = dict(_UNIT_SLOT_PAIRS)
+
 # Keys that signal the end of the street portion of an address.
 _POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area", "postcode"})
 
@@ -168,7 +171,15 @@ def collect_ambiguous_components(
         # canonical UNIT_MAP designators (GH #129: e.g. "SMP").  We still
         # require the token to *look* like a designator (alphabetic) so a
         # mislabelled number or fragment is not promoted to a slot.
-        if key in _UNIT_TYPE_KEYS and key in component_values:
+        #
+        # The same routing applies when the slot's *identifier* is already
+        # occupied even though the type is not (GH #170: "#1, UNIT 1" — the
+        # '#' phrase fills sub_premise_number before the first OccupancyType
+        # arrives).  Pairing this type with the earlier identifiers would fuse
+        # two distinct unit phrases into one.
+        if key in _UNIT_TYPE_KEYS and (
+            key in component_values or component_values.get(_UNIT_TYPE_TO_ID[key])
+        ):
             cleaned_unit_token = token.upper().replace(".", "").strip(",;")
             known_designator = cleaned_unit_token in UNIT_MAP
             if known_designator or cleaned_unit_token.isalpha():
@@ -363,6 +374,15 @@ def _normalize_unit_value(value: str) -> str:
     return value.upper().replace(".", "").strip(",;. ")
 
 
+def _normalize_unit_identifier(value: str) -> str:
+    """Normalize an identifier for duplicate comparison, dropping any '#'.
+
+    A bare ``"# 1"`` phrase and a named ``"UNIT 1"`` carry the same
+    identifier; the pound sign is a designator stand-in, not identifier text.
+    """
+    return _normalize_unit_value(value.replace("#", ""))
+
+
 def _dedupe_secondary_units(components: dict[str, str]) -> None:
     """Collapse an identical-duplicate secondary unit into a single slot.
 
@@ -375,9 +395,27 @@ def _dedupe_secondary_units(components: dict[str, str]) -> None:
     When the dependent unit's normalized (type, id) equals the primary's, drop
     the dependent slot so only one unit survives.  Distinct second units
     (``"STE J, SMP 2"``) differ in type or id and are left untouched.
+
+    A second duplicate shape (GH #170): a bare ``'#'`` phrase restated by a
+    named designator (``"#1, UNIT 1"``).  The '#' identifiers land in the
+    primary slot with no type; the named unit routes to the dependent slot.
+    When the identifiers match, the named designator wins the primary slot and
+    the '#' phrase is dropped.  Distinct pairs (``"#108 STE B"``) differ in
+    identifier and keep both slots.
     """
     primary_type = components.get("sub_premise_type")
     dep_type = components.get("dependent_sub_premise_type")
+
+    primary_unnamed = not primary_type or _normalize_unit_value(primary_type) == "#"
+    if primary_unnamed and dep_type:
+        primary_id = _normalize_unit_identifier(components.get("sub_premise_number", ""))
+        dep_id = _normalize_unit_identifier(components.get("dependent_sub_premise_number", ""))
+        if primary_id and primary_id == dep_id:
+            components["sub_premise_type"] = dep_type
+            components["sub_premise_number"] = components["dependent_sub_premise_number"]
+            components.pop("dependent_sub_premise_type", None)
+            components.pop("dependent_sub_premise_number", None)
+            return
 
     # Nothing to fold when either slot lacks a type.
     if not primary_type or not dep_type:
