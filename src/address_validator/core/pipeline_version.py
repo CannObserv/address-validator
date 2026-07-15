@@ -32,7 +32,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Bump on any code change that alters parse/standardize output. See module docstring.
-PIPELINE_CODE_VERSION = 1
+PIPELINE_CODE_VERSION = 2
 
 # Fingerprint of the active custom model; None → bundled usaddress model.
 _model_fingerprint: str | None = None

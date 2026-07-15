@@ -402,6 +402,61 @@ class TestRepeatedLabelFallback:
         assert not vals.get("dependent_sub_premise_number")
         assert "SPANAWAY" in vals.get("locality", "")
 
+    @pytest.mark.parametrize(
+        ("raw", "designator", "identifier", "city"),
+        [
+            (
+                "19315 BOTHELL EVERETT HWY #1, UNIT 1 BOTHELL, WA 98012",
+                "UNIT",
+                "1",
+                "BOTHELL",
+            ),
+            (
+                "2615 OLD HIGHWAY 99 S RD #A, UNIT A MOUNT VERNON, WA 98273-8273",
+                "UNIT",
+                "A",
+                "MOUNT VERNON",
+            ),
+            (
+                "11525 E DAY MT SPOKANE RD #B, STE B MEAD, WA 99021",
+                "STE",
+                "B",
+                "MEAD",
+            ),
+        ],
+    )
+    async def test_duplicate_hash_unit_collapsed_into_named_unit(
+        self, raw: str, designator: str, identifier: str, city: str
+    ) -> None:
+        """GH-170: '#1, UNIT 1' states the same unit twice (data-entry idiom).
+
+        usaddress tags '#' and '1,' as OccupancyIdentifier before the first
+        OccupancyType arrives, so the identifiers must not concatenate into
+        'UNIT # 1, 1' — the named designator wins and the '#' phrase is
+        dropped as a duplicate.
+        """
+        outcome = await parse_address(raw)
+        vals = outcome.response.components.values
+        assert vals.get("sub_premise_type") == designator
+        assert vals.get("sub_premise_number") == identifier
+        assert not vals.get("dependent_sub_premise_type")
+        assert not vals.get("dependent_sub_premise_number")
+        assert city in vals.get("locality", "")
+
+    async def test_distinct_hash_unit_and_named_unit_both_kept(self) -> None:
+        """GH-170 guard: '#108 STE B' is two distinct units — no collapse.
+
+        The bare '#' phrase keeps the primary slot; the named designator is
+        routed to dependent_sub_premise and neither folds into the other.
+        """
+        outcome = await parse_address("5041 RAINIER AVE S #108 STE B, SEATTLE, WA 98118-1946")
+        vals = outcome.response.components.values
+        assert "108" in vals.get("sub_premise_number", "")
+        assert "STE" not in vals.get("sub_premise_number", "")
+        assert vals.get("dependent_sub_premise_type") == "STE"
+        assert vals.get("dependent_sub_premise_number") == "B"
+        assert "SEATTLE" in vals.get("locality", "")
+
 
 # ---------------------------------------------------------------------------
 # ZIP normalisation
