@@ -383,7 +383,10 @@ def _normalize_unit_identifier(value: str) -> str:
     return _normalize_unit_value(value.replace("#", ""))
 
 
-def _dedupe_secondary_units(components: dict[str, str]) -> None:
+def _dedupe_secondary_units(
+    components: dict[str, str],
+    warnings: list[str] | None = None,
+) -> None:
     """Collapse an identical-duplicate secondary unit into a single slot.
 
     The RLE routing in :func:`collect_ambiguous_components` slots a repeated
@@ -411,10 +414,19 @@ def _dedupe_secondary_units(components: dict[str, str]) -> None:
         primary_id = _normalize_unit_identifier(components.get("sub_premise_number", ""))
         dep_id = _normalize_unit_identifier(components.get("dependent_sub_premise_number", ""))
         if primary_id and primary_id == dep_id:
+            kept_id = components["dependent_sub_premise_number"]
             components["sub_premise_type"] = dep_type
-            components["sub_premise_number"] = components["dependent_sub_premise_number"]
+            components["sub_premise_number"] = kept_id
             components.pop("dependent_sub_premise_type", None)
             components.pop("dependent_sub_premise_number", None)
+            # Input content is being dropped — signal it, especially on the
+            # clean parse path where no "Ambiguous parse" warning exists.
+            if warnings is not None:
+                warnings.append(
+                    warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
+                        designator=dep_type, identifier=kept_id
+                    )
+                )
             return
 
     # Nothing to fold when either slot lacks a type.
@@ -446,4 +458,4 @@ def recover_components(
     """
     _recover_unit_from_city(component_values, warnings)
     _recover_identifier_fragment_from_city(component_values, warnings)
-    _dedupe_secondary_units(component_values)
+    _dedupe_secondary_units(component_values, warnings)

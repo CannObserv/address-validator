@@ -442,6 +442,23 @@ class TestRepeatedLabelFallback:
         assert not vals.get("dependent_sub_premise_type")
         assert not vals.get("dependent_sub_premise_number")
         assert city in vals.get("locality", "")
+        # The dropped '#' phrase must be signalled, not silent.
+        assert any("Duplicate secondary unit collapsed" in w for w in outcome.response.warnings)
+
+    async def test_duplicate_unit_collapse_warns_on_clean_parse_path(self) -> None:
+        """GH-170 CR: the collapse heuristic also fires on a clean (non-RLE)
+        parse — '#2 BLDG 2' tags cleanly with the '#' phrase in the primary
+        slot and BLDG in the dependent slot.  Dropping the '#' phrase there
+        must emit the catalogued warning; a clean parse must never silently
+        discard input content.
+        """
+        outcome = await parse_address("123 MAIN ST #2 BLDG 2 SEATTLE, WA 98101")
+        result = outcome.response
+        assert result.type == "Street Address"
+        vals = result.components.values
+        assert vals.get("sub_premise_type") == "BLDG"
+        assert vals.get("sub_premise_number") == "2"
+        assert any("Duplicate secondary unit collapsed" in w for w in result.warnings)
 
     async def test_distinct_hash_unit_and_named_unit_both_kept(self) -> None:
         """GH-170 guard: '#108 STE B' is two distinct units — no collapse.
