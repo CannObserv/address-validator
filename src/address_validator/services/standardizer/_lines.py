@@ -61,6 +61,34 @@ def _get(components: dict[str, str], key: str) -> str:
     return val
 
 
+# Container designators (USPS Pub 28 secondary-unit hierarchy): these render
+# before the specific unit on line 2 regardless of source order.
+_CONTAINER_DESIGNATORS: frozenset[str] = frozenset({"BLDG", "FL"})
+
+
+def _sub_renders_first(components: dict[str, str], sub_type: str) -> bool:
+    """Decide line-2 slot order: does the dependent (sub) unit render first?
+
+    A container designator (BLDG/FL) always renders before the specific unit
+    per USPS Pub 28 (``"BLDG C STE 120"``).  For same-level pairs there is no
+    container relationship, so source order wins: *components* preserves
+    insertion order (token order for parsed input, JSON key order for direct
+    component input), and the slot whose keys appear first renders first
+    (GH #170: ``"#108 STE B"`` must not invert to ``"STE B # 108"``).
+    """
+    if sub_type in _CONTAINER_DESIGNATORS:
+        return True
+    keys = list(components)
+
+    def first_pos(*names: str) -> float:
+        positions = [keys.index(n) for n in names if n in keys]
+        return min(positions) if positions else float("inf")
+
+    sub_pos = first_pos("dependent_sub_premise_type", "dependent_sub_premise_number")
+    unit_pos = first_pos("sub_premise_type", "sub_premise_number")
+    return sub_pos < unit_pos
+
+
 # -- small helpers for assembling street fragments --------------------------
 
 
@@ -91,14 +119,19 @@ def _assemble_lines(
     unit_id: str,
     sub_type: str,
     sub_id: str,
+    *,
+    sub_first: bool = True,
 ) -> tuple[str, str, str]:
     """Build the three address lines from the standardised component dict.
 
     Returns ``(line1, line2, last_line)``:
 
     - **line1** — street number + street name, or PO box.
-    - **line2** — secondary-unit designators (USPS Pub 28: larger container
-      before more specific unit, e.g. ``"BLDG C STE 120"``).
+    - **line2** — secondary-unit designators.  *sub_first* controls slot
+      order: ``True`` (default) renders the dependent slot first — correct
+      when it holds a larger container (USPS Pub 28: ``"BLDG C STE 120"``);
+      callers pass :func:`_sub_renders_first` to preserve source order for
+      same-level unit pairs (GH #170).
     - **last_line** — city, state/region, and postal code in single-line
       format (``"CITY, ST ZIP"``).
     """
@@ -122,8 +155,13 @@ def _assemble_lines(
         line1 = ""
 
     # --- address line 2 ---
-    # Larger container (sub) before more specific unit (occupancy).
-    line2 = " ".join(p for p in (sub_type, sub_id, unit_type, unit_id) if p)
+    # Slot order per *sub_first* (container-first by default; source order
+    # for same-level pairs — see _sub_renders_first).
+    if sub_first:
+        ordered = (sub_type, sub_id, unit_type, unit_id)
+    else:
+        ordered = (unit_type, unit_id, sub_type, sub_id)
+    line2 = " ".join(p for p in ordered if p)
 
     # --- last line ---
     city = std.get("locality", "")
