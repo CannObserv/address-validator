@@ -11,6 +11,7 @@ from address_validator.services.standardizer._lines import (
     _get,
     _lookup,
     _std_zip,
+    _sub_renders_first,
 )
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -196,7 +197,14 @@ def standardize_us(
             std[gd_key] = v
 
     # --- assemble output lines ---
-    line1, line2, last_line = _assemble_lines(std, unit_type, unit_id, sub_type, sub_id)
+    line1, line2, last_line = _assemble_lines(
+        std,
+        unit_type,
+        unit_id,
+        sub_type,
+        sub_id,
+        sub_first=_sub_renders_first(components, sub_type),
+    )
 
     city = std.get("locality", "")
     state = std.get("administrative_area", "")

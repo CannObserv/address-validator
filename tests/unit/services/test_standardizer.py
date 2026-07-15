@@ -154,6 +154,53 @@ class TestStandardize:
         result = standardize(comps)
         assert result.address_line_2 == "STE 300"
 
+    def test_same_level_units_render_in_source_order(self) -> None:
+        """GH-170 CR: '#108 STE B' — neither unit is a container, so line 2
+        preserves source order (insertion order of the component keys)
+        instead of forcing the dependent slot first.
+        """
+        comps = {
+            "premise_number": "5041",
+            "thoroughfare_name": "RAINIER",
+            "thoroughfare_trailing_type": "AVE",
+            "sub_premise_number": "# 108",
+            "dependent_sub_premise_type": "STE",
+            "dependent_sub_premise_number": "B",
+        }
+        result = standardize(comps)
+        assert result.address_line_2 == "# 108 STE B"
+
+    def test_same_level_units_dependent_first_in_source(self) -> None:
+        """Source order also wins when the dependent slot's keys were
+        inserted first — the pair renders dependent-then-primary."""
+        comps = {
+            "premise_number": "1210",
+            "thoroughfare_name": "WENATCHEE",
+            "thoroughfare_trailing_type": "AVE",
+            "dependent_sub_premise_type": "SMP",
+            "dependent_sub_premise_number": "2",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "J",
+        }
+        result = standardize(comps)
+        assert result.address_line_2 == "SMP 2 STE J"
+
+    def test_container_unit_renders_first_regardless_of_source_order(self) -> None:
+        """USPS Pub 28: a container designator (BLDG/FL) in the dependent
+        slot renders before the specific unit even when it appeared later
+        in the source ('STE 120 BLDG C' → 'BLDG C STE 120')."""
+        comps = {
+            "premise_number": "1",
+            "thoroughfare_name": "CAMPUS",
+            "thoroughfare_trailing_type": "DR",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "120",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "C",
+        }
+        result = standardize(comps)
+        assert result.address_line_2 == "BLDG C STE 120"
+
     def test_building_name_recovery(self) -> None:
         """BLD C in premise_name should be recovered as BLDG C."""
         comps = {
@@ -204,6 +251,10 @@ class TestStandardize:
         '… STE J, SMP - 2 …' standardizes to a clean two-designator line2.
         The unknown 'SMP' designator is preserved; the comma the parser left
         on 'J,' is stripped during line assembly.
+
+        GH-170 CR: neither designator is a container, so line 2 follows
+        source order ('STE J' first) — the pre-GH-170 'SMP 2 STE J' was an
+        artifact of the fixed dependent-first assembly.
         """
         comps = {
             "premise_number": "1210",
@@ -219,7 +270,7 @@ class TestStandardize:
             "postcode": "98801",
         }
         result = standardize(comps)
-        assert result.address_line_2 == "SMP 2 STE J"
+        assert result.address_line_2 == "STE J SMP 2"
         assert "STE SMP" not in result.standardized
 
     def test_standardized_two_space_separator(self) -> None:
