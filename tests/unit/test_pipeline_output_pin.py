@@ -32,8 +32,8 @@ from address_validator.services.standardizer import standardize
 # Pins — update together with PIPELINE_CODE_VERSION (see module docstring)
 # ---------------------------------------------------------------------------
 
-_PINNED_CODE_VERSION = 5
-_PINNED_CORPUS_HASH = "ef9874185c970deafc6f0dba6e4d3b7f23b0b5df80337a8818194a198cc729d6"
+_PINNED_CODE_VERSION = 6
+_PINNED_CORPUS_HASH = "c0f8396780f7fa7a30d15c206d142505286401ab752dd0430532c19d3e57c4df"
 
 # Fixed corpus — exercises the pipeline surfaces most likely to change output:
 # cleanup regexes, directional/type abbreviation, secondary units, PO Box / rural
@@ -59,6 +59,7 @@ _CORPUS = [
     "1/2 421 Elm St Tampa FL 33602",
     "19315 BOTHELL EVERETT HWY #1, UNIT 1 BOTHELL, WA 98012",
     "5041 RAINIER AVE S #108 STE B, SEATTLE, WA 98118-1946",
+    "19315 bothell everett hwy #1, suite 1 bothell, wa 98012",
 ]
 
 

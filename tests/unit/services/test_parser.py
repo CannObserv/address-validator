@@ -471,6 +471,17 @@ class TestRepeatedLabelFallback:
             for w in outcome.response.warnings
         ), outcome.response.warnings
 
+    async def test_duplicate_unit_collapse_warning_uses_usps_abbreviation(self) -> None:
+        """GH-170 CR round 3: the collapse warning names the designator the
+        same way the standardized output will — the UNIT_MAP abbreviation
+        ('suite' → 'STE'), not the raw input token.
+        """
+        outcome = await parse_address("19315 bothell everett hwy #1, suite 1 bothell, wa 98012")
+        assert any(
+            "Duplicate secondary unit collapsed into 'STE 1'" in w
+            for w in outcome.response.warnings
+        ), outcome.response.warnings
+
     async def test_distinct_hash_unit_and_named_unit_both_kept(self) -> None:
         """GH-170 guard: '#108 STE B' is two distinct units — no collapse.
 
