@@ -171,7 +171,12 @@ async def run_reconciliation_loop(
     while True:
         await asyncio.sleep(interval_s)
         try:
-            usage = fetch_daily_usage(monitoring_client, project_id)
+            # Sync gRPC call — run in the default executor so a slow or
+            # timing-out Monitoring call cannot stall the event loop while
+            # requests are being served (GH #177).
+            usage = await asyncio.get_running_loop().run_in_executor(
+                None, fetch_daily_usage, monitoring_client, project_id
+            )
             if usage is not None:
                 reconcile_once(guard, daily_window_index, usage)
             else:

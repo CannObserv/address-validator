@@ -96,8 +96,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         config = ValidationConfig()
     registry = ProviderRegistry(config)
 
-    # Eagerly construct provider singletons so quota sync wiring runs at boot
-    registry.get_provider()
+    # Eagerly construct provider singletons so quota sync wiring runs at boot.
+    # Construction may make sync GCP network calls (Cloud Quotas / Monitoring),
+    # so it runs in the default executor to keep them off the event loop (GH #177).
+    await asyncio.get_running_loop().run_in_executor(None, registry.get_provider)
     app.state.registry = registry
 
     # Start reconciliation background task if Google provider is active
