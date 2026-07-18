@@ -52,7 +52,6 @@ omit = [
     "src/address_validator/usps_data/__init__.py",
     "src/address_validator/services/__init__.py",
     "src/address_validator/routers/__init__.py",
-    "src/address_validator/routers/v1/__init__.py",
     "src/address_validator/middleware/__init__.py",
 ]
 branch = true
