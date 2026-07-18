@@ -1,4 +1,5 @@
-"""Training candidate collection — ContextVars + fire-and-forget DB insert.
+"""Training candidate collection — ContextVars + fail-open DB insert (queued
+by the audit middleware's bounded write queue, GH #180).
 
 When the parser encounters a RepeatedLabelError or triggers post-parse recovery
 heuristics, this module records the raw address and token data as a training

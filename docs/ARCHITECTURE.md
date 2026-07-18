@@ -8,7 +8,7 @@ All source modules live under `src/address_validator/`.
 HTTP request
  └─ middleware/api_version.py  appends API-Version: 2 header on /api/v2/ responses
  └─ middleware/request_id.py  generates ULID, sets ContextVar, echoes X-Request-ID header
- └─ middleware/audit.py       records every API request to audit_log (fire-and-forget)
+ └─ middleware/audit.py       records every API request to audit_log (bounded queue + single writer task; drained on lifespan shutdown — GH #180)
  └─ routers/v2/               ISO 19160-4 surface; component_profile query param (iso-19160-4 default, usps-pub28, canada-post)
      ├─ parse            →   services/parser.py — US: usaddress wrapper (post-parse recovery in services/parse_recovery.py); CA: libpostal sidecar via LibpostalClient; component_profile controls output key vocabulary
      ├─ standardize      →   services/standardizer/ (package: us.py / ca.py / shared _lines.py) — US: ISO keys via USPS pipeline (Pub 28 abbrev tables from usps_data/); CA: ISO keys via ca.standardize_ca() (canada-post spec); enabled via check_country

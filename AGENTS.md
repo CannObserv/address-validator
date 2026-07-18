@@ -63,6 +63,7 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - `/api/v2/health` → `{"status": "ok"|"degraded", "api_version": "2", "database": "ok"|"error"|"unconfigured", "libpostal": "ok"|"unavailable"}`; HTTP 503 when degraded (libpostal state does NOT affect HTTP status)
 - Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
+- CORS: denied by default (GH #35). `ALLOWED_ORIGINS` env var grants browser origins — comma-separated list, or `*` for any; unset = no `Access-Control-Allow-Origin` ever emitted
 
 ## Logging
 

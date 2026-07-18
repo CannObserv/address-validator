@@ -15,6 +15,7 @@ from address_validator.services.libpostal_client import (
     LibpostalUnavailableError,
 )
 from address_validator.services.parse_recovery import (
+    RecoveryKind,
     collect_ambiguous_components,
     recover_components,
 )
@@ -50,6 +51,14 @@ class ParseOutcome:
     parse_type: str
     candidate_data: dict[str, Any] | None = field(default=None)
 
+
+# Recovery kinds that mark a clean parse as a training candidate: the parser
+# mis-tagged something badly enough that a heuristic had to repair it, so the
+# raw input is worth labelling for CRF retraining.  DUPLICATE_UNIT_COLLAPSED
+# is excluded — a data-entry duplicate is an input problem, not a model one.
+_CANDIDATE_RECOVERY_KINDS = frozenset(
+    {RecoveryKind.UNIT_RECOVERED, RecoveryKind.FRAGMENT_RECOVERED}
+)
 
 # Map usaddress tag names to friendlier keys.
 TAG_NAMES: dict[str, str] = {
@@ -218,21 +227,17 @@ def _parse(raw: str, country: str) -> ParseOutcome:
     logger.debug("parsed address type=%s country=%s", addr_type, country)
     component_values = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
 
-    recover_components(component_values, warnings)
+    recovery_events = recover_components(component_values, warnings)
 
     candidate_data: dict[str, Any] | None = None
-    if any(
-        "Unit designator recovered" in w or "identifier fragment" in w.lower() for w in warnings
-    ):
+    candidate_events = [e for e in recovery_events if e.kind in _CANDIDATE_RECOVERY_KINDS]
+    if candidate_events:
         candidate_data = {
             "raw_address": raw,
             "failure_type": "post_parse_recovery",
             "parsed_tokens": [(v, k) for k, v in tagged.items()],
             "recovered_components": component_values,
-            "failure_reason": (
-                "; ".join(w for w in warnings if "recovered" in w.lower())[:400]
-                or "post-parse recovery heuristics matched"
-            ),
+            "failure_reason": "; ".join(e.warning for e in candidate_events)[:400],
         }
 
     response = ParseResponseV2(

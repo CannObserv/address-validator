@@ -1,6 +1,7 @@
 """Unit tests for GCP quota sync — limit discovery and usage monitoring."""
 
 import asyncio
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -221,3 +222,46 @@ class TestRunReconciliationLoop:
         assert fetch_calls == 3
         # First tick reported usage=50 vs local=40 → adjust down by 10.
         assert guard._tokens[1] == 110.0
+
+    async def test_fetch_runs_off_event_loop(self) -> None:
+        """fetch_daily_usage is sync gRPC I/O — it must run in an executor
+        thread, never on the event loop, so a slow Monitoring call cannot
+        stall in-flight requests (GH #177)."""
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+                FixedResetQuotaWindow(limit=160, mode="hard"),
+            ],
+            provider_name="google",
+        )
+        loop_thread = threading.get_ident()
+        fetch_threads: list[int] = []
+
+        def _fake_fetch(_client, _project):
+            fetch_threads.append(threading.get_ident())
+
+        async def _fake_sleep(_seconds):
+            if fetch_threads:
+                raise asyncio.CancelledError
+
+        with (
+            patch(
+                "address_validator.services.validation.gcp_quota_sync.fetch_daily_usage",
+                side_effect=_fake_fetch,
+            ),
+            patch(
+                "address_validator.services.validation.gcp_quota_sync.asyncio.sleep",
+                side_effect=_fake_sleep,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await run_reconciliation_loop(
+                guard=guard,
+                daily_window_index=1,
+                monitoring_client=MagicMock(),
+                project_id="test",
+                interval_s=0.0,
+            )
+
+        assert fetch_threads
+        assert all(t != loop_thread for t in fetch_threads)

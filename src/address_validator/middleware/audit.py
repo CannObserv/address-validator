@@ -2,15 +2,23 @@
 
 Pure ASGI implementation — no BaseHTTPMiddleware.  Runs in the same asyncio
 task as the endpoint so ContextVars set by the validation pipeline (provider,
-status, cache_hit) are visible when the audit row is written.
+status, cache_hit) are visible when the audit row is queued.
+
+Rows are written through a bounded queue serviced by a single writer task
+(:class:`AuditWriteQueue`, GH #180): bursts beyond DB throughput apply
+backpressure by dropping rows (fail-open, logged) instead of accumulating
+unbounded fire-and-forget tasks, and the queue is drained on lifespan
+shutdown so final in-flight rows are not lost on restart.
 
 Skips non-API routes: /, /docs, /redoc, /openapi.json, /admin/*, /static/*.
 """
 
 import asyncio
+import contextlib
 import logging
 import time
 from datetime import UTC, datetime
+from typing import Any, Literal
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -33,8 +41,115 @@ from address_validator.services.training_candidates import (
 
 logger = logging.getLogger(__name__)
 
-# Strong references to fire-and-forget tasks so they aren't garbage-collected.
-_background_tasks: set[asyncio.Task[None]] = set()
+# Signals the writer task to exit after the queue ahead of it is drained.
+_SENTINEL: Any = object()
+
+_QueueItemKind = Literal["audit", "candidate"]
+
+
+class AuditWriteQueue:
+    """Bounded queue + single writer task for audit and candidate rows (GH #180).
+
+    ``enqueue()`` is synchronous and never blocks the request path: when the
+    queue is full the row is dropped with a WARNING (fail-open — the audit
+    trail is advisory, like the writes themselves).  The writer task starts
+    lazily on first enqueue (so apps without a lifespan, e.g. test minis,
+    still write) and resolves ``write_audit_row`` / ``write_training_candidate``
+    from this module's globals at call time, preserving the established
+    patch points.  ``aclose()`` drains everything already queued, then stops
+    the writer — wired to lifespan shutdown by :class:`AuditMiddleware`.
+    """
+
+    def __init__(self, maxsize: int = 1000, close_timeout_s: float = 5.0) -> None:
+        self._queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=maxsize)
+        self._task: asyncio.Task[None] | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._close_timeout_s = close_timeout_s
+        self._pending = 0
+
+    @property
+    def pending(self) -> int:
+        """Rows enqueued but not yet written (queued + in-flight)."""
+        return self._pending
+
+    def enqueue(self, kind: _QueueItemKind, engine: Any, kwargs: dict[str, Any]) -> None:
+        """Queue one row for the writer; drop it (logged) when the queue is full."""
+        self._ensure_started()
+        try:
+            self._queue.put_nowait((kind, engine, kwargs))
+            self._pending += 1
+        except asyncio.QueueFull:
+            logger.warning(
+                "audit_queue: full (%d pending) — dropping %s row (fail-open)",
+                self._queue.qsize(),
+                kind,
+            )
+
+    def _ensure_started(self) -> None:
+        """Start (or restart) the writer task on the running loop.
+
+        The loop identity check matters under test: each test gets a fresh
+        event loop while the app (and this queue) is module-scoped, so a
+        writer started on an earlier, now-closed loop must be replaced.
+        In production there is a single loop and this never re-fires.
+        """
+        loop = asyncio.get_running_loop()
+        if self._task is None or self._task.done() or self._loop is not loop:
+            if self._loop is not loop:
+                # A writer abandoned mid-write on a dead loop never ran its
+                # finally block — resynchronize the counter with what is
+                # actually still queued so `pending` cannot drift upward.
+                self._pending = self._queue.qsize()
+            self._loop = loop
+            self._task = loop.create_task(self._run(), name="audit-write-queue")
+
+    async def _run(self) -> None:
+        while True:
+            item = await self._queue.get()
+            try:
+                if item is _SENTINEL:
+                    return
+                kind, engine, kwargs = item
+                if kind == "audit":
+                    await write_audit_row(engine, **kwargs)
+                else:
+                    await write_training_candidate(engine=engine, **kwargs)
+            except Exception:
+                # write_* are fail-open already; this is defence in depth so a
+                # bug in the writer itself can never kill the queue consumer.
+                logger.exception("audit_queue: writer failed for a queued row")
+            finally:
+                if item is not _SENTINEL:
+                    self._pending -= 1
+                self._queue.task_done()
+
+    async def aclose(self) -> None:
+        """Drain queued rows and stop the writer (bounded by close_timeout_s).
+
+        No-op when the writer belongs to a different event loop (nested test
+        apps sharing this queue): awaiting a foreign-loop task raises, and
+        that loop's own lifespan shutdown is responsible for the drain.
+        """
+        task = self._task
+        if task is None or task.done():
+            self._task = None
+            return
+        if self._loop is not asyncio.get_running_loop():
+            return
+        try:
+            async with asyncio.timeout(self._close_timeout_s):
+                await self._queue.put(_SENTINEL)
+                await task
+        except TimeoutError:
+            logger.warning(
+                "audit_queue: drain timed out — cancelling writer with %d rows pending",
+                self._queue.qsize(),
+            )
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        self._task = None
+
 
 _SKIP_PREFIXES = ("/admin", "/static", "/docs", "/redoc")
 _SKIP_EXACT = {"/", "/openapi.json"}
@@ -123,14 +238,16 @@ def _emit_audit_artifacts(
     status_code: int,
     elapsed_ms: int,
     exc_info: BaseException | None,
+    queue: AuditWriteQueue,
 ) -> None:
-    """Queue fire-and-forget audit + candidate writes.
+    """Queue audit + candidate rows on the bounded write queue.
 
     Called from both the success and exception paths in AuditMiddleware. No-op
     when the app has no engine configured. `exc_info` accepts `BaseException`
     so that `asyncio.CancelledError` (and other non-`Exception` shutdown
     conditions) still produce a labeled audit row instead of a `status_code=0`
-    row with no `error_detail`.
+    row with no `error_detail`.  Enqueueing is synchronous — safe to call from
+    the middleware's ``finally`` block even under cancellation.
     """
     app = scope.get("app")
     engine = getattr(app.state, "engine", None) if app else None
@@ -160,27 +277,26 @@ def _emit_audit_artifacts(
         ):
             error_detail = "audit_invariant_violated"
 
-    task = asyncio.create_task(
-        write_audit_row(
-            engine,
-            timestamp=datetime.now(UTC),
-            request_id=get_request_id() or None,
-            client_ip=_get_client_ip(scope),
-            method=scope.get("method", ""),
-            endpoint=path,
-            status_code=status_code,
-            latency_ms=elapsed_ms,
-            provider=provider,
-            validation_status=validation_status,
-            cache_hit=cache_hit,
-            error_detail=error_detail,
-            pattern_key=pattern_key,
-            parse_type=parse_type,
-            raw_input=raw_input,
-        )
+    queue.enqueue(
+        "audit",
+        engine,
+        {
+            "timestamp": datetime.now(UTC),
+            "request_id": get_request_id() or None,
+            "client_ip": _get_client_ip(scope),
+            "method": scope.get("method", ""),
+            "endpoint": path,
+            "status_code": status_code,
+            "latency_ms": elapsed_ms,
+            "provider": provider,
+            "validation_status": validation_status,
+            "cache_hit": cache_hit,
+            "error_detail": error_detail,
+            "pattern_key": pattern_key,
+            "parse_type": parse_type,
+            "raw_input": raw_input,
+        },
     )
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
 
     # Skip training candidate write on exception — parser may have left
     # partial ContextVar state we don't want to persist.
@@ -190,29 +306,44 @@ def _emit_audit_artifacts(
     if candidate is None:
         return
     api_version: str | None = "2" if path.startswith("/api/v2/") else None
-    candidate_task = asyncio.create_task(
-        write_training_candidate(
-            engine=engine,
-            endpoint=path,
-            provider=provider,
-            api_version=api_version,
+    queue.enqueue(
+        "candidate",
+        engine,
+        {
+            "endpoint": path,
+            "provider": provider,
+            "api_version": api_version,
             **candidate,
-        )
+        },
     )
-    _background_tasks.add(candidate_task)
-    candidate_task.add_done_callback(_background_tasks.discard)
 
 
 class AuditMiddleware:
-    """Record API requests to the audit_log table after the response is sent."""
+    """Record API requests to the audit_log table after the response is sent.
+
+    Owns the :class:`AuditWriteQueue`.  On the ASGI ``lifespan`` scope the
+    middleware intercepts the ``lifespan.shutdown`` message and drains the
+    queue *before* forwarding it inward, so all queued rows are written while
+    the app's engine is still open (the lifespan handler closes it later).
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
+        self.queue = AuditWriteQueue()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "lifespan":
+            await self.app(scope, self._draining_receive(receive), send)
+            return
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+
+        # Publish the queue for observability (tests poll `pending` to wait
+        # for writes deterministically; cheap identity check per request).
+        app = scope.get("app")
+        if app is not None and getattr(app.state, "audit_queue", None) is not self.queue:
+            app.state.audit_queue = self.queue
 
         path: str = scope.get("path", "")
         if not _should_audit(path):
@@ -246,7 +377,7 @@ class AuditMiddleware:
         finally:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             try:
-                _emit_audit_artifacts(scope, path, status_code, elapsed_ms, exc_info)
+                _emit_audit_artifacts(scope, path, status_code, elapsed_ms, exc_info, self.queue)
             except Exception:
                 # Defense in depth: a bug in the helper must never mask the
                 # exception we are re-raising (or suppress a clean return).
@@ -255,3 +386,14 @@ class AuditMiddleware:
                     path,
                     get_request_id() or "?",
                 )
+
+    def _draining_receive(self, receive: Receive) -> Receive:
+        """Wrap *receive* so the write queue drains on lifespan shutdown."""
+
+        async def wrapped() -> Message:
+            message = await receive()
+            if message["type"] == "lifespan.shutdown":
+                await self.queue.aclose()
+            return message
+
+        return wrapped

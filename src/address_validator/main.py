@@ -8,10 +8,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response, status
+from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from address_validator.core.errors import APIError, api_error_response
@@ -22,10 +22,7 @@ from address_validator.middleware.api_version import ApiVersionHeaderMiddleware
 from address_validator.middleware.audit import AuditMiddleware
 from address_validator.middleware.request_id import RequestIdMiddleware
 from address_validator.models import ErrorResponse
-from address_validator.routers.admin._config import get_css_version
-from address_validator.routers.admin._config import templates as admin_templates
-from address_validator.routers.admin.deps import AdminAuthRequired, DatabaseUnavailable
-from address_validator.routers.admin.router import admin_router
+from address_validator.routers.admin.router import admin_router, register_admin_exception_handlers
 from address_validator.routers.v2 import countries as v2_countries
 from address_validator.routers.v2 import health as v2_health
 from address_validator.routers.v2 import parse as v2_parse
@@ -96,8 +93,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         config = ValidationConfig()
     registry = ProviderRegistry(config)
 
-    # Eagerly construct provider singletons so quota sync wiring runs at boot
-    registry.get_provider()
+    # Eagerly construct provider singletons so quota sync wiring runs at boot.
+    # Construction may make sync GCP network calls (Cloud Quotas / Monitoring),
+    # so it runs in the default executor to keep them off the event loop (GH #177).
+    await asyncio.get_running_loop().run_in_executor(None, registry.get_provider)
     app.state.registry = registry
 
     # Start reconciliation background task if Google provider is active
@@ -136,28 +135,24 @@ app = FastAPI(
 )
 
 
-@app.exception_handler(AdminAuthRequired)
-async def _admin_auth_redirect(request: Request, exc: AdminAuthRequired) -> Response:
-    return RedirectResponse(url=exc.redirect_url, status_code=302)
+register_admin_exception_handlers(app)
 
 
-@app.exception_handler(DatabaseUnavailable)
-async def _admin_db_unavailable(request: Request, exc: DatabaseUnavailable) -> Response:
-    return admin_templates.TemplateResponse(
-        "admin/error_503.html",
-        {
-            "request": request,
-            "user": exc.user,
-            "active_nav": "",
-            "css_version": get_css_version(),
-        },
-        status_code=503,
-    )
+def _parse_allowed_origins(value: str) -> list[str]:
+    """Parse the ``ALLOWED_ORIGINS`` env var into a list of origins.
+
+    Comma-separated origins, whitespace-tolerant. An empty/unset value yields
+    ``[]`` — the restrictive default: CORSMiddleware then never emits an
+    ``Access-Control-Allow-Origin`` grant, so browser cross-origin access is
+    denied until origins are configured explicitly (GH #35). ``*`` is passed
+    through for deployments that genuinely want any-origin access.
+    """
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_parse_allowed_origins(os.environ.get("ALLOWED_ORIGINS", "")),
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )

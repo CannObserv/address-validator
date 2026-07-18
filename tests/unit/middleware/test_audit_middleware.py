@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,6 +21,7 @@ from address_validator.db.tables import model_training_candidates as mtc
 from address_validator.main import app
 from address_validator.middleware.audit import (
     AuditMiddleware,
+    AuditWriteQueue,
     _check_validate_invariants,
     _should_audit,
 )
@@ -32,6 +34,21 @@ from tests.conftest import TEST_API_KEY
 
 # ULID: 26 Crockford base-32 characters.
 _ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
+
+
+def _wait_audit_idle(tc_app, timeout: float = 2.0) -> None:
+    """Poll until the audit write queue has processed everything it holds.
+
+    The TestClient portal loop runs in a background thread, so sleeping here
+    lets the writer task make progress. Deterministic replacement for
+    fixed-length sleeps when asserting on queued writes.
+    """
+    q = getattr(tc_app.state, "audit_queue", None)
+    assert q is not None, "audit_queue not published on app.state"
+    deadline = time.monotonic() + timeout
+    while q.pending and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert q.pending == 0, "audit queue did not drain in time"
 
 
 def test_should_audit_api_routes() -> None:
@@ -76,11 +93,15 @@ def test_audit_row_receives_request_id(client: TestClient) -> None:
                 "/api/v2/parse",
                 json={"address": "123 Main St, Springfield, IL 62704"},
             )
+            _wait_audit_idle(client.app)
     finally:
         client.app.state.engine = original_engine
 
-    mock_write.assert_called_once()
-    request_id = mock_write.call_args.kwargs["request_id"]
+    # Filter to this test's request: rows enqueued by earlier tests whose event
+    # loop ended before the writer ran are drained here too (queue carryover).
+    calls = [c for c in mock_write.call_args_list if c.kwargs["endpoint"] == "/api/v2/parse"]
+    assert len(calls) == 1
+    request_id = calls[0].kwargs["request_id"]
     assert request_id is not None, "request_id was None — middleware ordering is broken"
     assert _ULID_RE.match(request_id), f"request_id {request_id!r} is not a valid ULID"
 
@@ -560,6 +581,88 @@ async def test_audit_writes_candidate_with_endpoint_and_version(db):
     finally:
         app.state.engine = saved_engine
         app.state.api_key = saved_api_key
+
+
+# ---------------------------------------------------------------------------
+# AuditWriteQueue — bounded queue + single writer (GH #180)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditWriteQueue:
+    async def test_full_queue_drops_new_items(self, caplog: pytest.LogCaptureFixture) -> None:
+        """When the bounded queue is full, new rows are dropped (fail-open)."""
+        q = AuditWriteQueue(maxsize=2)
+        gate = asyncio.Event()
+
+        async def _blocked_write(engine, **kwargs):
+            await gate.wait()
+
+        with (
+            patch("address_validator.middleware.audit.write_audit_row", _blocked_write),
+            caplog.at_level(logging.WARNING, logger="address_validator.middleware.audit"),
+        ):
+            q.enqueue("audit", "engine", {"n": 1})
+            await asyncio.sleep(0)  # writer takes item 1 and blocks on the gate
+            q.enqueue("audit", "engine", {"n": 2})
+            q.enqueue("audit", "engine", {"n": 3})
+            q.enqueue("audit", "engine", {"n": 4})  # queue full — dropped
+            assert any("dropping" in r.message for r in caplog.records)
+            gate.set()
+            await q.aclose()
+
+    async def test_aclose_drains_pending_items(self) -> None:
+        """aclose() writes every queued row before stopping the writer."""
+        q = AuditWriteQueue()
+        mock_write = AsyncMock()
+        with patch("address_validator.middleware.audit.write_audit_row", mock_write):
+            q.enqueue("audit", "engine", {"n": 1})
+            q.enqueue("audit", "engine", {"n": 2})
+            await q.aclose()
+        assert mock_write.call_count == 2
+
+    async def test_writer_survives_write_exception(self) -> None:
+        """A failing write must not kill the writer — later rows still write."""
+        calls: list[dict] = []
+
+        async def _boom(engine, **kwargs):
+            calls.append(kwargs)
+            raise RuntimeError("db down")
+
+        with patch("address_validator.middleware.audit.write_audit_row", _boom):
+            q = AuditWriteQueue()
+            q.enqueue("audit", "engine", {"n": 1})
+            q.enqueue("audit", "engine", {"n": 2})
+            await q.aclose()
+        assert len(calls) == 2
+
+    async def test_candidate_items_routed_to_candidate_writer(self) -> None:
+        q = AuditWriteQueue()
+        mock_candidate = AsyncMock()
+        with patch("address_validator.middleware.audit.write_training_candidate", mock_candidate):
+            q.enqueue("candidate", "engine", {"raw_address": "x"})
+            await q.aclose()
+        mock_candidate.assert_called_once()
+        assert mock_candidate.call_args.kwargs["raw_address"] == "x"
+
+    def test_lifespan_shutdown_drains_queue(self) -> None:
+        """Rows enqueued during requests are written by lifespan shutdown —
+        no sleep needed, the drain guarantees it (GH #180)."""
+        mini = FastAPI()
+        mini.add_middleware(AuditMiddleware)
+        mini.add_middleware(RequestIdMiddleware)
+        mini.state.engine = MagicMock()
+
+        @mini.get("/api/v2/fake")
+        async def _fake_endpoint() -> dict[str, str]:
+            return {"ok": "true"}
+
+        mock_write = AsyncMock()
+        with (
+            patch("address_validator.middleware.audit.write_audit_row", mock_write),
+            TestClient(mini) as tc,
+        ):
+            tc.get("/api/v2/fake")
+        mock_write.assert_called_once()
 
 
 class _RateLimitedInner:
