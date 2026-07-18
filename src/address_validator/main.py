@@ -138,9 +138,21 @@ app = FastAPI(
 register_admin_exception_handlers(app)
 
 
+def _parse_allowed_origins(value: str) -> list[str]:
+    """Parse the ``ALLOWED_ORIGINS`` env var into a list of origins.
+
+    Comma-separated origins, whitespace-tolerant. An empty/unset value yields
+    ``[]`` — the restrictive default: CORSMiddleware then never emits an
+    ``Access-Control-Allow-Origin`` grant, so browser cross-origin access is
+    denied until origins are configured explicitly (GH #35). ``*`` is passed
+    through for deployments that genuinely want any-origin access.
+    """
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_parse_allowed_origins(os.environ.get("ALLOWED_ORIGINS", "")),
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )

@@ -102,3 +102,12 @@ uv run python infra/archive_audit.py --backfill
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH` | systemd `EnvironmentFile=` (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |
+
+### CORS
+
+`ALLOWED_ORIGINS` (optional, GH #35) — comma-separated browser origins granted
+cross-origin access (e.g. `https://app.example.com,https://admin.example.com`),
+or `*` for any origin. Unset (the default) emits no
+`Access-Control-Allow-Origin` header at all: server-to-server clients (curl,
+SDKs) are unaffected, browsers are denied cross-origin access. Set it in
+`/etc/address-validator/.env` and restart the service.
