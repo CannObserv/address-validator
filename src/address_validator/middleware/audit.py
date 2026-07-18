@@ -95,6 +95,11 @@ class AuditWriteQueue:
         """
         loop = asyncio.get_running_loop()
         if self._task is None or self._task.done() or self._loop is not loop:
+            if self._loop is not loop:
+                # A writer abandoned mid-write on a dead loop never ran its
+                # finally block — resynchronize the counter with what is
+                # actually still queued so `pending` cannot drift upward.
+                self._pending = self._queue.qsize()
             self._loop = loop
             self._task = loop.create_task(self._run(), name="audit-write-queue")
 

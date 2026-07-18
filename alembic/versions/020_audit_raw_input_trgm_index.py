@@ -11,6 +11,11 @@ serves arbitrary-position ILIKE patterns directly; the query needs no change.
 
 `pg_trgm` is a trusted extension since PostgreSQL 13, so CREATE EXTENSION
 requires only CREATE on the database (which the app user has), not superuser.
+
+The index is built CONCURRENTLY (CR #181 round 1): migrations run during
+lifespan startup, and a plain CREATE INDEX would hold a write lock on the
+hottest write table for the duration of the GIN build. CONCURRENTLY cannot
+run inside a transaction, hence the autocommit blocks.
 """
 
 revision: str = "020"
@@ -23,11 +28,17 @@ from alembic import op  # noqa: E402
 
 def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-    op.execute(
-        "CREATE INDEX idx_audit_raw_input_trgm ON audit_log USING gin (raw_input gin_trgm_ops)"
-    )
+    with op.get_context().autocommit_block():
+        # IF NOT EXISTS: a failed CONCURRENTLY build leaves an invalid index —
+        # drop it manually before retrying; this guard is for reruns after the
+        # index was created outside Alembic (e.g. a hotfix).
+        op.execute(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audit_raw_input_trgm "
+            "ON audit_log USING gin (raw_input gin_trgm_ops)"
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_audit_raw_input_trgm", table_name="audit_log")
+    with op.get_context().autocommit_block():
+        op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_audit_raw_input_trgm")
     # The extension is left installed — other objects may depend on it.
