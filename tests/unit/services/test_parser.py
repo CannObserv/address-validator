@@ -10,6 +10,8 @@ import usaddress
 from address_validator.services.audit import get_audit_parse_type, reset_audit_context
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parse_recovery import (
+    RecoveryEvent,
+    RecoveryKind,
     _recover_identifier_fragment_from_city,
     _recover_unit_from_city,
     recover_components,
@@ -581,13 +583,70 @@ class TestParseWarnings:
         assert any("Unit designator recovered" in w for w in result.warnings)
 
     async def test_identifier_fragment_recovered_from_city_warning(self) -> None:
-        """When _recover_identifier_fragment_from_city fires, a warning is appended."""
+        """When _recover_identifier_fragment_from_city fires, an event is recorded."""
         comps: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
-        warnings: list[str] = []
-        _recover_identifier_fragment_from_city(comps, warnings)
+        events: list[RecoveryEvent] = []
+        _recover_identifier_fragment_from_city(comps, events)
         assert comps["sub_premise_number"] == "120 K"
         assert comps["locality"] == "WALLA WALLA"
-        assert any("identifier fragment" in w.lower() for w in warnings)
+        assert [e.kind for e in events] == [RecoveryKind.FRAGMENT_RECOVERED]
+        assert any("identifier fragment" in e.warning.lower() for e in events)
+
+
+# ---------------------------------------------------------------------------
+# Structured recovery events (GH #176)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoveryEvents:
+    def test_recover_components_returns_structured_events(self) -> None:
+        c: dict[str, str] = {"locality": "BSMT, FREELAND"}
+        warnings: list[str] = []
+        events = recover_components(c, warnings)
+        assert [e.kind for e in events] == [RecoveryKind.UNIT_RECOVERED]
+        # The warnings list is derived from the events — same text, same order.
+        assert [e.warning for e in events] == warnings
+
+    def test_no_events_on_clean_components(self) -> None:
+        c: dict[str, str] = {"locality": "SPRINGFIELD"}
+        warnings: list[str] = []
+        assert recover_components(c, warnings) == []
+        assert warnings == []
+
+    def test_duplicate_unit_collapse_yields_event(self) -> None:
+        c: dict[str, str] = {
+            "sub_premise_number": "#1",
+            "dependent_sub_premise_type": "UNIT",
+            "dependent_sub_premise_number": "1",
+        }
+        warnings: list[str] = []
+        events = recover_components(c, warnings)
+        assert [e.kind for e in events] == [RecoveryKind.DUPLICATE_UNIT_COLLAPSED]
+        assert [e.warning for e in events] == warnings
+
+    async def test_candidate_collection_survives_warning_rewording(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Candidate collection is keyed on structured events, not warning
+        display text — rewording a warning must not disable it (GH #176)."""
+        monkeypatch.setattr(
+            "address_validator.core.warnings.UNIT_RECOVERED_FROM_FIELD",
+            "Completely reworded warning: '{designator}'",
+        )
+        tagged = {
+            "AddressNumber": "123",
+            "StreetName": "MAIN",
+            "StreetNamePostType": "ST",
+            "PlaceName": "BSMT, FREELAND",
+        }
+        with mock.patch(
+            "address_validator.services.parser.usaddress.tag",
+            return_value=(tagged, "Street Address"),
+        ):
+            outcome = await parse_address("123 MAIN ST BSMT, FREELAND")
+        assert outcome.candidate_data is not None
+        assert outcome.candidate_data["failure_type"] == "post_parse_recovery"
+        assert "Completely reworded warning" in outcome.candidate_data["failure_reason"]
 
 
 class TestParserLogging:

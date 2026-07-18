@@ -16,11 +16,41 @@ which it passes into :func:`collect_ambiguous_components`.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from enum import StrEnum
+
 from address_validator.core import warnings as warning_catalogue
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.states import STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
 from address_validator.usps_data.units import UNIT_MAP
+
+
+class RecoveryKind(StrEnum):
+    """Machine-readable identifier for a post-parse recovery heuristic.
+
+    Callers branch on these (e.g. the parser's training-candidate collection)
+    instead of sniffing warning display text, so rewording a warning in
+    ``core/warnings.py`` can never silently change behaviour (GH #176).
+    """
+
+    UNIT_RECOVERED = "unit_recovered"
+    FRAGMENT_RECOVERED = "fragment_recovered"
+    DUPLICATE_UNIT_COLLAPSED = "duplicate_unit_collapsed"
+
+
+@dataclass(frozen=True)
+class RecoveryEvent:
+    """A recovery heuristic that fired, with the warning text it emitted.
+
+    ``warning`` carries the fully formatted catalogue string so callers can
+    surface it (response warnings, candidate ``failure_reason``) without
+    re-deriving it from the kind.
+    """
+
+    kind: RecoveryKind
+    warning: str
+
 
 # Combined lookup for tokens that are valid address vocabulary.
 _ADDRESS_VOCABULARY: set[str] = (
@@ -222,19 +252,24 @@ def collect_ambiguous_components(
     return component_values
 
 
-def _warn_unit_recovered(warnings: list[str] | None, designator: str) -> None:
-    """Append a unit-recovered warning, including the designator token.
+def _record_unit_recovered(events: list[RecoveryEvent] | None, designator: str) -> None:
+    """Record a unit-recovered event, including the designator token.
 
     Shared by phase1/phase2 recovery helpers so the message format is
-    defined in one place.  No-op when *warnings* is ``None``.
+    defined in one place.  No-op when *events* is ``None``.
     """
-    if warnings is not None:
-        warnings.append(warning_catalogue.UNIT_RECOVERED_FROM_FIELD.format(designator=designator))
+    if events is not None:
+        events.append(
+            RecoveryEvent(
+                kind=RecoveryKind.UNIT_RECOVERED,
+                warning=warning_catalogue.UNIT_RECOVERED_FROM_FIELD.format(designator=designator),
+            )
+        )
 
 
 def _recover_unit_phase1(
     components: dict[str, str],
-    warnings: list[str] | None,
+    events: list[RecoveryEvent] | None,
 ) -> None:
     """Phase 1: peel comma-separated leading unit designators from city."""
     while True:
@@ -257,7 +292,7 @@ def _recover_unit_phase1(
                 if desig_id:
                     components[slot[1]] = desig_id
             components["locality"] = after
-            _warn_unit_recovered(warnings, desig_type)
+            _record_unit_recovered(events, desig_type)
             continue
 
         # A single word before the comma that isn't in any address
@@ -274,7 +309,7 @@ def _recover_unit_phase1(
 
 def _recover_unit_phase2(
     components: dict[str, str],
-    warnings: list[str] | None,
+    events: list[RecoveryEvent] | None,
 ) -> None:
     """Phase 2: strip bare leading unit designator (no comma) from city.
 
@@ -299,14 +334,17 @@ def _recover_unit_phase2(
         if slot:
             components[slot[0]] = first
         components["locality"] = rest
-        _warn_unit_recovered(warnings, first)
+        _record_unit_recovered(events, first)
     elif word in UNIT_MAP and slot is None:
         # All slots full — just strip the orphaned designator word.
         components["locality"] = rest
-        _warn_unit_recovered(warnings, first)
+        _record_unit_recovered(events, first)
 
 
-def _recover_unit_from_city(components: dict[str, str], warnings: list[str] | None = None) -> None:
+def _recover_unit_from_city(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
     """Move unit designators mis-tagged as part of city back to occupancy.
 
     usaddress sometimes tags secondary designators that follow the street
@@ -318,13 +356,13 @@ def _recover_unit_from_city(components: dict[str, str], warnings: list[str] | No
     This function peels off comma-separated leading segments (Phase 1)
     then checks for a bare leading designator word (Phase 2).
     """
-    _recover_unit_phase1(components, warnings)
-    _recover_unit_phase2(components, warnings)
+    _recover_unit_phase1(components, events)
+    _recover_unit_phase2(components, events)
 
 
 def _recover_identifier_fragment_from_city(
     components: dict[str, str],
-    warnings: list[str] | None = None,
+    events: list[RecoveryEvent] | None = None,
 ) -> None:
     """Move a stray single-letter unit qualifier from the start of city.
 
@@ -360,8 +398,13 @@ def _recover_identifier_fragment_from_city(
         if components.get(key):
             components[key] += f" {fragment}"
             components["locality"] = rest
-            if warnings is not None:
-                warnings.append(warning_catalogue.UNIT_FRAGMENT_FROM_CITY)
+            if events is not None:
+                events.append(
+                    RecoveryEvent(
+                        kind=RecoveryKind.FRAGMENT_RECOVERED,
+                        warning=warning_catalogue.UNIT_FRAGMENT_FROM_CITY,
+                    )
+                )
             return
 
 
@@ -385,7 +428,7 @@ def _normalize_unit_identifier(value: str) -> str:
 
 def _dedupe_secondary_units(
     components: dict[str, str],
-    warnings: list[str] | None = None,
+    events: list[RecoveryEvent] | None = None,
 ) -> None:
     """Collapse an identical-duplicate secondary unit into a single slot.
 
@@ -424,12 +467,15 @@ def _dedupe_secondary_units(
             # Tokens are normalized, and the designator uses its UNIT_MAP
             # abbreviation so the warning matches the standardized output
             # ('suite' → 'STE').
-            if warnings is not None:
+            if events is not None:
                 designator = _normalize_unit_value(dep_type)
-                warnings.append(
-                    warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
-                        designator=UNIT_MAP.get(designator, designator),
-                        identifier=_normalize_unit_value(kept_id),
+                events.append(
+                    RecoveryEvent(
+                        kind=RecoveryKind.DUPLICATE_UNIT_COLLAPSED,
+                        warning=warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
+                            designator=UNIT_MAP.get(designator, designator),
+                            identifier=_normalize_unit_value(kept_id),
+                        ),
                     )
                 )
             return
@@ -450,17 +496,26 @@ def _dedupe_secondary_units(
 def recover_components(
     component_values: dict[str, str],
     warnings: list[str] | None = None,
-) -> None:
+) -> list[RecoveryEvent]:
     """Run all post-parse recovery heuristics over *component_values* in place.
 
-    Mutates *component_values* (and appends to *warnings* when supplied):
-    moves unit designators mis-tagged into the city back onto occupancy slots,
-    repairs a stray single-letter identifier fragment at the city head, then
-    collapses an identical-duplicate secondary unit into a single slot.
+    Mutates *component_values*: moves unit designators mis-tagged into the
+    city back onto occupancy slots, repairs a stray single-letter identifier
+    fragment at the city head, then collapses an identical-duplicate secondary
+    unit into a single slot.
+
+    Returns the list of :class:`RecoveryEvent` that fired, in order.  When
+    *warnings* is supplied, each event's warning text is appended to it — the
+    warnings list is derived from the events, so the two never diverge.
+    Callers branch on the returned events (never on warning text; GH #176).
 
     This is the single entry point the parser uses for both the clean and the
     ambiguous (RepeatedLabelError) US paths.
     """
-    _recover_unit_from_city(component_values, warnings)
-    _recover_identifier_fragment_from_city(component_values, warnings)
-    _dedupe_secondary_units(component_values, warnings)
+    events: list[RecoveryEvent] = []
+    _recover_unit_from_city(component_values, events)
+    _recover_identifier_fragment_from_city(component_values, events)
+    _dedupe_secondary_units(component_values, events)
+    if warnings is not None:
+        warnings.extend(e.warning for e in events)
+    return events
