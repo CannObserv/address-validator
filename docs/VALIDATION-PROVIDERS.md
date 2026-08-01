@@ -69,13 +69,12 @@ License executed 2026-07-06.** Design doc: `docs/plans/2026-07-02-usps-enhanced-
 `DPVConfirmation`/`vacant` retained — current provider works unchanged. New
 `additionalInfo` indicators are recon targets (GH #122).
 
-**Canary:** `scripts/usps_canary.sh` runs daily 16:23 UTC July 30 – August 9
-via crontab (`23 16 30-31 7 *` + `23 16 1-9 8 *`) — after the assumed
-15:00 UTC cutover on switch day, so the August 1 run probes the post-cutover
-API. Probes OAuth, a live `/address` call (cache
-bypassed, no DB writes), both vendored spec checksums, and portal spec links;
-comments on GH #155 on anomaly (always on August 1). Remove both crontab
-entries after August 9.
+**Canary:** `scripts/usps_canary.sh` — launch validated 2026-08-01 (Enhanced
+shape live on prod, zero changes needed); post-launch watch runs daily
+16:23 UTC August 2–6 via crontab (`23 16 2-6 8 *`). Probes OAuth, a live
+`/address` call (cache bypassed, no DB writes), both vendored spec checksums,
+and portal spec links; comments on GH #155 on anomaly. Remove the crontab
+entry after August 6.
 
 If USPS starts rejecting our OAuth credentials (401/403 → `ProviderBadRequestError`,
 logged as operator-action-required) before the license is executed:
