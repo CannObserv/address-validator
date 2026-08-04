@@ -9,6 +9,9 @@
 # first-party skills there (brainstorming/, train-model/, writing-plans/)
 # alongside symlinks into skills-vendor/. The indexer does not follow
 # symlinks, so excluding skills-vendor/ already drops the vendored content.
+#
+# `.skills/` holds the vendored copy of managing-skills' doctor.sh — same
+# class of content, kept out for the same reason.
 skills-vendor/
 .claude/skills/
 .skills/

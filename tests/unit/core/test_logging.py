@@ -1,15 +1,24 @@
 """Structured-log contract tests (GH #185, skills#69, skills#81).
 
-Pins three things:
+Pins five things:
 
-1. App records render as JSON carrying ``{timestamp, level, logger, message,
+1. **The PII guard.** ``httpx``/``httpcore`` stay at WARNING regardless of
+   ``LOG_LEVEL``, and ``log_config.json`` mirrors the pin so the uvicorn boot
+   path applies it too. The libpostal sidecar is called as
+   ``GET /parse?address=<user address>`` and httpx logs full request URLs at
+   INFO, so an unpinned httpx writes address content into every log line.
+2. App records render as JSON carrying ``{timestamp, level, logger, message,
    request_id}``. A bare ``JsonFormatter()`` derives its keys from the default
    ``"%(message)s"`` fmt and silently drops level, logger, and timestamp.
-2. ``core/log_config.json`` stays valid under ``dictConfig`` (a malformed file
+3. ``LOG_LEVEL`` resolution — the only knob for app-logger verbosity, since
+   uvicorn's ``--log-level`` never touches root. Unparseable values (and
+   ``NOTSET``) fall back to INFO and report the rejected string.
+4. ``core/log_config.json`` stays valid under ``dictConfig`` (a malformed file
    fails the service at boot, not in review) and single-sources its formatter
    from ``build_json_formatter`` rather than duplicating the fmt string.
-3. A ``uvicorn.access`` record renders through that same formatter — the guard
-   against uvicorn's lines regressing to plain text next to JSON app logs.
+5. A ``uvicorn.access`` record renders through that same formatter — the guard
+   against uvicorn's lines regressing to plain text next to JSON app logs —
+   and the systemd ``ExecStart`` still passes ``--log-config``.
 """
 
 import json
