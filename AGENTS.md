@@ -186,6 +186,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/verification-before-completion` | Before claiming done or opening a PR |
 | `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
 | `/reviewing-architecture` | Architecture review |
+| `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function — "add a fitness function", "enforce this contract", "lock this rule" |
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |

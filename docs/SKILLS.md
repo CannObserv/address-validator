@@ -20,6 +20,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 |---|---|---|
 | `/reviewing-code-python-fastapi` | "CR" or "code review" | Structured tiered findings report; implements approved fixes |
 | `/reviewing-architecture` | "AR" or "architecture review" | High-level structural health, design principles, maintainability |
+| `/enforcing-architecture` | "add a fitness function", "enforce this contract", "lock this rule" | Graduates an accepted AR finding into an executable check (import-linter / module-size gate / OpenAPI drift guard). Delegated to by `/reviewing-architecture` on a `N: fix + fitness` or bare `N: fitness` directive |
 | `/security-review` | Security audit of pending branch changes | OWASP-oriented findings on current branch diff |
 | `/review` | Review a pull request | PR-level review |
 
