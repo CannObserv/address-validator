@@ -15,9 +15,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from address_validator.core.errors import APIError, api_error_response
+from address_validator.core.logging import configure_logging
 from address_validator.core.pipeline_version import load_custom_model
 from address_validator.db import engine as db_engine
-from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.api_version import ApiVersionHeaderMiddleware
 from address_validator.middleware.audit import AuditMiddleware
 from address_validator.middleware.request_id import RequestIdMiddleware
@@ -35,8 +35,13 @@ from address_validator.services.validation.registry import ProviderRegistry
 
 _THIS_DIR = Path(__file__).resolve().parent  # src/address_validator/
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
-logging.getLogger().addFilter(RequestIdFilter())
+# Structured JSON logs on stdout, with request_id attached by the handler's
+# RequestIdFilter. Under systemd, uvicorn is launched with
+# `--log-config src/address_validator/core/log_config.json`, which configures
+# the whole tree (including uvicorn's own loggers) before this module imports;
+# this call then reinstalls an equivalent root handler and is the fallback for
+# uvicorn invocations that omit --log-config.
+configure_logging()
 
 logger = logging.getLogger(__name__)
 

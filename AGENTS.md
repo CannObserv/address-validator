@@ -114,6 +114,18 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | Worktree finished | `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-destroy.sh <branch>` — never `git worktree remove` by hand |
 | Stale process suspected | `pgrep -af "\.worktrees/.*uvicorn"` lists zombies; kill all PIDs not matching `systemctl show address-validator -p MainPID` |
 
+Dev-server command (from the worktree root). `PYTHONPATH=src` is mandatory —
+the project is not installed into `.venv/`, and `--log-config`'s `"()"` factory
+is resolved by `dictConfig` before uvicorn imports the app, so a missing
+PYTHONPATH fails at boot with `Unable to configure formatter 'json'`. Always
+pass `--log-config`, or uvicorn's own lines revert to plain text alongside the
+JSON app records:
+
+```bash
+PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8001 --reload \
+  --log-config src/address_validator/core/log_config.json
+```
+
 ## Environment
 
 | File | Contents | Loaded by |

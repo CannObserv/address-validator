@@ -15,7 +15,10 @@ EnvironmentFile=-/home/exedev/address-validator/.env
 #   USPS_CONSUMER_SECRET=<secret from developer.usps.com>
 StateDirectory=address-validator
 Environment=PYTHONPATH=/home/exedev/address-validator/src
-ExecStart=/home/exedev/address-validator/.venv/bin/uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
+# --log-config: route uvicorn's own access/error loggers through the app's JSON
+# formatter (GH #185). Without it journald gets plain-text uvicorn lines mixed
+# with JSON app records. Path is relative to WorkingDirectory.
+ExecStart=/home/exedev/address-validator/.venv/bin/uvicorn address_validator.main:app --host 0.0.0.0 --port 8000 --log-config src/address_validator/core/log_config.json
 Restart=on-failure
 RestartSec=3
 

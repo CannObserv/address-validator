@@ -200,8 +200,17 @@ Requires Python ≥ 3.12.  Dependencies are managed with
 ```bash
 uv sync                  # install dependencies into .venv/
 export API_KEY="your-secret-key"
-uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8000
+export PYTHONPATH=src    # the project is not installed into .venv/ (src layout)
+uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8000 \
+  --log-config src/address_validator/core/log_config.json
 ```
+
+`--log-config` routes uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error`
+loggers through the same JSON formatter the app uses, so every line on stdout
+has the same `{timestamp, level, logger, message, request_id}` shape.  Omit it
+and uvicorn's lines fall back to plain text alongside the JSON app records.
+`PYTHONPATH=src` is required for both the app import and `--log-config`'s
+`"()"` factory reference (the systemd unit sets it via `Environment=`).
 
 A systemd unit file (`infra/address-validator.service`) is included for
 persistent deployment.  The API key is stored in
@@ -223,6 +232,8 @@ src/address_validator/
     address_format.py          # Canonical single-line address string builder
     countries.py               # SUPPORTED_COUNTRIES (US+CA), VALID_ISO2, check_country()
     errors.py                  # APIError, api_error_response()
+    logging.py                 # build_json_formatter() — single source of the JSON log schema
+    log_config.json            # uvicorn --log-config (dictConfig) sharing that formatter
   routers/
     deps.py                    # Shared FastAPI dependencies (registry, libpostal client)
     v2/                        # ISO 19160-4 surface; component_profile query param

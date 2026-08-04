@@ -6,8 +6,12 @@
 # Restart after code change
 sudo systemctl restart address-validator
 
-# Tail logs
+# Tail logs (structured JSON, one object per line — see docs/LOGGING.md)
 journalctl -u address-validator -f
+
+# Tail logs, pretty-printed / filtered by request
+journalctl -u address-validator -f -o cat | jq -c '{t:.timestamp, l:.level, rid:.request_id, m:.message}'
+journalctl -u address-validator -o cat | jq 'select(.request_id == "<ULID>")'
 
 # Re-install systemd unit after infra/address-validator.service changes
 sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload

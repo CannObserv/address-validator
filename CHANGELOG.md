@@ -6,6 +6,10 @@ and the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- **Logs are now structured JSON** ([#185](https://github.com/CannObserv/address-validator/issues/185)). Every line on stdout (and therefore in journald) is a JSON object with `{timestamp, level, logger, message, request_id}`, replacing the previous `LEVEL:name:message` text format — which carried no timestamp and silently dropped the `request_id` ULID. uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error` loggers share the same formatter via `--log-config src/address_validator/core/log_config.json`, so access lines are JSON too and are correlated by `request_id`. Operators grepping journald for the old plain-text shape must update; see [`docs/LOGGING.md`](docs/LOGGING.md).
+
 ### Changed (breaking)
 
 - **CA `POST /api/v2/parse` now reports its true source spec** ([#134](https://github.com/CannObserv/address-validator/issues/134)). For Canadian addresses, `components.spec` in the parse response is now `raw` (the honest spec for an unstandardized libpostal parse) instead of being silently relabelled `iso-19160-4`. This converges `parse` onto the same spec-selection rule `standardize` already used. Consumers keying on the parse-CA `components.spec` value must update; `standardize` CA responses are unchanged (`canada-post`).
