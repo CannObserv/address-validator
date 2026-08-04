@@ -33,13 +33,25 @@ uv run pre-commit install
 
 | Direction | Order |
 |---|---|
-| Deploy | merge to `main` → `git pull` in the main checkout → `cp` the unit → `daemon-reload` → `restart` |
-| Rollback | revert the code **and** the unit together, then `daemon-reload` → `restart` |
+| Deploy | merge to `main` → `git pull` in the main checkout → **`uv sync`** → `cp` the unit → `daemon-reload` → `restart` |
+| Rollback | revert the code **and** the unit together, then `uv sync` → `daemon-reload` → `restart` |
 
-Two ways to break it: `cp`ing the new unit before the merge lands (config file
-absent), or reverting the code while the installed unit still passes the flag.
-If the service is crashlooping after a deploy, check for that error in
-`journalctl -u address-validator -n 50` before anything else.
+Three ways to break it: `cp`ing the new unit before the merge lands (config
+file absent), reverting the code while the installed unit still passes the
+flag, or — the one that actually bit on the #185 deploy — **skipping `uv sync`
+when the branch added a dependency**.
+
+`uv sync` is not optional on any deploy that touches `pyproject.toml`. Each
+worktree has its own `.venv/`, so a dependency added while developing in a
+worktree is absent from the main checkout's venv until `uv sync` runs there.
+The service runs `/home/exedev/address-validator/.venv/bin/uvicorn` from the
+main checkout, so the missing package surfaces as the same
+`Unable to configure formatter 'json'` crashloop — the traceback's real cause
+is `ModuleNotFoundError` several frames up, which is easy to miss.
+
+If the service is crashlooping after a deploy, run
+`journalctl -u address-validator -n 50` and read the **whole** traceback, not
+just the final `ValueError`.
 
 ## Scheduled timers
 
