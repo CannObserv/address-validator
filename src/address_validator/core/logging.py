@@ -30,6 +30,22 @@ LOG_LEVEL_ENV = "LOG_LEVEL"
 
 DEFAULT_LOG_LEVEL = logging.INFO
 
+#: Third-party loggers pinned regardless of ``LOG_LEVEL``.
+#:
+#: ``httpx`` logs the full request URL at INFO, and the libpostal sidecar call is
+#: ``GET /parse?address=<the user's address>`` — so an unpinned ``httpx`` writes
+#: Canadian address content verbatim into every log line, which AGENTS.md
+#: forbids at INFO or above. ``httpcore`` dumps connection and header detail at
+#: DEBUG for the same requests.
+#:
+#: The pin is deliberately **not** derived from ``LOG_LEVEL``: raising app
+#: verbosity to debug a parse must not be able to reopen a PII leak. Mirrored in
+#: ``log_config.json`` so the uvicorn boot path applies it too.
+PINNED_LOGGER_LEVELS: dict[str, int] = {
+    "httpx": logging.WARNING,
+    "httpcore": logging.WARNING,
+}
+
 
 def build_json_formatter() -> JsonFormatter:
     """Build the JSON formatter used by every handler in the process.
@@ -64,6 +80,12 @@ def resolve_log_level(raw: str | None = None) -> tuple[int, str | None]:
     name = value.strip().upper()
     if not name:
         return DEFAULT_LOG_LEVEL, None
+    # NOTSET is in getLevelNamesMapping() but means "delegate to parent" — on the
+    # root logger that resolves to 0, i.e. emit everything from every library.
+    # An operator writing LOG_LEVEL=NOTSET means "no preference", not "firehose",
+    # so treat it as a rejected value rather than honouring it.
+    if name == "NOTSET":
+        return DEFAULT_LOG_LEVEL, value
     level = logging.getLevelNamesMapping().get(name)
     if level is None:
         return DEFAULT_LOG_LEVEL, value
@@ -96,6 +118,8 @@ def configure_logging(level: int | None = None) -> None:
 
     Under uvicorn this call also reinstalls an equivalent root handler, which is
     what keeps app logs JSON even if someone launches without ``--log-config``.
+
+    :data:`PINNED_LOGGER_LEVELS` is applied last and is not affected by *level*.
     """
     rejected: str | None = None
     if level is None:
@@ -104,6 +128,9 @@ def configure_logging(level: int | None = None) -> None:
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers = [build_stdout_handler()]
+
+    for name, pinned in PINNED_LOGGER_LEVELS.items():
+        logging.getLogger(name).setLevel(pinned)
 
     if rejected is not None:
         logging.getLogger(__name__).warning(

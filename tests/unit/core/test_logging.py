@@ -21,6 +21,7 @@ import pytest
 
 from address_validator.core.logging import (
     LOG_LEVEL_ENV,
+    PINNED_LOGGER_LEVELS,
     build_json_formatter,
     build_stdout_handler,
     configure_logging,
@@ -37,12 +38,22 @@ UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
 
 
 @pytest.fixture
-def restore_root_logger():
-    """Save/restore root handlers and level around configure_logging()."""
+def restore_root_logger(monkeypatch: pytest.MonkeyPatch):
+    """Save/restore root handlers and level around configure_logging().
+
+    Also clears any ambient ``LOG_LEVEL``: a value exported in the developer's
+    shell would otherwise change the level `configure_logging()` resolves and
+    silently suppress the records these tests parse (CI, which exports nothing,
+    would not reproduce it). Tests that want a specific level set it themselves.
+    """
+    monkeypatch.delenv(LOG_LEVEL_ENV, raising=False)
     root = logging.getLogger()
     saved_handlers, saved_level = root.handlers[:], root.level
+    saved_pinned = {n: logging.getLogger(n).level for n in PINNED_LOGGER_LEVELS}
     yield root
     root.handlers, root.level = saved_handlers, saved_level
+    for name, level in saved_pinned.items():
+        logging.getLogger(name).setLevel(level)
 
 
 class TestJsonFormatter:
@@ -137,6 +148,12 @@ class TestLogLevel:
         silently either, so the offending string comes back for the warning."""
         assert resolve_log_level("VERBOSE") == (logging.INFO, "VERBOSE")
 
+    def test_notset_is_rejected_rather_than_honoured(self) -> None:
+        """NOTSET is a real name in getLevelNamesMapping(), but on root it means
+        level 0 — emit everything from every library. An operator writing it
+        means "no preference", so it must land on INFO and be reported."""
+        assert resolve_log_level("NOTSET") == (logging.INFO, "NOTSET")
+
     def test_env_var_drives_configure_logging(
         self, monkeypatch: pytest.MonkeyPatch, restore_root_logger
     ) -> None:
@@ -161,6 +178,51 @@ class TestLogLevel:
         warning = json.loads(capsys.readouterr().out)
         assert warning["level"] == "WARNING"
         assert "LOUD" in warning["message"]
+
+
+class TestPiiPinnedLoggers:
+    """`httpx` logs the full request URL at INFO, and the libpostal sidecar call
+    is `GET /parse?address=<user address>` — so an unpinned httpx writes address
+    content into every line, which AGENTS.md forbids at INFO+."""
+
+    #: Shaped exactly like the real leaked line (see libpostal_client.py:96).
+    LEAK = (
+        "HTTP Request: GET http://localhost:4400/parse?address=4711+Yonge+Street"
+        '+Apt+1203%2C+Toronto+ON+M2N+6K8 "HTTP/1.1 200 OK"'
+    )
+
+    def test_address_bearing_httpx_record_is_suppressed(self, capsys, restore_root_logger) -> None:
+        configure_logging()
+        logging.getLogger("httpx").info(self.LEAK)
+
+        out = capsys.readouterr().out
+        assert out == "", f"address content reached the log: {out!r}"
+
+    def test_pin_survives_log_level_debug(
+        self, monkeypatch: pytest.MonkeyPatch, capsys, restore_root_logger
+    ) -> None:
+        """Raising app verbosity to debug a parse must not reopen the leak."""
+        monkeypatch.setenv(LOG_LEVEL_ENV, "DEBUG")
+        configure_logging()
+
+        logging.getLogger("httpx").info(self.LEAK)
+        logging.getLogger("httpcore.connection").debug("connect_tcp.started host=...")
+
+        assert capsys.readouterr().out == ""
+
+    def test_pinned_loggers_still_report_real_problems(self, capsys, restore_root_logger) -> None:
+        """WARNING, not silence — a sidecar failure must still surface."""
+        configure_logging()
+        logging.getLogger("httpx").warning("sidecar unreachable")
+
+        assert json.loads(capsys.readouterr().out)["message"] == "sidecar unreachable"
+
+    def test_log_config_mirrors_the_pins(self) -> None:
+        """The uvicorn boot path must apply the same pins, or the leak reopens
+        for every line logged before `main` is imported."""
+        loggers = json.loads(LOG_CONFIG_PATH.read_text())["loggers"]
+        for name, level in PINNED_LOGGER_LEVELS.items():
+            assert loggers[name]["level"] == logging.getLevelName(level)
 
 
 class TestUvicornLogConfig:

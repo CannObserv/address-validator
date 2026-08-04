@@ -63,6 +63,7 @@ Standalone CLI scripts (`scripts/db/*`, `infra/sweep_cache.py`, `infra/archive_a
 |---|---|---|
 | `address_validator.*` and every other app/library logger (via root) | `LOG_LEVEL` env var, applied by `configure_logging()` at `main` import | `INFO` |
 | `uvicorn`, `uvicorn.access`, `uvicorn.error` | uvicorn's `--log-level` flag; otherwise `log_config.json` | `INFO` |
+| `httpx`, `httpcore` | **pinned** — not configurable (see below) | `WARNING` |
 
 **`--log-level` does not affect app loggers.** Uvicorn applies it to `uvicorn.error`, `uvicorn.access`, and `uvicorn.asgi` only — it never touches the root logger. Use `LOG_LEVEL` for the app tree:
 
@@ -71,9 +72,21 @@ Standalone CLI scripts (`scripts/db/*`, `infra/sweep_cache.py`, `infra/archive_a
 LOG_LEVEL=DEBUG
 ```
 
-`log_config.json`'s `root.level` only governs the handful of lines uvicorn emits before it imports the app; `configure_logging()` runs after dictConfig and is what decides app verbosity thereafter. An unrecognized `LOG_LEVEL` falls back to `INFO` and logs a `WARNING` naming the rejected value — a typo must not take the service down at boot, but it must not pass silently either.
+`log_config.json`'s `root.level` only governs the handful of lines uvicorn emits before it imports the app; `configure_logging()` runs after dictConfig and is what decides app verbosity thereafter. An unrecognized `LOG_LEVEL` — or `NOTSET`, which on root means "emit everything from every library" and is not what an operator writing it intends — falls back to `INFO` and logs a `WARNING` naming the rejected value. A typo must not take the service down at boot, but it must not pass silently either.
 
 `DEBUG` off in production.
+
+### Pinned loggers — a PII guard, not a noise filter
+
+`httpx` and `httpcore` are held at `WARNING` **regardless of `LOG_LEVEL`**, in `core/logging.py::PINNED_LOGGER_LEVELS` and mirrored in `log_config.json` so the uvicorn boot path applies them too.
+
+`httpx` logs the full request URL at `INFO`, and the libpostal sidecar call is `GET /parse?address=<the user's address>` ([`services/libpostal_client.py`](../src/address_validator/services/libpostal_client.py)) — so an unpinned `httpx` writes Canadian address content verbatim into every log line, breaking the no-PII-at-INFO+ rule. `httpcore` adds connection and header detail at `DEBUG` for the same requests.
+
+The pin is deliberately not derived from `LOG_LEVEL`: raising app verbosity to debug a parse must not be able to reopen a PII leak. Real transport failures still surface — `WARNING` and above pass through. `tests/unit/core/test_logging.py::TestPiiPinnedLoggers` pins all of this, including that the JSON config mirrors the Python constant.
+
+A side benefit: because these two are pinned, `LOG_LEVEL=DEBUG` is effectively app-scoped and readable rather than drowned in per-request transport chatter.
+
+USPS and Google are unaffected — they `POST`, so the address is in the request body and `httpx` logs only method and URL.
 
 Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
 

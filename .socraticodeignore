@@ -11,3 +11,4 @@
 # symlinks, so excluding skills-vendor/ already drops the vendored content.
 skills-vendor/
 .claude/skills/
+.skills/
