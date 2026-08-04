@@ -57,7 +57,23 @@ Standalone CLI scripts (`scripts/db/*`, `infra/sweep_cache.py`, `infra/archive_a
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
 
-Levels come from `core/log_config.json` (root and the three uvicorn loggers at `INFO`); a uvicorn `--log-level` flag overrides them. `DEBUG` off in production.
+## Levels
+
+| Loggers | Controlled by | Default |
+|---|---|---|
+| `address_validator.*` and every other app/library logger (via root) | `LOG_LEVEL` env var, applied by `configure_logging()` at `main` import | `INFO` |
+| `uvicorn`, `uvicorn.access`, `uvicorn.error` | uvicorn's `--log-level` flag; otherwise `log_config.json` | `INFO` |
+
+**`--log-level` does not affect app loggers.** Uvicorn applies it to `uvicorn.error`, `uvicorn.access`, and `uvicorn.asgi` only — it never touches the root logger. Use `LOG_LEVEL` for the app tree:
+
+```bash
+# systemd: add to /etc/address-validator/.env, then restart
+LOG_LEVEL=DEBUG
+```
+
+`log_config.json`'s `root.level` only governs the handful of lines uvicorn emits before it imports the app; `configure_logging()` runs after dictConfig and is what decides app verbosity thereafter. An unrecognized `LOG_LEVEL` falls back to `INFO` and logs a `WARNING` naming the rejected value — a typo must not take the service down at boot, but it must not pass silently either.
+
+`DEBUG` off in production.
 
 Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
 

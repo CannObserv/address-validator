@@ -211,6 +211,8 @@ has the same `{timestamp, level, logger, message, request_id}` shape.  Omit it
 and uvicorn's lines fall back to plain text alongside the JSON app records.
 `PYTHONPATH=src` is required for both the app import and `--log-config`'s
 `"()"` factory reference (the systemd unit sets it via `Environment=`).
+Set `LOG_LEVEL=DEBUG` to raise app-logger verbosity — uvicorn's `--log-level`
+flag does not reach app loggers.  See [`docs/LOGGING.md`](docs/LOGGING.md).
 
 A systemd unit file (`infra/address-validator.service`) is included for
 persistent deployment.  The API key is stored in

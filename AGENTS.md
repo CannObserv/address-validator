@@ -108,9 +108,9 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | Code change (no env/service) | `sudo systemctl restart address-validator` |
 | Env var change | Edit `/etc/address-validator/.env`, then restart |
 | Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
-| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree with `--reload` |
+| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree using the dev-server command below (add `--reload`) |
 | Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
-| Agent-driven smoke check | Use plain `uvicorn` (no `--reload`) — the watcher process leaks if the agent shell exits before cleanup |
+| Agent-driven smoke check | Dev-server command below, minus `--reload` — the watcher process leaks if the agent shell exits before cleanup |
 | Worktree finished | `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-destroy.sh <branch>` — never `git worktree remove` by hand |
 | Stale process suspected | `pgrep -af "\.worktrees/.*uvicorn"` lists zombies; kill all PIDs not matching `systemctl show address-validator -p MainPID` |
 
@@ -130,8 +130,10 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 | File | Contents | Loaded by |
 |---|---|---|
-| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) | systemd (required) |
+| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) + `LOG_LEVEL` | systemd (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`) | systemd (optional with `-` prefix), manual `export` |
+
+`LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
 
 ## Testing and linting
 

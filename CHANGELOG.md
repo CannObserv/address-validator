@@ -9,6 +9,7 @@ and the project uses semantic versioning.
 ### Changed
 
 - **Logs are now structured JSON** ([#185](https://github.com/CannObserv/address-validator/issues/185)). Every line on stdout (and therefore in journald) is a JSON object with `{timestamp, level, logger, message, request_id}`, replacing the previous `LEVEL:name:message` text format — which carried no timestamp and silently dropped the `request_id` ULID. uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error` loggers share the same formatter via `--log-config src/address_validator/core/log_config.json`, so access lines are JSON too and are correlated by `request_id`. Operators grepping journald for the old plain-text shape must update; see [`docs/LOGGING.md`](docs/LOGGING.md).
+- **`LOG_LEVEL` env var** ([#185](https://github.com/CannObserv/address-validator/issues/185)). App-logger verbosity is now configurable (default `INFO`); previously it was hardcoded, making the `DEBUG` events catalogued in `docs/LOGGING.md` unreachable without a code change. uvicorn's `--log-level` flag does *not* affect app loggers — it only reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi`.
 
 ### Changed (breaking)
 

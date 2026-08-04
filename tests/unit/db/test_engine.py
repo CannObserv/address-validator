@@ -97,7 +97,8 @@ class TestMigrationsPreserveLoggingConfig:
         """Real invariant: an INFO record emitted by address_validator.* after
         migrations must propagate to a root-level handler.
 
-        Mirrors the production pipeline: app sets root=INFO via basicConfig,
+        Mirrors the production pipeline: app sets root=INFO via
+        core.logging.configure_logging(),
         INFO records propagate from address_validator.* to a root handler.
         Uses a private handler (rather than pytest's caplog) because
         ``caplog.at_level`` forces a level on the target logger, which would

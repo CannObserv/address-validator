@@ -20,9 +20,11 @@ from pathlib import Path
 import pytest
 
 from address_validator.core.logging import (
+    LOG_LEVEL_ENV,
     build_json_formatter,
     build_stdout_handler,
     configure_logging,
+    resolve_log_level,
 )
 from address_validator.logging_filter import RequestIdFilter
 from address_validator.middleware.request_id import _request_id_var
@@ -105,6 +107,62 @@ class TestJsonFormatter:
         assert any(isinstance(f, RequestIdFilter) for f in handler.filters)
 
 
+class TestLogLevel:
+    """`LOG_LEVEL` is the only knob for app-logger verbosity — uvicorn's
+    --log-level reaches uvicorn.error/access/asgi and never root."""
+
+    def test_defaults_to_info_when_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv(LOG_LEVEL_ENV, raising=False)
+        assert resolve_log_level() == (logging.INFO, None)
+
+    def test_blank_and_whitespace_are_treated_as_unset(self) -> None:
+        assert resolve_log_level("") == (logging.INFO, None)
+        assert resolve_log_level("   ") == (logging.INFO, None)
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("DEBUG", logging.DEBUG),
+            ("debug", logging.DEBUG),
+            ("  WaRnInG  ", logging.WARNING),
+            ("ERROR", logging.ERROR),
+            ("CRITICAL", logging.CRITICAL),
+        ],
+    )
+    def test_parses_level_names_case_insensitively(self, raw: str, expected: int) -> None:
+        assert resolve_log_level(raw) == (expected, None)
+
+    def test_unrecognized_value_falls_back_to_info_and_reports(self) -> None:
+        """A typo must not take the service down at boot — but it must not pass
+        silently either, so the offending string comes back for the warning."""
+        assert resolve_log_level("VERBOSE") == (logging.INFO, "VERBOSE")
+
+    def test_env_var_drives_configure_logging(
+        self, monkeypatch: pytest.MonkeyPatch, restore_root_logger
+    ) -> None:
+        monkeypatch.setenv(LOG_LEVEL_ENV, "DEBUG")
+        configure_logging()
+        assert logging.getLogger().level == logging.DEBUG
+
+    def test_explicit_level_argument_wins_over_env(
+        self, monkeypatch: pytest.MonkeyPatch, restore_root_logger
+    ) -> None:
+        monkeypatch.setenv(LOG_LEVEL_ENV, "DEBUG")
+        configure_logging(logging.ERROR)
+        assert logging.getLogger().level == logging.ERROR
+
+    def test_bad_env_var_warns_once_logging_is_up(
+        self, monkeypatch: pytest.MonkeyPatch, capsys, restore_root_logger
+    ) -> None:
+        monkeypatch.setenv(LOG_LEVEL_ENV, "LOUD")
+        configure_logging()
+
+        assert logging.getLogger().level == logging.INFO
+        warning = json.loads(capsys.readouterr().out)
+        assert warning["level"] == "WARNING"
+        assert "LOUD" in warning["message"]
+
+
 class TestUvicornLogConfig:
     def test_log_config_is_valid_and_shares_formatter(self) -> None:
         config = json.loads(LOG_CONFIG_PATH.read_text())
@@ -140,6 +198,16 @@ class TestUvicornLogConfig:
         finally:
             # Restore level too: dictConfig sets root + uvicorn loggers to INFO,
             # and leaking that into later tests would be an order-dependent flake.
+            #
+            # Residual hazard (benign today, but read this before debugging a
+            # weird capture failure downstream): dictConfig's non-incremental
+            # path runs _clearExistingHandlers(), which calls logging.shutdown()
+            # over every handler registered process-wide — pytest's capture
+            # handlers included. The handler objects restored below are
+            # therefore *closed*. That is harmless for StreamHandler (close()
+            # does not touch the underlying stream), which is why the suite is
+            # stable, but a handler type with real close() semantics would
+            # break here.
             for n, (handlers, propagate, level) in saved.items():
                 lg = logging.getLogger(n)
                 lg.handlers, lg.propagate, lg.level = handlers, propagate, level

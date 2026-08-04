@@ -75,9 +75,10 @@ async def _run_migrations(dsn: str) -> None:
     cfg.set_main_option("sqlalchemy.url", dsn)
 
     # Tell alembic/env.py to skip its fileConfig() call — alembic.ini's
-    # [logger_root] sets level=WARNING and would clobber the app's
-    # logging.basicConfig(level=INFO), silently dropping every INFO log from
-    # address_validator.* for the rest of the process lifetime. See #124.
+    # [logger_root] sets level=WARNING and would clobber the root level set by
+    # core.logging.configure_logging() (LOG_LEVEL, default INFO), silently
+    # dropping every INFO log from address_validator.* for the rest of the
+    # process lifetime. See #124; the logging seam itself is #185.
     # Save/restore any prior value so an external export of the same var
     # (e.g. from the launching shell) survives this call unchanged.
     skip_var = "ALEMBIC_SKIP_LOGGING_CONFIG"

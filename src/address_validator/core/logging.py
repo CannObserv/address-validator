@@ -15,11 +15,20 @@ output the rest of the cohort had to unpick.
 """
 
 import logging
+import os
 import sys
+from typing import TextIO
 
 from pythonjsonlogger.json import JsonFormatter
 
 from address_validator.logging_filter import RequestIdFilter
+
+#: Env var controlling the app-logger verbosity. Uvicorn's own three loggers are
+#: pinned by ``log_config.json`` and steered by uvicorn's ``--log-level`` flag,
+#: which never touches root — see :func:`resolve_log_level`.
+LOG_LEVEL_ENV = "LOG_LEVEL"
+
+DEFAULT_LOG_LEVEL = logging.INFO
 
 
 def build_json_formatter() -> JsonFormatter:
@@ -42,7 +51,26 @@ def build_json_formatter() -> JsonFormatter:
     )
 
 
-def build_stdout_handler() -> logging.StreamHandler:
+def resolve_log_level(raw: str | None = None) -> tuple[int, str | None]:
+    """Resolve the app log level from ``LOG_LEVEL``.
+
+    Returns ``(level, rejected)`` — *rejected* is the offending string when the
+    env var held something unparseable, else ``None``.  Unset or unparseable
+    both fall back to ``INFO``: a typo in ``LOG_LEVEL`` must not take the
+    service down at boot, but it also must not pass silently, so the caller
+    logs a warning once logging is up.
+    """
+    value = os.environ.get(LOG_LEVEL_ENV, "") if raw is None else raw
+    name = value.strip().upper()
+    if not name:
+        return DEFAULT_LOG_LEVEL, None
+    level = logging.getLevelNamesMapping().get(name)
+    if level is None:
+        return DEFAULT_LOG_LEVEL, value
+    return level, None
+
+
+def build_stdout_handler() -> logging.StreamHandler[TextIO]:
     """A stdout handler carrying the JSON formatter *and* the request-ID filter.
 
     The filter belongs on the **handler**, not on a logger: a logger-level
@@ -56,14 +84,28 @@ def build_stdout_handler() -> logging.StreamHandler:
     return handler
 
 
-def configure_logging(level: int = logging.INFO) -> None:
+def configure_logging(level: int | None = None) -> None:
     """Install the JSON stdout handler on the root logger.
 
-    Under uvicorn, ``--log-config src/address_validator/core/log_config.json``
-    configures the whole logging tree at boot and this call merely reinstalls an
-    equivalent root handler — which is what keeps app logs JSON even if someone
-    launches uvicorn without ``--log-config``.
+    *level* defaults to :envvar:`LOG_LEVEL` (``INFO`` when unset).  This runs at
+    ``main`` import time — i.e. **after** uvicorn's ``--log-config`` dictConfig —
+    so it is what actually decides the app-logger verbosity in production.
+    ``log_config.json``'s ``root.level`` only governs the handful of lines
+    uvicorn emits before it imports the app; uvicorn's ``--log-level`` flag
+    steers uvicorn's own three loggers and never touches root.
+
+    Under uvicorn this call also reinstalls an equivalent root handler, which is
+    what keeps app logs JSON even if someone launches without ``--log-config``.
     """
+    rejected: str | None = None
+    if level is None:
+        level, rejected = resolve_log_level()
+
     root = logging.getLogger()
     root.setLevel(level)
     root.handlers = [build_stdout_handler()]
+
+    if rejected is not None:
+        logging.getLogger(__name__).warning(
+            "unrecognized %s=%r — falling back to INFO", LOG_LEVEL_ENV, rejected
+        )

@@ -23,6 +23,24 @@ sudo cp infra/libpostal.service /etc/systemd/system/ && sudo systemctl daemon-re
 uv run pre-commit install
 ```
 
+### Unit file and code must move together
+
+`ExecStart` passes `--log-config src/address_validator/core/log_config.json`
+(GH #185), so the unit file and the working tree are coupled. A mismatch is a
+**boot crash**, not degraded logging — uvicorn dies with
+`ValueError: Unable to configure formatter 'json'` before binding the port, and
+`Restart=on-failure` turns that into a crashloop.
+
+| Direction | Order |
+|---|---|
+| Deploy | merge to `main` → `git pull` in the main checkout → `cp` the unit → `daemon-reload` → `restart` |
+| Rollback | revert the code **and** the unit together, then `daemon-reload` → `restart` |
+
+Two ways to break it: `cp`ing the new unit before the merge lands (config file
+absent), or reverting the code while the installed unit still passes the flag.
+If the service is crashlooping after a deploy, check for that error in
+`journalctl -u address-validator -n 50` before anything else.
+
 ## Scheduled timers
 
 ```bash
