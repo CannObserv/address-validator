@@ -87,3 +87,25 @@ class TestTagMapping:
             pytest.raises(LibpostalUnavailableError),
         ):
             await client.parse("123 Main St")
+
+    async def test_http_status_error_message_omits_the_address(
+        self, client: LibpostalClient
+    ) -> None:
+        """str(httpx.HTTPStatusError) embeds the full request URL, and the
+        sidecar is called as GET /parse?address=<user address>. The raised
+        error must carry the status code only — the address must not ride along
+        inside an exception message (GH #185)."""
+        address = "4711 Yonge Street Apt 1203, Toronto ON M2N 6K8"
+        request = httpx.Request("GET", f"http://localhost:4400/parse?address={address}")
+        status_error = httpx.HTTPStatusError(
+            "boom", request=request, response=httpx.Response(400, request=request)
+        )
+
+        with (
+            patch.object(client._http, "get", side_effect=status_error),
+            pytest.raises(LibpostalUnavailableError) as excinfo,
+        ):
+            await client.parse(address)
+
+        assert "Yonge" not in str(excinfo.value)
+        assert "400" in str(excinfo.value)

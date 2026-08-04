@@ -24,9 +24,10 @@ from alembic import context
 config = context.config
 
 # Skip fileConfig when invoked embedded inside the FastAPI app (issue #124).
-# alembic.ini's [logger_root] sets level=WARNING, which would clobber the
-# app's logging.basicConfig(level=INFO) and silently drop every INFO log from
-# the address_validator.* tree for the rest of the process lifetime.
+# alembic.ini's [logger_root] sets level=WARNING, which would clobber the root
+# level set by core.logging.configure_logging() (LOG_LEVEL, default INFO) and
+# silently drop every INFO log from the address_validator.* tree for the rest
+# of the process lifetime.
 # db.engine._run_migrations sets ALEMBIC_SKIP_LOGGING_CONFIG=1 around its
 # command.upgrade() call to suppress this path. Standalone `alembic ...`
 # invocations are unaffected. Exact-match "1" so any other value (e.g. "0",

@@ -6,6 +6,18 @@ and the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Added
+
+- **`LOG_LEVEL` env var** ([#185](https://github.com/CannObserv/address-validator/issues/185)). App-logger verbosity is now configurable (default `INFO`); previously it was hardcoded, making the `DEBUG` events catalogued in `docs/LOGGING.md` unreachable without a code change. uvicorn's `--log-level` flag does *not* affect app loggers — it only reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi`.
+
+### Fixed
+
+- **Canadian address content no longer written to logs at `INFO`** ([#185](https://github.com/CannObserv/address-validator/issues/185)). The libpostal sidecar is called as `GET /parse?address=<address>`, and `httpx` logs the full request URL at `INFO` — so every CA request emitted the user's address verbatim, contrary to the no-PII-at-INFO+ rule in `AGENTS.md`. `httpx` and `httpcore` are now pinned to `WARNING` independently of `LOG_LEVEL`, so raising verbosity cannot reopen it. Pre-dates the JSON logging work; found during review of it.
+
+### Changed
+
+- **Logs are now structured JSON** ([#185](https://github.com/CannObserv/address-validator/issues/185)). Every line on stdout (and therefore in journald) is a JSON object with `{timestamp, level, logger, message, request_id}`, replacing the previous `LEVEL:name:message` text format — which carried no timestamp and silently dropped the `request_id` ULID. uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error` loggers share the same formatter via `--log-config src/address_validator/core/log_config.json`, so access lines are JSON too and are correlated by `request_id`. Operators grepping journald for the old plain-text shape must update; see [`docs/LOGGING.md`](docs/LOGGING.md).
+
 ### Changed (breaking)
 
 - **CA `POST /api/v2/parse` now reports its true source spec** ([#134](https://github.com/CannObserv/address-validator/issues/134)). For Canadian addresses, `components.spec` in the parse response is now `raw` (the honest spec for an unstandardized libpostal parse) instead of being silently relabelled `iso-19160-4`. This converges `parse` onto the same spec-selection rule `standardize` already used. Consumers keying on the parse-CA `components.spec` value must update; `standardize` CA responses are unchanged (`canada-post`).

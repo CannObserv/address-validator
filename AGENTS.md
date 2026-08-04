@@ -99,7 +99,9 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 
-**Worktree path convention — `.worktrees/<branch-slug>/` only.** Always create worktrees via `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-create.sh [--new] <branch>` (resolves to `<repo>/.worktrees/`). Never create sibling-directory worktrees (`../address-validator-<n>/`) or hand-roll paths — these are invisible to `worktree-destroy.sh` and the source of leaked dev-server zombies. Always destroy via `worktree-destroy.sh <branch>`; never run `git worktree remove` by hand. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
+**Worktree path convention — `.worktrees/<branch-slug>/` only.** Always create worktrees via `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-create.sh [--new] <branch>` (resolves to `<repo>/.worktrees/`). Never create sibling-directory worktrees (`../address-validator-<n>/`) or hand-roll paths — these are invisible to `worktree-destroy.sh` and the source of leaked dev-server zombies. Always destroy via `worktree-destroy.sh <branch>`; never run `git worktree remove` by hand.
+
+**Worktrees that have had `.skills/doctor.sh` run in them need `worktree-destroy.sh <branch> --force`.** The doctor heals dangling vendor symlinks by running `git submodule update --init`, and git refuses to remove a worktree containing checked-out submodules (`fatal: working trees containing submodules cannot be moved or removed`). The `/reviewing-code-python-fastapi` preflight invokes the doctor automatically, so any worktree that has been through a code review is in this state. Note `--force` also bypasses git's dirty-tree check — commit or stash first. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
 
 ## Server lifecycle
 
@@ -108,18 +110,32 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | Code change (no env/service) | `sudo systemctl restart address-validator` |
 | Env var change | Edit `/etc/address-validator/.env`, then restart |
 | Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
-| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree with `--reload` |
+| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree using the dev-server command below (add `--reload`) |
 | Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
-| Agent-driven smoke check | Use plain `uvicorn` (no `--reload`) — the watcher process leaks if the agent shell exits before cleanup |
+| Agent-driven smoke check | Dev-server command below, minus `--reload` — the watcher process leaks if the agent shell exits before cleanup |
 | Worktree finished | `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-destroy.sh <branch>` — never `git worktree remove` by hand |
 | Stale process suspected | `pgrep -af "\.worktrees/.*uvicorn"` lists zombies; kill all PIDs not matching `systemctl show address-validator -p MainPID` |
+
+Dev-server command (from the worktree root). `PYTHONPATH=src` is mandatory —
+the project is not installed into `.venv/`, and `--log-config`'s `"()"` factory
+is resolved by `dictConfig` before uvicorn imports the app, so a missing
+PYTHONPATH fails at boot with `Unable to configure formatter 'json'`. Always
+pass `--log-config`, or uvicorn's own lines revert to plain text alongside the
+JSON app records:
+
+```bash
+PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8001 --reload \
+  --log-config src/address_validator/core/log_config.json
+```
 
 ## Environment
 
 | File | Contents | Loaded by |
 |---|---|---|
-| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) | systemd (required) |
+| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) + `LOG_LEVEL` | systemd (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`) | systemd (optional with `-` prefix), manual `export` |
+
+`LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
 
 ## Testing and linting
 
@@ -186,6 +202,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/verification-before-completion` | Before claiming done or opening a PR |
 | `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
 | `/reviewing-architecture` | Architecture review |
+| `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function — "add a fitness function", "enforce this contract", "lock this rule" |
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |

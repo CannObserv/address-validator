@@ -6,8 +6,12 @@
 # Restart after code change
 sudo systemctl restart address-validator
 
-# Tail logs
+# Tail logs (structured JSON, one object per line — see docs/LOGGING.md)
 journalctl -u address-validator -f
+
+# Tail logs, pretty-printed / filtered by request
+journalctl -u address-validator -f -o cat | jq -c '{t:.timestamp, l:.level, rid:.request_id, m:.message}'
+journalctl -u address-validator -o cat | jq 'select(.request_id == "<ULID>")'
 
 # Re-install systemd unit after infra/address-validator.service changes
 sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload
@@ -18,6 +22,24 @@ sudo cp infra/libpostal.service /etc/systemd/system/ && sudo systemctl daemon-re
 # Install pre-commit hooks (ruff + Tailwind CSS build)
 uv run pre-commit install
 ```
+
+### Unit file and code must move together
+
+`ExecStart` passes `--log-config src/address_validator/core/log_config.json`
+(GH #185), so the unit file and the working tree are coupled. A mismatch is a
+**boot crash**, not degraded logging — uvicorn dies with
+`ValueError: Unable to configure formatter 'json'` before binding the port, and
+`Restart=on-failure` turns that into a crashloop.
+
+| Direction | Order |
+|---|---|
+| Deploy | merge to `main` → `git pull` in the main checkout → `cp` the unit → `daemon-reload` → `restart` |
+| Rollback | revert the code **and** the unit together, then `daemon-reload` → `restart` |
+
+Two ways to break it: `cp`ing the new unit before the merge lands (config file
+absent), or reverting the code while the installed unit still passes the flag.
+If the service is crashlooping after a deploy, check for that error in
+`journalctl -u address-validator -n 50` before anything else.
 
 ## Scheduled timers
 

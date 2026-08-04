@@ -69,7 +69,9 @@ services/training_candidates.py  training ContextVars + write_training_candidate
 services/training_batches.py    batch lifecycle — ALLOWED_TRANSITIONS state machine + CRUD (create_batch, transition_status, advance_step, assign_candidates, unassign_candidates, get_batch_id_by_slug, record_upstream_pr); admin routes AND scripts/model/*.py call through this for all status transitions
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
-logging_filter.py   RequestIdFilter — injects request_id into every LogRecord via root logger
+logging_filter.py   RequestIdFilter — injects request_id into every LogRecord; attached to the stdout handler (not a logger) so propagated records carry it
+core/logging.py     build_json_formatter() (single source of truth for the JSON schema) + build_stdout_handler() + configure_logging()
+core/log_config.json  uvicorn --log-config dictConfig — routes uvicorn/uvicorn.access/uvicorn.error through build_json_formatter()
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)

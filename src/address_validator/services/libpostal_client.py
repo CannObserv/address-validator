@@ -100,7 +100,15 @@ class LibpostalClient:
             raise LibpostalUnavailableError(str(exc)) from exc
         except httpx.HTTPStatusError as exc:
             logger.warning("libpostal sidecar returned %s", exc.response.status_code)
-            raise LibpostalUnavailableError(str(exc)) from exc
+            # Status code only, never str(exc): httpx embeds the full request URL
+            # in HTTPStatusError's message, and this request is
+            # GET /parse?address=<the user's address>. Nothing logs this message
+            # today, but it travels up through three call sites and a
+            # `raise ... from`, so keeping the address out of it is the cheap
+            # guard. See GH #185 and PINNED_LOGGER_LEVELS in core/logging.py.
+            raise LibpostalUnavailableError(
+                f"libpostal sidecar returned {exc.response.status_code}"
+            ) from exc
         except RuntimeError as exc:
             # httpx raises RuntimeError when the client is closed (e.g. during shutdown)
             logger.warning("libpostal client not usable: %s", exc)

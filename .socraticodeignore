@@ -1,0 +1,17 @@
+# .socraticodeignore — semantic-index exclusions (gitignore syntax).
+# Layered on SocratiCode's built-in defaults + .gitignore.
+#
+# Vendored skill trees (managing-skills submodules) are not this project's
+# code: they inflate embedding time and outrank first-party code in
+# codebase_search results. See GH #182 / gregoryfoster/skills#76.
+#
+# NOTE: `skills/` is deliberately NOT excluded — this repo authors
+# first-party skills there (brainstorming/, train-model/, writing-plans/)
+# alongside symlinks into skills-vendor/. The indexer does not follow
+# symlinks, so excluding skills-vendor/ already drops the vendored content.
+#
+# `.skills/` holds the vendored copy of managing-skills' doctor.sh — same
+# class of content, kept out for the same reason.
+skills-vendor/
+.claude/skills/
+.skills/
