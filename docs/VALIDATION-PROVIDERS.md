@@ -77,11 +77,12 @@ License executed 2026-07-06.** Design doc: `docs/plans/2026-07-02-usps-enhanced-
 `additionalInfo` indicators are recon targets (GH #122).
 
 **Canary:** `scripts/usps_canary.sh` — launch validated 2026-08-01 (Enhanced
-shape live on prod, zero changes needed); post-launch watch runs daily
-16:23 UTC August 2–6 via crontab (`23 16 2-6 8 *`). Probes OAuth, a live
-`/address` call (cache bypassed, no DB writes), both vendored spec checksums,
-and portal spec links; comments on GH #155 on anomaly. Remove the crontab
-entry after August 6.
+shape live on prod, zero changes needed). USPS was disabled Aug 2–6 (billing
+freeze) then reinstated 2026-08-06; a short post-reinstatement watch runs
+daily 16:23 UTC August 7–8 via crontab (`23 16 7-8 8 *`). Probes OAuth, a
+live `/address` call (cache bypassed, no DB writes), both vendored spec
+checksums, and portal spec links; comments on GH #155 on anomaly. Remove the
+crontab entry after August 8.
 
 If USPS starts rejecting our OAuth credentials (401/403 → `ProviderBadRequestError`,
 logged as operator-action-required) before the license is executed:
