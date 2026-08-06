@@ -7,8 +7,13 @@
     },
     {
       "name": "usps-api-spec",
-      "path": "./docs/usps-addresses-v3r2_3.yaml",
-      "description": "USPS Address Validation API v3 OpenAPI spec — upstream provider contract, request/response shapes, DPV fields."
+      "path": "./docs/usps-addresses-v3r2_4.yaml",
+      "description": "USPS Addresses API v3 OpenAPI spec (v3.2.3, pre-Enhanced) — legacy provider contract, request/response shapes, DPV fields. Superseded in production by usps-enhanced-api-spec; retained for comparison."
+    },
+    {
+      "name": "usps-enhanced-api-spec",
+      "path": "./docs/usps-enhanced-addresses-v3r2.yaml",
+      "description": "USPS Enhanced Addresses API OpenAPI spec (v3.3.1) — the contract live in production since 2026-08-01. Same servers and /address path as v3.2.3, DPVConfirmation/vacant retained, plus the additionalInfo indicator set."
     },
     {
       "name": "usps-pub28-reference",

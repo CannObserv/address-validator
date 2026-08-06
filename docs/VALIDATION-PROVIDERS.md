@@ -48,7 +48,14 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 
 ## USPS provider
 
-- API: USPS Addresses API v3. Spec archived at `docs/usps-addresses-v3r2_4.yaml`.
+- API: USPS Addresses API v3. Spec archived at `docs/usps-addresses-v3r2_4.yaml`;
+  the Enhanced spec live in production is `docs/usps-enhanced-addresses-v3r2.yaml`.
+  **Vendoring a new spec revision is a two-file change** — add/replace the YAML *and*
+  repoint the matching entry in `.socraticodecontextartifacts.json`. A stale path there
+  is skipped silently by the SocratiCode server (short artifact count, no error), and
+  blocks `mcp-driver.mjs` until `INDEX_TIMEOUT_MS`. Verify with
+  `node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs validate-manifest .`
+  then re-run `codebase_context_index`.
 - Auth: OAuth2 client credentials. Token cached 55 min in-process (`asyncio.Lock` prevents concurrent refresh races).
 - Rate limit: multi-window quota guard — per-second soft window (default 5 req/s), per-day soft
   window (default 10 000/day). Configurable via `USPS_RATE_LIMIT_RPS` and `USPS_DAILY_LIMIT`.
