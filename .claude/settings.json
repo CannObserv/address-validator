@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/skills-submodule-update.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/skills-submodule-update.sh\""
           }
         ]
       }
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/context-budget-guard.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/context-budget-guard.sh\"",
             "timeout": 10
           }
         ]

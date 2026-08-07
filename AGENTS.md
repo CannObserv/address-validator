@@ -98,8 +98,9 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
-- Worktrees live at `.worktrees/<branch-slug>/` only; always create and destroy them via the `using-git-worktrees` scripts, never `git worktree remove` — path convention and the `--force`-after-`doctor.sh` gotcha in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- Dev server runs from the worktree root with `PYTHONPATH=src` and `--log-config` (both mandatory — it fails at boot without them); full command, plus the restart-after-what table and zombie hygiene, in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
+- Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
+- Full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## Environment
 
@@ -169,7 +170,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 |---|---|
 | `/brainstorming` | Before any new feature — design before code |
 | `/writing-plans` | After brainstorming; before multi-step implementation |
-| `/using-git-worktrees` | Every feature branch — isolated worktree; see port/lifecycle table above |
+| `/using-git-worktrees` | Every feature branch — isolated worktree; ports above, lifecycle in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
 | `/test-driven-development` | Before writing implementation code |
 | `/systematic-debugging` | Any bug or unexpected test failure |
 | `/verification-before-completion` | Before claiming done or opening a PR |
@@ -193,14 +194,15 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow; what each module owns
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env files, dev-server + worktree lifecycle
-- [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently when a file is edited
+- [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quota + fallback semantics
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
-- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue and what emits each
-- [docs/LOGGING.md](docs/LOGGING.md) — event/level table, structured fields, PII policy
-- [docs/STYLE.md](docs/STYLE.md) — admin dashboard design: brand, dark mode, WCAG 2.1 AA, responsive
+- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue
+- [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
+- [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
 - [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
 - [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, how verified, USPS API model notes
+- `docs/usps-addresses-v3r2_4.yaml`, `docs/usps-enhanced-addresses-v3r2.yaml` — vendored USPS OpenAPI specs (standard, Enhanced)
 
 `docs/plans/` and `docs/research/` are dated snapshots — history, never current guidance.

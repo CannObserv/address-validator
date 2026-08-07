@@ -6,3 +6,11 @@
 # provenance of a curation move. Pre-dates the #191 curation; the anchor is
 # referenced from PR and issue prose.
 docs/VALIDATION-PROVIDERS.md :: Pipeline-version invalidation (#145)
+
+# Legitimate navigation, both restored during the #191 review after an earlier
+# pass cleared them by deleting the reference — the anti-pattern the skill's own
+# rationalization table names. Neither target moved: the port assignments stayed
+# in AGENTS.md § Infrastructure, and the tool table stayed in § Code Exploration
+# Policy.
+docs/SKILLS.md :: and `AGENTS.md` → Infrastructure for port assignments
+docs/SKILLS.md :: See `AGENTS.md` → Code Exploration Policy for the "when to use each tool" reference table.
