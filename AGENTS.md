@@ -100,7 +100,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
-- Full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## Environment
 
@@ -192,17 +192,17 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
 ## Detail Docs
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow; what each module owns
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env files, dev-server + worktree lifecycle
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
-- [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quota + fallback semantics
+- [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
 - [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
 - [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
-- [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, how verified, USPS API model notes
-- `docs/usps-addresses-v3r2_4.yaml`, `docs/usps-enhanced-addresses-v3r2.yaml` — vendored USPS OpenAPI specs (standard, Enhanced)
+- [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, API model notes
+- Vendored USPS OpenAPI specs: [standard](docs/usps-addresses-v3r2_4.yaml), [Enhanced](docs/usps-enhanced-addresses-v3r2.yaml)
 
-`docs/plans/` and `docs/research/` are dated snapshots — history, never current guidance.
+`docs/plans/`, `docs/research/` — dated snapshots, never current guidance.
