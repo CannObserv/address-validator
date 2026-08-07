@@ -15,7 +15,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/skills-submodule-update.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/skills-submodule-update.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/context-budget-guard.sh\"",
+            "timeout": 10
           }
         ]
       }
