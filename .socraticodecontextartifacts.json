@@ -27,7 +27,7 @@
     },
     {
       "name": "address-validation-research",
-      "path": "./docs/address-validation-research.md",
+      "path": "./docs/research/address-validation-research.md",
       "description": "Domain research: address standards (USPS Pub 28, ISO 19160-4, Canada Post), provider landscape, parsing libraries, and design tradeoffs."
     },
     {

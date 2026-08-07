@@ -98,35 +98,8 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
-
-**Worktree path convention — `.worktrees/<branch-slug>/` only.** Always create worktrees via `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-create.sh [--new] <branch>` (resolves to `<repo>/.worktrees/`). Never create sibling-directory worktrees (`../address-validator-<n>/`) or hand-roll paths — these are invisible to `worktree-destroy.sh` and the source of leaked dev-server zombies. Always destroy via `worktree-destroy.sh <branch>`; never run `git worktree remove` by hand.
-
-**Worktrees that have had `.skills/doctor.sh` run in them need `worktree-destroy.sh <branch> --force`.** The doctor heals dangling vendor symlinks by running `git submodule update --init`, and git refuses to remove a worktree containing checked-out submodules (`fatal: working trees containing submodules cannot be moved or removed`). The `/reviewing-code-python-fastapi` preflight invokes the doctor automatically, so any worktree that has been through a code review is in this state. Note `--force` also bypasses git's dirty-tree check — commit or stash first. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
-
-## Server lifecycle
-
-| After… | Do this |
-|---|---|
-| Code change (no env/service) | `sudo systemctl restart address-validator` |
-| Env var change | Edit `/etc/address-validator/.env`, then restart |
-| Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
-| New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree using the dev-server command below (add `--reload`) |
-| Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
-| Agent-driven smoke check | Dev-server command below, minus `--reload` — the watcher process leaks if the agent shell exits before cleanup |
-| Worktree finished | `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-destroy.sh <branch>` — never `git worktree remove` by hand |
-| Stale process suspected | `pgrep -af "\.worktrees/.*uvicorn"` lists zombies; kill all PIDs not matching `systemctl show address-validator -p MainPID` |
-
-Dev-server command (from the worktree root). `PYTHONPATH=src` is mandatory —
-the project is not installed into `.venv/`, and `--log-config`'s `"()"` factory
-is resolved by `dictConfig` before uvicorn imports the app, so a missing
-PYTHONPATH fails at boot with `Unable to configure formatter 'json'`. Always
-pass `--log-config`, or uvicorn's own lines revert to plain text alongside the
-JSON app records:
-
-```bash
-PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8001 --reload \
-  --log-config src/address_validator/core/log_config.json
-```
+- Worktrees live at `.worktrees/<branch-slug>/` only; always create and destroy them via the `using-git-worktrees` scripts, never `git worktree remove` — path convention and the `--force`-after-`doctor.sh` gotcha in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- Dev server runs from the worktree root with `PYTHONPATH=src` and `--log-config` (both mandatory — it fails at boot without them); full command, plus the restart-after-what table and zombie hygiene, in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## Environment
 
@@ -215,3 +188,19 @@ With issue: `#<n> [type]: <description>`
 Without: `[type]: <description>`
 Multiple issues: `#12, #14 [type]: <description>`
 Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
+
+## Detail Docs
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow; what each module owns
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env files, dev-server + worktree lifecycle
+- [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently when a file is edited
+- [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quota + fallback semantics
+- [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
+- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue and what emits each
+- [docs/LOGGING.md](docs/LOGGING.md) — event/level table, structured fields, PII policy
+- [docs/STYLE.md](docs/STYLE.md) — admin dashboard design: brand, dark mode, WCAG 2.1 AA, responsive
+- [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
+- [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
+- [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, how verified, USPS API model notes
+
+`docs/plans/` and `docs/research/` are dated snapshots — history, never current guidance.

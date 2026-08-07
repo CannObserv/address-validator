@@ -8,7 +8,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 |---|---|---|
 | `/brainstorming` | New feature without prior design | Explore requirements and design options before any code |
 | `/writing-plans` | After brainstorming; before multi-step impl | Produce a step-by-step implementation plan |
-| `/using-git-worktrees` | Every feature branch | Parallel branch checkouts via git worktree — creation, lifecycle, and cleanup; consult AGENTS.md for project-specific port and env setup |
+| `/using-git-worktrees` | Every feature branch | Parallel branch checkouts via git worktree — creation, lifecycle, and cleanup; consult [DEPLOYMENT.md](DEPLOYMENT.md) for the path convention, port assignments, and dev-server command |
 | `/test-driven-development` | Before writing implementation code | Write failing tests first, then implement |
 | `/systematic-debugging` | Any bug or unexpected test failure | Structured root-cause analysis before proposing fixes |
 | `/verification-before-completion` | Before claiming done or opening a PR | Run verification commands and confirm output; evidence before assertions |
@@ -58,4 +58,4 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `socraticode:codebase-exploration` | Semantic search, dependency graphs, architecture understanding |
 | `socraticode:codebase-management` | Index management, health checks, file watching, context artifacts |
 
-See `AGENTS.md` → Skills → SocratiCode for the "when to use each tool" reference table.
+See the `Code Exploration Policy` section of the root policy file for the "when to use each tool" reference table.
