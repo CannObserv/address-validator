@@ -52,13 +52,21 @@ have opposite hazards:
 
 - **Created by `worktree-create.sh`** (the documented path) — the script
   symlinks `.venv` to the main checkout's real venv, so the worktree and
-  production **share one environment**. This removes the #185 trap: a
-  dependency added in the worktree is already present in the main venv. It
-  also means **`uv sync` / `uv add` in that worktree writes directly into the
-  venv the port-8000 service is running from.** On this single-VM dev+prod box
-  that is a production mutation — expect a restart to pick up whatever the
-  worktree resolved, and don't run `uv lock --upgrade && uv sync` from a
+  production **share one environment**. This removes the #185 trap *once the
+  worktree has actually synced* — editing `pyproject.toml` there and never
+  running `uv sync` leaves the main venv exactly as short as before. It also
+  means **`uv sync` / `uv add` in that worktree writes directly into the venv
+  the port-8000 service is running from.** On this single-VM dev+prod box that
+  is a production mutation, so don't run `uv lock --upgrade && uv sync` from a
   worktree unless you intend to upgrade production's dependencies.
+
+  **`uv sync` also *removes*.** It prunes any package absent from the current
+  branch's lockfile, so running it from a worktree whose dependencies differ
+  from `main`'s will uninstall those packages from the venv the **live service
+  is using** — an immediate `ModuleNotFoundError` crashloop, not a deferred
+  deploy problem, and a restart does not recover it. Run `uv sync` from the
+  main checkout unless you specifically intend to reshape production's
+  environment.
 - **Created any other way** — notably the Claude Code Agent tool's
   `isolation: "worktree"`, which calls `git worktree add` directly and never
   runs the script — the worktree inherits **no** venv at all. Link one before
@@ -66,7 +74,7 @@ have opposite hazards:
   silently collect fewer tests and still report green):
 
   ```bash
-  ln -s /home/exedev/address-validator/.venv .venv
+  ln -s "$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")/.venv" .venv
   ```
 
 If the service is crashlooping after a deploy, run

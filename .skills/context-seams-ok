@@ -29,3 +29,7 @@ docs/SOCRATICODE.md :: 71.4%-unresolved caveat recorded in `AGENTS.md` under
 # The skills index naming the file that skill's whole job is to curate. Nothing
 # moved; the reference is the row's content.
 docs/SKILLS.md :: Curates AGENTS.md + its doc tree against the token budget
+
+# Naming AGENTS.md as one of the manifest's 11 registered artifacts, which it
+# is. Not a cross-reference to relocated content.
+docs/SOCRATICODE.md :: AGENTS.md, the two vendored USPS OpenAPI specs, Pub 28, the provider / logging /
