@@ -6,27 +6,38 @@
 
 FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpostal sidecar) addresses. systemd+uvicorn on port 8000. libpostal sidecar on port 4400 (pelias/libpostal-service Docker, `infra/libpostal.service`).
 
+<!-- BEGIN socraticode-policy -->
 ## Code Exploration Policy
 
-SocratiCode MCP tools are **deferred** — schemas are not loaded at session start and calling any `codebase_*` tool without loading first will fail with `InputValidationError`. A `SessionStart` hook echoes a reminder with the prefetch query each session; use `ToolSearch` to load schemas before the first `codebase_*` call.
+SocratiCode is the preferred semantic-search tool here once indexed (local Qdrant
+store + on-disk graph; manifest `.socraticodecontextartifacts.json`). Its MCP
+tools are **deferred** — schemas load only after the `ToolSearch` prefetch that
+`.claude/hooks/socraticode-reminder.sh` prints each session; calling one before
+that fails with `InputValidationError`.
 
-**Negative rule.** Broad semantic questions → SocratiCode (`codebase_search`, `codebase_symbol`, etc.). `grep`/`ripgrep` → exact string or regex matches only. Explore subagent → path-pattern file walks only, not semantic search.
+**Negative rule.** Use SocratiCode MCP tools first for semantic questions ("where
+is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg` only on
+exact strings (error messages, log lines, known symbols). Reserve the Explore
+subagent for path-pattern walks (`*.py` under `src/address_validator/routers/`),
+not semantic search.
 
-Prefetch query: `select:mcp__plugin_socraticode_socraticode__codebase_search,mcp__plugin_socraticode_socraticode__codebase_symbol,mcp__plugin_socraticode_socraticode__codebase_symbols,mcp__plugin_socraticode_socraticode__codebase_flow,mcp__plugin_socraticode_socraticode__codebase_impact,mcp__plugin_socraticode_socraticode__codebase_graph_query,mcp__plugin_socraticode_socraticode__codebase_graph_circular,mcp__plugin_socraticode_socraticode__codebase_graph_stats,mcp__plugin_socraticode_socraticode__codebase_graph_visualize,mcp__plugin_socraticode_socraticode__codebase_status,mcp__plugin_socraticode_socraticode__codebase_context,mcp__plugin_socraticode_socraticode__codebase_context_search`
-
-| Objective | Tool |
+| Goal | Tool |
 |---|---|
-| Explore codebase purpose or feature location | `codebase_search` with broad queries |
-| Locate specific functions, constants, or types | `codebase_search` with exact names |
-| Find exact strings, error messages, or regex patterns | grep / ripgrep |
-| View file imports and dependents | `codebase_graph_query` |
-| Assess impact before modifying code | `codebase_impact target=X` |
-| Trace execution or discover entry points | `codebase_flow` / `codebase_flow entrypoint=X` |
-| Analyze callers and callees for a function | `codebase_symbol name=X` |
-| List or search symbols | `codebase_symbols file=path` / `codebase_symbols query=X` |
-| Detect circular deps, view stats, visualize structure | `codebase_graph_circular`, `codebase_graph_stats`, `codebase_graph_visualize` |
-| Verify index currency | `codebase_status` |
-| Browse knowledge artifacts; locate schemas, endpoints, configs | `codebase_context`, `codebase_context_search` |
+| Where is X defined / how does Y work / what touches Z | `codebase_search` |
+| Exact string or regex (errors, log lines, known symbols) | `grep` / `rg` |
+| Imports/dependents of a file · blast radius of a change | `codebase_graph_query` / `codebase_impact` |
+
+Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/SOCRATICODE.md).
+<!-- END socraticode-policy -->
+
+## Code Exploration Notes (repo-specific)
+
+- Graph yield is `ok` (376 edges / 239 files) but **71.4% of import references
+  are unresolved** — the `uv`/hatch src-layout gap (`address-validator` dist dir
+  → `src/` → `address_validator` module). Treat a *sparse* `codebase_graph_query`
+  or `codebase_impact` answer as possibly-partial and confirm with
+  `rg -n 'from address_validator\.<mod> import|import address_validator\.<mod>'`
+  before concluding nothing depends on a file.
 
 ## Architecture
 
@@ -107,7 +118,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) + `LOG_LEVEL` | systemd (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`) | systemd (optional with `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`, `GH_TOKEN_SKILLS`) | systemd (optional with `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
 
@@ -147,7 +158,7 @@ See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 PAT in `.env` (project root) as `GH_TOKEN`:
 
 ```bash
-export GH_TOKEN=$(grep GH_TOKEN .env | cut -d= -f2)
+export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
 ```
 
 ## Sensitive areas
@@ -180,8 +191,8 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
-| `socraticode:codebase-exploration` | Semantic search, dependency graphs — see **Code Exploration Policy** above |
-| `socraticode:codebase-management` | Index management, health checks, file watching — see **Code Exploration Policy** above |
+| `socraticode:codebase-exploration` | Semantic search, dependency graphs — tool table in [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+| `socraticode:codebase-management` | Index management, health checks, file watching — see [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
 
 ## Commit convention
 
@@ -201,6 +212,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
+- [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch query, graph health
 - [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
 - [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, API model notes
 - Vendored USPS OpenAPI specs: [standard](docs/usps-addresses-v3r2_4.yaml), [Enhanced](docs/usps-enhanced-addresses-v3r2.yaml)

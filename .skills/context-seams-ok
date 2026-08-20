@@ -9,8 +9,19 @@ docs/VALIDATION-PROVIDERS.md :: Pipeline-version invalidation (#145)
 
 # Legitimate navigation, both restored during the #191 review after an earlier
 # pass cleared them by deleting the reference — the anti-pattern the skill's own
-# rationalization table names. Neither target moved: the port assignments stayed
-# in AGENTS.md § Infrastructure, and the tool table stayed in § Code Exploration
-# Policy.
+# rationalization table names. Port assignments are still in AGENTS.md
+# § Infrastructure. The tool table moved to docs/SOCRATICODE.md in the #193
+# init-socraticode v1.4 split, and the SKILLS.md line was rewritten to name both
+# halves rather than acknowledged in place.
 docs/SKILLS.md :: and `AGENTS.md` → Infrastructure for port assignments
-docs/SKILLS.md :: See `AGENTS.md` → Code Exploration Policy for the "when to use each tool" reference table.
+docs/SKILLS.md :: `AGENTS.md` → Code Exploration Policy carries the negative rule.
+
+# The block↔doc seam that init-socraticode v1.4's split creates by design: the
+# policy block in AGENTS.md carries the rule, docs/SOCRATICODE.md carries the
+# table, and each names the other. All four targets exist as written — the
+# `## Code Exploration Policy` block and the `## Code Exploration Notes
+# (repo-specific)` section, both in AGENTS.md.
+docs/SOCRATICODE.md :: Detail doc for the `## Code Exploration Policy` block in [AGENTS.md](../AGENTS.md).
+docs/SOCRATICODE.md :: file wholesale. Repo-specific exploration notes belong in `AGENTS.md` under
+docs/SOCRATICODE.md :: and the `AGENTS.md` block should be on its degraded variant. This repo last
+docs/SOCRATICODE.md :: 71.4%-unresolved caveat recorded in `AGENTS.md` under

@@ -49,6 +49,11 @@
       "name": "design-plans",
       "path": "./docs/plans",
       "description": "Feature and architectural design docs: rationale, tradeoffs, and decisions behind every major subsystem — quota guards, middleware refactors, CA address support, admin dashboard, training pipeline, and more."
+    },
+    {
+      "name": "socraticode-reference",
+      "path": "./docs/SOCRATICODE.md",
+      "description": "Code exploration reference: full codebase_* tool table, ToolSearch prefetch query, per-tool notes, graph-health and index-scope guidance."
     }
   ]
 }
