@@ -25,3 +25,7 @@ docs/SOCRATICODE.md :: Detail doc for the `## Code Exploration Policy` block in 
 docs/SOCRATICODE.md :: file wholesale. Repo-specific exploration notes belong in `AGENTS.md` under
 docs/SOCRATICODE.md :: and the `AGENTS.md` block should be on its degraded variant. This repo last
 docs/SOCRATICODE.md :: 71.4%-unresolved caveat recorded in `AGENTS.md` under
+
+# The skills index naming the file that skill's whole job is to curate. Nothing
+# moved; the reference is the row's content.
+docs/SKILLS.md :: Curates AGENTS.md + its doc tree against the token budget

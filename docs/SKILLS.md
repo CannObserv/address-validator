@@ -44,6 +44,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/simplify` | After implementing a feature | Reviews changed code for reuse, quality, efficiency |
 | `/writing-skills` | Create or edit a skill | Authors new skills and verifies before deployment |
 | `/managing-skills` | Add/update external skill repos | git submodule + symlink pattern for skills-vendor/ |
+| `/curating-context` | "curate context", "trim AGENTS.md"; weekly maintenance | Curates AGENTS.md + its doc tree against the token budget (`.skills/context-budget`, 6,000). Its `context-budget-guard.sh` PostToolUse hook warns on every edit that pushes the file over |
 
 ## Project-specific skills
 

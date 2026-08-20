@@ -151,6 +151,8 @@ uv add <package>                # add dep; commit pyproject.toml + uv.lock toget
 uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
 ```
 
+In a `worktree-create.sh` worktree `.venv` is a **symlink to the main checkout's**, so these write into the venv the port-8000 service runs from.
+
 See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
 ## GitHub CLI
@@ -188,6 +190,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
 | `/reviewing-architecture` | Architecture review |
 | `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function — "add a fitness function", "enforce this contract", "lock this rule" |
+| `/curating-context` | Trim AGENTS.md + docs to the 6,000-token budget; weekly maintenance |
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |

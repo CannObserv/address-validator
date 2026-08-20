@@ -41,13 +41,33 @@ file absent), reverting the code while the installed unit still passes the
 flag, or — the one that actually bit on the #185 deploy — **skipping `uv sync`
 when the branch added a dependency**.
 
-`uv sync` is not optional on any deploy that touches `pyproject.toml`. Each
-worktree has its own `.venv/`, so a dependency added while developing in a
-worktree is absent from the main checkout's venv until `uv sync` runs there.
-The service runs `/home/exedev/address-validator/.venv/bin/uvicorn` from the
-main checkout, so the missing package surfaces as the same
+`uv sync` is not optional on any deploy that touches `pyproject.toml`. The
+service runs `/home/exedev/address-validator/.venv/bin/uvicorn` from the main
+checkout, so a package missing there surfaces as the same
 `Unable to configure formatter 'json'` crashloop — the traceback's real cause
 is `ModuleNotFoundError` several frames up, which is easy to miss.
+
+**Which venv a worktree uses depends on how it was created**, and the two cases
+have opposite hazards:
+
+- **Created by `worktree-create.sh`** (the documented path) — the script
+  symlinks `.venv` to the main checkout's real venv, so the worktree and
+  production **share one environment**. This removes the #185 trap: a
+  dependency added in the worktree is already present in the main venv. It
+  also means **`uv sync` / `uv add` in that worktree writes directly into the
+  venv the port-8000 service is running from.** On this single-VM dev+prod box
+  that is a production mutation — expect a restart to pick up whatever the
+  worktree resolved, and don't run `uv lock --upgrade && uv sync` from a
+  worktree unless you intend to upgrade production's dependencies.
+- **Created any other way** — notably the Claude Code Agent tool's
+  `isolation: "worktree"`, which calls `git worktree add` directly and never
+  runs the script — the worktree inherits **no** venv at all. Link one before
+  the first test run, rather than resolving a fresh one (a new environment can
+  silently collect fewer tests and still report green):
+
+  ```bash
+  ln -s /home/exedev/address-validator/.venv .venv
+  ```
 
 If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
@@ -81,6 +101,8 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 ## Worktree conventions
 
 **Worktree path convention — `.worktrees/<branch-slug>/` only.** Always create worktrees via `bash skills-vendor/gregoryfoster-skills/skills/using-git-worktrees/scripts/worktree-create.sh [--new] <branch>` (resolves to `<repo>/.worktrees/`). Never create sibling-directory worktrees (`../address-validator-<n>/`) or hand-roll paths — these are invisible to `worktree-destroy.sh` and the source of leaked dev-server zombies. Always destroy via `worktree-destroy.sh <branch>`; never run `git worktree remove` by hand.
+
+**Destroy flags.** `worktree-destroy.sh` finds the worktree **by branch** via the git registry, so any directory layout resolves — including the harness's `.claude/worktrees/agent-<id>/`, where branch and directory leaf differ. Preview any destroy with `--dry-run`: it prints the resolved path, base ref, merge verdict, lock state and removal command, exits with the code the real run would return, and changes nothing. `--unlock` is for one case only — a destroy that actually *reports* a held lock, meaning the owning agent is still running or died without releasing; check which before overriding, and note `--force` is not the remedy (git wants `-f -f` for a lock). The script also refuses to destroy the worktree it is being run from, so `cd` to the main checkout first.
 
 **Worktrees that have had `.skills/doctor.sh` run in them need `worktree-destroy.sh <branch> --force`.** The doctor heals dangling vendor symlinks by running `git submodule update --init`, and git refuses to remove a worktree containing checked-out submodules (`fatal: working trees containing submodules cannot be moved or removed`). The `/reviewing-code-python-fastapi` preflight invokes the doctor automatically, so any worktree that has been through a code review is in this state. Note `--force` also bypasses git's dirty-tree check — commit or stash first. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
 
