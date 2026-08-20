@@ -32,12 +32,10 @@ Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/S
 
 ## Code Exploration Notes (repo-specific)
 
-- Graph yield is `ok` (376 edges / 239 files) but **71.4% of import references
-  are unresolved** — the `uv`/hatch src-layout gap (`address-validator` dist dir
-  → `src/` → `address_validator` module). Treat a *sparse* `codebase_graph_query`
-  or `codebase_impact` answer as possibly-partial and confirm with
-  `rg -n 'from address_validator\.<mod> import|import address_validator\.<mod>'`
-  before concluding nothing depends on a file.
+- Graph yield `ok` (376 edges / 239 files) but **71.4% of imports unresolved** —
+  the `uv` src-layout gap (dist dir → `src/` → underscored module). Treat a sparse
+  `codebase_graph_query`/`codebase_impact` answer as possibly-partial; confirm with
+  `rg -n 'import address_validator\.<mod>'` before concluding nothing depends on a file.
 
 ## Architecture
 
@@ -151,13 +149,13 @@ uv add <package>                # add dep; commit pyproject.toml + uv.lock toget
 uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
 ```
 
-In a `worktree-create.sh` worktree `.venv` is a **symlink to the main checkout's**, so these write into the venv the port-8000 service runs from.
+A worktree's `.venv` **symlinks the main checkout's** — `uv sync`/`uv add` there mutate *and prune* the venv the port-8000 service runs from. Run them from the main checkout ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
 ## GitHub CLI
 
-PAT in `.env` (project root) as `GH_TOKEN`:
+Two PATs in `.env` — `GH_TOKEN` (this repo), `GH_TOKEN_SKILLS` (`gregoryfoster/skills`). Anchor the grep; unanchored matches both and `gh` rejects the result:
 
 ```bash
 export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)

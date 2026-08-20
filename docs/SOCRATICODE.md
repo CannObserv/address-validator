@@ -57,8 +57,10 @@ remove the standalone — the plugin already provides the server:
 - **`codebase_flow`** traces from an entry point; give it a real file path, not a
   symbol name.
 - **`codebase_context_search`** only sees files listed in
-  `.socraticodecontextartifacts.json` (10 artifacts here — API models, DB schema,
-  Alembic migrations, the vendored USPS OpenAPI specs, infra units). A path that
+  `.socraticodecontextartifacts.json` (11 artifacts here, all **documentation** —
+  AGENTS.md, the two vendored USPS OpenAPI specs, Pub 28, the provider / logging /
+  style / dependency references, `docs/plans/`, and this file. No source, schema or
+  migration is registered, so it cannot answer from those). A path that
   does not resolve is skipped silently, so a missing answer is often a manifest
   problem. Validate with:
   `node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs validate-manifest .`

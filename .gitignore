@@ -1,5 +1,6 @@
 venv/
-.venv/
+# bare (no trailing slash): worktree-create.sh links .venv as a SYMLINK,
+# which a directory-only pattern does not match.
 .venv
 __pycache__/
 *.pyc
