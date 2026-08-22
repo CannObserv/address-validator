@@ -32,10 +32,10 @@ Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/S
 
 ## Code Exploration Notes (repo-specific)
 
-- Graph yield `ok` (376 edges / 239 files) but **71.4% of imports unresolved** —
-  the `uv` src-layout gap (dist dir → `src/` → underscored module). Treat a sparse
-  `codebase_graph_query`/`codebase_impact` answer as possibly-partial; confirm with
-  `rg -n 'import address_validator\.<mod>'` before concluding nothing depends on a file.
+- Graph yield `ok` (376 edges / 238 files, 2026-08-22). The 71.4% `unresolvedPct`
+  is a **call**-edge statistic, not imports — import edges probe exact, so an empty
+  `codebase_graph_query`/`codebase_impact` answer means no dependents. Evidence and
+  re-measurement recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
 
 ## Architecture
 

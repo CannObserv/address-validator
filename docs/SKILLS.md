@@ -22,6 +22,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/reviewing-architecture` | "AR" or "architecture review" | High-level structural health, design principles, maintainability |
 | `/enforcing-architecture` | "add a fitness function", "enforce this contract", "lock this rule" | Graduates an accepted AR finding into an executable check (import-linter / module-size gate / OpenAPI drift guard). Delegated to by `/reviewing-architecture` on a `N: fix + fitness` or bare `N: fitness` directive |
 | `/security-review` | Security audit of pending branch changes | OWASP-oriented findings on current branch diff |
+| `/auditing-ci-cost` | "audit CI", "CI cost", "Actions spend" | Per-job billed-minute census of GitHub Actions spend, incident days separated from the baseline, then a prescription that branches on job COUNT vs job DURATION. Hands an accepted path filter to `/enforcing-architecture`. Needs `gh` + `jq` |
 | `/review` | Review a pull request | PR-level review |
 
 ## Agent orchestration skills
