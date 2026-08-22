@@ -86,8 +86,11 @@ measured **`ok`** — 376 edges across 239 files, 1.573 per file — with a stan
 `## Code Exploration Notes (repo-specific)`.
 
 The `.claude/hooks/socraticode-health.sh` SessionStart hook re-checks this yield
-gate, `codebase_health`, and a failed last operation at most once per UTC day. It
-is silent when clean, and it **reports only** — it never re-indexes.
+gate, `codebase_health`, a failed last operation, and any **declared-but-not-indexed
+context artifact** (named, e.g. `context artifacts 10/11 indexed — logging-contract:
+○ not yet indexed`) at most once per UTC day. It is silent when clean, and it
+**reports only** — it never re-indexes; close an artifact gap with
+`codebase_context_index`.
 
 ## Index scope
 
