@@ -47,6 +47,15 @@ checkout, so a package missing there surfaces as the same
 `Unable to configure formatter 'json'` crashloop — the traceback's real cause
 is `ModuleNotFoundError` several frames up, which is easy to miss.
 
+**Since GH #201 this step carries more weight, not less.** Under the old `link`
+default a worktree's `uv add` wrote the package straight into production's venv,
+so a deploy that skipped `uv sync` often still booted — the shared venv was
+accidentally masking the #185 trap. With `worktree_venv=none` nothing a worktree
+does reaches production's venv, so **the deploy-time `uv sync` is now the only
+thing that puts a new dependency there.** Removing the shared-venv hazard and
+sharpening this one are the same change; the deploy checklist above is what
+covers it.
+
 **Every worktree provisions its own venv.** This box sets
 `.skills/worktree_venv=none` (read by `worktree-create.sh` from the primary
 checkout), so no worktree gets a `.venv` symlink and none can reach the venv the
@@ -93,6 +102,12 @@ The cost of removing that coupling is negligible — measured, not estimated:
 `~/.cache/uv`, so the `df` delta across a full sync is ~4.6 MiB. Against the
 disk-hygiene budget that is noise.
 
+That figure has a precondition: hardlinks require the cache and the worktree to
+sit on **one filesystem**. Both are under `/` here. Move `~/.cache/uv`, or put
+`.worktrees/` on a separate mount, and uv silently falls back to copying — at
+which point the real cost per worktree is the full ~313 MiB and this tradeoff
+is worth re-measuring rather than re-reading.
+
 Two properties of this repo make `link` less dangerous than the
 `using-git-worktrees` skill's worst case, and neither changes the verdict:
 `infra/address-validator.service` invokes **no `uv`** (its `ExecStart` is
@@ -112,6 +127,12 @@ from a committed lockfile.
 stay uncommitted — it encodes "this checkout is a live service's
 `WorkingDirectory=`", a property of this VM, not of the repo. A clone elsewhere
 gets the `link` default, which is correct there.
+
+Because it is untracked, nothing in git notices if it disappears — and what it
+re-enables is silent until production falls over. `tests/unit/test_worktree_venv_knob.py`
+is the notice: it compares the primary checkout against the unit's
+`WorkingDirectory=` and asserts the knob reads `none` only on the box where the
+hazard exists, skipping on every other clone and in CI.
 
 If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
