@@ -1,6 +1,7 @@
 venv/
-# bare (no trailing slash): worktree-create.sh links .venv as a SYMLINK,
-# which a directory-only pattern does not match.
+# bare (no trailing slash): a .venv is a real directory in the main checkout
+# and in each worktree, but a SYMLINK under the `link` default of
+# .skills/worktree_venv. A directory-only pattern would miss the symlink.
 .venv
 __pycache__/
 *.pyc
@@ -10,6 +11,8 @@ htmlcov/
 scripts/build/bin/
 node_modules/
 .worktrees
+# machine-local: this checkout is a live service's WorkingDirectory (GH #201)
+/.skills/worktree_venv
 *.egg-info/
 .claude/worktrees/
 .claude/scheduled_tasks.lock

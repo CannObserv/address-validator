@@ -108,6 +108,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
+- New worktree: `uv sync` first — no `.venv` is linked in ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
 - A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
@@ -149,7 +150,7 @@ uv add <package>                # add dep; commit pyproject.toml + uv.lock toget
 uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
 ```
 
-A worktree's `.venv` **symlinks the main checkout's** — `uv sync`/`uv add` there mutate *and prune* the venv the port-8000 service runs from. Run them from the main checkout ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+Worktrees get **no** `.venv` (`.skills/worktree_venv=none`) — run `uv sync` in a new worktree before its first test run (~0.2 s, ~4 MiB). This is why: under the `link` default a worktree's `uv sync` *prunes* the venv the port-8000 service runs from. Rationale and measurements → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
