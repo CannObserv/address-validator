@@ -47,35 +47,94 @@ checkout, so a package missing there surfaces as the same
 `Unable to configure formatter 'json'` crashloop — the traceback's real cause
 is `ModuleNotFoundError` several frames up, which is easy to miss.
 
-**Which venv a worktree uses depends on how it was created**, and the two cases
-have opposite hazards:
+**Since GH #201 this step carries more weight, not less.** Under the old `link`
+default, a worktree that ran `uv add` wrote the package straight into
+production's venv, so a deploy that then skipped `uv sync` still booted — the
+shared venv was accidentally masking the #185 trap. Only for that route: a
+branch that hand-edited `pyproject.toml` installed nothing either way, which is
+why #185 happened at all. With `worktree_venv=none` **no** worktree action
+reaches production's venv, so **the deploy-time `uv sync` is now the only thing
+that puts a new dependency there** — the masking is gone along with the hazard.
+Removing the shared-venv coupling and sharpening this step are the same change;
+the deploy checklist above is what covers it.
 
-- **Created by `worktree-create.sh`** (the documented path) — the script
-  symlinks `.venv` to the main checkout's real venv, so the worktree and
-  production **share one environment**. This removes the #185 trap *once the
-  worktree has actually synced* — editing `pyproject.toml` there and never
-  running `uv sync` leaves the main venv exactly as short as before. It also
-  means **`uv sync` / `uv add` in that worktree writes directly into the venv
-  the port-8000 service is running from.** On this single-VM dev+prod box that
-  is a production mutation, so don't run `uv lock --upgrade && uv sync` from a
-  worktree unless you intend to upgrade production's dependencies.
+**Every worktree provisions its own venv.** This box sets
+`.skills/worktree_venv=none` (read by `worktree-create.sh` from the primary
+checkout), so no worktree gets a `.venv` symlink and none can reach the venv the
+port-8000 service runs from. After creating a worktree — by the script or any
+other route, including the Claude Code Agent tool's `isolation: "worktree"` —
+provision it once:
 
-  **`uv sync` also *removes*.** It prunes any package absent from the current
-  branch's lockfile, so running it from a worktree whose dependencies differ
-  from `main`'s will uninstall those packages from the venv the **live service
-  is using** — an immediate `ModuleNotFoundError` crashloop, not a deferred
-  deploy problem, and a restart does not recover it. Run `uv sync` from the
-  main checkout unless you specifically intend to reshape production's
-  environment.
-- **Created any other way** — notably the Claude Code Agent tool's
-  `isolation: "worktree"`, which calls `git worktree add` directly and never
-  runs the script — the worktree inherits **no** venv at all. Link one before
-  the first test run, rather than resolving a fresh one (a new environment can
-  silently collect fewer tests and still report green):
+```bash
+uv sync          # in the worktree root, before the first test run
+```
 
-  ```bash
-  ln -s "$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")/.venv" .venv
-  ```
+`worktree-create.sh` announces the missing venv on stderr rather than leaving you
+to discover it:
+
+```
+NOTE: .skills/worktree_venv=none — no .venv linked into <path>; provision one there
+```
+
+### Why `none` and not `link` (GH #201 — settled, do not re-litigate)
+
+`link` shares **one mutable environment** between every worktree and production.
+Measured on this VM (uv 0.10.4), what each uv verb does to that shared venv when
+run from a worktree:
+
+| Command in a worktree | Effect on the production venv under `link` |
+|---|---|
+| `uv run pytest` / `uv run --group dev …` | no prune, no mutation |
+| `uv add <pkg>` | installs into it — additive, recoverable |
+| `uv sync` | **prunes** any package absent from the branch's lockfile |
+
+That last row is the whole hazard, and it is unrecoverable by restart: it
+uninstalls packages from the venv a live uvicorn imports from, producing an
+immediate `ModuleNotFoundError` crashloop. Under `link` the only thing preventing
+it is a reader remembering this page.
+
+The cost of removing that coupling is negligible — measured, not estimated:
+
+| | |
+|---|---|
+| `uv sync` in a fresh worktree | **0.20 s** (warm shared `~/.cache/uv`) |
+| Disk per worktree venv | **~4 MiB real** |
+
+`du` reports ~313 MiB for a worktree venv and is misleading: uv hardlinks out of
+`~/.cache/uv`, so the `df` delta across a full sync is ~4.6 MiB. Against the
+disk-hygiene budget that is noise.
+
+That figure has a precondition: hardlinks require the cache and the worktree to
+sit on **one filesystem**. Both are under `/` here. Move `~/.cache/uv`, or put
+`.worktrees/` on a separate mount, and uv silently falls back to copying — at
+which point the real cost per worktree is the full ~313 MiB and this tradeoff
+is worth re-measuring rather than re-reading.
+
+Two properties of this repo make `link` less dangerous than the
+`using-git-worktrees` skill's worst case, and neither changes the verdict:
+`infra/address-validator.service` invokes **no `uv`** (its `ExecStart` is
+`.venv/bin/uvicorn` directly, and there is no `ExecStartPre=uv sync`), so the
+service never rewrites the venv under a worktree; and `pyproject.toml` declares
+no `[build-system]`, so `address_validator` is never installed into `.venv` and
+`uv run` has nothing to reinstall. These cut the hazard's *frequency*, not its
+*severity*.
+
+Secondary benefit: a worktree venv resolves from **that branch's** `uv.lock`, so
+a branch that adds a dependency is tested against the dependencies it declares.
+The skill's caution that "a freshly resolved environment can silently collect
+fewer tests" targets ad-hoc `uv venv` + install, not a deterministic `uv sync`
+from a committed lockfile.
+
+**The knob is machine-local.** `.skills/worktree_venv` is gitignored and must
+stay uncommitted — it encodes "this checkout is a live service's
+`WorkingDirectory=`", a property of this VM, not of the repo. A clone elsewhere
+gets the `link` default, which is correct there.
+
+Because it is untracked, nothing in git notices if it disappears — and what it
+re-enables is silent until production falls over. `tests/unit/test_worktree_venv_knob.py`
+is the notice: it compares the primary checkout against the unit's
+`WorkingDirectory=` and asserts the knob reads `none` only on the box where the
+hazard exists, skipping on every other clone and in CI.
 
 If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
