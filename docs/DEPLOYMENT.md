@@ -48,13 +48,15 @@ checkout, so a package missing there surfaces as the same
 is `ModuleNotFoundError` several frames up, which is easy to miss.
 
 **Since GH #201 this step carries more weight, not less.** Under the old `link`
-default a worktree's `uv add` wrote the package straight into production's venv,
-so a deploy that skipped `uv sync` often still booted — the shared venv was
-accidentally masking the #185 trap. With `worktree_venv=none` nothing a worktree
-does reaches production's venv, so **the deploy-time `uv sync` is now the only
-thing that puts a new dependency there.** Removing the shared-venv hazard and
-sharpening this one are the same change; the deploy checklist above is what
-covers it.
+default, a worktree that ran `uv add` wrote the package straight into
+production's venv, so a deploy that then skipped `uv sync` still booted — the
+shared venv was accidentally masking the #185 trap. Only for that route: a
+branch that hand-edited `pyproject.toml` installed nothing either way, which is
+why #185 happened at all. With `worktree_venv=none` **no** worktree action
+reaches production's venv, so **the deploy-time `uv sync` is now the only thing
+that puts a new dependency there** — the masking is gone along with the hazard.
+Removing the shared-venv coupling and sharpening this step are the same change;
+the deploy checklist above is what covers it.
 
 **Every worktree provisions its own venv.** This box sets
 `.skills/worktree_venv=none` (read by `worktree-create.sh` from the primary
