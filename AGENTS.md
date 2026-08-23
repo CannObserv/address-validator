@@ -108,7 +108,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - All development work happens on git worktrees — never modify the main worktree directly
 - Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
-- New worktree: `uv sync` first — no `.venv` is linked in ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+- New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in, and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
 - A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 

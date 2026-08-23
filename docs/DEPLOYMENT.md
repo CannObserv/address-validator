@@ -66,8 +66,12 @@ other route, including the Claude Code Agent tool's `isolation: "worktree"` —
 provision it once:
 
 ```bash
-uv sync          # in the worktree root, before the first test run
+uv sync                    # venv — before the first test run
+bash .skills/doctor.sh     # vendored skills + hooks — before the first skill call
 ```
+
+Both, every time. A fresh worktree is missing **two** things, and only the first
+one announces itself.
 
 `worktree-create.sh` announces the missing venv on stderr rather than leaving you
 to discover it:
@@ -75,6 +79,40 @@ to discover it:
 ```
 NOTE: .skills/worktree_venv=none — no .venv linked into <path>; provision one there
 ```
+
+### Why `bash .skills/doctor.sh` is the other half (GH #203)
+
+A worktree checks out the repo's committed symlinks but **not** its submodules.
+Every `skills/`, `.claude/skills/`, and `.claude/hooks/` entry is a symlink into
+`skills-vendor/`, so in a fresh worktree all of them dangle — measured on
+2026-08-23: **38 broken links** (17 `skills/`, 17 `.claude/skills/`, 4
+`.claude/hooks/`). Until the doctor runs, that worktree has **no vendored skills
+and no working hooks**: `/reviewing-code-python-fastapi`, `/using-git-worktrees`
+and the rest cannot resolve their `scripts/` directory, and there is no
+`~/.claude/skills` on this box to fall back to.
+
+`.skills/doctor.sh` is installed as a **real file, never a symlink**, precisely
+so it still runs in that state. It initializes the submodules and heals all 38:
+
+```
+doctor: dangling symlinks detected — initializing submodules...
+```
+
+Cost: **~2 s** and ~6.6 MiB per worktree (two shallow submodule clones).
+
+Two consequences worth knowing:
+
+- **It self-heals on the main paths.** The Phase 1 preflight of every
+  `reviewing-*` / `shipping-*` skill invokes the doctor, so a worktree that
+  reaches a review or a ship repairs itself. The gap this bootstrap closes is
+  only the window *before* that first preflight — where the visible symptom is
+  `tests/unit/test_socraticode_prefetch_sync.py` failing on a dangling hook.
+  Those two failures are a **canary, not noise**: they mean the vendored skills
+  in that worktree are unreachable too.
+- **It makes `--force` mandatory on destroy.** Initialized submodules are what
+  `git worktree remove` refuses to act on, so use
+  `worktree-destroy.sh <branch> --force` afterwards — already the norm for any
+  worktree that has been through a review.
 
 ### Why `none` and not `link` (GH #201 — settled, do not re-litigate)
 
