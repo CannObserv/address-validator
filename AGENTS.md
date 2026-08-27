@@ -41,16 +41,6 @@ Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/S
 
 See `docs/ARCHITECTURE.md` for the full module map.
 
-```
-HTTP request
- └─ middleware: api_version → request_id → audit
- └─ routers/v2/   ISO 19160-4 surface; component_profile param; CA via libpostal
- └─ routers/admin/  Jinja2 + HTMX dashboard (exe.dev auth)
- └─ services/validation/  provider pipeline (null/usps/google/chain + cache)
-```
-
-Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countries.py` · `core/errors.py` · `services/validation/pipeline.py` (parse→std→provider)
-
 ## Key conventions
 
 - `models.py` is the single source of truth for API contracts; field name/type changes are breaking
@@ -69,7 +59,7 @@ Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countr
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
 - Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v2/health`
-- `/api/v2/health` → `{"status": "ok"|"degraded", "api_version": "2", "database": "ok"|"error"|"unconfigured", "libpostal": "ok"|"unavailable"}`; HTTP 503 when degraded (libpostal state does NOT affect HTTP status)
+- `/api/v2/health`: HTTP 503 when degraded; libpostal state does NOT affect HTTP status. Response shape → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
 - CORS: denied by default (GH #35). `ALLOWED_ORIGINS` env var grants browser origins — comma-separated list, or `*` for any; unset = no `Access-Control-Allow-Origin` ever emitted

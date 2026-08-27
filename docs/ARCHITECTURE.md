@@ -4,6 +4,18 @@ All source modules live under `src/address_validator/`.
 
 ## Request flow
 
+At a glance:
+
+```
+HTTP request
+ └─ middleware: api_version → request_id → audit
+ └─ routers/v2/   ISO 19160-4 surface; component_profile param; CA via libpostal
+ └─ routers/admin/  Jinja2 + HTMX dashboard (exe.dev auth)
+ └─ services/validation/  provider pipeline (null/usps/google/chain + cache)
+```
+
+In full:
+
 ```
 HTTP request
  └─ middleware/api_version.py  appends API-Version: 2 header on /api/v2/ responses
@@ -45,6 +57,8 @@ HTTP request
 ```
 
 ## Key modules
+
+Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countries.py` · `core/errors.py` · `services/validation/pipeline.py` (parse→std→provider)
 
 ```
 db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates, training_batches, candidate_batch_assignments)

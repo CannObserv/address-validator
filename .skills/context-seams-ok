@@ -7,6 +7,14 @@
 # referenced from PR and issue prose.
 docs/VALIDATION-PROVIDERS.md :: Pipeline-version invalidation (#145)
 
+# Same shape, judged 2026-08-27: each names the issue that SETTLED the
+# behaviour the section documents — the worktree-bootstrap half (#203) and the
+# venv-knob decision (#201) — not provenance of a curation move. Both anchors
+# are cited from the merged PR prose, and #201's heading carries the
+# do-not-re-litigate marker that is the section's whole point.
+docs/DEPLOYMENT.md :: Why `bash .skills/doctor.sh` is the other half (GH #203)
+docs/DEPLOYMENT.md :: Why `none` and not `link` (GH #201 — settled, do not re-litigate)
+
 # Legitimate navigation, both restored during the #191 review after an earlier
 # pass cleared them by deleting the reference — the anti-pattern the skill's own
 # rationalization table names. Port assignments are still in AGENTS.md
@@ -22,9 +30,8 @@ docs/SKILLS.md :: `AGENTS.md` → Code Exploration Policy carries the negative r
 # `## Code Exploration Policy` block and the `## Code Exploration Notes
 # (repo-specific)` section, both in AGENTS.md.
 docs/SOCRATICODE.md :: Detail doc for the `## Code Exploration Policy` block in [AGENTS.md](../AGENTS.md).
-docs/SOCRATICODE.md :: file wholesale. Repo-specific exploration notes belong in `AGENTS.md` under
-docs/SOCRATICODE.md :: and the `AGENTS.md` block should be on its degraded variant. This repo last
-docs/SOCRATICODE.md :: 71.4%-unresolved caveat recorded in `AGENTS.md` under
+docs/SOCRATICODE.md :: go under `## Repo-specific notes` down there, not in `AGENTS.md`
+docs/SOCRATICODE.md :: and the `AGENTS.md` block should be on its degraded variant.
 
 # The skills index naming the file that skill's whole job is to curate. Nothing
 # moved; the reference is the row's content.
@@ -32,4 +39,4 @@ docs/SKILLS.md :: Curates AGENTS.md + its doc tree against the token budget
 
 # Naming AGENTS.md as one of the manifest's 11 registered artifacts, which it
 # is. Not a cross-reference to relocated content.
-docs/SOCRATICODE.md :: AGENTS.md, the two vendored USPS OpenAPI specs, Pub 28, the provider / logging /
+docs/SOCRATICODE.md :: AGENTS.md, the two vendored USPS OpenAPI
