@@ -178,6 +178,17 @@ If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
 just the final `ValueError`.
 
+### Health endpoint
+
+`GET /api/v2/health` is open (no `X-API-Key`) and is the readiness check for
+every restart above:
+
+- `/api/v2/health` → `{"status": "ok"|"degraded", "api_version": "2", "database": "ok"|"error"|"unconfigured", "libpostal": "ok"|"unavailable"}`; HTTP 503 when degraded (libpostal state does NOT affect HTTP status)
+
+```bash
+curl -s http://localhost:8000/api/v2/health | jq .
+```
+
 ## Server lifecycle
 
 | After… | Do this |
