@@ -12,7 +12,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/test-driven-development` | Before writing implementation code | Write failing tests first, then implement |
 | `/systematic-debugging` | Any bug or unexpected test failure | Structured root-cause analysis before proposing fixes |
 | `/verification-before-completion` | Before claiming done or opening a PR | Run verification commands and confirm output; evidence before assertions |
-| `/shipping-work-python-fastapi` | Work is done and merged | Commit, push, close issues, post GH summary |
+| `/shipping-work-python-fastapi` | Work is done and merged | Commit, push, close issues, post GH summary. Its Step 1.5 doc-drift gate reads `.skills/doc-sensitive-paths` — a project-tailored list that **replaces** the skill's built-in defaults (which assume a `src/api|models|core/` layout and match almost nothing here). Entries match whole path segments at any depth; every entry must match a tracked file, enforced by `tests/unit/test_doc_sensitive_paths.py`. Re-verify that test after any layout change ([GH #208](https://github.com/CannObserv/address-validator/issues/208)) |
 
 ## Review skills
 
