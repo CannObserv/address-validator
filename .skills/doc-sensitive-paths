@@ -1,0 +1,94 @@
+# Sensitive paths for shipping-work's doc-check.sh (Step 1.5).
+#
+# Files whose existence, names, or structure is mirrored in AGENTS.md / README.md
+# / docs/. When one changes, the matching doc section probably needs updating too.
+#
+# Grammar: one path per line; blank lines and #-comments ignored. Entries match
+# whole path SEGMENTS at any depth, not a root-anchored prefix — `core/` matches
+# `src/address_validator/core/`. This file REPLACES the skill's built-in
+# defaults rather than extending them (gregoryfoster/skills#252, GH #208).
+#
+# Why tailored: the defaults describe a `src/api|models|core/` service. This repo
+# is a flat `src/address_validator/` package, so 6 of the 12 default entries
+# (schema.sql, deploy/, src/api/, src/models/, src/core/, .env.example) matched
+# nothing and Step 1.5 passed without being able to fail.
+#
+# Every entry below must match at least one tracked file. That is enforced, not
+# asserted — re-verify after any layout change with:
+#   uv run pytest tests/unit/test_doc_sensitive_paths.py
+#
+# Do NOT re-verify with `doc-check.sh --base HEAD`. An empty diff returns at
+# "No changes vs ..." before the dead-entry census runs, so it reports a green
+# without inspecting a single entry. The census is on the no-hit path only: to
+# see it by hand, pass a --base whose diff touches nothing in this list.
+
+# Deliberately absent: docs/. docs/plans/ and docs/research/ are dated snapshots
+# that churn on every design cycle, and a segment-matching list has no way to
+# exclude them — an entry for docs/ would hit on nearly every branch and train
+# the reader to ignore Step 1.5.
+#
+# Also absent: templates/ and static/. docs/STYLE.md is a rulebook (brand, dark
+# mode, WCAG 2.1 AA), not an inventory of them — the coupling is too weak to
+# earn a hit on every admin-dashboard tweak.
+
+# --- Doc surface itself, including the entrypoint that loads it ---
+AGENTS.md
+CLAUDE.md
+README.md
+CHANGELOG.md
+
+# --- Toolchain + dependency surfaces named in AGENTS.md "Testing and linting"
+#     and "Common tasks", and in docs/DEPENDENCY-POLICY.md. Both lockfiles, so
+#     neither toolchain is watched more loosely than the other ---
+pyproject.toml
+uv.lock
+package.json
+package-lock.json
+.pre-commit-config.yaml
+
+# --- API contract and the single-source-of-truth vocabularies docs catalogue.
+#     Named per module, not per subdirectory: the flat layout puts doc-coupled
+#     code at the package root, which a subdirectory-only list misses.
+#
+#     models.py          API contracts (AGENTS.md "Key conventions")
+#     auth.py            AGENTS.md "Authentication": X-API-Key, open routes, admin
+#     main.py            middleware order, ALLOWED_ORIGINS/CORS
+#     logging_filter.py  PII redaction -> docs/LOGGING.md
+#     core/              warnings/validation_status/pipeline_version SSoT + docs
+#     routers/           route table -> AGENTS.md, docs/ARCHITECTURE.md
+#     middleware/        load-bearing order -> docs/SENSITIVE-AREAS.md
+#     usps_data/         Pub 28 edition -> docs/usps-pub28.md
+#
+#     Entries carry no trailing comments: the parser strips whole-line # only,
+#     so an inline comment would become part of the path and match nothing. ---
+models.py
+auth.py
+main.py
+logging_filter.py
+core/
+routers/
+services/
+middleware/
+usps_data/
+canada_post_data/
+
+# --- Schema: migrations, the env.py wiring that makes `alembic check`
+#     meaningful, and the Alembic-head mirror in db/tables.py ---
+alembic/
+alembic.ini
+db/tables.py
+
+# --- Deployment surface: units, timers, and ops scripts documented in
+#     AGENTS.md "Deployment"/"Infrastructure" and docs/DEPLOYMENT.md ---
+infra/
+scripts/
+.env.test
+
+# --- Agent-context plumbing inventoried by AGENTS.md and docs/SKILLS.md /
+#     docs/SOCRATICODE.md. .gitmodules records the vendored skill repos ---
+.claude/
+.skills/
+skills/
+.gitmodules
+.github/workflows/
+.socraticodecontextartifacts.json
