@@ -8,7 +8,7 @@ metadata:
   synced-from: "obra-superpowers v6.3.0 (b36e0829c6d0140e93cfef2ca599b1b07d4a7797)"
   triggers: brainstorm, design this, let's design
   overrides: obra-superpowers/brainstorming
-  override-reason: "Hard-block variant (explicit approval words, no implied consent); docs/plans/ path convention; project commit convention for the design doc; GitHub issue opened per design; writing-plans offered, never mandatory; visual companion omitted (its files are not vendored into this override)"
+  override-reason: "Hard-block variant (explicit approval words, no implied consent); docs/plans/ path convention; project commit convention for the design doc; GitHub issue opened per design; writing-plans offered, never mandatory; visual companion launched with exe.dev proxy flags (remote VM, no local browser)"
 ---
 
 # Brainstorming Ideas Into Designs — address-validator
@@ -77,14 +77,15 @@ Classify first, announce the path, then work the items in order.
 
 **Architectural:**
 1. **Explore project context** — AGENTS.md, README.md, `git log --oneline -10`, relevant source
-2. **Ask clarifying questions** — one at a time; purpose, constraints, success criteria, scope boundaries
-3. **Propose 2–3 approaches** — trade-offs, lead with your recommendation
-4. **Present design** — in sections scaled to their complexity, approval after each section
-5. **Write design doc** — `docs/plans/YYYY-MM-DD-<topic>-design.md`, then commit
-6. **Design self-review** — inline check for placeholders, contradictions, ambiguity, scope
-7. **User reviews the written doc** — ask before proceeding
-8. **Open a GitHub issue** — track the work
-9. **Transition to implementation** — offer `writing-plans`; do not invoke it unbidden
+2. **Offer the visual companion just-in-time** — NOT upfront; only when a question is genuinely clearer shown than described (see Visual companion below)
+3. **Ask clarifying questions** — one at a time; purpose, constraints, success criteria, scope boundaries
+4. **Propose 2–3 approaches** — trade-offs, lead with your recommendation
+5. **Present design** — in sections scaled to their complexity, approval after each section
+6. **Write design doc** — `docs/plans/YYYY-MM-DD-<topic>-design.md`, then commit
+7. **Design self-review** — inline check for placeholders, contradictions, ambiguity, scope
+8. **User reviews the written doc** — ask before proceeding
+9. **Open a GitHub issue** — track the work
+10. **Transition to implementation** — offer `writing-plans`; do not invoke it unbidden
 
 ## The process
 
@@ -190,6 +191,42 @@ EOF
 
 Do NOT invoke any implementation action without user direction.
 
+## Visual companion
+
+A browser-based companion for showing mockups, diagrams, and visual options during brainstorming. It is a tool, not a mode: accepting it means it is *available* for questions that benefit from visual treatment, not that every question goes through the browser.
+
+**Offer it just-in-time — never upfront.** Wait until a question would genuinely be clearer shown than told: a real mockup, layout, or diagram question, not merely a UI *topic*. The first time that happens, offer it then, as **its own message** — only the offer, no clarifying question or other content alongside it:
+
+> "This next part might be easier if I show you — I can put together mockups, diagrams, and comparisons in a browser tab as we go. It's still new and can be token-intensive. Want me to? I'll open it for you."
+
+Wait for the answer. If they decline, continue text-only and don't offer again unless they raise it.
+
+**Per-question decision.** Even after they accept, decide FOR EACH QUESTION whether to use the browser or the terminal. The test: would the user understand this better by seeing it than reading it?
+
+- **Browser** — mockups, wireframes, layout comparisons, architecture diagrams, side-by-side visual designs
+- **Terminal** — requirements questions, conceptual choices, tradeoff lists, A/B/C/D text options, scope decisions
+
+A question about a UI topic is not automatically a visual question. "What should the admin dashboard convey?" is conceptual — terminal. "Which of these two dashboard layouts?" is visual — browser.
+
+<HARD-GATE>
+This VM is remote: the user's browser is not on this machine. The companion's default invocation binds `127.0.0.1` on a random ephemeral port, which their browser can never reach. Start it with the three flags below or the tab will not load.
+</HARD-GATE>
+
+```bash
+# From the project root. Port MUST be 3000-9999 — the exe.dev proxy forwards
+# only that range, and the script's default random port falls outside it.
+BRAINSTORM_PORT=3900 bash skills/brainstorming/scripts/start-server.sh \
+  --project-dir "$PWD" --host 0.0.0.0 --url-host address-validator.exe.xyz
+```
+
+- **Relay the URL as `https://`.** The script prints `http://address-validator.exe.xyz:3900/?key=…`; the proxy terminates TLS, so the user needs the same URL with `https://`. Swap the scheme by hand before sending it.
+- **Do not use `--open`** — it would open a browser on the VM, not the user's machine. Send them the link instead.
+- **Pick a free port.** 8000 is the production service, 8001 the dev server, 4400 libpostal. 3900 is a safe default.
+- **Invoke by the full path** shown above. The companion guide writes bare `scripts/start-server.sh`, which does not resolve from the project root ([#63](https://github.com/gregoryfoster/skills/issues/63)).
+- Session content and state land in `.superpowers/brainstorm/` (gitignored).
+
+Read [visual-companion.md](visual-companion.md) for the full guide — screen-writing, event polling, and lifecycle — before the first screen. Note it is vendored upstream text: its examples use the bare `scripts/` path and assume a local browser, so the flags above override it.
+
 ## Key principles
 
 - **One question at a time** — never overwhelm
@@ -210,5 +247,6 @@ Recorded so the next sync can tell a deviation from a drift:
 | "Commit the design document" | `[docs]:` / `#<n> [docs]:` prefix | Project commit convention (AGENTS.md) |
 | No issue step | `gh issue create` after the doc | Work here is issue-tracked |
 | Architectural MUST end in `writing-plans` | Offered, never mandatory | Small architectural changes don't earn a plan doc |
-| Visual companion + `scripts/` | Omitted | Those files are not vendored into this override; the vendor's `skills/brainstorming/visual-companion.md` path would not resolve |
+| Visual companion assumes a local browser on an ephemeral port | `BRAINSTORM_PORT` in 3000-9999, `--host 0.0.0.0`, `--url-host`, relay as `https://` | Remote VM behind the exe.dev proxy — the default invocation is unreachable |
+| Companion guide invokes bare `scripts/start-server.sh` | Full path from project root | Bare path does not resolve from the project root (#63) |
 | Process-flow digraph | Omitted | The path checklists carry the same routing |

@@ -17,3 +17,6 @@ node_modules/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 scratch/
+
+# brainstorming visual companion session content/state (skills/brainstorming)
+.superpowers/
