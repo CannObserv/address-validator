@@ -114,12 +114,14 @@ index if left in, and vendored prose outranks first-party code in
 Everything below the END marker survives an `init-socraticode` re-run. Measured
 figures carry the date they were taken; re-measure rather than trusting them.
 
-### Measured graph yield (2026-08-22)
+### Measured graph yield (2026-09-09, SocratiCode v1.13.2)
 
-`verdict: "ok"` — **376 edges across 238 files, 1.580 per file**, with
-`unresolvedPct` 71.4%. That percentage is a call-edge statistic and this repo's
-`uv` src-layout makes it structurally high; it is **not** a statement about
-imports. The differential above was run on 2026-08-22 to settle it:
+`verdict: "ok"` — **376 edges across 242 files, 1.6 per file**, 0 circular
+chains, with `unresolvedPct` 72.2% (1770 symbols, 8385 call edges). That
+percentage is a call-edge statistic and this repo's `uv` src-layout makes it
+structurally high; it is **not** a statement about imports. The differential
+above has been run twice to settle it — 2026-08-22 on v1.6.x, and again
+2026-09-09 after a full reindex on v1.13.2 — with the same outcome both times:
 `codebase_graph_query` on
 `src/address_validator/services/validation/pipeline.py` returned exactly two
 importers — `src/address_validator/routers/v2/validate.py` and
@@ -130,11 +132,11 @@ answer means no importers, not a broken resolver.
 
 ### The daily health hook is never silent here
 
-`unresolvedPct` 71.4% clears the hook's 50% warn threshold, so the once-per-day
+`unresolvedPct` sits above the hook's 50% warn threshold, so the once-per-day
 run always emits:
 
 ```
-graph unresolved 71.4% (> 50%) — share of call edges with no first-party
+graph unresolved <N>% (> 50%) — share of call edges with no first-party
 callee; verdict is ok, so this is a statistic, not a defect
 ```
 

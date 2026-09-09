@@ -32,10 +32,10 @@ Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/S
 
 ## Code Exploration Notes (repo-specific)
 
-- Graph yield `ok` (376 edges / 238 files, 2026-08-22). The 71.4% `unresolvedPct`
-  is a **call**-edge statistic, not imports — import edges probe exact, so an empty
-  `codebase_graph_query`/`codebase_impact` answer means no dependents. Evidence and
-  re-measurement recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
+- `unresolvedPct` is a **call**-edge statistic, not imports — import edges probe
+  exact, so an empty `codebase_graph_query`/`codebase_impact` answer means no
+  dependents, not a lossy graph. Measured yield, evidence and re-measurement
+  recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
 
 ## Architecture
 
