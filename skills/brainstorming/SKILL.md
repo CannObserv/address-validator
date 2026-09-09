@@ -251,5 +251,5 @@ Recorded so the next sync can tell a deviation from a drift:
 | No issue step | `gh issue create` after the doc | Work here is issue-tracked |
 | Architectural MUST end in `writing-plans` | Offered, never mandatory | Small architectural changes don't earn a plan doc |
 | Visual companion assumes a local browser on an ephemeral port | `BRAINSTORM_PORT` in 3000-9999, `--host 0.0.0.0`, `--url-host`, relay as `https://` | Remote VM behind the exe.dev proxy — the default invocation is unreachable |
-| Companion guide invokes bare `scripts/start-server.sh` | Full path from project root | Bare path does not resolve from the project root (#63) |
+| Companion guide invokes bare `scripts/start-server.sh` | Full path from project root | Bare path does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)) |
 | Process-flow digraph | Omitted | The path checklists carry the same routing |
