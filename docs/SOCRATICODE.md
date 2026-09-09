@@ -120,8 +120,8 @@ figures carry the date they were taken; re-measure rather than trusting them.
 chains, with `unresolvedPct` 72.2% (1770 symbols, 8385 call edges). That
 percentage is a call-edge statistic and this repo's `uv` src-layout makes it
 structurally high; it is **not** a statement about imports. The differential
-above has been run twice to settle it — 2026-08-22 on v1.6.x, and again
-2026-09-09 after a full reindex on v1.13.2 — with the same outcome both times:
+above has been run twice to settle it — 2026-08-22, and again 2026-09-09
+after a full reindex on v1.13.2 — with the same outcome both times:
 `codebase_graph_query` on
 `src/address_validator/services/validation/pipeline.py` returned exactly two
 importers — `src/address_validator/routers/v2/validate.py` and
