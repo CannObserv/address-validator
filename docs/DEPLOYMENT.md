@@ -189,6 +189,21 @@ every restart above:
 curl -s http://localhost:8000/api/v2/health | jq .
 ```
 
+## Port map
+
+| Port | Owner | Notes |
+|---|---|---|
+| 8000 | systemd production service (main worktree) | Never start uvicorn here by hand |
+| 8001 | dev server (active worktree) | Reachable at `https://address-validator.exe.xyz:8001/` |
+| 4400 | libpostal sidecar | `pelias/libpostal-service` Docker, `infra/libpostal.service` |
+| 3900 | brainstorming visual companion | On demand only; see `skills/brainstorming/SKILL.md` |
+
+The exe.dev proxy forwards **only ports 3000–9999**, so anything a browser must
+reach binds inside that range. Claiming a port already listed here collides
+silently in at least one case — the companion falls back to a random 49152+
+port and still reports success — so add new entries here rather than picking
+an unrecorded number.
+
 ## Server lifecycle
 
 | After… | Do this |
