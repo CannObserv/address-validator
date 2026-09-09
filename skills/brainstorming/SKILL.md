@@ -208,20 +208,23 @@ Wait for the answer. If they decline, continue text-only and don't offer again u
 
 A question about a UI topic is not automatically a visual question. "What should the admin dashboard convey?" is conceptual — terminal. "Which of these two dashboard layouts?" is visual — browser.
 
-<HARD-GATE>
-This VM is remote: the user's browser is not on this machine. The companion's default invocation binds `127.0.0.1` on a random ephemeral port, which their browser can never reach. Start it with the three flags below or the tab will not load.
-</HARD-GATE>
+**This VM is remote: the user's browser is not on this machine.** The companion's default invocation binds `127.0.0.1` on a random ephemeral port, which their browser can never reach. Launch it exactly as below or the tab will not load.
 
 ```bash
 # From the project root. Port MUST be 3000-9999 — the exe.dev proxy forwards
 # only that range, and the script's default random port falls outside it.
-BRAINSTORM_PORT=3900 bash skills/brainstorming/scripts/start-server.sh \
+# BRAINSTORM_TOKEN is load-bearing: without it a port collision falls back to a
+# random 49152-65534 port and still prints a success line (see below).
+BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
+  bash skills/brainstorming/scripts/start-server.sh \
   --project-dir "$PWD" --host 0.0.0.0 --url-host address-validator.exe.xyz
 ```
 
+- **Confirm `"port":3900` in the returned JSON before relaying the URL.** On `EADDRINUSE` the server falls back to a random 49152–65534 port — outside the proxy range, so the link can never load — and prints an ordinary `server-started` line either way (measured: a collision on 3900 bound 54972 and reported success). `BRAINSTORM_TOKEN` makes it refuse that fallback and exit 1, which is why the variable is not optional. The wrapper reports the refusal as `{"error": "Server failed to start within 5 seconds"}`, not as a port message — read that as "the port is taken", pick another free one in 3000–9999, and never drop the variable to get past it.
 - **Relay the URL as `https://`.** The script prints `http://address-validator.exe.xyz:3900/?key=…`; the proxy terminates TLS, so the user needs the same URL with `https://`. Swap the scheme by hand before sending it.
 - **Do not use `--open`** — it would open a browser on the VM, not the user's machine. Send them the link instead.
-- **Pick a free port.** 8000 is the production service, 8001 the dev server, 4400 libpostal. 3900 is a safe default.
+- **`--url-host` is this VM's name**, as in the dev-server URL AGENTS.md documents (`https://address-validator.exe.xyz:8001/`). Confirm it there rather than trusting the literal above if the VM may have been renamed.
+- **Pick a free port.** 8000 is the production service, 8001 the dev server, 4400 libpostal, 3900 the companion (docs/DEPLOYMENT.md).
 - **Invoke by the full path** shown above. The companion guide writes bare `scripts/start-server.sh`, which does not resolve from the project root ([#63](https://github.com/gregoryfoster/skills/issues/63)).
 - Session content and state land in `.superpowers/brainstorm/` (gitignored).
 
