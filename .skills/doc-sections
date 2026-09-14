@@ -28,7 +28,7 @@ CHANGELOG.md: "[Unreleased]" — user-visible API changes (models.py, routers/, 
 
 # --- Module map and risk table ---
 docs/ARCHITECTURE.md: "Request flow", "Key modules" — route + middleware chain, module map incl. db/tables.py's table list and canada_post_data/ (routers/, services/, middleware/, core/, logging_filter.py, db/tables.py, canada_post_data/)
-docs/SENSITIVE-AREAS.md: per-module risk rows, incl. per-migration rows — what breaks silently (routers/, services/, middleware/, core/, db/tables.py, alembic/)
+docs/SENSITIVE-AREAS.md: per-module risk rows, incl. per-migration rows and db/engine.py, which loads alembic.ini to migrate at startup — what breaks silently (routers/, services/, middleware/, core/, db/tables.py, alembic/, alembic.ini)
 
 # --- Single-source-of-truth catalogues ---
 docs/WARNINGS.md: "Catalogue" — warning strings (core/warnings.py)
