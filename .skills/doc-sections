@@ -42,4 +42,4 @@ docs/usps-pub28.md: "Spec version used by this project", "Pub 28 sections refere
 docs/DEPENDENCY-POLICY.md: "Python (uv + pyproject.toml)", "JavaScript (npm + package.json)" — pin rules and lockfile pairing (pyproject.toml, uv.lock, package.json, package-lock.json)
 docs/DEPLOYMENT.md: "Common operations", "Port map", "Scheduled timers", "Database maintenance scripts", "Env file locations", "CORS" — units, timers, ops scripts, env (infra/, scripts/, main.py)
 docs/SKILLS.md: every vendored skill and its trigger (skills/, .claude/, .gitmodules)
-docs/SOCRATICODE.md: "Context artifacts", "Index scope" — manifest and index exclusions (.socraticodecontextartifacts.json, .claude/hooks/)
+docs/SOCRATICODE.md: "Prefetch", "Graph health", "Context artifacts", "Index scope" — session hooks, manifest and index exclusions (.claude/hooks/, .socraticodecontextartifacts.json)
