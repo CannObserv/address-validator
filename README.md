@@ -25,7 +25,9 @@ Components use ISO 19160-4 element names by default; pass
   using the `pycountry` library; only `US` is currently supported.
 - **API key authentication** — `/api/v2/*` endpoints require an
   `X-API-Key` header; docs remain open.
-- **CORS enabled** — cross-origin requests are allowed from any origin.
+- **CORS denied by default** — browsers get no cross-origin access until
+  `ALLOWED_ORIGINS` grants it (comma-separated origins, or `*`); server-side
+  clients are unaffected. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#cors).
 - **Health check** — `GET /api/v2/health` for liveness probes.
 
 ## Endpoints
