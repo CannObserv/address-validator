@@ -4,7 +4,7 @@
 # Grammar: one line per section; blank lines and whole-line #-comments
 # ignored; each line printed verbatim as a bullet. This file REPLACES the
 # skill's two built-in lines, which describe a layout this repo does not keep
-# (e.g. they send a routers/ hit to an AGENTS.md "route table" that does not
+# (e.g. they send every hit to an AGENTS.md "route table" that does not
 # exist — README.md "Endpoints" and docs/ARCHITECTURE.md hold it here).
 #
 # Line shape, which the drift test depends on:
