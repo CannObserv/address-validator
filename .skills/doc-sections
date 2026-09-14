@@ -13,11 +13,12 @@
 # heading edit with:
 #   uv run pytest tests/unit/test_doc_sections.py
 #
-# Keep this file in step with doc-sensitive-paths: upstream checks nothing
-# about advice, so an entry added there with no line here gets silence on a
-# hit (gregoryfoster/skills#284). Every entry group there has a line here,
-# except .github/workflows/ — no doc inventories it; its one workflow
-# (context-cadence.yml) documents itself.
+# Kept in step with doc-sensitive-paths by the same test: every entry there is
+# a line's doc or named as a whole token in some line's parenthetical — an
+# entry named nowhere gets advice about everything but itself on a hit.
+# Upstream checks nothing about advice (gregoryfoster/skills#284). One entry is
+# exempt (_UNROUTED in the test): .github/workflows/ — no doc inventories it;
+# its one workflow (context-cadence.yml) documents itself.
 
 # --- Policy file + README: contract, auth, commands, ops, agent plumbing ---
 AGENTS.md: "Key conventions", "Authentication", "Sensitive areas" — API contract, open routes, CORS, middleware order, the SSoT vocabularies and schema mirror (models.py, auth.py, main.py, core/, db/tables.py, alembic/)
