@@ -34,6 +34,12 @@ def _lines() -> list[str]:
     return lines
 
 
+def _split(line: str) -> tuple[str, str]:
+    """``<doc>: <advice>`` → ``(doc, advice)``; ``doc`` is ``""`` without a colon."""
+    doc, colon, advice = line.partition(":")
+    return (doc.strip(), advice) if colon else ("", line)
+
+
 def _tracked_files() -> set[str]:
     out = subprocess.run(
         ["git", "-c", "core.quotePath=false", "ls-files"],
@@ -67,9 +73,7 @@ def test_sections_file_is_non_empty() -> None:
 def test_every_line_names_a_tracked_doc() -> None:
     """The text before the first colon is the doc a hit sends the reader to."""
     tracked = _tracked_files()
-    missing = [
-        line for line in _lines() if ":" not in line or line.split(":", 1)[0].strip() not in tracked
-    ]
+    missing = [line for line in _lines() if _split(line)[0] not in tracked]
     assert not missing, (
         "these .skills/doc-sections lines do not open with a tracked doc path "
         f"followed by a colon: {missing}"
@@ -80,9 +84,9 @@ def test_every_quoted_heading_exists_in_its_doc() -> None:
     """A quoted phrase names a section of the line's doc; a rename strands it."""
     stale = []
     for line in _lines():
-        doc, _, advice = line.partition(":")
-        path = REPO_ROOT / doc.strip()
-        if not path.is_file():
+        doc, advice = _split(line)
+        path = REPO_ROOT / doc
+        if not doc or not path.is_file():
             continue  # reported by test_every_line_names_a_tracked_doc
         headings = _headings(path)
         stale += [f"{doc}: {q!r}" for q in _QUOTED.findall(advice) if q not in headings]
