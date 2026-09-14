@@ -1,0 +1,45 @@
+# Advice for shipping-work's doc-check.sh (Step 1.5): the doc sections to
+# spot-check when an entry in .skills/doc-sensitive-paths hits (GH #210).
+#
+# Grammar: one line per section; blank lines and whole-line #-comments
+# ignored; each line printed verbatim as a bullet. This file REPLACES the
+# skill's two built-in lines, which describe a layout this repo does not keep
+# (e.g. they send every hit to an AGENTS.md "route table" that does not
+# exist — README.md "Endpoints" and docs/ARCHITECTURE.md hold it here).
+#
+# Line shape, which the drift test depends on:
+#   <one tracked doc>: "<heading>", "<heading>" — what drifts (entries that route here)
+# Quotes are reserved for heading names. Verify after any doc rename or
+# heading edit with:
+#   uv run pytest tests/unit/test_doc_sections.py
+#
+# Kept in step with doc-sensitive-paths by the same test: every entry there is
+# a line's doc or named as a whole token in some line's parenthetical — an
+# entry named nowhere gets advice about everything but itself on a hit.
+# Upstream checks nothing about advice (gregoryfoster/skills#284). One entry is
+# exempt (_UNROUTED in the test): .github/workflows/ — no doc inventories it;
+# its one workflow (context-cadence.yml) documents itself.
+
+# --- Policy file + README: contract, auth, commands, ops, agent plumbing ---
+AGENTS.md: "Key conventions", "Authentication", "Sensitive areas" — API contract, open routes, CORS, middleware order, the SSoT vocabularies and schema mirror (models.py, auth.py, main.py, core/, db/tables.py, alembic/)
+AGENTS.md: "Testing and linting", "Common tasks", "Deployment", "Infrastructure", "Environment" — commands, toolchain, ops (pyproject.toml, uv.lock, package*.json, .pre-commit-config.yaml, infra/, scripts/, .env.test)
+AGENTS.md: "Skills", "Code Exploration Policy", "Detail Docs" — agent-context plumbing and the doc index (.claude/, .skills/, skills/, .gitmodules, CLAUDE.md, a doc added or renamed)
+README.md: "Features", "Endpoints", "Authentication", "Project Structure" — request/response examples, open routes, CORS claim, module tree (models.py, auth.py, main.py, routers/, services/, middleware/, usps_data/, canada_post_data/, alembic/)
+CHANGELOG.md: "[Unreleased]" — user-visible API changes (models.py, routers/, core/warnings.py, core/validation_status.py)
+
+# --- Module map and risk table ---
+docs/ARCHITECTURE.md: "Request flow", "Key modules" — route + middleware chain, module map incl. db/tables.py's table list and canada_post_data/ (routers/, services/, middleware/, core/, logging_filter.py, db/tables.py, canada_post_data/)
+docs/SENSITIVE-AREAS.md: per-module risk rows, incl. per-migration rows and db/engine.py, which loads alembic.ini to migrate at startup — what breaks silently (routers/, services/, middleware/, core/, db/tables.py, alembic/, alembic.ini)
+
+# --- Single-source-of-truth catalogues ---
+docs/WARNINGS.md: "Catalogue" — warning strings (core/warnings.py)
+docs/VALIDATION-STATUS.md: "Catalogue" — status vocabulary (core/validation_status.py, db/tables.py CheckConstraint, alembic/)
+docs/VALIDATION-PROVIDERS.md: "Full env var reference", "DPV status mapping", "Pipeline-version invalidation (#145)", "Fallback chain internals" — provider env vars and behaviour (services/validation/, core/pipeline_version.py)
+docs/LOGGING.md: "Request correlation", "Event table", "Pinned loggers — a PII guard, not a noise filter" — request_id injection, event levels, PII policy (logging_filter.py, core/logging.py, middleware/)
+docs/usps-pub28.md: "Spec version used by this project", "Pub 28 sections referenced in this codebase" — Pub 28 edition and table provenance (usps_data/)
+
+# --- Dependencies, deployment, agent tooling ---
+docs/DEPENDENCY-POLICY.md: "Python (uv + pyproject.toml)", "JavaScript (npm + package.json)" — pin rules and lockfile pairing (pyproject.toml, uv.lock, package.json, package-lock.json)
+docs/DEPLOYMENT.md: "Common operations", "Port map", "Scheduled timers", "Database maintenance scripts", "Env file locations", "CORS" — units, timers, ops scripts, env (infra/, scripts/, main.py)
+docs/SKILLS.md: every vendored skill and its trigger (skills/, .claude/, .gitmodules)
+docs/SOCRATICODE.md: "Prefetch", "Graph health", "Context artifacts", "Index scope" — session hooks, manifest and index exclusions (.claude/hooks/, .socraticodecontextartifacts.json)

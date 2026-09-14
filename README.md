@@ -12,20 +12,26 @@ Components use ISO 19160-4 element names by default; pass
 
 ## Features
 
-- **Parse** a raw address string into labelled components using the
-  [usaddress](https://github.com/datamade/usaddress) library.
-- **Standardize** addresses to USPS format: all-caps, official suffix
+- **Parse** a raw address string into labelled components — US via the
+  [usaddress](https://github.com/datamade/usaddress) library, CA via the
+  libpostal sidecar.
+- **Standardize** US addresses to USPS format: all-caps, official suffix
   abbreviations (Avenue → AVE), directional abbreviations (South → S),
   state abbreviations (Illinois → IL), secondary unit designators
-  (Suite → STE), and ZIP code normalization.
+  (Suite → STE), and ZIP code normalization. CA addresses follow Canada
+  Post conventions (bilingual EN/FR suffixes and directionals, province
+  abbreviations).
 - **Intersection support** — `"Hollywood Blvd and Vine St"` →
   `"HOLLYWOOD BLVD & VINE ST"`.
 - **Country validation** — requests accept an optional `country` field
-  (ISO 3166-1 alpha-2, default `"US"`). Invalid codes are rejected
-  using the `pycountry` library; only `US` is currently supported.
+  (ISO 3166-1 alpha-2, default `"US"`). `US` and `CA` are supported;
+  other valid codes get `422 country_not_supported`, and codes the
+  `pycountry` library does not recognise get `422 invalid_country_code`.
 - **API key authentication** — `/api/v2/*` endpoints require an
   `X-API-Key` header; docs remain open.
-- **CORS enabled** — cross-origin requests are allowed from any origin.
+- **CORS denied by default** — browsers get no cross-origin access until
+  `ALLOWED_ORIGINS` grants it (comma-separated origins, or `*`); server-side
+  clients are unaffected. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#cors).
 - **Health check** — `GET /api/v2/health` for liveness probes.
 
 ## Endpoints
