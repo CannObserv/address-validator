@@ -18,7 +18,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SECTIONS = REPO_ROOT / ".skills" / "doc-sections"
 
-_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
+# An ATX closing run must follow whitespace (CommonMark), so ``## Use C#`` keeps its ``#``.
+_HEADING = re.compile(r"^#{1,6}\s+(.+?)(?:\s+#+)?\s*$")
 _QUOTED = re.compile(r'"([^"]+)"')
 
 
