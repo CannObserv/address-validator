@@ -204,6 +204,79 @@ silently in at least one case — the companion falls back to a random 49152+
 port and still reports success — so add new entries here rather than picking
 an unrecorded number.
 
+## Host memory
+
+Single-VM dev+prod means an interactive agent session shares 7.2 GiB **and no
+swap** with the production service. Two facts make that sharper than it sounds:
+
+- exe.dev session processes inherit `oom_score_adj` **-1000** from `exe-init`
+  and `sshd`. The OOM killer can never pick a session — under real exhaustion
+  it takes `address-validator.service` instead.
+- With no swap and a small `vm.min_free_kbytes`, the host does not reach the
+  OOM killer at all in the common case. A burst allocation drains the free pool
+  faster than reclaim refills it and `GFP_ATOMIC` callers that cannot sleep
+  (softirq, network) simply fail: page-allocation errors in `tailscaled` and
+  `ksoftirqd`, a dead network, and **nothing killed**. That is how the
+  2026-09-16 outage on the sibling `broker` VM presented — the bus was down
+  57m 48s (gregoryfoster/skills#295).
+
+Three defences, all installed rather than tuned at runtime:
+
+| What | Where | Install |
+|---|---|---|
+| Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
+| Atomic-allocation headroom — `vm.min_free_kbytes = 131072` | `infra/60-address-validator-memory.conf` | `sudo cp infra/60-address-validator-memory.conf /etc/sysctl.d/ && sudo sysctl --system` |
+| A killer that acts before the kernel stalls | earlyoom | `sudo apt-get install -y earlyoom && sudo systemctl enable --now earlyoom` |
+
+Verify:
+
+```bash
+systemctl show address-validator -p MemoryLow -p OOMScoreAdjust -p MemoryCurrent
+sysctl vm.min_free_kbytes
+systemctl is-active earlyoom
+```
+
+`MemoryLow` is a **soft** floor — the kernel reclaims from the service only
+once everything unprotected is exhausted — and `OOMScoreAdjust=-500` cannot
+outrank a session at -1000; it does not need to, it needs to outrank the rest
+of the host. Steady-state RSS for the service is ~150 MB, so 512 MB is
+reservation, not a cap. `libpostal.service` is deliberately left unprotected:
+at ~1.9 GB it is the largest thing on the host, it restarts itself
+(`Restart=always`), and `/api/v2/health` treats its absence as `unavailable`
+without failing the service — it is the right thing to lose first.
+
+### Don't install a SocratiCode server at launch
+
+The plugin's MCP command is `npx -y --prefer-online socraticode@latest`, and
+`--prefer-online` revalidates against the registry on **every** launch, so a
+warm npx cache is not a warm path on any day the package moved. Measured on
+`broker`: a cold install plus server plus full index peaked at **1.2 G**, and
+all 126 `MemoryHigh` throttle events landed in the install — none in indexing.
+The same workload from a pre-installed build peaked at **75 MB**.
+`.claude/hooks/socraticode-health.sh` runs that driver from SessionStart once
+per UTC day, so on this host the install path was live.
+
+A pinned install is resolved ahead of the plugin's command by
+`mcp-driver.mjs`. Install once, deliberately, under a cap:
+
+```bash
+npm view socraticode version        # pick a literal; never @latest
+systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M \
+  -- npm install --prefix ~/.socraticode/pin socraticode@<version>
+node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs resolve
+```
+
+`resolve` prints which path won without launching a server; it should name the
+pinned install. Nothing else is configured — absent a pin the chain is exactly
+what it was. Re-pin as a decision, not on a schedule: the point of pinning was
+to stop an unattended launch from installing.
+
+**The pin does not cover the session.** Claude Code cannot override a plugin's
+MCP server command, so the plugin keeps launching `@latest` while the driver
+stays fixed. The daily health hook measures that gap and reports a defect only
+when the two differ by a minor or major release — a patch apart is the intended
+steady state, since a pin is meant to lag.
+
 ## Server lifecycle
 
 | After… | Do this |

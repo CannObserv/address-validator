@@ -196,7 +196,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 ## Detail Docs
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server, host memory
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
