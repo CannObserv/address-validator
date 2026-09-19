@@ -94,9 +94,9 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
 - Port 8001 = dev server (active git worktree, `--reload`)
+- **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) → Host memory
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
-- Standard workflow: `/brainstorming` → design doc → worktree → implement → PR → merge → clean up worktree
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
 - New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in, and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
