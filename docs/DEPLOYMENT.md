@@ -220,12 +220,13 @@ swap** with the production service. Two facts make that sharper than it sounds:
   2026-09-16 outage on the sibling `broker` VM presented — the bus was down
   57m 48s (gregoryfoster/skills#295).
 
-Four defences, all installed rather than tuned at runtime:
+Five defences, all installed rather than tuned at runtime:
 
 | What | Where | Install |
 |---|---|---|
 | **Parent allocation** — `MemoryLow=1G` on `system.slice` | `infra/system-slice-memory.conf` | `sudo mkdir -p /etc/systemd/system/system.slice.d && sudo cp infra/system-slice-memory.conf /etc/systemd/system/system.slice.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
 | Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
+| Database reservation — `MemoryLow=384M` | `infra/postgresql-memory.conf` | `sudo mkdir -p /etc/systemd/system/postgresql@16-main.service.d && sudo cp infra/postgresql-memory.conf /etc/systemd/system/postgresql@16-main.service.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
 | Atomic-allocation headroom — `vm.min_free_kbytes = 131072` | `infra/60-address-validator-memory.conf` | `sudo cp infra/60-address-validator-memory.conf /etc/sysctl.d/ && sudo sysctl --system` |
 | A killer that acts before the kernel stalls | earlyoom | `sudo apt-get install -y earlyoom && sudo systemctl enable --now earlyoom` |
 
@@ -262,10 +263,23 @@ systemctl is-active earlyoom
 once everything unprotected is exhausted — and `OOMScoreAdjust=-500` cannot
 outrank a session at -1000; it does not need to, it needs to outrank the rest
 of the host. Steady-state RSS for the service is ~150 MB, so 512 MB is
-reservation, not a cap. `libpostal.service` is deliberately left unprotected:
-at ~1.9 GB it is the largest thing on the host, it restarts itself
-(`Restart=always`), and `/api/v2/health` treats its absence as `unavailable`
-without failing the service — it is the right thing to lose first.
+reservation, not a cap.
+
+**What to lose, in order.** `/api/v2/health` already ranks these, and the
+reservations follow it rather than inventing a second opinion:
+
+| Service | Health says | Reservation |
+|---|---|---|
+| `libpostal.service` (~1.9 GB) | `libpostal: unavailable`, status stays ok | **none, deliberately** — largest thing on the host, `Restart=always`, and the only one whose loss the service survives. The right thing to lose first |
+| everything else in `system.slice` | — | the 128M left undistributed after the two claims below |
+| `postgresql@16-main` (~281 MB) | `database: error` → **HTTP 503** | `MemoryLow=384M` |
+| `address-validator` (~150 MB) | the service itself | `MemoryLow=512M`, `OOMScoreAdjust=-500` |
+
+Protecting postgres is not optional generosity: an outage there fails the
+health check outright, so leaving it at `MemoryLow=0` would have protected the
+app while letting the thing it returns 503 without be reclaimed out from under
+it. Only `address-validator` gets `OOMScoreAdjust` — giving postgres the same
+value would restore the tie between them rather than ordering them.
 
 ### Don't install a SocratiCode server at launch
 
