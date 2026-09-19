@@ -220,18 +220,40 @@ swap** with the production service. Two facts make that sharper than it sounds:
   2026-09-16 outage on the sibling `broker` VM presented — the bus was down
   57m 48s (gregoryfoster/skills#295).
 
-Three defences, all installed rather than tuned at runtime:
+Four defences, all installed rather than tuned at runtime:
 
 | What | Where | Install |
 |---|---|---|
-| Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
+| **Parent allocation** — `MemoryLow=1G` on `system.slice` | `infra/system-slice-memory.conf` | `sudo mkdir -p /etc/systemd/system/system.slice.d && sudo cp infra/system-slice-memory.conf /etc/systemd/system/system.slice.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
+| Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
 | Atomic-allocation headroom — `vm.min_free_kbytes = 131072` | `infra/60-address-validator-memory.conf` | `sudo cp infra/60-address-validator-memory.conf /etc/sysctl.d/ && sudo sysctl --system` |
 | A killer that acts before the kernel stalls | earlyoom | `sudo apt-get install -y earlyoom && sudo systemctl enable --now earlyoom` |
 
-Verify:
+**The parent allocation is not optional, and its absence is invisible.**
+`systemd.resource-control(5)`: *"For a protection to be effective, it is
+generally required to set a corresponding allocation on all ancestors, which is
+then distributed between children (with the exception of the root slice)."* A
+cgroup's effective `memory.low` is bounded by its ancestors', so `MemoryLow=`
+on the service alone is inert while `system.slice` sits at the default 0. This
+host does not soften that: `/sys/fs/cgroup` is mounted `rw,relatime` with no
+`memory_recursiveprot`. `system.slice`'s own parent is the root slice, which
+the man page exempts, so those two levels are the whole chain.
+
+Verify — **read the kernel's view, not the unit property.** `systemctl show`
+reports what is configured, which on a host missing the parent allocation is
+`MemoryLow=536870912` next to an effective protection of zero:
 
 ```bash
-systemctl show address-validator -p MemoryLow -p OOMScoreAdjust -p MemoryCurrent
+# The effective chain. The parent must be non-zero or the child's value is
+# decoration; both numbers matter, neither alone is the answer.
+cat /sys/fs/cgroup/system.slice/memory.low                          # want 1073741824
+cat /sys/fs/cgroup/system.slice/address-validator.service/memory.low # want 536870912
+cat /sys/fs/cgroup/system.slice/postgresql@16-main.service/memory.low # want 402653184
+
+# Reclaim actually deferred under pressure, cumulative since boot:
+grep '^low ' /sys/fs/cgroup/system.slice/address-validator.service/memory.events
+
+systemctl show address-validator -p OOMScoreAdjust -p MemoryCurrent  # these two are honest
 sysctl vm.min_free_kbytes
 systemctl is-active earlyoom
 ```
