@@ -132,6 +132,9 @@ answer means no importers, not a broken resolver.
 
 ### The daily health hook is never silent here
 
+**Two** lines are expected every day, not one. Both are the hook working; a
+*third* finding beside them is the one to read.
+
 `unresolvedPct` sits above the hook's 50% warn threshold, so the once-per-day
 run always emits:
 
@@ -140,7 +143,31 @@ graph unresolved <N>% (> 50%) — share of call edges with no first-party
 callee; verdict is ok, so this is a statistic, not a defect
 ```
 
-That line is expected. A *second* finding beside it is the one to read.
+And since GH #214 pinned the server (`~/.socraticode/pin`, so no launch
+installs one — [docs/DEPLOYMENT.md](DEPLOYMENT.md) → Host memory), the pin
+check reports on every run. It never returns nothing, because "silent" and
+"never ran" would be indistinguishable:
+
+```
+pinned at <version>; the plugin's 'socraticode@latest' resolves to <same> — same feature release
+```
+
+That is the intended steady state. A pin is *meant* to lag, so same-version
+and one-patch-apart are notes. Only a **minor or major** gap is a defect —
+two feature releases writing one store — and it names the re-pin command:
+
+```
+npm install --prefix ~/.socraticode/pin socraticode@<version>
+```
+
+Re-pin as a decision, not on a schedule. Two wordings mean the check could not
+run rather than found nothing: *"no server version was recorded"* and *"the
+registry did not answer"*, both ending `NOT measured`. Neither is an all-clear.
+
+**The pin does not cover the session.** Claude Code cannot override a plugin's
+MCP command, so the plugin keeps launching `@latest` while the driver stays
+fixed — that gap is exactly what this check measures, and it is new with the
+pin. Before it, both floated and agreed by coincidence of timing.
 
 ### Context artifacts
 

@@ -22,5 +22,25 @@ ExecStart=/home/exedev/address-validator/.venv/bin/uvicorn address_validator.mai
 Restart=on-failure
 RestartSec=3
 
+# Memory reservation (GH #214). This VM runs dev sessions beside this service on
+# 7.2 GiB with no swap, and exe.dev session processes inherit oom_score_adj
+# -1000 from exe-init/sshd -- the OOM killer can never pick a session, so under
+# real exhaustion it takes this service instead. Steady state here is ~150 MB.
+#   MemoryLow      soft floor: the kernel reclaims from this cgroup only after
+#                  everything unprotected is exhausted. INERT ON ITS OWN --
+#                  a cgroup's effective memory.low is bounded by its
+#                  ancestors', and system.slice defaults to 0, so this line
+#                  needs infra/system-slice-memory.conf installed to do
+#                  anything at all. `systemctl show` reports the configured
+#                  value either way; see docs/DEPLOYMENT.md -> Host memory
+#                  for the check that reads the effective one.
+#   OOMScoreAdjust makes this service a worse target than any unadjusted
+#                  process. It cannot outrank a session at -1000; it does not
+#                  need to, it needs to outrank the rest of the host.
+# A cap on a session is not a substitute -- a cgroup cap on a process the killer
+# will not touch stalls it rather than killing it (gregoryfoster/skills#295).
+MemoryLow=512M
+OOMScoreAdjust=-500
+
 [Install]
 WantedBy=multi-user.target

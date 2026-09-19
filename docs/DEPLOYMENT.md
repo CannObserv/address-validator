@@ -14,6 +14,8 @@ journalctl -u address-validator -f -o cat | jq -c '{t:.timestamp, l:.level, rid:
 journalctl -u address-validator -o cat | jq 'select(.request_id == "<ULID>")'
 
 # Re-install systemd unit after infra/address-validator.service changes
+# NOTE: this alone does NOT establish the memory reservation — the unit's
+# MemoryLow= is inert without the system.slice drop-in (see Host memory below).
 sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload
 
 # Install/enable libpostal sidecar
@@ -203,6 +205,115 @@ reach binds inside that range. Claiming a port already listed here collides
 silently in at least one case — the companion falls back to a random 49152+
 port and still reports success — so add new entries here rather than picking
 an unrecorded number.
+
+## Host memory
+
+Single-VM dev+prod means an interactive agent session shares 7.2 GiB **and no
+swap** with the production service. Two facts make that sharper than it sounds:
+
+- exe.dev session processes inherit `oom_score_adj` **-1000** from `exe-init`
+  and `sshd`. The OOM killer can never pick a session — under real exhaustion
+  it takes `address-validator.service` instead.
+- With no swap and a small `vm.min_free_kbytes`, the host does not reach the
+  OOM killer at all in the common case. A burst allocation drains the free pool
+  faster than reclaim refills it and `GFP_ATOMIC` callers that cannot sleep
+  (softirq, network) simply fail: page-allocation errors in `tailscaled` and
+  `ksoftirqd`, a dead network, and **nothing killed**. That is how the
+  2026-09-16 outage on the sibling `broker` VM presented — the bus was down
+  57m 48s (gregoryfoster/skills#295).
+
+Five defences, all installed rather than tuned at runtime:
+
+| What | Where | Install |
+|---|---|---|
+| **Parent allocation** — `MemoryLow=1G` on `system.slice` | `infra/system-slice-memory.conf` | `sudo mkdir -p /etc/systemd/system/system.slice.d && sudo cp infra/system-slice-memory.conf /etc/systemd/system/system.slice.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
+| Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
+| Database reservation — `MemoryLow=384M` | `infra/postgresql-memory.conf` | `sudo mkdir -p /etc/systemd/system/postgresql@16-main.service.d && sudo cp infra/postgresql-memory.conf /etc/systemd/system/postgresql@16-main.service.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
+| Atomic-allocation headroom — `vm.min_free_kbytes = 131072` | `infra/60-address-validator-memory.conf` | `sudo cp infra/60-address-validator-memory.conf /etc/sysctl.d/ && sudo sysctl --system` |
+| A killer that acts before the kernel stalls | earlyoom | `sudo apt-get install -y earlyoom && sudo systemctl enable --now earlyoom` |
+
+**The parent allocation is not optional, and its absence is invisible.**
+`systemd.resource-control(5)`: *"For a protection to be effective, it is
+generally required to set a corresponding allocation on all ancestors, which is
+then distributed between children (with the exception of the root slice)."* A
+cgroup's effective `memory.low` is bounded by its ancestors', so `MemoryLow=`
+on the service alone is inert while `system.slice` sits at the default 0. This
+host does not soften that: `/sys/fs/cgroup` is mounted `rw,relatime` with no
+`memory_recursiveprot`. `system.slice`'s own parent is the root slice, which
+the man page exempts, so those two levels are the whole chain.
+
+Verify — **read the kernel's view, not the unit property.** `systemctl show`
+reports what is configured, which on a host missing the parent allocation is
+`MemoryLow=536870912` next to an effective protection of zero:
+
+```bash
+# The effective chain. The parent must be non-zero or the child's value is
+# decoration; both numbers matter, neither alone is the answer.
+cat /sys/fs/cgroup/system.slice/memory.low                          # want 1073741824
+cat /sys/fs/cgroup/system.slice/address-validator.service/memory.low # want 536870912
+cat /sys/fs/cgroup/system.slice/postgresql@16-main.service/memory.low # want 402653184
+
+# Reclaim actually deferred under pressure, cumulative since boot:
+grep '^low ' /sys/fs/cgroup/system.slice/address-validator.service/memory.events
+
+systemctl show address-validator -p OOMScoreAdjust -p MemoryCurrent  # these two are honest
+sysctl vm.min_free_kbytes
+systemctl is-active earlyoom
+```
+
+`MemoryLow` is a **soft** floor — the kernel reclaims from the service only
+once everything unprotected is exhausted — and `OOMScoreAdjust=-500` cannot
+outrank a session at -1000; it does not need to, it needs to outrank the rest
+of the host. Steady-state RSS for the service is ~150 MB, so 512 MB is
+reservation, not a cap.
+
+**What to lose, in order.** `/api/v2/health` already ranks these, and the
+reservations follow it rather than inventing a second opinion:
+
+| Service | Health says | Reservation |
+|---|---|---|
+| `libpostal.service` (~1.9 GB) | `libpostal: unavailable`, status stays ok | **none, deliberately** — largest thing on the host, `Restart=always`, and the only one whose loss the service survives. The right thing to lose first |
+| everything else in `system.slice` | — | the 128M left undistributed after the two claims below |
+| `postgresql@16-main` (~281 MB) | `database: error` → **HTTP 503** | `MemoryLow=384M` |
+| `address-validator` (~150 MB) | the service itself | `MemoryLow=512M`, `OOMScoreAdjust=-500` |
+
+Protecting postgres is not optional generosity: an outage there fails the
+health check outright, so leaving it at `MemoryLow=0` would have protected the
+app while letting the thing it returns 503 without be reclaimed out from under
+it. Only `address-validator` gets `OOMScoreAdjust` — giving postgres the same
+value would restore the tie between them rather than ordering them.
+
+### Don't install a SocratiCode server at launch
+
+The plugin's MCP command is `npx -y --prefer-online socraticode@latest`, and
+`--prefer-online` revalidates against the registry on **every** launch, so a
+warm npx cache is not a warm path on any day the package moved. Measured on
+`broker`: a cold install plus server plus full index peaked at **1.2 G**, and
+all 126 `MemoryHigh` throttle events landed in the install — none in indexing.
+The same workload from a pre-installed build peaked at **75 MB**.
+`.claude/hooks/socraticode-health.sh` runs that driver from SessionStart once
+per UTC day, so on this host the install path was live.
+
+A pinned install is resolved ahead of the plugin's command by
+`mcp-driver.mjs`. Install once, deliberately, under a cap:
+
+```bash
+npm view socraticode version        # pick a literal; never @latest
+systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M \
+  -- npm install --prefix ~/.socraticode/pin socraticode@<version>
+node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs resolve
+```
+
+`resolve` prints which path won without launching a server; it should name the
+pinned install. Nothing else is configured — absent a pin the chain is exactly
+what it was. Re-pin as a decision, not on a schedule: the point of pinning was
+to stop an unattended launch from installing.
+
+**The pin does not cover the session.** Claude Code cannot override a plugin's
+MCP server command, so the plugin keeps launching `@latest` while the driver
+stays fixed. The daily health hook measures that gap and reports a defect only
+when the two differ by a minor or major release — a patch apart is the intended
+steady state, since a pin is meant to lag.
 
 ## Server lifecycle
 
