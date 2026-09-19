@@ -14,6 +14,8 @@ journalctl -u address-validator -f -o cat | jq -c '{t:.timestamp, l:.level, rid:
 journalctl -u address-validator -o cat | jq 'select(.request_id == "<ULID>")'
 
 # Re-install systemd unit after infra/address-validator.service changes
+# NOTE: this alone does NOT establish the memory reservation — the unit's
+# MemoryLow= is inert without the system.slice drop-in (see Host memory below).
 sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload
 
 # Install/enable libpostal sidecar
