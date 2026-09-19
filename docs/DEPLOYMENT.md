@@ -222,15 +222,23 @@ swap** with the production service. Two facts make that sharper than it sounds:
   2026-09-16 outage on the sibling `broker` VM presented — the bus was down
   57m 48s (gregoryfoster/skills#295).
 
-Five defences, all installed rather than tuned at runtime:
+Six defences, all installed rather than tuned at runtime:
 
 | What | Where | Install |
 |---|---|---|
 | **Parent allocation** — `MemoryLow=1G` on `system.slice` | `infra/system-slice-memory.conf` | `sudo mkdir -p /etc/systemd/system/system.slice.d && sudo cp infra/system-slice-memory.conf /etc/systemd/system/system.slice.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
 | Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
-| Database reservation — `MemoryLow=384M` | `infra/postgresql-memory.conf` | `sudo mkdir -p /etc/systemd/system/postgresql@16-main.service.d && sudo cp infra/postgresql-memory.conf /etc/systemd/system/postgresql@16-main.service.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
+| Database reservation — `MemoryLow=384M`, **both levels** | `infra/system-postgresql-slice-memory.conf` + `infra/postgresql-memory.conf` | `sudo mkdir -p /etc/systemd/system/system-postgresql.slice.d /etc/systemd/system/postgresql@16-main.service.d && sudo cp infra/system-postgresql-slice-memory.conf /etc/systemd/system/system-postgresql.slice.d/10-memory-reservation.conf && sudo cp infra/postgresql-memory.conf /etc/systemd/system/postgresql@16-main.service.d/10-memory-reservation.conf && sudo systemctl daemon-reload` |
 | Atomic-allocation headroom — `vm.min_free_kbytes = 131072` | `infra/60-address-validator-memory.conf` | `sudo cp infra/60-address-validator-memory.conf /etc/sysctl.d/ && sudo sysctl --system` |
 | A killer that acts before the kernel stalls | earlyoom | `sudo apt-get install -y earlyoom && sudo systemctl enable --now earlyoom` |
+
+**A templated unit hides an extra level.** `postgresql@16-main.service` is a
+template instance, so systemd files it under an auto-created
+`system-postgresql.slice` rather than directly in `system.slice` — and that
+intermediate slice is created with no resource settings, i.e. `memory.low` 0,
+which clamps the unit's own 384M to an effective zero. Both levels need the
+allocation. Any templated unit added to this host needs its own
+`system-<prefix>.slice` drop-in; a plain unit does not.
 
 **The parent allocation is not optional, and its absence is invisible.**
 `systemd.resource-control(5)`: *"For a protection to be effective, it is
@@ -247,11 +255,14 @@ reports what is configured, which on a host missing the parent allocation is
 `MemoryLow=536870912` next to an effective protection of zero:
 
 ```bash
-# The effective chain. The parent must be non-zero or the child's value is
-# decoration; both numbers matter, neither alone is the answer.
-cat /sys/fs/cgroup/system.slice/memory.low                          # want 1073741824
+# The effective chain. EVERY ancestor must be non-zero or the child's value is
+# decoration; the numbers only mean anything read together. Note postgres is a
+# TEMPLATED unit, so it sits one level deeper, under an implicit
+# system-postgresql.slice -- read the path, not the unit name.
+cat /sys/fs/cgroup/system.slice/memory.low                           # want 1073741824
 cat /sys/fs/cgroup/system.slice/address-validator.service/memory.low # want 536870912
-cat /sys/fs/cgroup/system.slice/postgresql@16-main.service/memory.low # want 402653184
+cat /sys/fs/cgroup/system.slice/system-postgresql.slice/memory.low   # want 402653184
+cat /sys/fs/cgroup/system.slice/system-postgresql.slice/postgresql@16-main.service/memory.low  # want 402653184
 
 # Reclaim actually deferred under pressure, cumulative since boot:
 grep '^low ' /sys/fs/cgroup/system.slice/address-validator.service/memory.events
