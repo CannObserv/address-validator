@@ -15,3 +15,18 @@
 skills-vendor/
 .claude/skills/
 .skills/
+
+# `docs/plans/` is dated design prose — AGENTS.md: "dated snapshots, never
+# current guidance". It was 981 chunks, 36.6% of the code index and 2.3x all
+# of src/, and it outranked first-party source on questions the plans answer
+# wrongly: a context search for the validated_addresses status CHECK returned
+# a plan showing 'assigned', a value migration 014 dropped and that
+# SENSITIVE-AREAS.md calls a derived rollup, never a stored status.
+#
+# Same argument as skills-vendor/ above, applied to our own prose — which is
+# worse, because ours is more plausible. Excluded from the CODE index only:
+# the identical content stays embedded as the `design-plans` context
+# artifact, so plan rationale is still searchable via codebase_context_search
+# (deliberate call) rather than surfacing unbidden in codebase_search.
+# See GH #218 (option A); the context-store share is still open there.
+docs/plans/
