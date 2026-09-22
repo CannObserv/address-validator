@@ -26,8 +26,14 @@ not semantic search.
 | Where is X defined / how does Y work / what touches Z | `codebase_search` |
 | Exact string or regex (errors, log lines, known symbols) | `grep` / `rg` |
 | Imports/dependents of a file · blast radius of a change | `codebase_graph_query` / `codebase_impact` |
+| A documented contract — log levels, DPV map, Pub 28, style, dep policy | `codebase_context_search` |
+| Schema, status vocabularies, migrations | `codebase_search` or the source — **never** `codebase_context_search` |
 
-Full tool table, prefetch query, per-tool guidance: [docs/SOCRATICODE.md](docs/SOCRATICODE.md).
+Two separate stores: `.socraticodeignore` governs the code index and graph, not
+the context store. `codebase_context_search` is the only path to `docs/plans`
+rationale — and is **wrong** on schema/status questions, which it answers from
+dated plans (GH #218). Full tool table, store model, prefetch query:
+[docs/SOCRATICODE.md](docs/SOCRATICODE.md).
 <!-- END socraticode-policy -->
 
 ## Code Exploration Notes (repo-specific)
