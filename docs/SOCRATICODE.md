@@ -114,6 +114,93 @@ index if left in, and vendored prose outranks first-party code in
 Everything below the END marker survives an `init-socraticode` re-run. Measured
 figures carry the date they were taken; re-measure rather than trusting them.
 
+### Three stores, not one — and `.socraticodeignore` governs only two
+
+Measured 2026-09-22 against the live Qdrant (`localhost:16333`), SocratiCode
+1.14.0. "The index" is three separate collections with three separate
+controls:
+
+| Store | Collection | Built by | Searched by | Governed by |
+|---|---|---|---|---|
+| **Code index** | `codebase_<id>` | `codebase_index` / `codebase_update` / file watcher | `codebase_search` | `.socraticodeignore` |
+| **Context store** | `context_<id>` | `codebase_context_index` (auto on first search) | `codebase_context_search` | `.socraticodecontextartifacts.json` |
+| **Graph** | `<id>_symgraph_*` | `codebase_graph_build` (auto after a full index) | `codebase_graph_query`, `codebase_impact` | `.socraticodeignore` |
+
+**`.socraticodeignore` does not reach the context store.** Excluding a path
+removes it from `codebase_search` and from the graph, and leaves it fully
+searchable through `codebase_context_search` if an artifact declares it. That
+is not a quirk to work around — it is what makes GH #218 option A safe, and
+it is why option A alone does not settle the context-store question.
+
+Two independent mechanisms produce that, and both were verified by running
+`readArtifactContent` directly rather than inferred from behaviour:
+
+- **Directory artifact** — the ignore chain is re-rooted at the *artifact*
+  directory (`createIgnoreFilter(resolved)`), so it reads
+  `<artifact-dir>/.socraticodeignore`, never the project root's; and glob
+  yields paths relative to that directory, which therefore cannot match a
+  project-rooted pattern. Upstream calls this out as deliberate — it "keeps a
+  directory from ignoring itself".
+- **Single-file artifact** — read verbatim, bypassing the ignore chain
+  entirely: "a declared path is an explicit instruction".
+
+Test performed: a fixture project whose root `.socraticodeignore` contained
+`docs/plans/`, with a directory artifact at `./docs/plans`, returned both
+files and `exclusions.ignored = 0`.
+
+**The lever that does trim a directory artifact** is an ignore file placed
+*inside* it (`docs/plans/.socraticodeignore`), plus the built-in defaults and
+nested `.gitignore`s. To drop a whole artifact, remove it from the manifest.
+
+### Which search to reach for
+
+| You want | Call | Because |
+|---|---|---|
+| Where something is defined / how it works / what touches it | `codebase_search` | First-party source, tests and infra; dated prose is excluded (above) |
+| A contract or standard — log levels, DPV mapping, Pub 28 rules, style, dependency policy | `codebase_context_search` | Curated docs win cleanly here; measured top-5 for a logging query was 4x LOGGING.md + AGENTS.md, zero plans |
+| Design rationale — *why* it was built this way | `codebase_context_search`, expecting `design-plans` | The only path to plan prose now. Treat every hit as a dated snapshot |
+| Authoritative schema, status vocabularies, migrations | **`codebase_search`**, or read the source | There is **no** schema context artifact; `codebase_context_search` answers this from plans and gets it **wrong** — see below |
+| Exact strings — error text, log lines, known symbols | `grep` / `rg` | Lexical, not semantic |
+| Importers / blast radius | `codebase_graph_query`, `codebase_impact` | Import edges are exact here |
+
+**The sharp edge.** `codebase_context_search` for
+`"model_training_candidates status values allowed"` returned **5 of 5 hits from
+`design-plans`, zero first-party**, asserting that `assign_candidates` flips row
+status to `'assigned'` — which [SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records
+as a read-time rollup that is *never* stored, and which migration 014 dropped
+from the CHECK. The same question to `codebase_search` returns migration 014
+itself.
+
+Plans dominate where they are voluminous, and they are voluminous where the
+design was iterated — which is where they are most likely superseded. Crowd-out
+and staleness are correlated. For anything schema- or status-shaped, go to the
+code.
+
+### `docs/plans/` and `docs/research/` are excluded from the code index (2026-09-21, GH #218)
+
+`.socraticodeignore` drops both from `codebase_search` — the two directories
+AGENTS.md calls "dated snapshots, never current guidance". Neither is dropped
+from the context store: the same content stays embedded as the `design-plans`
+and `address-validation-research` artifacts, so that prose is still reachable
+— deliberately, via `codebase_context_search`, instead of competing with
+source in every code search.
+
+Measured before the exclusion, on the 1.14.0 rebuild: `docs/plans` was **981
+of 2,677 code chunks (36.6%)** — 2.3x all of `src/` (419, 15.7%) — and
+`design-plans` was **983 of 1,112 context chunks (88.4%)**, against 10 chunks
+for AGENTS.md. `docs/research` added 28 more code chunks (1.0%). Together,
+52% of everything embedded for this repo was prose AGENTS.md calls "dated
+snapshots, never current guidance".
+
+The failure this prevents is not noise, it is *wrong answers*: a context search
+for the `validated_addresses` status CHECK returned a plan asserting
+`'assigned'`, which migration 014 dropped and which
+[docs/SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records as a derived rollup that
+is never stored.
+
+**The context-store share (88.4%) is unfixed** — GH #218 options B and C. Re-read
+that issue before concluding plan prose is handled.
+
 ### Measured graph yield (2026-09-09, SocratiCode v1.13.2)
 
 `verdict: "ok"` — **376 edges across 242 files, 1.6 per file**, 0 circular
