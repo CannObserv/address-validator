@@ -30,3 +30,11 @@ skills-vendor/
 # (deliberate call) rather than surfacing unbidden in codebase_search.
 # See GH #218 (option A); the context-store share is still open there.
 docs/plans/
+
+# `docs/research/` is the other half of the same AGENTS.md sentence. Smaller
+# (28 chunks, 1.0%) but identical in kind, and excluded on the identical
+# terms: its one indexed file, address-validation-research.md, IS the
+# `address-validation-research` context artifact, so nothing leaves the store.
+# The ISO 19160 PDF beside it was never indexed (binary, unsupported
+# extension) and is unaffected either way.
+docs/research/

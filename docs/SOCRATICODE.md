@@ -114,19 +114,21 @@ index if left in, and vendored prose outranks first-party code in
 Everything below the END marker survives an `init-socraticode` re-run. Measured
 figures carry the date they were taken; re-measure rather than trusting them.
 
-### `docs/plans/` is excluded from the code index (2026-09-21, GH #218)
+### `docs/plans/` and `docs/research/` are excluded from the code index (2026-09-21, GH #218)
 
-`.socraticodeignore` drops `docs/plans/` from `codebase_search`. It is **not**
-dropped from the context store: the same content stays embedded as the
-`design-plans` artifact, so plan rationale is still reachable — deliberately,
-via `codebase_context_search`, instead of competing with source in every code
-search.
+`.socraticodeignore` drops both from `codebase_search` — the two directories
+AGENTS.md calls "dated snapshots, never current guidance". Neither is dropped
+from the context store: the same content stays embedded as the `design-plans`
+and `address-validation-research` artifacts, so that prose is still reachable
+— deliberately, via `codebase_context_search`, instead of competing with
+source in every code search.
 
 Measured before the exclusion, on the 1.14.0 rebuild: `docs/plans` was **981
 of 2,677 code chunks (36.6%)** — 2.3x all of `src/` (419, 15.7%) — and
 `design-plans` was **983 of 1,112 context chunks (88.4%)**, against 10 chunks
-for AGENTS.md. Together, 52% of everything embedded for this repo was prose
-AGENTS.md calls "dated snapshots, never current guidance".
+for AGENTS.md. `docs/research` added 28 more code chunks (1.0%). Together,
+52% of everything embedded for this repo was prose AGENTS.md calls "dated
+snapshots, never current guidance".
 
 The failure this prevents is not noise, it is *wrong answers*: a context search
 for the `validated_addresses` status CHECK returned a plan asserting
