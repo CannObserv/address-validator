@@ -114,6 +114,16 @@ index if left in, and vendored prose outranks first-party code in
 Everything below the END marker survives an `init-socraticode` re-run. Measured
 figures carry the date they were taken; re-measure rather than trusting them.
 
+### The generated table above is wrong about schemas — this section wins
+
+The row *"Browse knowledge artifacts; locate schemas, endpoints, configs →
+`codebase_context`, `codebase_context_search`"* sits above the END marker, so
+`init-socraticode` regenerates it and it cannot be durably fixed here. **It is
+wrong for this repo on schemas**, measured: see the sharp edge below. This
+repo has no schema context artifact; schema, status-vocabulary and migration
+questions go to `codebase_search` or the source. Everything below the marker
+supersedes it. Upstream fix tracked at gregoryfoster/skills.
+
 ### Three stores, not one — and `.socraticodeignore` governs only two
 
 Measured 2026-09-22 against the live Qdrant (`localhost:16333`), SocratiCode
