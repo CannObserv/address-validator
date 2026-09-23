@@ -9,35 +9,33 @@ FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpo
 <!-- BEGIN socraticode-policy -->
 ## Code Exploration Policy
 
-SocratiCode is the preferred semantic-search tool here once indexed (local Qdrant
-store + on-disk graph; manifest `.socraticodecontextartifacts.json`). Its MCP
-tools are **deferred** — schemas load only after the `ToolSearch` prefetch that
-`.claude/hooks/socraticode-reminder.sh` prints each session; calling one before
-that fails with `InputValidationError`.
+SocratiCode is the preferred semantic-search tool here once indexed (local
+Qdrant store + on-disk graph; manifest `.socraticodecontextartifacts.json`).
+Its MCP tools are **deferred** — schemas load only after the `ToolSearch`
+prefetch that `.claude/hooks/socraticode-reminder.sh` prints each session.
 
-**Negative rule.** Use SocratiCode MCP tools first for semantic questions ("where
-is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg` only on
-exact strings (error messages, log lines, known symbols). Reserve the Explore
-subagent for path-pattern walks (`*.py` under `src/address_validator/routers/`),
+**Negative rule.** Use SocratiCode MCP tools first for semantic questions
+("where is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg`
+only on exact strings (error messages, log lines, known symbols). Reserve the
+Explore subagent for path-pattern walks (`*.py` under `src/address_validator/routers/`),
 not semantic search.
 
 | Goal | Tool |
-|---|---|
+|------|------|
 | Where is X defined / how does Y work / what touches Z | `codebase_search` |
 | Exact string or regex (errors, log lines, known symbols) | `grep` / `rg` |
 | Imports/dependents of a file · blast radius of a change | `codebase_graph_query` / `codebase_impact` |
-| A documented contract — log levels, DPV map, Pub 28, style, dep policy | `codebase_context_search` |
-| Schema, status vocabularies, migrations | `codebase_search` or the source — **never** `codebase_context_search` |
 
-Two separate stores: `.socraticodeignore` governs the code index and graph, not
-the context store. `codebase_context_search` is the only path to `docs/plans`
-rationale — and is **wrong** on schema/status questions, which it answers from
-dated plans (GH #218). Full tool table, store model, prefetch query:
-[docs/SOCRATICODE.md](docs/SOCRATICODE.md).
+Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs/SOCRATICODE.md).
 <!-- END socraticode-policy -->
 
 ## Code Exploration Notes (repo-specific)
 
+- **Schema, status vocabularies, migrations → `codebase_search` or the source,
+  never `codebase_context_search`.** No schema artifact is declared, so a
+  context search answers these from dated `docs/plans` — wrongly (GH #218).
+- `codebase_context_search` is for documented contracts (log levels, DPV map,
+  Pub 28, style, dep policy) and is the only path to `docs/plans` rationale.
 - `unresolvedPct` is a **call**-edge statistic, not imports — import edges probe
   exact, so an empty `codebase_graph_query`/`codebase_impact` answer means no
   dependents, not a lossy graph. Measured yield, evidence and re-measurement
