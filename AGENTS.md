@@ -36,10 +36,9 @@ Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs
   context search answers these from dated `docs/plans` — wrongly (GH #218).
 - `codebase_context_search` is for documented contracts (log levels, DPV map,
   Pub 28, style, dep policy) and is the only path to `docs/plans` rationale.
-- `unresolvedPct` is a **call**-edge statistic, not imports — import edges probe
-  exact, so an empty `codebase_graph_query`/`codebase_impact` answer means no
-  dependents, not a lossy graph. Measured yield, evidence and re-measurement
-  recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
+- `unresolvedPct` is a **call**-edge statistic; import edges are exact, so an
+  empty `codebase_graph_query`/`codebase_impact` answer means no dependents.
+  Evidence: [docs/SOCRATICODE.md](docs/SOCRATICODE.md).
 
 ## Architecture
 
@@ -102,7 +101,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
-- New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in, and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+- New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in (`.skills/worktree_venv=none`: under the `link` default a worktree's `uv sync` *prunes* the port-8000 service's venv), and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
 - A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
@@ -143,8 +142,6 @@ uv sync                         # install/refresh deps
 uv add <package>                # add dep; commit pyproject.toml + uv.lock together
 uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
 ```
-
-Worktrees get **no** `.venv` (`.skills/worktree_venv=none`) — run `uv sync` in a new worktree before its first test run (~0.2 s, ~4 MiB). This is why: under the `link` default a worktree's `uv sync` *prunes* the venv the port-8000 service runs from. Rationale and measurements → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
@@ -187,8 +184,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
-| `socraticode:codebase-exploration` | Semantic search, dependency graphs — tool table in [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
-| `socraticode:codebase-management` | Index management, health checks, file watching — see [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+| `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
 
 ## Commit convention
 

@@ -1,0 +1,8 @@
+# Counts judged legitimate (curating-context Phase 6.5, check-counts.sh).
+
+# A format spec, not a tally: the USPS single-line convention is two spaces,
+# and changing it rewrites the sentence and the standardizer together.
+AGENTS.md :: stable :: two-space separator between logical address lines
+
+# Both PATs are named in the same section (GH_TOKEN, GH_TOKEN_SKILLS).
+AGENTS.md :: enumerated :: Two PATs in `.env`

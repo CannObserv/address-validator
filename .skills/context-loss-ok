@@ -1,0 +1,10 @@
+# Judged warrants for lines a curation rewrote rather than moved (curating-context Phase 6).
+# 2026-09-23, GH #221: class-C tightenings to bring AGENTS.md under 6,000 tokens; --claims: 0 atoms dropped.
+AGENTS.md :: tighten :: - `unresolvedPct` is a **call**-edge statistic, not imports — import edges probe
+AGENTS.md :: tighten :: exact, so an empty `codebase_graph_query`/`codebase_impact` answer means no
+AGENTS.md :: tighten :: dependents, not a lossy graph. Measured yield, evidence and re-measurement
+AGENTS.md :: tighten :: recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
+AGENTS.md :: tighten :: - New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in, and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+AGENTS.md :: tighten :: Worktrees get **no** `.venv` (`.skills/worktree_venv=none`) — run `uv sync` in a new worktree before its first test run (~0.2 s, ~4 MiB). This is why: under the `link` default a worktree's `uv sync` *prunes* the venv the port-8000 service runs from. Rationale and measurements → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+AGENTS.md :: tighten :: | `socraticode:codebase-exploration` | Semantic search, dependency graphs — tool table in [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+AGENTS.md :: tighten :: | `socraticode:codebase-management` | Index management, health checks, file watching — see [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |

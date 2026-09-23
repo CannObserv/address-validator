@@ -311,9 +311,9 @@ Verified by calling `readArtifactContent` directly. A fixture whose root
 `.socraticodeignore` held `docs/plans/`, with a directory artifact at
 `./docs/plans`, returned both files and `exclusions.ignored = 0`.
 
-### `docs/plans/` and `docs/research/` are excluded from the code index (GH #218)
+### `docs/plans/` and `docs/research/` are excluded from the code index
 
-`.socraticodeignore` drops both — the directories AGENTS.md calls "dated
+Since GH #218, `.socraticodeignore` drops both — the directories AGENTS.md calls "dated
 snapshots, never current guidance". Both stay in the context store as the
 `design-plans` (directory) and `address-validation-research` (single-file)
 artifacts, so nothing became unsearchable.
