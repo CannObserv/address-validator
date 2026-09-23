@@ -204,7 +204,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
-- [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch query, graph health
+- [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch hook, graph health
 - [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
 - [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, API model notes
 - Vendored USPS OpenAPI specs: [standard](docs/usps-addresses-v3r2_4.yaml), [Enhanced](docs/usps-enhanced-addresses-v3r2.yaml)
