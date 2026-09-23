@@ -275,169 +275,111 @@ outranks first-party code in `codebase_search` results.
 Everything below the END marker survives an `init-socraticode` re-run. Measured
 figures carry the date they were taken; re-measure rather than trusting them.
 
-### The generated table above is wrong about schemas — this section wins
+### Schemas: no schema artifact, so never context search
 
-The row *"Browse knowledge artifacts; locate schemas, endpoints, configs →
-`codebase_context`, `codebase_context_search`"* sits above the END marker, so
-`init-socraticode` regenerates it and it cannot be durably fixed here. **It is
-wrong for this repo on schemas**, measured: see the sharp edge below. This
-repo has no schema context artifact; schema, status-vocabulary and migration
-questions go to `codebase_search` or the source. Everything below the marker
-supersedes it. Upstream fix tracked at gregoryfoster/skills.
+No schema, migration or source file is a context artifact here, so the
+generated schema row above has no `artifactName` half: schema, status
+vocabularies and migrations go to `codebase_search` or `alembic/versions/`.
+An unscoped `codebase_context_search` answers them from `design-plans`, and
+**wrongly**: `"model_training_candidates status values allowed"` returned 5 of 5
+hits from plans asserting a stored `'assigned'` status, which migration 014
+dropped and [SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records as a read-time
+rollup. The same question to `codebase_search` puts migration 014 in its top
+three (re-checked 2026-09-23). This is the measurement upstream's schema row
+cites (gregoryfoster/skills#315).
 
-### Three stores, not one — and `.socraticodeignore` governs only two
+Context search is the right call for documented contracts — logging, DPV map,
+Pub 28, style, dependency policy — where a curated artifact exists and wins
+cleanly, and it is the only path to `docs/plans` rationale. Treat every
+`design-plans` hit as a dated snapshot.
+
+### The three collections, and what the generated Index scope leaves out
 
 Measured 2026-09-22 against the live Qdrant (`localhost:16333`), SocratiCode
-1.14.0. "The index" is three separate collections with three separate
-controls:
+1.14.0. The generated section's "two stores" are three collections:
 
-| Store | Collection | Built by | Searched by | Governed by |
-|---|---|---|---|---|
-| **Code index** | `codebase_<id>` | `codebase_index` / `codebase_update` / file watcher | `codebase_search` | `.socraticodeignore` |
-| **Context store** | `context_<id>` | `codebase_context_index` (auto on first search) | `codebase_context_search` | `.socraticodecontextartifacts.json` |
-| **Graph** | `<id>_symgraph_*` | `codebase_graph_build` (auto after a full index) | `codebase_graph_query`, `codebase_impact` | `.socraticodeignore` |
+| Store | Collection | Built by | Governed by |
+|---|---|---|---|
+| Code index | `codebase_<id>` | `codebase_index` / `codebase_update` / watcher | `.socraticodeignore` |
+| Context store | `context_<id>` | `codebase_context_index` (auto on first search) | `.socraticodecontextartifacts.json` |
+| Graph | `<id>_symgraph_*` | `codebase_graph_build` (auto after a full index) | `.socraticodeignore` |
 
-**`.socraticodeignore` does not reach the context store.** Excluding a path
-removes it from `codebase_search` and from the graph, and leaves it fully
-searchable through `codebase_context_search` if an artifact declares it. That
-is not a quirk to work around — it is what makes GH #218 option A safe, and
-it is why option A alone does not settle the context-store question.
+The generated section covers directory artifacts. It says nothing about
+**single-file** artifacts: those are read verbatim and skip every ignore file.
+Upstream calls that deliberate: "a declared path is an explicit instruction".
+Verified by calling `readArtifactContent` directly. A fixture whose root
+`.socraticodeignore` held `docs/plans/`, with a directory artifact at
+`./docs/plans`, returned both files and `exclusions.ignored = 0`.
 
-Two independent mechanisms produce that, and both were verified by running
-`readArtifactContent` directly rather than inferred from behaviour:
+### `docs/plans/` and `docs/research/` are excluded from the code index (GH #218)
 
-- **Directory artifact** — the ignore chain is re-rooted at the *artifact*
-  directory (`createIgnoreFilter(resolved)`), so it reads
-  `<artifact-dir>/.socraticodeignore`, never the project root's; and glob
-  yields paths relative to that directory, which therefore cannot match a
-  project-rooted pattern. Upstream calls this out as deliberate — it "keeps a
-  directory from ignoring itself".
-- **Single-file artifact** — read verbatim, bypassing the ignore chain
-  entirely: "a declared path is an explicit instruction".
+`.socraticodeignore` drops both — the directories AGENTS.md calls "dated
+snapshots, never current guidance". Both stay in the context store as the
+`design-plans` (directory) and `address-validation-research` (single-file)
+artifacts, so nothing became unsearchable.
 
-Test performed: a fixture project whose root `.socraticodeignore` contained
-`docs/plans/`, with a directory artifact at `./docs/plans`, returned both
-files and `exclusions.ignored = 0`.
+**Keep both lines on a re-run.** Phase 4 asks about dated prose only where it
+is a *directory* artifact, and recommends against excluding a directory that
+is not one. `docs/research/` is neither case: its one indexable file is a
+single-file artifact (the ISO 19160 PDF beside it was never indexed), so the
+exclusion loses nothing. Check `git diff .socraticodeignore` is empty afterwards.
 
-**The lever that does trim a directory artifact** is an ignore file placed
-*inside* it (`docs/plans/.socraticodeignore`), plus the built-in defaults and
-nested `.gitignore`s. To drop a whole artifact, remove it from the manifest.
+Before the exclusion (2026-09-21, 1.14.0) plans were 981 of 2,677 code chunks
+(36.6%), 2.3x all of `src/`; after it the code index fell to 1,672. The
+context store stays about 88% `design-plans`: #218 closed on **option E** —
+keep the artifact and route schema questions away from it (above, and the
+first bullet of AGENTS.md's *Code Exploration Notes*). That routing is what
+makes E hold. Do not drop it from AGENTS.md without reopening #218.
 
-### Which search to reach for
+### Measured graph yield (2026-09-23, SocratiCode v1.14.0)
 
-| You want | Call | Because |
-|---|---|---|
-| Where something is defined / how it works / what touches it | `codebase_search` | First-party source, tests and infra; dated prose is excluded (above) |
-| A contract or standard — log levels, DPV mapping, Pub 28 rules, style, dependency policy | `codebase_context_search` | Curated docs win cleanly here; measured top-5 for a logging query was 4x LOGGING.md + AGENTS.md, zero plans |
-| Design rationale — *why* it was built this way | `codebase_context_search`, expecting `design-plans` | The only path to plan prose now. Treat every hit as a dated snapshot |
-| Authoritative schema, status vocabularies, migrations | **`codebase_search`**, or read the source | There is **no** schema context artifact; `codebase_context_search` answers this from plans and gets it **wrong** — see below |
-| Exact strings — error text, log lines, known symbols | `grep` / `rg` | Lexical, not semantic |
-| Importers / blast radius | `codebase_graph_query`, `codebase_impact` | Import edges are exact here |
-
-**The sharp edge.** `codebase_context_search` for
-`"model_training_candidates status values allowed"` returned **5 of 5 hits from
-`design-plans`, zero first-party**, asserting that `assign_candidates` flips row
-status to `'assigned'` — which [SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records
-as a read-time rollup that is *never* stored, and which migration 014 dropped
-from the CHECK. The same question to `codebase_search` returns migration 014
-itself.
-
-Plans dominate where they are voluminous, and they are voluminous where the
-design was iterated — which is where they are most likely superseded. Crowd-out
-and staleness are correlated. For anything schema- or status-shaped, go to the
-code.
-
-### `docs/plans/` and `docs/research/` are excluded from the code index (2026-09-21, GH #218)
-
-`.socraticodeignore` drops both from `codebase_search` — the two directories
-AGENTS.md calls "dated snapshots, never current guidance". Neither is dropped
-from the context store: the same content stays embedded as the `design-plans`
-and `address-validation-research` artifacts, so that prose is still reachable
-— deliberately, via `codebase_context_search`, instead of competing with
-source in every code search.
-
-Measured before the exclusion, on the 1.14.0 rebuild: `docs/plans` was **981
-of 2,677 code chunks (36.6%)** — 2.3x all of `src/` (419, 15.7%) — and
-`design-plans` was **983 of 1,112 context chunks (88.4%)**, against 10 chunks
-for AGENTS.md. `docs/research` added 28 more code chunks (1.0%). Together,
-52% of everything embedded for this repo was prose AGENTS.md calls "dated
-snapshots, never current guidance".
-
-The failure this prevents is not noise, it is *wrong answers*: a context search
-for the `validated_addresses` status CHECK returned a plan asserting
-`'assigned'`, which migration 014 dropped and which
-[docs/SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records as a derived rollup that
-is never stored.
-
-**The context-store share (88.4%) is unfixed** — GH #218 options B and C. Re-read
-that issue before concluding plan prose is handled.
-
-### Measured graph yield (2026-09-09, SocratiCode v1.13.2)
-
-`verdict: "ok"` — **376 edges across 242 files, 1.6 per file**, 0 circular
-chains, with `unresolvedPct` 72.2% (1770 symbols, 8385 call edges). That
-percentage is a call-edge statistic and this repo's `uv` src-layout makes it
-structurally high; it is **not** a statement about imports. The differential
-above has been run twice to settle it — 2026-08-22, and again 2026-09-09
-after a full reindex on v1.13.2 — with the same outcome both times:
-`codebase_graph_query` on
+`verdict: "ok"` — **377 edges across 243 files, 1.55 per file**, graph built
+by 1.14.0 (current), with `unresolvedPct` 72.2% (1,779 symbols, 8,425 call
+edges). That percentage counts edges into the stdlib and frameworks by
+construction; it is **not** a statement about imports. The import-graph
+differential above was run 2026-08-22 and again 2026-09-09 with the same
+outcome: `codebase_graph_query` on
 `src/address_validator/services/validation/pipeline.py` returned exactly two
 importers — `src/address_validator/routers/v2/validate.py` and
-`tests/unit/validation/test_pipeline.py` — and an `rg` sweep over every spelling
-of that import returned the same two files. **The import graph is exact here.**
-Trust `codebase_graph_query` / `codebase_impact` answers on imports; an empty
-answer means no importers, not a broken resolver.
+`tests/unit/validation/test_pipeline.py` — matching an `rg` sweep over every
+spelling of that import. **The import graph is exact here**: an empty
+`codebase_graph_query` / `codebase_impact` answer means no importers.
 
-### The daily health hook is never silent here
+### The daily health hook is silent when clean
 
-**Two** lines are expected every day, not one. Both are the hook working; a
-*third* finding beside them is the one to read.
+On a clean day the hook prints nothing. It prints only when the driver exits
+non-zero, i.e. on a defect or a crashed check. Two **notes** are written to
+`.git/socraticode-health.log` every run and never reach the session:
 
-`unresolvedPct` sits above the hook's 50% warn threshold, so the once-per-day
-run always emits:
+- `graph unresolved 72.2% (> 50%)` — the statistic above, beside `verdict: ok`.
+- `pinned at <version>; the plugin's 'socraticode@latest' resolves to <same> —
+  same feature release`. GH #214 pinned the server (`~/.socraticode/pin` —
+  [DEPLOYMENT.md](DEPLOYMENT.md) → Host memory). A pin is meant to lag; only a
+  **minor or major** gap is a defect, and the hook then names the re-pin
+  command (`npm install --prefix ~/.socraticode/pin socraticode@<version>`).
+  Re-pin as a decision, not on a schedule.
 
-```
-graph unresolved <N>% (> 50%) — share of call edges with no first-party
-callee; verdict is ok, so this is a statistic, not a defect
-```
+The pin does not cover the session: Claude Code cannot override a plugin's MCP
+command, so the plugin keeps launching `@latest` while the driver stays fixed.
+That gap is what the pin check measures.
 
-And since GH #214 pinned the server (`~/.socraticode/pin`, so no launch
-installs one — [docs/DEPLOYMENT.md](DEPLOYMENT.md) → Host memory), the pin
-check reports on every run. It never returns nothing, because "silent" and
-"never ran" would be indistinguishable:
-
-```
-pinned at <version>; the plugin's 'socraticode@latest' resolves to <same> — same feature release
-```
-
-That is the intended steady state. A pin is *meant* to lag, so same-version
-and one-patch-apart are notes. Only a **minor or major** gap is a defect —
-two feature releases writing one store — and it names the re-pin command:
-
-```
-npm install --prefix ~/.socraticode/pin socraticode@<version>
-```
-
-Re-pin as a decision, not on a schedule. Two wordings mean the check could not
-run rather than found nothing: *"no server version was recorded"* and *"the
-registry did not answer"*, both ending `NOT measured`. Neither is an all-clear.
-
-**The pin does not cover the session.** Claude Code cannot override a plugin's
-MCP command, so the plugin keeps launching `@latest` while the driver stays
-fixed — that gap is exactly what this check measures, and it is new with the
-pin. Before it, both floated and agreed by coincidence of timing.
+Earlier revisions of this file expected both lines in the session every day;
+since they became notes, the session sees neither. Output that says `FAILED TO RUN` or `NOT measured` means the
+check did not run. It is not an all-clear.
 
 ### Context artifacts
 
 11 declared, all **documentation** — AGENTS.md, the two vendored USPS OpenAPI
-specs, Pub 28, the provider / logging / style / dependency references,
-`docs/plans/`, and this file. No source, schema or migration is registered, so
-`codebase_context_search` cannot answer from those. Validate the manifest with:
+specs, Pub 28, the provider / logging / style / dependency references, the
+research doc, `docs/plans/`, and this file. No source, schema or migration is
+registered. Validate with:
 
 ```bash
 node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs \
-  validate-manifest .
+  validate-manifest "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 ```
+
+From a worktree, pass `"$PWD"` instead to validate the worktree's own manifest.
 
 ### Index-scope exclusions
 
