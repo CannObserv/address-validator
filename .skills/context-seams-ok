@@ -30,8 +30,8 @@ docs/SKILLS.md :: `AGENTS.md` → Code Exploration Policy carries the negative r
 # `## Code Exploration Policy` block and the `## Code Exploration Notes
 # (repo-specific)` section, both in AGENTS.md.
 docs/SOCRATICODE.md :: Detail doc for the `## Code Exploration Policy` block in [AGENTS.md](../AGENTS.md).
-docs/SOCRATICODE.md :: go under `## Repo-specific notes` down there, not in `AGENTS.md`
-docs/SOCRATICODE.md :: and the `AGENTS.md` block should be on its degraded variant.
+docs/SOCRATICODE.md :: heading down there, not in `AGENTS.md`.
+docs/SOCRATICODE.md :: `AGENTS.md` block should be on its degraded variant.
 
 # The skills index naming the file that skill's whole job is to curate. Nothing
 # moved; the reference is the row's content.
@@ -40,3 +40,17 @@ docs/SKILLS.md :: Curates AGENTS.md + its doc tree against the token budget
 # Naming AGENTS.md as one of the manifest's 11 registered artifacts, which it
 # is. Not a cross-reference to relocated content.
 docs/SOCRATICODE.md :: AGENTS.md, the two vendored USPS OpenAPI
+
+# Re-judged 2026-09-23 (GH #221): the init-socraticode template re-wrapped
+# both lines above; same claims, same targets. Plus the template's own advice
+# not to park the rebuild rule in AGENTS.md — a statement about what belongs
+# there, not a pointer to moved content.
+docs/SOCRATICODE.md :: it. That rule does not need to live in your `AGENTS.md`
+
+# GH #221 repo notes naming AGENTS.md content that is still there: the
+# "dated snapshots" line (Detail Docs footer) and the #218 routing bullets that
+# lead `## Code Exploration Notes (repo-specific)`. The pointer is the point —
+# option E holds only while that routing stays in AGENTS.md.
+docs/SOCRATICODE.md :: `.socraticodeignore` drops both — the directories AGENTS.md calls "dated
+docs/SOCRATICODE.md :: first bullet of AGENTS.md's *Code Exploration Notes*). That routing is what
+docs/SOCRATICODE.md :: makes E hold. Do not drop it from AGENTS.md without reopening #218.

@@ -61,4 +61,4 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `socraticode:codebase-exploration` | Semantic search, dependency graphs, architecture understanding |
 | `socraticode:codebase-management` | Index management, health checks, file watching, context artifacts |
 
-See [SOCRATICODE.md](SOCRATICODE.md) for the "when to use each tool" reference table and the prefetch query; `AGENTS.md` → Code Exploration Policy carries the negative rule.
+See [SOCRATICODE.md](SOCRATICODE.md) for the "when to use each tool" reference table and how to run the prefetch hook by hand; `AGENTS.md` → Code Exploration Policy carries the negative rule.

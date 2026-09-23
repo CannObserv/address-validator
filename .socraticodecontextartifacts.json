@@ -3,7 +3,7 @@
     {
       "name": "architecture-overview",
       "path": "./AGENTS.md",
-      "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch query, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
+      "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch hook, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
     },
     {
       "name": "usps-api-spec",
@@ -53,7 +53,7 @@
     {
       "name": "socraticode-reference",
       "path": "./docs/SOCRATICODE.md",
-      "description": "Code exploration reference: full codebase_* tool table, ToolSearch prefetch query, per-tool notes, graph-health and index-scope guidance."
+      "description": "Code exploration reference: full codebase_* tool table, pointer to the prefetch hook, per-tool notes, graph-health and index-scope guidance, and repo-specific search routing."
     }
   ]
 }

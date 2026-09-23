@@ -9,39 +9,36 @@ FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpo
 <!-- BEGIN socraticode-policy -->
 ## Code Exploration Policy
 
-SocratiCode is the preferred semantic-search tool here once indexed (local Qdrant
-store + on-disk graph; manifest `.socraticodecontextartifacts.json`). Its MCP
-tools are **deferred** — schemas load only after the `ToolSearch` prefetch that
-`.claude/hooks/socraticode-reminder.sh` prints each session; calling one before
-that fails with `InputValidationError`.
+SocratiCode is the preferred semantic-search tool here once indexed (local
+Qdrant store + on-disk graph; manifest `.socraticodecontextartifacts.json`).
+Its MCP tools are **deferred** — schemas load only after the `ToolSearch`
+prefetch that `.claude/hooks/socraticode-reminder.sh` prints each session.
 
-**Negative rule.** Use SocratiCode MCP tools first for semantic questions ("where
-is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg` only on
-exact strings (error messages, log lines, known symbols). Reserve the Explore
-subagent for path-pattern walks (`*.py` under `src/address_validator/routers/`),
+**Negative rule.** Use SocratiCode MCP tools first for semantic questions
+("where is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg`
+only on exact strings (error messages, log lines, known symbols). Reserve the
+Explore subagent for path-pattern walks (`*.py` under `src/address_validator/routers/`),
 not semantic search.
 
 | Goal | Tool |
-|---|---|
+|------|------|
 | Where is X defined / how does Y work / what touches Z | `codebase_search` |
 | Exact string or regex (errors, log lines, known symbols) | `grep` / `rg` |
 | Imports/dependents of a file · blast radius of a change | `codebase_graph_query` / `codebase_impact` |
-| A documented contract — log levels, DPV map, Pub 28, style, dep policy | `codebase_context_search` |
-| Schema, status vocabularies, migrations | `codebase_search` or the source — **never** `codebase_context_search` |
 
-Two separate stores: `.socraticodeignore` governs the code index and graph, not
-the context store. `codebase_context_search` is the only path to `docs/plans`
-rationale — and is **wrong** on schema/status questions, which it answers from
-dated plans (GH #218). Full tool table, store model, prefetch query:
-[docs/SOCRATICODE.md](docs/SOCRATICODE.md).
+Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs/SOCRATICODE.md).
 <!-- END socraticode-policy -->
 
 ## Code Exploration Notes (repo-specific)
 
-- `unresolvedPct` is a **call**-edge statistic, not imports — import edges probe
-  exact, so an empty `codebase_graph_query`/`codebase_impact` answer means no
-  dependents, not a lossy graph. Measured yield, evidence and re-measurement
-  recipe: [docs/SOCRATICODE.md](docs/SOCRATICODE.md) → Repo-specific notes.
+- **Schema, status vocabularies, migrations → `codebase_search` or the source,
+  never `codebase_context_search`.** No schema artifact is declared, so a
+  context search answers these from dated `docs/plans` — wrongly (GH #218).
+- `codebase_context_search` is for documented contracts (log levels, DPV map,
+  Pub 28, style, dep policy) and is the only path to `docs/plans` rationale.
+- `unresolvedPct` is a **call**-edge statistic; import edges are exact, so an
+  empty `codebase_graph_query`/`codebase_impact` answer means no dependents.
+  Evidence: [docs/SOCRATICODE.md](docs/SOCRATICODE.md).
 
 ## Architecture
 
@@ -104,7 +101,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
-- New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in, and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+- New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in (`.skills/worktree_venv=none`: under the `link` default a worktree's `uv sync` *prunes* the port-8000 service's venv), and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
 - A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
@@ -145,8 +142,6 @@ uv sync                         # install/refresh deps
 uv add <package>                # add dep; commit pyproject.toml + uv.lock together
 uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
 ```
-
-Worktrees get **no** `.venv` (`.skills/worktree_venv=none`) — run `uv sync` in a new worktree before its first test run (~0.2 s, ~4 MiB). This is why: under the `link` default a worktree's `uv sync` *prunes* the venv the port-8000 service runs from. Rationale and measurements → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
@@ -189,8 +184,7 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
-| `socraticode:codebase-exploration` | Semantic search, dependency graphs — tool table in [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
-| `socraticode:codebase-management` | Index management, health checks, file watching — see [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+| `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
 
 ## Commit convention
 
@@ -210,7 +204,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
-- [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch query, graph health
+- [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch hook, graph health
 - [docs/DEPENDENCY-POLICY.md](docs/DEPENDENCY-POLICY.md) — version pinning rules
 - [docs/usps-pub28.md](docs/usps-pub28.md) — Pub 28 edition behind `usps_data/`, API model notes
 - Vendored USPS OpenAPI specs: [standard](docs/usps-addresses-v3r2_4.yaml), [Enhanced](docs/usps-enhanced-addresses-v3r2.yaml)
