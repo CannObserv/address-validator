@@ -8,9 +8,9 @@ SessionStart.
 `docs/SOCRATICODE.md` used to carry a verbatim copy, and the two drifted: a
 vendored-skills bump moved the hook from a 9-tool subset to a 12-tool set and
 nothing noticed (GH #199). Since GH #221 the generated doc points at the hook
-instead of copying it (gregoryfoster/skills#209, #234), so there is one source
-and nothing to drift. This test keeps it that way: a copy reintroduced by hand
-is the drift site coming back.
+instead of copying it (gregoryfoster/skills#209, gregoryfoster/skills#234), so
+there is one source and nothing to drift. This test keeps it that way: a copy
+reintroduced by hand is the drift site coming back.
 
 Reads the hook through its symlink deliberately — the vendored script is what
 actually runs, so a submodule bump that changes its shape fails here.
