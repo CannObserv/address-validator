@@ -8,3 +8,6 @@ AGENTS.md :: tighten :: - New worktree bootstrap: `uv sync` **and** `bash .skill
 AGENTS.md :: tighten :: Worktrees get **no** `.venv` (`.skills/worktree_venv=none`) — run `uv sync` in a new worktree before its first test run (~0.2 s, ~4 MiB). This is why: under the `link` default a worktree's `uv sync` *prunes* the venv the port-8000 service runs from. Rationale and measurements → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 AGENTS.md :: tighten :: | `socraticode:codebase-exploration` | Semantic search, dependency graphs — tool table in [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
 AGENTS.md :: tighten :: | `socraticode:codebase-management` | Index management, health checks, file watching — see [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+# CR 2 on PR #222: the index line claimed SOCRATICODE.md holds the prefetch query;
+# test_doc_points_at_the_hook_instead_of_copying_it finds zero select: copies there.
+AGENTS.md :: disproven :: - [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch query, graph health
