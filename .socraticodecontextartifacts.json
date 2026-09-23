@@ -3,7 +3,7 @@
     {
       "name": "architecture-overview",
       "path": "./AGENTS.md",
-      "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch query, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
+      "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch hook, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
     },
     {
       "name": "usps-api-spec",
