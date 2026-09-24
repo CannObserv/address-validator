@@ -80,10 +80,19 @@ def test_deployment_doc_names_the_pinned_version() -> None:
     )
 
 
+TRAILING_COMMA_RE = re.compile(r",(\s*[}\]])")
+
+
 def _read_jsonc(path: Path) -> dict:
-    # VS Code keeps its settings as JSONC; drop whole-line comments before parsing.
+    # VS Code keeps its settings as JSONC: drop whole-line comments and trailing
+    # commas, the two forms its editor accepts that json.loads does not. Inline
+    # comments are left alone; a value may carry `//` (a URL).
     lines = path.read_text(encoding="utf-8").splitlines()
-    return json.loads("\n".join(ln for ln in lines if not ln.lstrip().startswith("//")))
+    text = "\n".join(ln for ln in lines if not ln.lstrip().startswith("//"))
+    try:
+        return json.loads(TRAILING_COMMA_RE.sub(r"\1", text))
+    except json.JSONDecodeError as e:
+        raise AssertionError(f"{path} does not parse as JSONC: {e}") from e
 
 
 @pytest.mark.skipif(not VSCODE_SERVER.is_dir(), reason="not a VS Code remote host")
