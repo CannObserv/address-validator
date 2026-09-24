@@ -332,16 +332,23 @@ bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/prefligh
 `resolve` launches nothing; it should name the pin. The variable does nothing on
 a plugin build that doesn't read it (a 1.14.0 label does not guarantee one);
 preflight says so, and warns if the declared pins disagree.
-Verify what launched, not a manifest — two of the plugin's three hardcode
-`@latest`: `ps -eo args | grep socraticode` shows `npm exec socraticode@1.14.0`.
-Not `claude mcp list` from a shell: PATH's CLI applies a project's `env` only in
-a folder it trusts, and none is trusted here, so it prints `@latest` over a
-working pin (measured 2026-09-24, 2.1.267).
+
+**Neither preflight nor the health hook sees the launch.** Both read
+`SOCRATICODE_SPEC` from their own environment, which the settings block always
+reaches, so both report the session pinned (preflight's ✓, the hook's absent
+pin-drift note) while it runs `@latest` — measured here, health-check said
+*fixed at 1.14.0* over a live `@latest` server (gregoryfoster/skills#332).
+Verify what launched, not a manifest or a check — two of the plugin's three
+manifests hardcode `@latest`: `ps -eo args | grep socraticode` shows
+`npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: it reports
+the calling shell's environment, and PATH's CLI trusts no folder here, so the
+settings block never reaches it (measured 2026-09-24, 2.1.267).
 
 **Re-pin it all together** — pre-install, warm-up, machine setting,
-`.claude/settings.json` — as a decision, never on a schedule, then run preflight. It is the only check that
-compares the two: the health hook's pin-drift check measures only a floating
-session, so a half re-pin (two builds writing one store) passes it silently.
+`.claude/settings.json` — as a decision, never on a schedule, then run preflight
+for the declared values and `ps` for the launch. The health hook's pin-drift
+check goes silent whenever the variable is set, so a half re-pin (two builds
+writing one store) passes it.
 
 ## Server lifecycle
 

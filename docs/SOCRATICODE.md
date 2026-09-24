@@ -358,9 +358,12 @@ Code's `claudeCode.environmentVariables`, declared in `.claude/settings.json`);
 [DEPLOYMENT.md](DEPLOYMENT.md) → Host memory. So the
 pin-drift note (`pinned at <version>; the plugin's 'socraticode@latest'
 resolves to …`) no longer appears: that check measures only a floating session.
-Unset the variable and it returns — a patch gap as a note, a minor or major one
+**That silence is not evidence.** The hook reads `SOCRATICODE_SPEC` from its own
+environment, never from the session's launch, and stays silent over a session
+running `@latest` (gregoryfoster/skills#332); only the process table shows the
+launch. Unset the variable and the note returns — a patch gap as a note, a minor or major one
 as a defect naming the re-pin command. Re-pin both together, as a decision, not
-on a schedule; `preflight.sh --check` warns when they disagree.
+on a schedule; `preflight.sh --check` warns when the declared values disagree.
 
 Earlier revisions of this file expected both lines in the session every day;
 since they became notes, the session sees neither. Output that says `FAILED TO RUN` or `NOT measured` means the
