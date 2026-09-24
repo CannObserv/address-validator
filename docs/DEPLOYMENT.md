@@ -339,10 +339,17 @@ reaches, so both report the session pinned (preflight's ✓, the hook's absent
 pin-drift note) while it runs `@latest` — measured here, health-check said
 *fixed at 1.14.0* over a live `@latest` server (gregoryfoster/skills#332).
 Verify what launched, not a manifest or a check — two of the plugin's three
-manifests hardcode `@latest`: `ps -eo args | grep socraticode` shows
-`npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: it reports
-the calling shell's environment, and PATH's CLI trusts no folder here, so the
-settings block never reaches it (measured 2026-09-24, 2.1.267).
+manifests hardcode `@latest`. List only the servers the IDE sessions' own
+`claude` started; a bare `grep` also matches its own shell and any server a
+`claude mcp list` or preflight run launched with the shell's environment:
+
+```bash
+for p in $(pgrep -f 'native-binary/claude'); do ps --ppid "$p" -o args= | grep '^npm exec socraticode'; done
+```
+
+Expect `npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: it
+reports the calling shell's environment, and PATH's CLI trusts no folder here,
+so the settings block never reaches it (measured 2026-09-24, 2.1.267).
 
 **Re-pin it all together** — pre-install, warm-up, machine setting,
 `.claude/settings.json` — as a decision, never on a schedule, then run preflight
