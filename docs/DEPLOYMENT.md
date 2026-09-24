@@ -315,12 +315,12 @@ CAP='systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M choom -n 
 $CAP npm install --prefix ~/.socraticode/pin socraticode@<version>
 $CAP npm exec --yes --prefer-online --package=socraticode@<version> -- true
 node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs resolve
+bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/preflight.sh --check
 ```
 
 `resolve` should name the pin. The variable reaches only sessions started
 afterwards, on a plugin build that reads it (a 1.14.0 label does not guarantee
-one); `init-socraticode/scripts/preflight.sh --check` warns if it doesn't, or if
-the pins disagree. Verify what launched, not a manifest — two of the plugin's
+one); preflight warns if it doesn't, or if the pins disagree. Verify what launched, not a manifest — two of the plugin's
 three hardcode `@latest`: `ps -eo args | grep socraticode` shows
 `npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: PATH's CLI
 applies a project's `env` only in a folder it trusts, and none is trusted here,
