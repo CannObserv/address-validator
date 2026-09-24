@@ -321,8 +321,10 @@ node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driv
 afterwards, on a plugin build that reads it (a 1.14.0 label does not guarantee
 one); `init-socraticode/scripts/preflight.sh --check` warns if it doesn't, or if
 the pins disagree. Verify what launched, not a manifest — two of the plugin's
-three hardcode `@latest`: `claude mcp list` (`plugin:socraticode:socraticode:`)
-or `ps -eo args | grep socraticode` shows `socraticode@1.14.0`.
+three hardcode `@latest`: `ps -eo args | grep socraticode` shows
+`npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: PATH's CLI
+applies a project's `env` only in a folder it trusts, and none is trusted here,
+so it prints `@latest` over a working pin (measured 2026-09-24, 2.1.267).
 
 **Re-pin both together** — pre-install, warm-up, `SOCRATICODE_SPEC` — as a
 decision, never on a schedule. The health hook's pin-drift check measures only
