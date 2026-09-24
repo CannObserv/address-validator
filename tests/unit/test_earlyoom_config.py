@@ -169,7 +169,7 @@ def test_what_restarts_on_its_own_is_preferred(comm: str) -> None:
 def test_the_service_its_database_and_the_user_manager_are_avoided(comm: str) -> None:
     assert re.search(_flag("--avoid"), comm), (
         f"--avoid does not match {comm!r}. Unavoided, stock ordering puts postgres "
-        "fifth (a 503) and the user manager second, which `systemd-run --user` needs"
+        "fifth (a 503) and the user manager third, and `systemd-run --user` caps need it"
     )
 
 

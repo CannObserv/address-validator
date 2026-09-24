@@ -100,14 +100,16 @@ decides whether it earns its place is which one it takes.
 
 A dry run on 2026-09-24 answered that: stock earlyoom takes
 `wof-libpostal-s` (1.9 G), the first row of the table above, so it stays. But
-the stock order rests on RSS alone. After libpostal came the user manager
-(`dbus-daemon`, `systemd`, `(sd-pam)`) and then postgres, fifth: a 503.
-`infra/earlyoom.default` sets the order instead. It `--prefer`s libpostal, then
-SocratiCode's `qdrant` and `ollama` (adj 0, all three restart on their own).
-It `--avoid`s the service, postgres and the user manager, which puts postgres
-behind every small daemon. `--avoid` is -300, a shift rather than an
-exemption. The file's header gives the reason for each flag. Where sessions sit
-at -1000, `--prefer` reaches nothing of theirs, so it names none of them.
+the stock order rests on RSS alone. After libpostal came the user's session
+bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
+postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
+`--prefer`s libpostal, then SocratiCode's `qdrant` and `ollama` (adj 0, all
+three restart on their own). It `--avoid`s the service, postgres and the user
+manager, which puts postgres behind every small daemon. `--avoid` is -300, a
+shift rather than an exemption. The session bus is left out on purpose:
+`dbus.socket` restarts it on next use, so it goes fourth. The file's header
+gives the reason for each flag. Where sessions sit at -1000, `--prefer`
+reaches nothing of theirs, so it names none of them.
 
 Two traps, both silent. `apt install` starts the daemon on Debian's
 `-r 3600`, and `enable --now` never restarts it, so an `active` unit can run

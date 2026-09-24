@@ -13,9 +13,9 @@
 #
 # Why it is kept. A dry run on 2026-09-24 (stock -r 3600) chose
 # wof-libpostal-s (1.9 G, badness 842), the process docs/HOST-MEMORY.md ranks
-# first to lose. The next picks were the user manager (dbus-daemon, systemd,
-# (sd-pam)) and then postgres, fifth, which is an HTTP 503. This file sets the
-# order instead of leaving it to RSS:
+# first to lose. The next picks were the user's session bus (dbus-daemon), the
+# user manager (systemd, (sd-pam)) and then postgres, fifth, which is an HTTP
+# 503. This file sets the order instead of leaving it to RSS:
 #
 # --prefer  +300: libpostal, then SocratiCode's qdrant and ollama. All three
 #           are adj 0 and restart on their own (Restart=always, or Docker's
@@ -25,6 +25,8 @@
 #           (systemd, (sd-pam)), which `systemd-run --user` caps need; sshd in
 #           case sessions ever stop being -1000. -300 is a shift, not an
 #           exemption: postgres drops from fifth to behind every small daemon.
+#           dbus-daemon is left out on purpose: dbus.socket restarts it on
+#           next use, so it goes fourth, after the three preferred.
 # -m 10,5   Debian's defaults, written down: SIGTERM at 10% available, SIGKILL at 5%.
 # -s 100,100  No effect without swap. If swap is ever added, memory alone
 #           still decides, instead of earlyoom waiting for swap to drain.
