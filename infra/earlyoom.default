@@ -27,7 +27,8 @@
 #           exemption: postgres drops from fifth to behind every small daemon.
 #           dbus-daemon is left out on purpose: dbus.socket restarts it on
 #           next use, so it goes fourth, after the three preferred.
-# -m 10,5   Debian's defaults, written down: SIGTERM at 10% available, SIGKILL at 5%.
+# -m 10,5   earlyoom's built-in defaults, written down: SIGTERM at 10% available,
+#           SIGKILL at 5%. Debian's own file sets only -r 3600.
 # -s 100,100  No effect without swap. If swap is ever added, memory alone
 #           still decides, instead of earlyoom waiting for swap to drain.
 #
