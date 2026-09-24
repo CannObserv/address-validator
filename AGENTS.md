@@ -97,7 +97,7 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
 - Port 8001 = dev server (active git worktree, `--reload`)
-- **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
+- **No swap**; a session can't be OOM-killed, so *services* die instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
@@ -167,7 +167,7 @@ Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
 
 ## Skills
 
-See `docs/SKILLS.md` for full descriptions. Key skills for development:
+Full descriptions: `docs/SKILLS.md`. Key skills:
 
 | Skill | When to use |
 |---|---|
@@ -179,11 +179,12 @@ See `docs/SKILLS.md` for full descriptions. Key skills for development:
 | `/verification-before-completion` | Before claiming done or opening a PR |
 | `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
 | `/reviewing-architecture` | Architecture review |
-| `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function — "add a fitness function", "enforce this contract", "lock this rule" |
+| `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function |
 | `/curating-context` | Trim AGENTS.md + docs to the 6,000-token budget; weekly maintenance |
 | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
 | `/train-model` | CRF model retraining pipeline |
 | `/schedule` | Recurring or one-time background agents |
+| `/using-mayfly-chat` | Chat with another repo's agent; never commit the channel URL |
 | `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
 
 ## Commit convention

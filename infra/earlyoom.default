@@ -1,0 +1,39 @@
+# earlyoom configuration for the address-validator host (GH #225).
+#
+# Install: sudo cp infra/earlyoom.default /etc/default/earlyoom \
+#          && sudo systemctl restart earlyoom
+# Restart, never `enable --now`: that leaves an active daemon on the arguments
+# it started with. Verify: tests/unit/test_earlyoom_config.py (on the host).
+#
+# What it can reach here. Sessions inherit oom_score_adj -1000 from exe.dev's
+# sshd, and earlyoom 1.7 skips a -1000 process exactly as the kernel does
+# (kill.c:242-253), --prefer or not. So it never takes a session, VS Code
+# Server or anything they launch. What it does is act before the kernel
+# stalls, on this host's own processes.
+#
+# Why it is kept. A dry run on 2026-09-24 (stock -r 3600) chose
+# wof-libpostal-s (1.9 G, badness 842), the process docs/HOST-MEMORY.md ranks
+# first to lose. The next picks were the user's session bus (dbus-daemon), the
+# user manager (systemd, (sd-pam)) and then postgres, fifth, which is an HTTP
+# 503. This file sets the order instead of leaving it to RSS:
+#
+# --prefer  +300: libpostal, then SocratiCode's qdrant and ollama. All three
+#           are adj 0 and restart on their own (Restart=always, or Docker's
+#           unless-stopped). Matched against /proc/<pid>/comm, which the kernel
+#           truncates to 15 chars, so libpostal is prefix-matched, never $-anchored.
+# --avoid   -300: the service (uvicorn), postgres, and the user manager
+#           (systemd, (sd-pam)), which `systemd-run --user` caps need; sshd in
+#           case sessions ever stop being -1000. -300 is a shift, not an
+#           exemption: postgres drops from fifth to behind every small daemon.
+#           dbus-daemon is left out on purpose: dbus.socket restarts it on
+#           next use, so it goes fourth, after the three preferred.
+# -m 10,5   earlyoom's built-in defaults, written down: SIGTERM at 10% available,
+#           SIGKILL at 5%. Debian's own file sets only -r 3600.
+# -s 100,100  No effect without swap. If swap is ever added, memory alone
+#           still decides, instead of earlyoom waiting for swap to drain.
+#
+# Debian's unit runs `/usr/bin/earlyoom $EARLYOOM_ARGS` and systemd splits that
+# expansion itself: a space inside a regex makes it two arguments, and a
+# backslash is dropped (\. reaches earlyoom as ., matching anything). So no
+# spaces, no escapes, no inner quotes; a literal character is [(] or [.].
+EARLYOOM_ARGS="-r 3600 -m 10,5 -s 100,100 --prefer ^(wof-libpostal|qdrant|ollama) --avoid ^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$"

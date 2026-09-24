@@ -17,3 +17,10 @@ docs/DEPLOYMENT.md :: retarget :: # MemoryLow= is inert without the system.slice
 docs/DEPLOYMENT.md :: retarget :: | Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
 AGENTS.md :: retarget :: - **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) → Host memory
 AGENTS.md :: retarget :: - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server, host memory
+# 2026-09-24, GH #226: two class-C tightenings pay for the /using-mayfly-chat row; the trigger
+# phrases dropped here stay in docs/SKILLS.md and in the skill's own description.
+AGENTS.md :: tighten :: See `docs/SKILLS.md` for full descriptions. Key skills for development:
+AGENTS.md :: tighten :: | `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function — "add a fitness function", "enforce this contract", "lock this rule" |
+# 2026-09-24, CR 4 on GH #225: earlyoom now kills the service last, after libpostal, SocratiCode's
+# infra, small daemons and postgres; "the service" became "services" to match HOST-MEMORY.md's intro.
+AGENTS.md :: tighten :: - **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
