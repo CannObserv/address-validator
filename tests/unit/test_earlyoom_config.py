@@ -223,9 +223,13 @@ def test_no_session_ancestor_is_none(tmp_path: Path) -> None:
 
 @on_the_host
 def test_the_running_daemon_has_this_files_arguments() -> None:
+    install = f"sudo cp infra/{CONFIG.name} {INSTALLED} && sudo systemctl restart earlyoom"
+    assert INSTALLED.is_file(), (
+        f"{INSTALLED} is missing — earlyoom is not installed here: "
+        f"sudo apt-get install -y earlyoom && {install}"
+    )
     assert INSTALLED.read_text(encoding="utf-8") == CONFIG.read_text(encoding="utf-8"), (
-        f"{INSTALLED} differs from infra/{CONFIG.name}: "
-        f"sudo cp infra/{CONFIG.name} {INSTALLED} && sudo systemctl restart earlyoom"
+        f"{INSTALLED} differs from infra/{CONFIG.name}: {install}"
     )
     pid = subprocess.run(
         ["systemctl", "show", "earlyoom", "-p", "MainPID", "--value"],
