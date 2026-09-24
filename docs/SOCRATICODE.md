@@ -353,8 +353,9 @@ non-zero, i.e. on a defect or a crashed check. One **note** is written to
 `graph unresolved 72.2% (> 50%)` — the statistic above, beside `verdict: ok`.
 
 **Both launches are pinned, to one version** — the driver by GH #214
-(`~/.socraticode/pin`), the session by GH #223 (`SOCRATICODE_SPEC` in
-`.claude/settings.json`); [DEPLOYMENT.md](DEPLOYMENT.md) → Host memory. So the
+(`~/.socraticode/pin`), the session by GH #223 (`SOCRATICODE_SPEC` from VS
+Code's `claudeCode.environmentVariables`, declared in `.claude/settings.json`);
+[DEPLOYMENT.md](DEPLOYMENT.md) → Host memory. So the
 pin-drift note (`pinned at <version>; the plugin's 'socraticode@latest'
 resolves to …`) no longer appears: that check measures only a floating session.
 Unset the variable and it returns — a patch gap as a note, a minor or major one

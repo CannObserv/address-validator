@@ -304,10 +304,21 @@ a pre-installed build, **75 MB**.
 
 Both launches are pinned to **1.14.0**: the driver's (daily health hook,
 `index`, `verify`) by a pre-install that `mcp-driver.mjs` resolves ahead of the
-plugin's command (GH #214), the session's by `SOCRATICODE_SPEC` in
-`.claude/settings.json` (GH #223). An exact spec launches from its own npx tree
-— built on first launch, so warm it. Install capped, with `choom`: sessions here
-sit at `oom_score_adj` -1000, where a cap stalls rather than kills.
+plugin's command (GH #214), the session's by `SOCRATICODE_SPEC` in Claude
+Code's environment **at startup** (GH #223). `.claude/settings.json`'s `env`
+block only declares it: the VS Code extension (2.1.280) expands the plugin's
+args before merging that block, so the server gets the variable in its
+environment and `@latest` in its argv (gregoryfoster/skills#332, two hosts). The
+mechanism is VS Code's machine-scoped setting, in
+`~/.vscode-server/data/Machine/settings.json`, live after a full reconnect:
+
+```json
+{ "claudeCode.environmentVariables": [{ "name": "SOCRATICODE_SPEC", "value": "socraticode@1.14.0" }] }
+```
+
+An exact spec launches from its own npx tree — built on first launch, so warm
+it. Install capped, with `choom`: sessions here sit at `oom_score_adj` -1000,
+where a cap stalls rather than kills.
 
 ```bash
 npm view socraticode version        # pick a literal; never @latest
@@ -318,17 +329,17 @@ node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driv
 bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/preflight.sh --check
 ```
 
-`resolve` launches nothing; it should name the pin. The variable reaches only
-sessions started afterwards, on a plugin build that reads it (a 1.14.0 label
-does not guarantee one); preflight warns if it doesn't, or if the pins disagree.
+`resolve` launches nothing; it should name the pin. The variable does nothing on
+a plugin build that doesn't read it (a 1.14.0 label does not guarantee one);
+preflight says so, and warns if the declared pins disagree.
 Verify what launched, not a manifest — two of the plugin's three hardcode
 `@latest`: `ps -eo args | grep socraticode` shows `npm exec socraticode@1.14.0`.
 Not `claude mcp list` from a shell: PATH's CLI applies a project's `env` only in
 a folder it trusts, and none is trusted here, so it prints `@latest` over a
 working pin (measured 2026-09-24, 2.1.267).
 
-**Re-pin both together** — pre-install, warm-up, `SOCRATICODE_SPEC` — as a
-decision, never on a schedule, then run preflight. It is the only check that
+**Re-pin it all together** — pre-install, warm-up, machine setting,
+`.claude/settings.json` — as a decision, never on a schedule, then run preflight. It is the only check that
 compares the two: the health hook's pin-drift check measures only a floating
 session, so a half re-pin (two builds writing one store) passes it silently.
 
