@@ -11,9 +11,10 @@ rather than leaving it to RSS.
 
 Four ways the file silently regresses, guarded here:
 
-- a regex gains a space or a backslash. Debian's unit expands ``$EARLYOOM_ARGS``
-  unquoted, so a space splits the regex into two arguments and a backslash is
-  dropped, both with no startup error;
+- a value gains a space, or a regex a backslash. Debian's unit expands
+  ``$EARLYOOM_ARGS`` unquoted, so a space splits the value into a stray
+  argument (earlyoom 1.7 then exits 13 and nothing runs) and a backslash is
+  dropped with no error at all;
 - ``--prefer`` stops matching libpostal's comm, which the kernel truncates to 15
   characters (a ``$``-anchored full binary name matches nothing);
 - ``--avoid`` stops covering the service, postgres or the user manager, or a
@@ -122,6 +123,29 @@ def test_every_regex_reaches_earlyoom_as_one_argument() -> None:
         "backslash is dropped (\\. becomes ., matching anything) and quotes are not "
         "the shell's. Keep regexes free of spaces and escapes; a literal is [.]"
     )
+
+
+# Each flag this file passes takes exactly one value.
+FLAGS = frozenset({"-r", "-m", "-s", "--prefer", "--avoid"})
+PERCENT_PAIR = re.compile(r"(\d+),(\d+)")
+
+
+def test_every_argument_is_a_flag_and_its_value() -> None:
+    # A space splits a value into a stray token; earlyoom 1.7 then exits 13
+    # ("extra argument not understood") and the host has no early killer at all.
+    args = _args()
+    flags = args[0::2]
+    assert len(args) % 2 == 0 and set(flags) <= FLAGS, (
+        f"{CONFIG.name} does not read as flag/value pairs over {sorted(FLAGS)}: {args}. "
+        "A space inside a value becomes a second argument, and earlyoom refuses to start"
+    )
+    for name in ("-m", "-s"):
+        m = PERCENT_PAIR.fullmatch(_flag(name))
+        assert m and int(m.group(2)) <= int(m.group(1)), (
+            f"{name} {_flag(name)!r} is not PERCENT,KILL_PERCENT with KILL <= PERCENT"
+        )
+    for name in ("--prefer", "--avoid"):
+        re.compile(_flag(name))
 
 
 def test_memory_alone_decides() -> None:
