@@ -97,7 +97,7 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
 - Port 8001 = dev server (active git worktree, `--reload`)
-- **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
+- **No swap**; a session can't be OOM-killed, so *services* die instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
