@@ -51,7 +51,8 @@ on_the_host = pytest.mark.skipif(socket.gethostname() != HOST, reason=f"not {HOS
 COMM_LEN = 15
 LIBPOSTAL_COMM = "wof-libpostal-s"  # pelias/libpostal-service's wof-libpostal-server
 
-# Userspace comms on the host, `ps -eo comm= | sort -u`, 2026-09-24.
+# Userspace comms on the host, 2026-09-24: every /proc/<pid>/comm with a non-zero
+# VmRSS (kernel threads have none), less one-off commands (sleep, sort, tr).
 HOST_COMMS = frozenset(
     {
         "(sd-pam)",
