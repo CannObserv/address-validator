@@ -5,7 +5,7 @@ The plugin launches `npx -y --prefer-online ${SOCRATICODE_SPEC:-socraticode@late
 pre-installed version (GH #223), so no session start installs a server — the
 memory peak GH #214 measured on this no-swap host.
 
-Two ways it silently regresses, both guarded here:
+Two ways it silently regresses in the repo, both guarded here:
 
 - the spec floats again (`@latest`, a range, a bare name, or the key dropped by
   a hand edit or an `init-socraticode` re-run) and every session start is an
@@ -13,18 +13,30 @@ Two ways it silently regresses, both guarded here:
 - the version moves and `docs/DEPLOYMENT.md` goes on naming the old one, so the
   re-pin and verification instructions describe a build nobody runs.
 
-The pre-install under `~/.socraticode/pin` is host state, not repo state; that
-half of "re-pin both together" is `preflight.sh --check`'s to compare.
+The settings block only *declares* the spec. The VS Code extension expands the
+plugin's args before merging that block, so what pins the launch is the
+machine-scoped `claudeCode.environmentVariables` setting
+(gregoryfoster/skills#332). That is host state, so its test runs only on a VS
+Code remote host and skips elsewhere (CI). It guards a third way to regress: a
+re-pin that moves the repo's value but not the machine's, which every check
+reading its own environment then reports as pinned.
+
+The pre-install under `~/.socraticode/pin` is host state too; comparing it is
+`preflight.sh --check`'s job.
 """
 
 import json
 import re
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 DOC = REPO_ROOT / "docs" / "DEPLOYMENT.md"
 SECTION_HEADING = "### Don't install a SocratiCode server at launch"
+VSCODE_SERVER = Path.home() / ".vscode-server"
+MACHINE_SETTINGS = VSCODE_SERVER / "data" / "Machine" / "settings.json"
 
 LITERAL_SPEC_RE = re.compile(r"socraticode@(\d+\.\d+\.\d+)")
 
@@ -65,4 +77,26 @@ def test_deployment_doc_names_the_pinned_version() -> None:
     assert not stale, (
         f"{DOC.name} → '{SECTION_HEADING[4:]}' still names socraticode@{', @'.join(stale)} "
         f"while SOCRATICODE_SPEC pins {version}"
+    )
+
+
+def _read_jsonc(path: Path) -> dict:
+    # VS Code keeps its settings as JSONC; drop whole-line comments before parsing.
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return json.loads("\n".join(ln for ln in lines if not ln.lstrip().startswith("//")))
+
+
+@pytest.mark.skipif(not VSCODE_SERVER.is_dir(), reason="not a VS Code remote host")
+def test_vscode_launches_claude_with_the_session_spec() -> None:
+    spec = f"socraticode@{_pinned_version()}"
+    assert MACHINE_SETTINGS.is_file(), (
+        f"{MACHINE_SETTINGS} is missing — the session launches socraticode@latest; "
+        f"set claudeCode.environmentVariables SOCRATICODE_SPEC={spec} (docs/DEPLOYMENT.md)"
+    )
+    entries = _read_jsonc(MACHINE_SETTINGS).get("claudeCode.environmentVariables", [])
+    values = [e.get("value") for e in entries if e.get("name") == "SOCRATICODE_SPEC"]
+    assert values == [spec], (
+        f"{MACHINE_SETTINGS} sets SOCRATICODE_SPEC to {values or 'nothing'}, "
+        f"but .claude/settings.json declares {spec} — only the machine setting reaches "
+        "the plugin's launch (gregoryfoster/skills#332)"
     )
