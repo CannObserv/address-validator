@@ -348,20 +348,23 @@ spelling of that import. **The import graph is exact here**: an empty
 ### The daily health hook is silent when clean
 
 On a clean day the hook prints nothing. It prints only when the driver exits
-non-zero, i.e. on a defect or a crashed check. Two **notes** are written to
-`.git/socraticode-health.log` every run and never reach the session:
+non-zero, i.e. on a defect or a crashed check. One **note** is written to
+`.git/socraticode-health.log` every run and never reaches the session:
+`graph unresolved 72.2% (> 50%)` — the statistic above, beside `verdict: ok`.
 
-- `graph unresolved 72.2% (> 50%)` — the statistic above, beside `verdict: ok`.
-- `pinned at <version>; the plugin's 'socraticode@latest' resolves to <same> —
-  same feature release`. GH #214 pinned the server (`~/.socraticode/pin` —
-  [DEPLOYMENT.md](DEPLOYMENT.md) → Host memory). A pin is meant to lag; only a
-  **minor or major** gap is a defect, and the hook then names the re-pin
-  command (`npm install --prefix ~/.socraticode/pin socraticode@<version>`).
-  Re-pin as a decision, not on a schedule.
-
-The pin does not cover the session: Claude Code cannot override a plugin's MCP
-command, so the plugin keeps launching `@latest` while the driver stays fixed.
-That gap is what the pin check measures.
+**Both launches are pinned, to one version** — the driver by GH #214
+(`~/.socraticode/pin`), the session by GH #223 (`SOCRATICODE_SPEC` from VS
+Code's `claudeCode.environmentVariables`, declared in `.claude/settings.json`);
+[HOST-MEMORY.md](HOST-MEMORY.md#dont-install-a-socraticode-server-at-launch). So
+the pin-drift note (`pinned at <version>; the plugin's 'socraticode@latest'
+resolves to …`) no longer appears: that check measures only a floating session.
+**That silence is not evidence.** The hook reads `SOCRATICODE_SPEC` from its own
+environment, never from the session's launch, and stays silent over a session
+running `@latest` (gregoryfoster/skills#332); only the process table shows the
+launch. Unset the variable and the note returns — a patch gap as a note, a minor
+or major one as a defect naming the re-pin command. Re-pin both together, as a
+decision, not on a schedule; `preflight.sh --check` warns when the declared
+values disagree.
 
 Earlier revisions of this file expected both lines in the session every day;
 since they became notes, the session sees neither. Output that says `FAILED TO RUN` or `NOT measured` means the

@@ -97,7 +97,7 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
 - Port 8001 = dev server (active git worktree, `--reload`)
-- **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) → Host memory
+- **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
 - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
 - All development work happens on git worktrees — never modify the main worktree directly
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
@@ -196,7 +196,8 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 ## Detail Docs
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server, host memory
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
+- [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md) — memory reservations, OOM ordering, SocratiCode pins
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary

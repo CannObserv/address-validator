@@ -32,7 +32,7 @@ RestartSec=3
 #                  ancestors', and system.slice defaults to 0, so this line
 #                  needs infra/system-slice-memory.conf installed to do
 #                  anything at all. `systemctl show` reports the configured
-#                  value either way; see docs/DEPLOYMENT.md -> Host memory
+#                  value either way; see docs/HOST-MEMORY.md
 #                  for the check that reads the effective one.
 #   OOMScoreAdjust makes this service a worse target than any unadjusted
 #                  process. It cannot outrank a session at -1000; it does not
