@@ -327,8 +327,9 @@ applies a project's `env` only in a folder it trusts, and none is trusted here,
 so it prints `@latest` over a working pin (measured 2026-09-24, 2.1.267).
 
 **Re-pin both together** — pre-install, warm-up, `SOCRATICODE_SPEC` — as a
-decision, never on a schedule. The health hook's pin-drift check measures only
-a floating session, so it is silent while the variable is set.
+decision, never on a schedule, then run preflight. It is the only check that
+compares the two: the health hook's pin-drift check measures only a floating
+session, so a half re-pin (two builds writing one store) passes it silently.
 
 ## Server lifecycle
 
