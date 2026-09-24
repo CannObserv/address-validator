@@ -296,35 +296,37 @@ value would restore the tie between them rather than ordering them.
 
 ### Don't install a SocratiCode server at launch
 
-The plugin's MCP command is `npx -y --prefer-online socraticode@latest`, and
-`--prefer-online` revalidates against the registry on **every** launch, so a
-warm npx cache is not a warm path on any day the package moved. Measured on
-`broker`: a cold install plus server plus full index peaked at **1.2 G**, and
-all 126 `MemoryHigh` throttle events landed in the install — none in indexing.
-The same workload from a pre-installed build peaked at **75 MB**.
-`.claude/hooks/socraticode-health.sh` runs that driver from SessionStart once
-per UTC day, so on this host the install path was live.
+The plugin launches `npx -y --prefer-online ${SOCRATICODE_SPEC:-socraticode@latest}`;
+on `@latest`, `--prefer-online` revalidates every launch, so any day the
+package moves, a launch installs. Measured on `broker`: install + server + full
+index peaked at **1.2 G**, all 126 `MemoryHigh` throttle events in the install;
+a pre-installed build, **75 MB**.
 
-A pinned install is resolved ahead of the plugin's command by
-`mcp-driver.mjs`. Install once, deliberately, under a cap:
+Both launches are pinned to **1.14.0**: the driver's (daily health hook,
+`index`, `verify`) by a pre-install `mcp-driver.mjs` prefers (GH #214), the
+session's by `SOCRATICODE_SPEC` in `.claude/settings.json` (GH #223). An exact
+spec launches from its own npx tree — built on first launch, so warm it. Install
+capped, with `choom`: sessions here sit at `oom_score_adj` -1000, where a cap
+stalls rather than kills.
 
 ```bash
 npm view socraticode version        # pick a literal; never @latest
-systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M \
-  -- npm install --prefix ~/.socraticode/pin socraticode@<version>
+CAP='systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M choom -n 500 --'
+$CAP npm install --prefix ~/.socraticode/pin socraticode@<version>
+$CAP npm exec --yes --prefer-online --package=socraticode@<version> -- true
 node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs resolve
 ```
 
-`resolve` prints which path won without launching a server; it should name the
-pinned install. Nothing else is configured — absent a pin the chain is exactly
-what it was. Re-pin as a decision, not on a schedule: the point of pinning was
-to stop an unattended launch from installing.
+`resolve` should name the pin. The variable reaches only sessions started
+afterwards, on a plugin build that reads it (a 1.14.0 label does not guarantee
+one); `init-socraticode/scripts/preflight.sh --check` warns if it doesn't, or if
+the pins disagree. Verify what launched, not a manifest — two of the plugin's
+three hardcode `@latest`: `claude mcp list` (`plugin:socraticode:socraticode:`)
+or `ps -eo args | grep socraticode` shows `socraticode@1.14.0`.
 
-**The pin does not cover the session.** Claude Code cannot override a plugin's
-MCP server command, so the plugin keeps launching `@latest` while the driver
-stays fixed. The daily health hook measures that gap and reports a defect only
-when the two differ by a minor or major release — a patch apart is the intended
-steady state, since a pin is meant to lag.
+**Re-pin both together** — pre-install, warm-up, `SOCRATICODE_SPEC` — as a
+decision, never on a schedule. The health hook's pin-drift check measures only
+a floating session, so it is silent while the variable is set.
 
 ## Server lifecycle
 
