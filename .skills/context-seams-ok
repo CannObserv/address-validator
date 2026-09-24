@@ -54,3 +54,12 @@ docs/SOCRATICODE.md :: it. That rule does not need to live in your `AGENTS.md`
 docs/SOCRATICODE.md :: `.socraticodeignore` drops both — the directories AGENTS.md calls "dated
 docs/SOCRATICODE.md :: first bullet of AGENTS.md's *Code Exploration Notes*). That routing is what
 docs/SOCRATICODE.md :: makes E hold. Do not drop it from AGENTS.md without reopening #218.
+# GH #223 split DEPLOYMENT.md "## Host memory" out to docs/HOST-MEMORY.md. These
+# point at DEPLOYMENT.md content that did NOT move (Server lifecycle, and the two
+# worktree rationale sections the doctor/venv-knob messages cite), or — the
+# session-pin test — already read the moved section from its new doc.
+docs/HOST-MEMORY.md :: `Service unit change` row under [Server lifecycle](DEPLOYMENT.md#server-lifecycle)
+tests/unit/test_doctor_escape_hatch.py :: "See docs/DEPLOYMENT.md -> 'Why `bash .skills/doctor.sh` is the other half'."
+tests/unit/test_worktree_venv_knob.py :: "See docs/DEPLOYMENT.md -> 'Why `none` and not `link`' (GH #201)."
+tests/unit/test_worktree_venv_knob.py :: "see docs/DEPLOYMENT.md (GH #201)."
+tests/unit/test_socraticode_session_pin.py :: SECTION_HEADING = "## Don't install a SocratiCode server at launch"

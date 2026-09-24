@@ -11,3 +11,9 @@ AGENTS.md :: tighten :: | `socraticode:codebase-management` | Index management, 
 # CR 2 on PR #222: the index line claimed SOCRATICODE.md holds the prefetch query;
 # test_doc_points_at_the_hook_instead_of_copying_it finds zero select: copies there.
 AGENTS.md :: disproven :: - [docs/SOCRATICODE.md](docs/SOCRATICODE.md) — `codebase_*` tool table, prefetch query, graph health
+# 2026-09-24, GH #223: DEPLOYMENT.md's "## Host memory" split out to docs/HOST-MEMORY.md; these pointers
+# were rewritten because what they point at moved in the same change.
+docs/DEPLOYMENT.md :: retarget :: # MemoryLow= is inert without the system.slice drop-in (see Host memory below).
+docs/DEPLOYMENT.md :: retarget :: | Service reservation — `MemoryLow=512M`, `OOMScoreAdjust=-500` | `infra/address-validator.service` | `Service unit change` row under [Server lifecycle](#server-lifecycle) |
+AGENTS.md :: retarget :: - **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) → Host memory
+AGENTS.md :: retarget :: - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server, host memory

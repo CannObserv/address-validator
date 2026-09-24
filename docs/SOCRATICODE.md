@@ -355,7 +355,7 @@ non-zero, i.e. on a defect or a crashed check. One **note** is written to
 **Both launches are pinned, to one version** — the driver by GH #214
 (`~/.socraticode/pin`), the session by GH #223 (`SOCRATICODE_SPEC` from VS
 Code's `claudeCode.environmentVariables`, declared in `.claude/settings.json`);
-[DEPLOYMENT.md](DEPLOYMENT.md) → Host memory. So the
+[HOST-MEMORY.md](HOST-MEMORY.md). So the
 pin-drift note (`pinned at <version>; the plugin's 'socraticode@latest'
 resolves to …`) no longer appears: that check measures only a floating session.
 **That silence is not evidence.** The hook reads `SOCRATICODE_SPEC` from its own

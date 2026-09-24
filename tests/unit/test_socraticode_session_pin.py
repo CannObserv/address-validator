@@ -10,7 +10,7 @@ Two ways it silently regresses in the repo, both guarded here:
 - the spec floats again (`@latest`, a range, a bare name, or the key dropped by
   a hand edit or an `init-socraticode` re-run) and every session start is an
   install again, with nothing failing;
-- the version moves and `docs/DEPLOYMENT.md` goes on naming the old one, so the
+- the version moves and `docs/HOST-MEMORY.md` goes on naming the old one, so the
   re-pin and verification instructions describe a build nobody runs.
 
 The settings block only *declares* the spec. The VS Code extension expands the
@@ -33,8 +33,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
-DOC = REPO_ROOT / "docs" / "DEPLOYMENT.md"
-SECTION_HEADING = "### Don't install a SocratiCode server at launch"
+DOC = REPO_ROOT / "docs" / "HOST-MEMORY.md"
+SECTION_HEADING = "## Don't install a SocratiCode server at launch"
 VSCODE_SERVER = Path.home() / ".vscode-server"
 MACHINE_SETTINGS = VSCODE_SERVER / "data" / "Machine" / "settings.json"
 
@@ -71,11 +71,11 @@ def test_deployment_doc_names_the_pinned_version() -> None:
     version = _pinned_version()
     section = _section()
     assert f"pinned to **{version}**" in section, (
-        f"{DOC.name} → '{SECTION_HEADING[4:]}' does not say the launches are pinned to {version}"
+        f"{DOC.name} → '{SECTION_HEADING[3:]}' does not say the launches are pinned to {version}"
     )
     stale = sorted(set(LITERAL_SPEC_RE.findall(section)) - {version})
     assert not stale, (
-        f"{DOC.name} → '{SECTION_HEADING[4:]}' still names socraticode@{', @'.join(stale)} "
+        f"{DOC.name} → '{SECTION_HEADING[3:]}' still names socraticode@{', @'.join(stale)} "
         f"while SOCRATICODE_SPEC pins {version}"
     )
 
@@ -91,7 +91,7 @@ def test_vscode_launches_claude_with_the_session_spec() -> None:
     spec = f"socraticode@{_pinned_version()}"
     assert MACHINE_SETTINGS.is_file(), (
         f"{MACHINE_SETTINGS} is missing — the session launches socraticode@latest; "
-        f"set claudeCode.environmentVariables SOCRATICODE_SPEC={spec} (docs/DEPLOYMENT.md)"
+        f"set claudeCode.environmentVariables SOCRATICODE_SPEC={spec} (docs/HOST-MEMORY.md)"
     )
     entries = _read_jsonc(MACHINE_SETTINGS).get("claudeCode.environmentVariables", [])
     values = [e.get("value") for e in entries if e.get("name") == "SOCRATICODE_SPEC"]
