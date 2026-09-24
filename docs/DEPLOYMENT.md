@@ -311,9 +311,9 @@ stalls rather than kills.
 
 ```bash
 npm view socraticode version        # pick a literal; never @latest
-CAP='systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M choom -n 500 --'
-$CAP npm install --prefix ~/.socraticode/pin socraticode@<version>
-$CAP npm exec --yes --prefer-online --package=socraticode@<version> -- true
+cap() { systemd-run --user --scope -p MemoryHigh=1200M -p MemoryMax=1536M choom -n 500 -- "$@"; }
+cap npm install --prefix ~/.socraticode/pin socraticode@<version>
+cap npm exec --yes --prefer-online --package=socraticode@<version> -- true
 node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs resolve
 bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/preflight.sh --check
 ```
