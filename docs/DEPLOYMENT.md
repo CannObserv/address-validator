@@ -303,11 +303,11 @@ index peaked at **1.2 G**, all 126 `MemoryHigh` throttle events in the install;
 a pre-installed build, **75 MB**.
 
 Both launches are pinned to **1.14.0**: the driver's (daily health hook,
-`index`, `verify`) by a pre-install `mcp-driver.mjs` prefers (GH #214), the
-session's by `SOCRATICODE_SPEC` in `.claude/settings.json` (GH #223). An exact
-spec launches from its own npx tree — built on first launch, so warm it. Install
-capped, with `choom`: sessions here sit at `oom_score_adj` -1000, where a cap
-stalls rather than kills.
+`index`, `verify`) by a pre-install that `mcp-driver.mjs` resolves ahead of the
+plugin's command (GH #214), the session's by `SOCRATICODE_SPEC` in
+`.claude/settings.json` (GH #223). An exact spec launches from its own npx tree
+— built on first launch, so warm it. Install capped, with `choom`: sessions here
+sit at `oom_score_adj` -1000, where a cap stalls rather than kills.
 
 ```bash
 npm view socraticode version        # pick a literal; never @latest
@@ -318,13 +318,14 @@ node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driv
 bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/preflight.sh --check
 ```
 
-`resolve` should name the pin. The variable reaches only sessions started
-afterwards, on a plugin build that reads it (a 1.14.0 label does not guarantee
-one); preflight warns if it doesn't, or if the pins disagree. Verify what launched, not a manifest — two of the plugin's
-three hardcode `@latest`: `ps -eo args | grep socraticode` shows
-`npm exec socraticode@1.14.0`. Not `claude mcp list` from a shell: PATH's CLI
-applies a project's `env` only in a folder it trusts, and none is trusted here,
-so it prints `@latest` over a working pin (measured 2026-09-24, 2.1.267).
+`resolve` launches nothing; it should name the pin. The variable reaches only
+sessions started afterwards, on a plugin build that reads it (a 1.14.0 label
+does not guarantee one); preflight warns if it doesn't, or if the pins disagree.
+Verify what launched, not a manifest — two of the plugin's three hardcode
+`@latest`: `ps -eo args | grep socraticode` shows `npm exec socraticode@1.14.0`.
+Not `claude mcp list` from a shell: PATH's CLI applies a project's `env` only in
+a folder it trusts, and none is trusted here, so it prints `@latest` over a
+working pin (measured 2026-09-24, 2.1.267).
 
 **Re-pin both together** — pre-install, warm-up, `SOCRATICODE_SPEC` — as a
 decision, never on a schedule, then run preflight. It is the only check that
