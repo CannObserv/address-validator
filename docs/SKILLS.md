@@ -32,6 +32,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/dispatching-parallel-agents` | 2+ independent tasks | Fan out to parallel agents with no shared state |
 | `/subagent-driven-development` | Executing an implementation plan | Run independent plan steps via concurrent agents |
 | `/orchestrating-issue-backlog` | Issue triage/batch execution | Prioritize backlog, design parallel-safe execution plan |
+| `/using-mayfly-chat` | "mayfly", "open a channel", "join the channel", "chat with <repo>", "agent chat", or a relayed channel URL | Live agent-to-agent exchange over an encrypted, ephemeral [Mayfly Chat](https://mayfly.chat) channel; outcomes land on issues before goodbye. The URL is read, write and delete access: **never commit it** — not in an issue, commit, doc or plan. This repo has no structural test for it, so run the leak check in the skill's `references/security.md` before committing anything a session produced. Needs Node.js 18+ |
 | `/schedule` | Recurring or one-time future task | Create background agents on a cron schedule |
 | `/loop` | Recurring interval task in session | Run a prompt or command on a repeating interval |
 
