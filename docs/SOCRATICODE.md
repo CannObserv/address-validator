@@ -361,8 +361,8 @@ Unset the variable and it returns — a patch gap as a note, a minor or major on
 as a defect naming the re-pin command. Re-pin both together, as a decision, not
 on a schedule; `preflight.sh --check` warns when they disagree.
 
-Earlier revisions of this file expected both notes in the session every day;
-since they became notes, the session sees none. Output that says `FAILED TO RUN` or `NOT measured` means the
+Earlier revisions of this file expected both lines in the session every day;
+since they became notes, the session sees neither. Output that says `FAILED TO RUN` or `NOT measured` means the
 check did not run. It is not an all-clear.
 
 ### Context artifacts
