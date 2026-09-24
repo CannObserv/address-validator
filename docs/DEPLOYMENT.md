@@ -208,8 +208,8 @@ an unrecorded number.
 
 ## Host memory
 
-Moved to [HOST-MEMORY.md](HOST-MEMORY.md): the six memory defences and how to
-verify them, what to lose in order, and the SocratiCode launch pins.
+Moved to [HOST-MEMORY.md](HOST-MEMORY.md): the memory defences and how to verify
+them, what to lose in order, and the SocratiCode launch pins.
 
 ## Server lifecycle
 
