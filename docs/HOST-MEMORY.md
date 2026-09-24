@@ -110,6 +110,10 @@ mechanism is VS Code's machine-scoped setting, in
 { "claudeCode.environmentVariables": [{ "name": "SOCRATICODE_SPEC", "value": "socraticode@1.14.0" }] }
 ```
 
+Verified here 2026-09-24, extension 2.1.281: the session's server launched as
+`npm exec socraticode@1.14.0` from a checkout with no settings block, so the
+machine setting alone carried it.
+
 An exact spec launches from its own npx tree — built on first launch, so warm
 it. Install capped, with `choom`: sessions here sit at `oom_score_adj` -1000,
 where a cap stalls rather than kills.
