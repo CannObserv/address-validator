@@ -1,6 +1,7 @@
 [Unit]
 Description=Archive expired audit_log rows to GCS
 After=network.target postgresql.service
+OnFailure=unit-failure@%n.service
 
 [Service]
 Type=oneshot

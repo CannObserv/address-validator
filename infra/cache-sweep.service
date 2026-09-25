@@ -1,6 +1,7 @@
 [Unit]
 Description=Sweep expired validation-cache rows
 After=network.target postgresql.service
+OnFailure=unit-failure@%n.service
 
 [Service]
 Type=oneshot

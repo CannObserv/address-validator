@@ -283,6 +283,18 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
   && sudo systemctl enable --now disk-hygiene.timer
 ```
 
+**Failures are reported to the journal.** Every timer-driven service carries
+`OnFailure=unit-failure@%n.service`; the `infra/unit-failure@.service` template
+logs one `crit` line tagged `unit-failure` naming the failed unit. A failed
+oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
+A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
+enforces it.
+
+```bash
+journalctl -t unit-failure              # every reported failure
+journalctl -t unit-failure --since today
+```
+
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 
 ```bash
