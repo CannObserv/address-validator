@@ -238,10 +238,15 @@ async def test_export_day_streams_fixed_schema(db: AsyncEngine, tmp_path: Path) 
     assert table.column("provider").to_pylist() == [None, None, "usps", "google", "usps"]
 
 
-def test_archive_schema_omits_raw_input() -> None:
-    """raw_input (address PII) is never archived; it ends at audit retention (#147, #228)."""
+def test_archive_schema_omits_address_data() -> None:
+    """No address-derived column is archived; address data ends at audit retention (#147, #228).
+
+    pattern_key is an unsalted SHA-256 of the standardized address, so archiving
+    it would let anyone holding the archive confirm or enumerate queried addresses.
+    """
     assert "raw_input" not in ARCHIVE_SCHEMA.names
-    assert {"parse_type", "pattern_key"} <= set(ARCHIVE_SCHEMA.names)
+    assert "pattern_key" not in ARCHIVE_SCHEMA.names
+    assert "parse_type" in ARCHIVE_SCHEMA.names
 
 
 @pytest.mark.asyncio

@@ -8,10 +8,12 @@ whole: a mid-day cutoff split a day across two runs, whose rollup then hit
 ``ON CONFLICT DO NOTHING`` and whose Parquet blob overwrote the first slice
 (#228). Days are bucketed in UTC regardless of the DB session timezone.
 
-Archived columns are ``ARCHIVE_SCHEMA``. ``raw_input`` (address content, PII)
-is deliberately NOT archived: it lives only for the audit-retention window
-(#147) and is dropped for good when the row is deleted, keeping address
-content out of GCS. ``client_ip`` IS archived.
+Archived columns are ``ARCHIVE_SCHEMA``. No address-derived column is
+archived: ``raw_input`` (address content, PII) lives only for the
+audit-retention window (#147) and is dropped for good when the row is
+deleted, and ``pattern_key`` is an unsalted SHA-256 of the standardized
+address — archiving it would let anyone holding the archive confirm or
+enumerate queried addresses. ``client_ip`` IS archived.
 
 Usage:
     uv run python infra/archive_audit.py               # archive expired rows
@@ -78,7 +80,6 @@ ARCHIVE_SCHEMA = pa.schema(
         ("cache_hit", pa.bool_()),
         ("error_detail", pa.string()),
         ("parse_type", pa.string()),
-        ("pattern_key", pa.string()),
     ]
 )
 
