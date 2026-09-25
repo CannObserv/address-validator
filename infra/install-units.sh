@@ -62,11 +62,12 @@ check() {
 
 # Installing from a linked worktree would put a branch's units into production
 # ahead of its merge (docs/DEPLOYMENT.md: unit file and code must move together).
+# A linked worktree's .git is a file (`gitdir: ...`); the main checkout's is a
+# directory. Deliberately no git call: as root without SUDO_UID, git refuses an
+# exedev-owned repo ("dubious ownership"), and a guard that read that failure
+# as "not a worktree" would fail open.
 refuse_linked_worktree() {
-  local git_dir common_dir
-  git_dir="$(git -C "$INFRA" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
-  common_dir="$(git -C "$INFRA" rev-parse --path-format=absolute --git-common-dir)"
-  if [ "$git_dir" != "$common_dir" ]; then
+  if [ -f "$INFRA/../.git" ]; then
     echo "Refusing to install from a linked worktree ($INFRA); run the main checkout's copy." >&2
     return 1
   fi

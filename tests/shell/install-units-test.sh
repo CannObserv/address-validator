@@ -98,6 +98,14 @@ check "install from a linked worktree is refused" \
 check "refused install writes nothing" bash -c '[ -z "$(ls -A "$0")" ]' "$wt_units"
 check "install from the main checkout still works" \
   bash -c 'UNIT_DIR="$1" "$0" >/dev/null 2>&1' "$wt_repo/infra/install-units.sh" "$wt_units"
+# Root without SUDO_UID (su -, cron) gets "dubious ownership" from git on an
+# exedev-owned repo; the guard must not treat that failure as "not a worktree".
+mkdir -p "$sandbox/badgit"
+printf '#!/bin/sh\necho "fatal: detected dubious ownership" >&2\nexit 128\n' >"$sandbox/badgit/git"
+chmod +x "$sandbox/badgit/git"
+check "install from a linked worktree is refused even when git fails" \
+  bash -c '! PATH="$2:$PATH" UNIT_DIR="$1" "$0" >/dev/null 2>&1' \
+  "$sandbox/wt/infra/install-units.sh" "$wt_units" "$sandbox/badgit"
 check "--check from a linked worktree is allowed" \
   bash -c 'UNIT_DIR="$1" "$0" --check >/dev/null 2>&1' "$sandbox/wt/infra/install-units.sh" "$wt_units"
 
