@@ -13,7 +13,9 @@ archived: ``raw_input`` (address content, PII) lives only for the
 audit-retention window (#147) and is dropped for good when the row is
 deleted, and ``pattern_key`` is an unsalted SHA-256 of the standardized
 address — archiving it would let anyone holding the archive confirm or
-enumerate queried addresses. ``client_ip`` IS archived.
+enumerate queried addresses. ``client_ip`` IS archived, raw — an operator
+decision on #228; a keyed-hash (HMAC) replacement is tracked in #233. Never
+swap in a plain SHA-256: the IPv4 space is small enough to brute-force.
 
 Usage:
     uv run python infra/archive_audit.py               # archive expired rows
