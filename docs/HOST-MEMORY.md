@@ -80,7 +80,7 @@ reservations follow it rather than inventing a second opinion:
 | Service | Health says | Reservation |
 |---|---|---|
 | `libpostal.service` (~1.9 GB) | `libpostal: unavailable`, status stays ok | **none, deliberately** — largest thing on the host, `Restart=always`, and the only one whose loss the service survives. The right thing to lose first |
-| `audit-archive.service` (nightly 03:00 UTC oneshot) | — | none; **capped** at `MemoryHigh=768M` / `MemoryMax=1G` so an overrun kills the job inside its own cgroup, not a reserved service (#228). Its export streams 10k-row batches, so it sits far below the cap |
+| `audit-archive.service` (nightly 03:00 UTC oneshot) | — | none; **capped** at `MemoryHigh=768M` / `MemoryMax=1G` so an overrun kills the job inside its own cgroup, not a reserved service (#228). Measured (2026-09-25, 298k-row synthetic day ≈ the 2026-03-12 peak): streamed export peaks at **153 MB** RSS (+45 MB over its 108 MB import baseline); the pre-#228 whole-day `list[dict]` export peaked at 648 MB |
 | everything else in `system.slice` | — | the 128M left undistributed after the two claims below |
 | `postgresql@16-main` (~281 MB) | `database: error` → **HTTP 503** | `MemoryLow=384M` |
 | `address-validator` (~150 MB) | the service itself | `MemoryLow=512M`, `OOMScoreAdjust=-500` |

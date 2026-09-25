@@ -10,7 +10,7 @@ EnvironmentFile=/etc/address-validator/.env
 Environment=PYTHONPATH=/home/exedev/address-validator/src
 ExecStart=/home/exedev/address-validator/.venv/bin/python infra/archive_audit.py
 # No swap on this host: an overrun must kill this job, not port 8000 (#228).
-# The export streams in 10k-row batches, so steady-state use is far below this.
+# Measured: streamed export of a 298k-row day peaks at ~153 MB RSS (docs/HOST-MEMORY.md).
 MemoryHigh=768M
 MemoryMax=1G
 
