@@ -258,7 +258,10 @@ sudo infra/install-units.sh audit-archive.service    # just one
 infra/install-units.sh --check                       # exit 1 on drift; sudo to include address-validator.service
 ```
 
-It does not enable units. First-time timer installs still need `enable --now`:
+It installs mode 0644, so the root-only `0600` that `address-validator.service`
+carries today goes away on its next install (its text is public in the repo);
+until then `--check` needs sudo to compare it. It does not enable units.
+First-time timer installs still need `enable --now`:
 
 ```bash
 # Audit log archive timer (daily GCS archival + row deletion)

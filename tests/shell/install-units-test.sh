@@ -71,6 +71,7 @@ printf '[Timer]\nOnCalendar=weekly\n' >"$sandbox/units/a.timer"
 bash "$SCRIPT" b.service >"$OUT" 2>&1
 check "named install fixes that unit" cmp -s "$sandbox/infra/b.service" "$sandbox/units/b.service"
 check "named install leaves others alone" bash -c '! cmp -s "$0/infra/a.timer" "$0/units/a.timer"' "$sandbox"
+check "--help prints the whole header" bash -c '"$0" --help | grep -q "^UNIT_DIR and SYSTEMCTL"' "$SCRIPT"
 check "unknown unit is rejected" bash -c '! "$0" nope.service >/dev/null 2>&1' "$SCRIPT"
 
 # Unreadable installed unit (root-only address-validator.service): SKIP, not drift.

@@ -11,8 +11,10 @@
 #   infra/install-units.sh --check          # exit 1 if any installed unit differs from infra/
 #
 # Install does not enable units; a new timer still needs `systemctl enable --now`.
-# --check reports root-only installed units (address-validator.service) as SKIP;
-# run it under sudo to cover them.
+# Units are installed mode 0644. That normalizes address-validator.service,
+# historically 0600 on this host; its text is public in the repo, so 0600
+# protected nothing, and once re-installed --check reads it without sudo.
+# Until then --check reports it as SKIP; run under sudo to cover it.
 #
 # UNIT_DIR and SYSTEMCTL are overridable for the sandbox test rig.
 
@@ -91,6 +93,6 @@ install_units() {
 
 case "${1:-}" in
   --check) check ;;
-  -h | --help) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+  -h | --help) awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}" ;;
   *) install_units "$@" ;;
 esac
