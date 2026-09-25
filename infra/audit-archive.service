@@ -9,6 +9,10 @@ WorkingDirectory=/home/exedev/address-validator
 EnvironmentFile=/etc/address-validator/.env
 Environment=PYTHONPATH=/home/exedev/address-validator/src
 ExecStart=/home/exedev/address-validator/.venv/bin/python infra/archive_audit.py
+# No swap on this host: an overrun must kill this job, not port 8000 (#228).
+# The export streams in 10k-row batches, so steady-state use is far below this.
+MemoryHigh=768M
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target
