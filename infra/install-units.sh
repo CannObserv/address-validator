@@ -54,7 +54,20 @@ check() {
   return 0
 }
 
+# Installing from a linked worktree would put a branch's units into production
+# ahead of its merge (docs/DEPLOYMENT.md: unit file and code must move together).
+refuse_linked_worktree() {
+  local git_dir common_dir
+  git_dir="$(git -C "$INFRA" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+  common_dir="$(git -C "$INFRA" rev-parse --path-format=absolute --git-common-dir)"
+  if [ "$git_dir" != "$common_dir" ]; then
+    echo "Refusing to install from a linked worktree ($INFRA); run the main checkout's copy." >&2
+    return 1
+  fi
+}
+
 install_units() {
+  refuse_linked_worktree
   local unit units=("$@")
   [ "${#units[@]}" -gt 0 ] || mapfile -t units < <(all_units)
   for unit in "${units[@]}"; do

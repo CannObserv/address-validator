@@ -23,6 +23,10 @@ check() {
   fi
 }
 
+# Hook-safe: under a git hook (pre-commit), exported GIT_* vars would point
+# sandbox git calls at the outer repo
+unset "${!GIT_@}" 2>/dev/null || true
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 sandbox="$(mktemp -d)"
 trap 'chmod -R u+rwx "$sandbox" 2>/dev/null || true; rm -rf "$sandbox"' EXIT
@@ -77,6 +81,24 @@ if [ "$(id -u)" -ne 0 ]; then
   check "--check passes with only unreadable units" bash -c '"$0" --check >"$1" 2>&1' "$SCRIPT" "$OUT"
   check "--check reports unreadable as SKIP" grep -q '^SKIP    a.service' "$OUT"
 fi
+
+# Linked worktree: install refused, --check still allowed
+wt_repo="$sandbox/wtrepo"
+mkdir -p "$wt_repo/infra"
+cp "$sandbox/infra/install-units.sh" "$sandbox/infra/b.service" "$wt_repo/infra/"
+git -C "$wt_repo" init -q
+git -C "$wt_repo" add -A
+git -C "$wt_repo" -c user.name=test -c user.email=test@test commit -q --no-verify -m init
+git -C "$wt_repo" worktree add -q "$sandbox/wt" -b wt-branch
+wt_units="$sandbox/wt-units"
+mkdir -p "$wt_units"
+check "install from a linked worktree is refused" \
+  bash -c '! UNIT_DIR="$1" "$0" >/dev/null 2>&1' "$sandbox/wt/infra/install-units.sh" "$wt_units"
+check "refused install writes nothing" bash -c '[ -z "$(ls -A "$0")" ]' "$wt_units"
+check "install from the main checkout still works" \
+  bash -c 'UNIT_DIR="$1" "$0" >/dev/null 2>&1' "$wt_repo/infra/install-units.sh" "$wt_units"
+check "--check from a linked worktree is allowed" \
+  bash -c 'UNIT_DIR="$1" "$0" --check >/dev/null 2>&1' "$sandbox/wt/infra/install-units.sh" "$wt_units"
 
 echo
 if [ "$FAILS" -ne 0 ]; then
