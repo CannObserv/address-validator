@@ -61,12 +61,14 @@ def _sort_validation_statuses(vs_dict: dict) -> dict:
 
 # Date guard: restrict audit_daily_stats to dates before the earliest live row,
 # avoiding double-counting when --backfill has populated rollups for recent dates.
+# Both sides are UTC days — archive_audit rolls up by UTC date (#228), so a
+# session-TimeZone cast would shift the boundary by a day off-UTC.
 _ARCHIVED_DATE_GUARD = (
     audit_daily_stats.c.date
     < select(
         func.coalesce(
-            func.min(sa.cast(audit_log.c.timestamp, sa.Date)),
-            func.current_date(),
+            func.min(sa.cast(func.timezone("UTC", audit_log.c.timestamp), sa.Date)),
+            sa.cast(func.timezone("UTC", func.now()), sa.Date),
         )
     ).scalar_subquery()
 )

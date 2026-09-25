@@ -3,10 +3,10 @@
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from address_validator.db.tables import audit_log
+from address_validator.db.tables import audit_daily_stats, audit_log
 from address_validator.routers.admin.queries import (
     get_audit_rows,
     get_dashboard_stats,
@@ -16,9 +16,11 @@ from address_validator.routers.admin.queries import (
     get_sparkline_data,
 )
 from address_validator.routers.admin.queries._shared import (
+    _from_archived,
     is_error_expr,
     is_rate_limited_expr,
 )
+from tests.conftest import TEST_CACHE_DSN
 
 
 async def _seed_rows(engine: AsyncEngine) -> None:
@@ -673,3 +675,47 @@ async def test_get_provider_daily_usage_counts_today_only(db: AsyncEngine) -> No
 @pytest.mark.asyncio
 async def test_get_provider_daily_usage_empty(db: AsyncEngine) -> None:
     assert await get_provider_daily_usage(db) == {}
+
+
+@pytest.mark.asyncio
+async def test_archived_date_guard_uses_utc_days(db: AsyncEngine) -> None:
+    """The guard compares UTC days, matching archive_audit's UTC rollup dates (#228).
+
+    A live row at 03:00 UTC on day D falls on D-1 in America/Los_Angeles. A
+    session-TimeZone cast would make the guard ``date < D-1`` and drop the
+    archived D-1 rollup from every all-time total.
+    """
+    day = datetime(2026, 9, 20, tzinfo=UTC)
+    async with db.begin() as conn:
+        await conn.execute(
+            text("""
+                INSERT INTO audit_log (timestamp, client_ip, method, endpoint, status_code)
+                VALUES (:ts, '1.1.1.1', 'POST', '/api/v2/validate', 200)
+            """),
+            {"ts": day + timedelta(hours=3)},
+        )
+        await conn.execute(
+            text("""
+                INSERT INTO audit_daily_stats (date, endpoint, status_code,
+                    request_count, error_count)
+                VALUES (:d, '/api/v2/validate', 200, 7, 0)
+            """),
+            {"d": (day - timedelta(days=1)).date()},
+        )
+
+    la = create_async_engine(
+        TEST_CACHE_DSN, connect_args={"server_settings": {"timezone": "America/Los_Angeles"}}
+    )
+    try:
+        async with la.connect() as conn:
+            total = (
+                await conn.execute(
+                    _from_archived([func.coalesce(func.sum(audit_daily_stats.c.request_count), 0)])
+                )
+            ).scalar()
+            assert (await conn.execute(select(func.current_setting("TimeZone")))).scalar() == (
+                "America/Los_Angeles"
+            )
+    finally:
+        await la.dispose()
+    assert total == 7
