@@ -260,7 +260,9 @@ infra/install-units.sh --check                       # exit 1 on drift; sudo to 
 
 It installs mode 0644, so the root-only `0600` that `address-validator.service`
 carries today goes away on its next install (its text is public in the repo);
-until then `--check` needs sudo to compare it. It does not enable units.
+until then `--check` needs sudo to compare it. Scope is `*.service` + `*.timer`
+only: the `infra/*.conf` memory drop-ins are not installed or checked here —
+see [HOST-MEMORY.md](HOST-MEMORY.md#reservations). It does not enable units.
 First-time timer installs still need `enable --now`:
 
 ```bash

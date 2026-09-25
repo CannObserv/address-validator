@@ -16,6 +16,10 @@
 # protected nothing, and once re-installed --check reads it without sudo.
 # Until then --check reports it as SKIP; run under sudo to cover it.
 #
+# Scope: infra/*.service and infra/*.timer only. The infra/*.conf memory
+# drop-ins and sysctl/earlyoom files install elsewhere and are NOT covered —
+# see docs/HOST-MEMORY.md "Reservations" for their install + verification.
+#
 # UNIT_DIR and SYSTEMCTL are overridable for the sandbox test rig.
 
 set -euo pipefail
