@@ -53,7 +53,7 @@ check() {
     fi
   done < <(all_units)
   if [ "$drift" -ne 0 ]; then
-    echo "Installed units drifted from infra/; fix: sudo infra/install-units.sh" >&2
+    echo "Installed units drifted from infra/; fix: sudo infra/install-units.sh from the main checkout" >&2
     return 1
   fi
   [ "$skipped" -eq 0 ] || echo "Some units were not compared (need sudo)." >&2

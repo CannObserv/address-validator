@@ -64,6 +64,7 @@ printf '[Service]\nExecStart=/old/path\n' >"$sandbox/units/b.service"
 check "--check fails on drift" bash -c '! "$0" --check >"$1" 2>&1' "$SCRIPT" "$OUT"
 check "--check names the drifted unit" grep -q '^DRIFT   b.service' "$OUT"
 check "--check shows the diff" grep -q '/old/path' "$OUT"
+check "--check drift hint names the main checkout" grep -q 'from the main checkout' "$OUT"
 
 # Install a named subset only
 : >"$CALLS"
