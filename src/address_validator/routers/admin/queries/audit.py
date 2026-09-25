@@ -36,9 +36,9 @@ async def get_audit_rows(
     3+ characters; shorter patterns yield no trigrams and fall back to a
     sequential scan. When ``raw_input`` is set, ``raw_input_days`` also bounds
     the search to a recent window (``timestamp >= now - raw_input_days``, served
-    by ``idx_audit_ts``; #152) — the planner picks whichever index is cheaper.
-    The window applies only alongside ``raw_input``; other filters are
-    cheap/indexed.
+    by ``idx_audit_ts``; #152) — the planner chooses between the two by cost
+    estimate, which can misjudge wide windows. The window applies only
+    alongside ``raw_input``; other filters are cheap/indexed.
     """
     conditions: list[ColumnElement] = []
 
