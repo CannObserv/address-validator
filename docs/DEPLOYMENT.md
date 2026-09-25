@@ -246,6 +246,20 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 ## Scheduled timers
 
+Installed units are copies: they do not follow the repo. `infra/install-units.sh`
+is the single install path — it copies units, runs `daemon-reload`, and clears
+stale `failed` state. Run it whenever a unit **or a path a unit references**
+changes; #109 moved scripts out of `scripts/` without re-installing, and two
+units failed nightly for months unnoticed (#228).
+
+```bash
+sudo infra/install-units.sh                          # all infra/*.service + *.timer
+sudo infra/install-units.sh audit-archive.service    # just one
+infra/install-units.sh --check                       # exit 1 on drift; sudo to include address-validator.service
+```
+
+It does not enable units. First-time timer installs still need `enable --now`:
+
 ```bash
 # Audit log archive timer (daily GCS archival + row deletion)
 sudo cp infra/audit-archive.service infra/audit-archive.timer /etc/systemd/system/ \
@@ -314,10 +328,11 @@ uv run python scripts/db/backfill_audit_raw_input.py
 # Must run with the same CUSTOM_MODEL_PATH the service uses.
 uv run python scripts/db/backfill_pipeline_version.py --apply
 
-# Archive audit log to GCS + delete archived rows
+# Archive audit log to GCS + delete archived rows. Exits if AUDIT_ARCHIVE_BUCKET
+# is unset; --skip-upload deletes without archiving, deliberately.
 uv run python infra/archive_audit.py
 
-# Backfill daily rollup aggregates
+# Backfill daily rollup aggregates (all complete UTC days, never today)
 uv run python infra/archive_audit.py --backfill
 ```
 
