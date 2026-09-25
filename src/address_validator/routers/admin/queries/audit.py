@@ -30,12 +30,15 @@ async def get_audit_rows(
 ) -> tuple[list[dict], int]:
     """Fetch paginated, filtered audit_log rows. Returns (rows, total_count).
 
-    The ``raw_input`` filter is a leading-wildcard ILIKE (unindexable by a plain
-    btree) over ``audit_log`` — the hottest write table in the service. When
-    ``raw_input`` is set, ``raw_input_days`` bounds the scan to a recent window
-    (``timestamp >= now - raw_input_days``) so the planner uses ``idx_audit_ts``
-    to constrain the range before the substring filter runs (#152). The window
-    applies only alongside ``raw_input``; other filters are cheap/indexed.
+    The ``raw_input`` filter is a leading-wildcard ILIKE over ``audit_log`` — the
+    hottest write table in the service. The ``pg_trgm`` GIN index
+    ``idx_audit_raw_input_trgm`` (migration 020, #179) serves it for patterns of
+    3+ characters; shorter patterns yield no trigrams, so only the window
+    bounds them. When ``raw_input`` is set, ``raw_input_days`` also bounds
+    the search to a recent window (``timestamp >= now - raw_input_days``, served
+    by ``idx_audit_ts``; #152) — the planner chooses between the two by cost
+    estimate, which can misjudge wide windows. The window applies only
+    alongside ``raw_input``; other filters are cheap/indexed.
     """
     conditions: list[ColumnElement] = []
 
