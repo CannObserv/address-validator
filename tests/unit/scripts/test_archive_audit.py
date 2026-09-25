@@ -352,6 +352,21 @@ async def test_full_archive_cycle(db: AsyncEngine) -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_archive_logs_actual_upload_count(
+    db: AsyncEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The verified-count log line counts uploads, not expired dates."""
+    await _seed_old_and_new_rows(db)
+    caplog.set_level("INFO", logger="archive_audit")
+
+    await run_archive(
+        db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", upload=_FakeUploader()
+    )
+
+    assert "Uploaded and verified 1 Parquet file(s)." in caplog.messages
+
+
+@pytest.mark.asyncio
 async def test_run_archive_skip_upload_still_deletes(db: AsyncEngine) -> None:
     """upload=None (explicit --skip-upload) aggregates and deletes without uploading."""
     await _seed_old_and_new_rows(db)

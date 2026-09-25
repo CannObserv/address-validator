@@ -338,6 +338,7 @@ async def run_archive(
         return
 
     total_exported = 0
+    uploaded = 0
     with tempfile.TemporaryDirectory() as tmpdir:
         for day in expired_dates:
             day_key = day.strftime("%Y-%m-%d")
@@ -352,6 +353,7 @@ async def run_archive(
 
             if upload is not None and exported:
                 upload(local_path, blob_name)
+                uploaded += 1
 
             # Remove local file after upload to limit disk usage.
             local_path.unlink(missing_ok=True)
@@ -359,7 +361,7 @@ async def run_archive(
     if upload is None:
         logger.info("Skipping upload (--skip-upload).")
     else:
-        logger.info("All %d Parquet files verified in GCS.", len(expired_dates))
+        logger.info("Uploaded and verified %d Parquet file(s).", uploaded)
     logger.info("Exported %d total rows across %d days.", total_exported, len(expired_dates))
 
     deleted = await delete_expired_rows(engine, cutoff)
