@@ -33,8 +33,8 @@ async def get_audit_rows(
     The ``raw_input`` filter is a leading-wildcard ILIKE over ``audit_log`` — the
     hottest write table in the service. The ``pg_trgm`` GIN index
     ``idx_audit_raw_input_trgm`` (migration 020, #179) serves it for patterns of
-    3+ characters; shorter patterns yield no trigrams and fall back to a
-    sequential scan. When ``raw_input`` is set, ``raw_input_days`` also bounds
+    3+ characters; shorter patterns yield no trigrams, so only the window
+    bounds them. When ``raw_input`` is set, ``raw_input_days`` also bounds
     the search to a recent window (``timestamp >= now - raw_input_days``, served
     by ``idx_audit_ts``; #152) — the planner chooses between the two by cost
     estimate, which can misjudge wide windows. The window applies only
