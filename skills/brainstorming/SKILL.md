@@ -275,4 +275,6 @@ Recorded so the next sync can tell a deviation from a drift:
 | "Too simple" example: a new todo-list project | A new endpoint or schema change | Examples drawn from this repo |
 | Visual companion assumes a local browser on an ephemeral port | `BRAINSTORM_PORT` in 3000-9999, `--host 0.0.0.0`, `--url-host`, relay as `https://` | Remote VM behind the exe.dev proxy — the default invocation is unreachable |
 | Companion guide invokes `bash scripts/start-server.sh` (bare path) | Full path from project root | Bare path does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)) |
-| Process-flow digraph | Omitted | The path checklists carry the same routing |
+| Process-flow digraph; "Terminal states are path-bound" paragraph | Omitted | The path checklists, HARD-GATE, and Implementation choice carry the same routing |
+| "Create a task for each item on your path" | Omitted | The numbered checklists are worked in order directly |
+| Self-review suggests the `elements-of-style` skill | Omitted | Not vendored in this repo |
