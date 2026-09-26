@@ -4,11 +4,11 @@ description: "Explores user intent, requirements, and design before any implemen
 compatibility: Designed for Claude. Requires git and gh CLI. Python project using FastAPI, Pydantic, uv.
 metadata:
   author: gregoryfoster
-  version: "6.3.0"
-  synced-from: "obra-superpowers v6.3.0 (b36e0829c6d0140e93cfef2ca599b1b07d4a7797)"
+  version: "6.4.2"
+  synced-from: "obra-superpowers v6.4.2 (8ca22dba9a94f28898bbce59f2537ff4d87c747d)"
   triggers: brainstorm, design this, let's design
   overrides: obra-superpowers/brainstorming
-  override-reason: "Hard-block variant (explicit approval words, no implied consent); docs/plans/ path convention; project commit convention for the design doc; GitHub issue opened per design; writing-plans offered, never mandatory; visual companion launched with exe.dev proxy flags (remote VM, no local browser)"
+  override-reason: "Hard-block variant (explicit approval words at every stage, no implied consent); docs/plans/ path convention; project commit convention for the design doc; GitHub issue opened per design; writing-plans offered, never mandatory (choosing plan vs direct implementation is its own approval stage); visual companion launched with exe.dev proxy flags (remote VM, no local browser)"
 ---
 
 # Brainstorming Ideas Into Designs — address-validator
@@ -17,10 +17,28 @@ Help turn ideas into fully formed designs through collaborative dialogue before 
 
 Classify how much process the request needs, then work your path: understand the context, refine the idea, present a design, get explicit approval.
 
-<HARD-GATE>
-Do NOT write any code, create any files (other than the design doc), run any migrations, or take any implementation action until you have presented a design AND the user has explicitly approved it with "approved", "proceed", "looks good", or clearly equivalent. "sounds fine" or "okay" without affirmative intent does not count.
+## Establish shared understanding
 
-This applies to EVERY path below. The ceremony scales with the task; the approval gate never does.
+The outcome of brainstorming is an understanding the user can recognize and correct, grounded in what they want to accomplish.
+
+1. **Discover intent.** Use the request and available context to identify the intended outcome, who it is for, and what success looks like. When that information is missing, ask one focused question about purpose or intended use before proposing features or an approach. Knowing the kind of service does not tell you why the user wants the change. Gathering missing requirements does not ask them to authorize the task again.
+2. **Write back your understanding.** Summarize the intended outcome, relevant constraints, and success criteria in a short note the user can assess. Separate what they said from assumptions. Invite correction and incorporate their answer before treating this as the design brief.
+3. **Carry intent into the design.** Preserve the agreed understanding in the selected path's design artifact: the written design doc for architectural work, or the in-chat design/probe for bounded work and spikes. Check proposed features and technical choices against that understanding.
+
+When the request already supplies the purpose and constraints, reflect that understanding instead of asking the same questions again. Keep the note concise; its accuracy and the opportunity to correct it matter.
+
+<HARD-GATE>
+Before taking any implementation action — writing code, creating files (other than the design doc and, once the user picks `writing-plans`, the plan), running migrations, installing dependencies, invoking an implementation skill — complete the selected path's approval stages:
+
+- **Spike:** the user approves the question and probe.
+- **Bounded:** the user approves the short in-chat design.
+- **Architectural:** the user approves the design in chat, then approves the written design doc, then chooses how implementation proceeds — `writing-plans` or direct implementation. Conversational design approval only permits writing the design doc; design-doc approval only permits opening the issue and offering that choice; picking `writing-plans` only permits writing the plan. If they choose `writing-plans`, the user must also explicitly approve the written plan (its Phase 3 review) before implementation.
+
+Every approval is explicit: "approved", "proceed", "looks good", or clearly equivalent. "sounds fine" or "okay" without affirmative intent does not count; silence and follow-up questions never do.
+
+A reply approves the stage actually presented. Approval of an idea or scope does not approve artifacts that do not exist yet. Resume at the earliest incomplete stage; never turn one approval into permission to skip the rest of the path. Read-only project exploration is allowed while stages remain incomplete.
+
+The ceremony scales with the path; the approval gate never does.
 </HARD-GATE>
 
 ## Three paths
@@ -28,8 +46,8 @@ This applies to EVERY path below. The ceremony scales with the task; the approva
 Before your first question, classify the request and say the classification out loud — "this looks bounded, so I'll present a short design here rather than write a design doc" — so the user can override it:
 
 - **Spike** — a feasibility question ("can we…", "is it possible…", "quick and dirty is fine") whose output is an answer, not code you keep. Present the question and what you'll try in 2–3 sentences, get approval, then find out as cheaply as correctness allows. No design doc, no issue. Report findings as a recommendation; anything you built stays labeled throwaway.
-- **Bounded** — a well-scoped change to code that already exists in this repo: a new flag, a new warning string, a one-file fix. Understanding the kind of app is not enough — bounded means the flow you are changing is already here to read. If there is no existing flow to change, the task is not bounded. Ask the clarifying questions that matter, present a short design IN CHAT (a few sentences to a few short paragraphs), and STOP. No design doc, no plan document.
-- **Architectural** — new subsystems, new endpoints, schema changes, changes that restructure how components fit together or alter API contracts others depend on. Follow the full process: questions, approaches, sectioned design, written design doc, GitHub issue.
+- **Bounded** — a well-scoped change to code that already exists in this repo: a new flag, a one-file fix. Understanding the kind of app is not enough — bounded means the flow you are changing is already here to read. If there is no existing flow to change, the task is not bounded. Ask the clarifying questions that matter, present a short design IN CHAT (a few sentences to a few short paragraphs), and STOP. Implementation starts only after the user says yes to that design — a bounded task's approval is as hard a gate as an architectural one. No design doc, no plan document.
+- **Architectural** — new projects, new subsystems, new endpoints, schema changes, changes that restructure how components fit together or alter API contracts others depend on. Follow the full process: questions, approaches, sectioned design, written design doc, GitHub issue, then the implementation choice.
 
 When in doubt between two paths, take the heavier one. The ratchet is one-way: hidden complexity discovered mid-task upgrades the path — stop, say so, and step up. Nothing downgrades mid-task.
 
@@ -37,16 +55,17 @@ When in doubt between two paths, take the heavier one. The ratchet is one-way: h
 
 ## Anti-pattern: "too simple to need approval"
 
-Every path ends with the user approving your intent before implementation. A one-line fix, a config change, a new constant — the design may be two sentences in chat, but you MUST present it and get approval. "Simple" tasks are where unexamined assumptions cause the most wasted work. What scales with simplicity is the artifact, never the approval.
+Every path ends with the user approving the required design before implementation. A one-line fix or a config change may need only two sentences in chat. A new endpoint or a schema change is architectural and requires the written design doc, the issue, and the implementation choice. Scale the artifact to the selected path; complete that path's approval stages before implementation. "Simple" tasks are where unexamined assumptions cause the most wasted work.
 
 ## Red flags
 
 | Thought | Reality |
 |---|---|
-| "This is too simple to need a design" | Simple means a short design, not no design. Two sentences in chat, then approval. |
+| "This is too simple to need a design" | Follow the selected path: a bounded change gets a short chat design; an architectural change gets the written design doc and the implementation choice. |
 | "I'll call it bounded and skip the design doc" | Reaching for a label to skip work IS the doubt — take the heavier path. |
 | "It's bounded and the design is obvious — I'll start while they read it" | The gate is the approval, not the design's length. Present, then stop until you hear yes. |
 | "I understand this kind of service, so it's bounded" | Bounded measures the repo, not your familiarity. No existing flow to change means architectural. |
+| "They approved the design doc, so I can start coding" | Design-doc approval permits the issue and the implementation choice — not implementation. Ask: `writing-plans` or direct? |
 | "The spike works, so I'll keep the code" | A spike's output is an answer. Keeping the code is a new request — classify it. |
 | "It grew, but I'm almost done — no need to re-classify" | Hidden complexity upgrades the path mid-task. Stop and say so. |
 | "They approved the spike, so the follow-up is approved too" | Each task gets its own classification and its own approval. |
@@ -64,13 +83,13 @@ Classify first, announce the path, then work the items in order.
 **Spike:**
 1. **Explore project context** — enough to frame the probe
 2. **Present question + probe plan** — 2–3 sentences
-3. **Get approval**
+3. **Get approval** — explicit, as for every path
 4. **Investigate** — as cheaply as correctness allows
 5. **Report findings** — a recommendation; label anything built as throwaway
 
 **Bounded:**
 1. **Explore project context** — AGENTS.md, the files in the area, recent commits
-2. **Ask clarifying questions** — one at a time, the ones that matter
+2. **Ask clarifying questions** — one at a time, the ones that matter; write back your understanding (see Establish shared understanding)
 3. **Present short design in chat** — approach, files touched, test strategy
 4. **Get approval** — STOP and wait for an explicit yes; presenting the design and starting in the same breath skips the gate
 5. **Implement** — normal workflow (`test-driven-development` applies); no design doc, no plan document
@@ -78,18 +97,18 @@ Classify first, announce the path, then work the items in order.
 **Architectural:**
 1. **Explore project context** — AGENTS.md, README.md, `git log --oneline -10`, relevant source
 2. **Offer the visual companion just-in-time** — NOT upfront; only when a question is genuinely clearer shown than described (see Visual companion below)
-3. **Ask clarifying questions** — one at a time; purpose, constraints, success criteria, scope boundaries
+3. **Ask clarifying questions** — one at a time; purpose, constraints, success criteria, scope boundaries; write back your understanding (see Establish shared understanding)
 4. **Propose 2–3 approaches** — trade-offs, lead with your recommendation
 5. **Present design** — in sections scaled to their complexity, approval after each section
 6. **Write design doc** — `docs/plans/YYYY-MM-DD-<topic>-design.md`, then commit
 7. **Design self-review** — inline check for placeholders, contradictions, ambiguity, scope
-8. **User reviews the written doc** — ask before proceeding
+8. **User reviews the written doc** — ask before proceeding; wait for explicit approval
 9. **Open a GitHub issue** — track the work
-10. **Transition to implementation** — offer `writing-plans`; do not invoke it unbidden
+10. **Offer the implementation choice** — `writing-plans` or direct implementation; the user's pick is its own approval stage. Do not invoke `writing-plans` unbidden, and do not start implementing before they choose
 
 ## The process
 
-The subsections below serve the bounded and architectural paths. A spike stops at "present the probe, get approval". Everything from **Exploring approaches** onward is architectural-path depth.
+The subsections below serve the bounded and architectural paths. A spike stops at "present the probe, get approval". Everything from **Exploring approaches** onward is architectural-path depth — for bounded work, context plus a few questions plus a short in-chat design is the whole process.
 
 **Understanding the idea:**
 
@@ -140,7 +159,7 @@ Do not proceed to the design doc until the user has explicitly approved the desi
 docs/plans/YYYY-MM-DD-<topic>-design.md
 ```
 
-Commit it using the project convention (AGENTS.md → Commit convention):
+Carry the agreed understanding (outcome, constraints, success criteria) into it. Commit it using the project convention (AGENTS.md → Commit convention):
 
 ```
 [docs]: add <topic> design doc          # issue number not yet known
@@ -160,7 +179,7 @@ Fix issues inline. No need to re-review — fix and move on.
 
 > "Design doc written and committed to `<path>`. Please review it and let me know if you want any changes before we go further."
 
-Wait for the response. If they request changes, make them and re-run the self-review. Only proceed once the user approves.
+Wait for the response. If they request changes, make them and re-run the self-review. Only proceed once the user explicitly approves.
 
 **Open a GitHub issue.** After the doc is approved, create the tracking issue:
 
@@ -184,12 +203,12 @@ EOF
 - Report the issue number to the user (e.g. "Opened #42")
 - If the issue number was not known at commit time, note the doc path in the issue body rather than amending the commit
 
-**Transition to implementation.** Present a summary of what was decided, then offer:
+**Implementation choice.** Present a summary of what was decided, then offer:
 
-- `writing-plans` to create a detailed implementation plan — appropriate for larger features, **optional**
+- `writing-plans` to create a detailed implementation plan — appropriate for larger features, **optional**. If chosen, the written plan gets its own explicit approval before any implementation.
 - Direct implementation for smaller work
 
-Do NOT invoke any implementation action without user direction.
+Wait for an explicit pick. Design-doc approval is not a pick, and neither is silence. If `writing-plans` decides no plan is warranted (its Phase 1 "just do the work"), do not start: return to the user for an explicit direct-implementation pick. Do NOT invoke any implementation action without user direction.
 
 ## Visual companion
 
@@ -225,7 +244,7 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 - **Do not use `--open`** — it would open a browser on the VM, not the user's machine. Send them the link instead.
 - **`--url-host` is this VM's name**, as in the dev-server URL AGENTS.md documents (`https://address-validator.exe.xyz:8001/`). Confirm it there rather than trusting the literal above if the VM may have been renamed.
 - **Pick a free port.** 8000 is the production service, 8001 the dev server, 4400 libpostal, 3900 the companion (docs/DEPLOYMENT.md).
-- **Invoke by the full path** shown above. The companion guide writes bare `scripts/start-server.sh`, which does not resolve from the project root ([#63](https://github.com/gregoryfoster/skills/issues/63)).
+- **Invoke by the full path** shown above. The companion guide writes `bash scripts/start-server.sh` with a bare `scripts/` path, which does not resolve from the project root ([#63](https://github.com/gregoryfoster/skills/issues/63)).
 - Session content and state land in `.superpowers/brainstorm/` (gitignored).
 
 Read [visual-companion.md](visual-companion.md) for the full guide — screen-writing, event polling, and lifecycle — before the first screen. Note it is vendored upstream text: its examples use the bare `scripts/` path and assume a local browser, so the flags above override it.
@@ -233,23 +252,29 @@ Read [visual-companion.md](visual-companion.md) for the full guide — screen-wr
 ## Key principles
 
 - **One question at a time** — never overwhelm
+- **Write back your understanding** — the user corrects it before it becomes the brief
 - **YAGNI** — remove unnecessary scope from every design
-- **Explicit approval required** — ambiguity does not count as approval, on every path
+- **Explicit approval required** — at every stage, on every path; ambiguity does not count as approval
+- **A reply approves the stage presented** — never the stages after it
 - **Classify out loud** — the user can only override a path they can see
 - **`docs/plans/` is our convention** — not `docs/` root, not project root
-- **`writing-plans` is optional** — useful for large features, never a mandatory terminal state
+- **`writing-plans` is optional** — useful for large features, never a mandatory terminal state; the choice to skip it is still the user's, made explicitly
 
-## Deliberate deviations from obra-superpowers v6.3.0
+## Deliberate deviations from obra-superpowers v6.4.2
 
 Recorded so the next sync can tell a deviation from a drift:
 
 | Vendor | Here | Why |
 |---|---|---|
-| Approval may be "a nod" | Explicit approval words required | Hard-block variant — implied consent has burned us |
-| `docs/superpowers/specs/` | `docs/plans/` | Project convention (AGENTS.md) |
+| Spike approval may be "a nod" | Explicit approval words at every stage, every path | Hard-block variant — implied consent has burned us |
+| `docs/superpowers/specs/` ("spec") | `docs/plans/` ("design doc") | Project convention (AGENTS.md) |
 | "Commit the design document" | `[docs]:` / `#<n> [docs]:` prefix | Project commit convention (AGENTS.md) |
 | No issue step | `gh issue create` after the doc | Work here is issue-tracked |
-| Architectural MUST end in `writing-plans` | Offered, never mandatory | Small architectural changes don't earn a plan doc |
+| Architectural gate: spec approval → `writing-plans` → plan review → execution method, all mandatory | Design-doc approval → issue → user explicitly picks `writing-plans` or direct implementation; plan approval applies only if they pick `writing-plans`; no execution-method stage | Small architectural changes don't earn a plan doc (#231); upstream's stage discipline is kept — the pick is its own approval, so design-doc approval never becomes a license to code. This repo vendors gregoryfoster/skills' `writing-plans`, which has no execution-method handoff — its Phase 3 plan review is the last stage |
+| Bounded examples include "a small endpoint" | Endpoints are architectural; repo tells list the drift-tested sources of truth | New endpoints alter the API contract (`models.py`) |
+| "Too simple" example: a new todo-list project | A new endpoint or schema change | Examples drawn from this repo |
 | Visual companion assumes a local browser on an ephemeral port | `BRAINSTORM_PORT` in 3000-9999, `--host 0.0.0.0`, `--url-host`, relay as `https://` | Remote VM behind the exe.dev proxy — the default invocation is unreachable |
-| Companion guide invokes bare `scripts/start-server.sh` | Full path from project root | Bare path does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)) |
-| Process-flow digraph | Omitted | The path checklists carry the same routing |
+| Companion guide invokes `bash scripts/start-server.sh` (bare path) | Full path from project root | Bare path does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)) |
+| Process-flow digraph; "Terminal states are path-bound" paragraph | Omitted | The path checklists, HARD-GATE, and Implementation choice carry the same routing |
+| "Create a task for each item on your path" | Omitted | The numbered checklists are worked in order directly |
+| Self-review suggests the `elements-of-style` skill | Omitted | Not vendored in this repo |
