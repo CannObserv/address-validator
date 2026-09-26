@@ -32,7 +32,7 @@ Before taking any implementation action — writing code, creating files (other 
 
 - **Spike:** the user approves the question and probe.
 - **Bounded:** the user approves the short in-chat design.
-- **Architectural:** the user approves the design in chat, then approves the written design doc, then chooses how implementation proceeds — `writing-plans` or direct implementation. Conversational design approval only permits writing the design doc; design-doc approval only permits opening the issue and offering that choice. If they choose `writing-plans`, the user must also review the written plan and choose its execution method before implementation.
+- **Architectural:** the user approves the design in chat, then approves the written design doc, then chooses how implementation proceeds — `writing-plans` or direct implementation. Conversational design approval only permits writing the design doc; design-doc approval only permits opening the issue and offering that choice. If they choose `writing-plans`, the user must also explicitly approve the written plan (its Phase 3 review) before implementation.
 
 Every approval is explicit: "approved", "proceed", "looks good", or clearly equivalent. "sounds fine" or "okay" without affirmative intent does not count; silence and follow-up questions never do.
 
@@ -205,10 +205,10 @@ EOF
 
 **Implementation choice.** Present a summary of what was decided, then offer:
 
-- `writing-plans` to create a detailed implementation plan — appropriate for larger features, **optional**. If chosen, the written plan gets its own review, and the user picks its execution method before any implementation.
+- `writing-plans` to create a detailed implementation plan — appropriate for larger features, **optional**. If chosen, the written plan gets its own explicit approval before any implementation.
 - Direct implementation for smaller work
 
-Wait for an explicit pick. Design-doc approval is not a pick, and neither is silence. Do NOT invoke any implementation action without user direction.
+Wait for an explicit pick. Design-doc approval is not a pick, and neither is silence. If `writing-plans` decides no plan is warranted (its Phase 1 "just do the work"), do not start: return to the user for an explicit direct-implementation pick. Do NOT invoke any implementation action without user direction.
 
 ## Visual companion
 
@@ -270,7 +270,7 @@ Recorded so the next sync can tell a deviation from a drift:
 | `docs/superpowers/specs/` ("spec") | `docs/plans/` ("design doc") | Project convention (AGENTS.md) |
 | "Commit the design document" | `[docs]:` / `#<n> [docs]:` prefix | Project commit convention (AGENTS.md) |
 | No issue step | `gh issue create` after the doc | Work here is issue-tracked |
-| Architectural gate: spec approval → `writing-plans` → plan review → execution method, all mandatory | Design-doc approval → issue → user explicitly picks `writing-plans` or direct implementation; the plan-review stages apply only if they pick `writing-plans` | Small architectural changes don't earn a plan doc (#231); upstream's stage discipline is kept — the pick is its own approval, so design-doc approval never becomes a license to code |
+| Architectural gate: spec approval → `writing-plans` → plan review → execution method, all mandatory | Design-doc approval → issue → user explicitly picks `writing-plans` or direct implementation; plan approval applies only if they pick `writing-plans`; no execution-method stage | Small architectural changes don't earn a plan doc (#231); upstream's stage discipline is kept — the pick is its own approval, so design-doc approval never becomes a license to code. This repo vendors gregoryfoster/skills' `writing-plans`, which has no execution-method handoff — its Phase 3 plan review is the last stage |
 | Bounded examples include "a small endpoint" | Endpoints are architectural; repo tells list the drift-tested sources of truth | New endpoints alter the API contract (`models.py`) |
 | "Too simple" example: a new todo-list project | A new endpoint or schema change | Examples drawn from this repo |
 | Visual companion assumes a local browser on an ephemeral port | `BRAINSTORM_PORT` in 3000-9999, `--host 0.0.0.0`, `--url-host`, relay as `https://` | Remote VM behind the exe.dev proxy — the default invocation is unreachable |
