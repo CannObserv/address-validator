@@ -28,11 +28,11 @@ The outcome of brainstorming is an understanding the user can recognize and corr
 When the request already supplies the purpose and constraints, reflect that understanding instead of asking the same questions again. Keep the note concise; its accuracy and the opportunity to correct it matter.
 
 <HARD-GATE>
-Before taking any implementation action — writing code, creating files (other than the design doc), running migrations, installing dependencies, invoking an implementation skill — complete the selected path's approval stages:
+Before taking any implementation action — writing code, creating files (other than the design doc and, once the user picks `writing-plans`, the plan), running migrations, installing dependencies, invoking an implementation skill — complete the selected path's approval stages:
 
 - **Spike:** the user approves the question and probe.
 - **Bounded:** the user approves the short in-chat design.
-- **Architectural:** the user approves the design in chat, then approves the written design doc, then chooses how implementation proceeds — `writing-plans` or direct implementation. Conversational design approval only permits writing the design doc; design-doc approval only permits opening the issue and offering that choice. If they choose `writing-plans`, the user must also explicitly approve the written plan (its Phase 3 review) before implementation.
+- **Architectural:** the user approves the design in chat, then approves the written design doc, then chooses how implementation proceeds — `writing-plans` or direct implementation. Conversational design approval only permits writing the design doc; design-doc approval only permits opening the issue and offering that choice; picking `writing-plans` only permits writing the plan. If they choose `writing-plans`, the user must also explicitly approve the written plan (its Phase 3 review) before implementation.
 
 Every approval is explicit: "approved", "proceed", "looks good", or clearly equivalent. "sounds fine" or "okay" without affirmative intent does not count; silence and follow-up questions never do.
 
