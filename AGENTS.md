@@ -88,7 +88,7 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 
 - Restart: `sudo systemctl restart address-validator`
 - Logs: `journalctl -u address-validator -f`
-- Re-install unit: `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload`
+- Re-install units: `sudo infra/install-units.sh [unit…]` (restart the service if its unit changed); `infra/install-units.sh --check` flags drift — re-run after moving any path a unit references (#228)
 - Pre-commit hooks: `uv run pre-commit install`
 - Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC) prunes VS Code server builds, npm/uv caches, orphaned worktrees; dry-run with `infra/disk-hygiene.sh --dry-run`
 

@@ -14,6 +14,13 @@ and the project uses semantic versioning.
 
 - **Canadian address content no longer written to logs at `INFO`** ([#185](https://github.com/CannObserv/address-validator/issues/185)). The libpostal sidecar is called as `GET /parse?address=<address>`, and `httpx` logs the full request URL at `INFO` — so every CA request emitted the user's address verbatim, contrary to the no-PII-at-INFO+ rule in `AGENTS.md`. `httpx` and `httpcore` are now pinned to `WARNING` independently of `LOG_LEVEL`, so raising verbosity cannot reopen it. Pre-dates the JSON logging work; found during review of it.
 
+- **Audit-log archive runs again, and archives whole days** ([#228](https://github.com/CannObserv/address-validator/issues/228)). The installed `audit-archive` and `docker-prune` units still pointed at pre-#109 `scripts/` paths and failed every night, unnoticed. The archiver also cut days at the 03:00 timer time rather than UTC midnight, so a day's rollup and Parquet file would have lost its 00:00–03:00 slice; it now exits instead of deleting when `AUDIT_ARCHIVE_BUCKET` is unset, and streams the export (298k-row day: 648 MB → 153 MB peak RSS). No address-derived column is archived (`raw_input`, `pattern_key`); `client_ip` is archived raw (HMAC tracked in [#233](https://github.com/CannObserv/address-validator/issues/233)).
+
+### Added (operations)
+
+- **`infra/install-units.sh`** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — the single install path for `infra/*.service` + `*.timer` (copy, `daemon-reload`, `reset-failed`; refuses a linked worktree); `--check` reports drift between installed units and `infra/`.
+- **Timer-driven unit failures reach the journal** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — `OnFailure=unit-failure@%n.service` logs one `crit` line per failure: `journalctl -t unit-failure`. Routing through the notifier service is [#232](https://github.com/CannObserv/address-validator/issues/232).
+
 ### Changed
 
 - **Logs are now structured JSON** ([#185](https://github.com/CannObserv/address-validator/issues/185)). Every line on stdout (and therefore in journald) is a JSON object with `{timestamp, level, logger, message, request_id}`, replacing the previous `LEVEL:name:message` text format — which carried no timestamp and silently dropped the `request_id` ULID. uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error` loggers share the same formatter via `--log-config src/address_validator/core/log_config.json`, so access lines are JSON too and are correlated by `request_id`. Operators grepping journald for the old plain-text shape must update; see [`docs/LOGGING.md`](docs/LOGGING.md).

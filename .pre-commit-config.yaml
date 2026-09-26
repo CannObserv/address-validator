@@ -18,6 +18,12 @@ repos:
         entry: bash tests/shell/disk-hygiene-test.sh
         files: '^(infra/disk-hygiene\.sh|tests/shell/disk-hygiene-test\.sh)$'
         pass_filenames: false
+      - id: install-units-test
+        name: install-units sandbox tests
+        language: system
+        entry: bash tests/shell/install-units-test.sh
+        files: '^(infra/install-units\.sh|tests/shell/install-units-test\.sh)$'
+        pass_filenames: false
       - id: build-tailwind-css
         name: Build Tailwind CSS
         language: system

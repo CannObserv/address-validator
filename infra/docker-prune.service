@@ -2,6 +2,7 @@
 Description=Remove Docker build cache, stopped containers, dangling images, unused networks
 After=docker.service
 Requires=docker.service
+OnFailure=unit-failure@%n.service
 
 [Service]
 Type=oneshot

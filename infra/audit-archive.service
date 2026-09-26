@@ -1,6 +1,7 @@
 [Unit]
 Description=Archive expired audit_log rows to GCS
 After=network.target postgresql.service
+OnFailure=unit-failure@%n.service
 
 [Service]
 Type=oneshot
@@ -9,6 +10,10 @@ WorkingDirectory=/home/exedev/address-validator
 EnvironmentFile=/etc/address-validator/.env
 Environment=PYTHONPATH=/home/exedev/address-validator/src
 ExecStart=/home/exedev/address-validator/.venv/bin/python infra/archive_audit.py
+# No swap on this host: an overrun must kill this job, not port 8000 (#228).
+# Measured: streamed export of a 298k-row day peaks at ~153 MB RSS (docs/HOST-MEMORY.md).
+MemoryHigh=768M
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target

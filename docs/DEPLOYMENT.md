@@ -16,10 +16,10 @@ journalctl -u address-validator -o cat | jq 'select(.request_id == "<ULID>")'
 # Re-install systemd unit after infra/address-validator.service changes
 # NOTE: this alone does NOT establish the memory reservation — the unit's
 # MemoryLow= is inert without the system.slice drop-in (see docs/HOST-MEMORY.md).
-sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload
+sudo infra/install-units.sh address-validator.service
 
 # Install/enable libpostal sidecar
-sudo cp infra/libpostal.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now libpostal
+sudo infra/install-units.sh libpostal.service && sudo systemctl enable --now libpostal
 
 # Install pre-commit hooks (ruff + Tailwind CSS build)
 uv run pre-commit install
@@ -35,10 +35,10 @@ uv run pre-commit install
 
 | Direction | Order |
 |---|---|
-| Deploy | merge to `main` → `git pull` in the main checkout → **`uv sync`** → `cp` the unit → `daemon-reload` → `restart` |
+| Deploy | merge to `main` → `git pull` in the main checkout → **`uv sync`** → `sudo infra/install-units.sh <unit>` (copy + `daemon-reload`) → `restart` |
 | Rollback | revert the code **and** the unit together, then `uv sync` → `daemon-reload` → `restart` |
 
-Three ways to break it: `cp`ing the new unit before the merge lands (config
+Three ways to break it: installing the new unit before the merge lands (config
 file absent), reverting the code while the installed unit still passes the
 flag, or — the one that actually bit on the #185 deploy — **skipping `uv sync`
 when the branch added a dependency**.
@@ -217,7 +217,7 @@ them, what to lose in order, and the SocratiCode launch pins.
 |---|---|
 | Code change (no env/service) | `sudo systemctl restart address-validator` |
 | Env var change | Edit `/etc/address-validator/.env`, then restart |
-| Service unit change | `sudo cp infra/address-validator.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl restart address-validator` |
+| Service unit change | `sudo infra/install-units.sh address-validator.service && sudo systemctl restart address-validator` (main checkout only — the script refuses a worktree) |
 | New worktree created | Kill any dev server on 8001 (`pgrep -f "\.worktrees/.*uvicorn" \| xargs -r kill`), then start from new worktree using the dev-server command below (add `--reload`) |
 | Dev/test iteration | Dev server on 8001 with `--reload` auto-picks up changes |
 | Agent-driven smoke check | Dev-server command below, minus `--reload` — the watcher process leaks if the agent shell exits before cleanup |
@@ -246,22 +246,53 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 ## Scheduled timers
 
+Installed units are copies: they do not follow the repo. `infra/install-units.sh`
+is the single install path — it copies units, runs `daemon-reload`, and clears
+stale `failed` state. Run it whenever a unit **or a path a unit references**
+changes; #109 moved scripts out of `scripts/` without re-installing, and two
+units failed nightly for months unnoticed (#228).
+
+```bash
+sudo infra/install-units.sh                          # all infra/*.service + *.timer
+sudo infra/install-units.sh audit-archive.service    # just one
+infra/install-units.sh --check                       # exit 1 on drift; sudo to include address-validator.service
+```
+
+It installs mode 0644, so the root-only `0600` that `address-validator.service`
+carries today goes away on its next install (its text is public in the repo);
+until then `--check` needs sudo to compare it. Scope is `*.service` + `*.timer`
+only: the `infra/*.conf` memory drop-ins are not installed or checked here —
+see [HOST-MEMORY.md](HOST-MEMORY.md#reservations). It does not enable units.
+First-time timer installs still need `enable --now`:
+
 ```bash
 # Audit log archive timer (daily GCS archival + row deletion)
-sudo cp infra/audit-archive.service infra/audit-archive.timer /etc/systemd/system/ \
-  && sudo systemctl daemon-reload && sudo systemctl enable --now audit-archive.timer
+sudo infra/install-units.sh audit-archive.service audit-archive.timer \
+  && sudo systemctl enable --now audit-archive.timer
 
 # Docker hygiene timer (weekly prune, Sun 03:30 UTC)
-sudo cp infra/docker-prune.service infra/docker-prune.timer /etc/systemd/system/ \
-  && sudo systemctl daemon-reload && sudo systemctl enable --now docker-prune.timer
+sudo infra/install-units.sh docker-prune.service docker-prune.timer \
+  && sudo systemctl enable --now docker-prune.timer
 
 # Validation-cache TTL sweep timer (daily 04:00 UTC)
-sudo cp infra/cache-sweep.service infra/cache-sweep.timer /etc/systemd/system/ \
-  && sudo systemctl daemon-reload && sudo systemctl enable --now cache-sweep.timer
+sudo infra/install-units.sh cache-sweep.service cache-sweep.timer \
+  && sudo systemctl enable --now cache-sweep.timer
 
 # Disk hygiene timer (weekly, Sun 05:00 UTC)
-sudo cp infra/disk-hygiene.service infra/disk-hygiene.timer /etc/systemd/system/ \
-  && sudo systemctl daemon-reload && sudo systemctl enable --now disk-hygiene.timer
+sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
+  && sudo systemctl enable --now disk-hygiene.timer
+```
+
+**Failures are reported to the journal.** Every timer-driven service carries
+`OnFailure=unit-failure@%n.service`; the `infra/unit-failure@.service` template
+logs one `crit` line tagged `unit-failure` naming the failed unit. A failed
+oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
+A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
+enforces it.
+
+```bash
+journalctl -t unit-failure              # every reported failure
+journalctl -t unit-failure --since today
 ```
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
@@ -314,10 +345,11 @@ uv run python scripts/db/backfill_audit_raw_input.py
 # Must run with the same CUSTOM_MODEL_PATH the service uses.
 uv run python scripts/db/backfill_pipeline_version.py --apply
 
-# Archive audit log to GCS + delete archived rows
+# Archive audit log to GCS + delete archived rows. Exits if AUDIT_ARCHIVE_BUCKET
+# is unset; --skip-upload deletes without archiving, deliberately.
 uv run python infra/archive_audit.py
 
-# Backfill daily rollup aggregates
+# Backfill daily rollup aggregates (all complete UTC days, never today)
 uv run python infra/archive_audit.py --backfill
 ```
 

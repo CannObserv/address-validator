@@ -1,5 +1,6 @@
 [Unit]
 Description=Prune stale VS Code server builds, dev caches, orphaned worktrees
+OnFailure=unit-failure@%n.service
 
 [Service]
 Type=oneshot

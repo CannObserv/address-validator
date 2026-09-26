@@ -1,0 +1,9 @@
+[Unit]
+Description=Report failure of %i to the journal
+# Target of OnFailure=unit-failure@%n.service on every timer-driven unit (#228).
+# One crit line tagged unit-failure: `journalctl -t unit-failure`.
+# Deliberately no OnFailure= of its own — a failing handler would recurse.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -t unit-failure -p daemon.crit "%i failed; see: journalctl -u %i -n 50"
