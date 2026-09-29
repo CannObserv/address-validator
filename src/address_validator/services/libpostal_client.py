@@ -96,7 +96,6 @@ class LibpostalClient:
         try:
             response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
-            raw = response.json()
         except httpx.RequestError as exc:
             # RequestError, not NetworkError/TimeoutException: Docker's port proxy
             # accepts then drops the connection while the container warms up,
@@ -119,9 +118,13 @@ class LibpostalClient:
             # httpx raises RuntimeError when the client is closed (e.g. during shutdown)
             logger.warning("libpostal client not usable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
+
+        try:
+            raw = response.json()
         except ValueError as exc:
-            # Non-JSON 2xx body (json.JSONDecodeError is a ValueError).  The
-            # decoder message carries only position info, never the address.
+            # Non-JSON 2xx body (json.JSONDecodeError and UnicodeDecodeError are
+            # both ValueError).  Fixed message, never the decoder's: the body
+            # is a parse of the user's address.
             logger.warning("libpostal sidecar returned a non-JSON body")
             raise LibpostalUnavailableError("libpostal sidecar returned a non-JSON body") from exc
 
