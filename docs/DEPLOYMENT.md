@@ -23,6 +23,9 @@ sudo infra/install-units.sh libpostal.service && sudo systemctl enable --now lib
 
 # Install pre-commit hooks (ruff + Tailwind CSS build)
 uv run pre-commit install
+
+# Install the needrestart drop-in (apt's hook lists restarts, never performs them)
+sudo install -m 644 infra/needrestart.conf.d/address-validator.conf /etc/needrestart/conf.d/
 ```
 
 ### Unit file and code must move together
@@ -210,6 +213,23 @@ an unrecorded number.
 
 Moved to [HOST-MEMORY.md](HOST-MEMORY.md): the memory defences and how to verify
 them, what to lose in order, and the SocratiCode launch pins.
+
+## OS security updates
+
+The image masks the apt timers, so patching is by hand (GH #235). apt's
+needrestart hook runs `needrestart -m u`, which Ubuntu turns into *automatic*
+restarts unless `$nrconf{restart}` is set. `infra/needrestart.conf.d/address-validator.conf`
+sets `'l'`, so an apply only lists what needs restarting and the restarts happen
+in a window, under the owner's approval.
+
+- Prove it loads: `sudo needrestart -m u -b -r l` prints `Disabling Ubuntu mode,
+  explicit restart mode configured`. That line tests the file's key, not `-r`,
+  and `-r l` keeps the proof itself from restarting anything.
+- Belt and braces on every apply: `sudo NEEDRESTART_MODE=l choom -n 0 -- unattended-upgrade -v`.
+- Maintainer scripts are out of its reach: `postgresql-16` restarts the cluster,
+  and `containerd` may restart itself. Hold them as separate steps.
+- `tests/unit/test_needrestart_config.py` evaluates the file as Perl, and on the
+  host pins the installed copy and the live `conf.d` chain.
 
 ## Server lifecycle
 
