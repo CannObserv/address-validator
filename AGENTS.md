@@ -110,7 +110,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) + `LOG_LEVEL` | systemd (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN`, `GH_TOKEN_SKILLS`) | systemd (optional with `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
 
@@ -147,7 +147,7 @@ See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
 
 ## GitHub CLI
 
-Two PATs in `.env` — `GH_TOKEN` (this repo), `GH_TOKEN_SKILLS` (`gregoryfoster/skills`). Anchor the grep; unanchored matches both and `gh` rejects the result:
+PATs in `.env` are per repo: `GH_TOKEN` for this one, `GH_TOKEN_<REPO>` for others (e.g. `GH_TOKEN_SKILLS` → `gregoryfoster/skills`). Anchor the grep; unanchored matches several and `gh` rejects the result:
 
 ```bash
 export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
