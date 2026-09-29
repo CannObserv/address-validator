@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(autouse=True)
-def _restore_engine_singleton(client: TestClient) -> Generator[None, None, None]:
+def _restore_app_state(client: TestClient) -> Generator[None, None, None]:
     """Guard against nested TestClient lifespans that call close_engine().
 
     Some tests in this suite (e.g. test_lifespan.py) start their own
@@ -43,6 +43,8 @@ def _restore_engine_singleton(client: TestClient) -> Generator[None, None, None]
     using the session-scoped client's anyio portal so the new engine is
     created in the same event loop as the asyncpg connection pool.
     """
+    # Starlette's State has no public way to enumerate attributes; _state is
+    # the dict its __setattr__ writes to.
     state = client.app.state._state
     snapshot = dict(state)
     yield
