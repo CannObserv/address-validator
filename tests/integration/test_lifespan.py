@@ -70,11 +70,7 @@ class TestLifespanLibpostal:
             raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
 
         def disconnecting_client(base_url: str) -> LibpostalClient:
-            client = LibpostalClient(base_url=base_url)
-            client._http = httpx.AsyncClient(
-                base_url=base_url, transport=httpx.MockTransport(handler)
-            )
-            return client
+            return LibpostalClient(base_url=base_url, transport=httpx.MockTransport(handler))
 
         # Engine isolation: see TestLifespanValidateConfig.test_valid_none_provider_starts_cleanly.
         with (

@@ -99,10 +99,7 @@ class TestHealthV2:
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
 
-        libpostal = LibpostalClient()
-        libpostal._http = httpx.AsyncClient(
-            base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
-        )
+        libpostal = LibpostalClient(transport=httpx.MockTransport(handler))
         monkeypatch.setattr(client.app.state, "libpostal_client", libpostal)
         response = client.get("/api/v2/health")
 

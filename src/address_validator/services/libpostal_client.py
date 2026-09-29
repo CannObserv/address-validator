@@ -79,11 +79,18 @@ def _map_tags(raw: list[dict[str, str]]) -> dict[str, str]:
 class LibpostalClient:
     """Async HTTP client wrapping the pelias/libpostal-service REST API."""
 
-    def __init__(self, base_url: str = "http://localhost:4400") -> None:
+    def __init__(
+        self,
+        base_url: str = "http://localhost:4400",
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        """*transport* overrides httpx's network transport (tests pass
+        ``httpx.MockTransport``); ``None`` uses the default."""
         self._base_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=httpx.Timeout(5.0),
+            transport=transport,
         )
 
     async def parse(self, address: str) -> dict[str, str]:

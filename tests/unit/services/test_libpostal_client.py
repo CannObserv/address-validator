@@ -118,11 +118,7 @@ def _disconnecting_client() -> LibpostalClient:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
 
-    client = LibpostalClient(base_url="http://localhost:4400")
-    client._http = httpx.AsyncClient(
-        base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
-    )
-    return client
+    return LibpostalClient(transport=httpx.MockTransport(handler))
 
 
 class TestTransportErrors:
@@ -141,10 +137,7 @@ class TestTransportErrors:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, text="<html>warming up</html>")
 
-        client = LibpostalClient(base_url="http://localhost:4400")
-        client._http = httpx.AsyncClient(
-            base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
-        )
+        client = LibpostalClient(transport=httpx.MockTransport(handler))
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
 
@@ -157,9 +150,6 @@ class TestTransportErrors:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json=body)
 
-        client = LibpostalClient(base_url="http://localhost:4400")
-        client._http = httpx.AsyncClient(
-            base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
-        )
+        client = LibpostalClient(transport=httpx.MockTransport(handler))
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
