@@ -50,6 +50,17 @@ _TAG_MAP: dict[str, str] = {
 }
 
 
+def _is_libpostal_payload(raw: object) -> bool:
+    """Return True if *raw* meets ``_map_tags``' preconditions: a list of
+    objects whose ``label``/``value``, when present, are strings."""
+    return isinstance(raw, list) and all(
+        isinstance(item, dict)
+        and isinstance(item.get("label", ""), str)
+        and isinstance(item.get("value", ""), str)
+        for item in raw
+    )
+
+
 def _map_tags(raw: list[dict[str, str]]) -> dict[str, str]:
     """Map a libpostal response list to an ISO 19160-4 component dict.
 
@@ -98,7 +109,8 @@ class LibpostalClient:
 
         Raises ``LibpostalUnavailableError`` when the sidecar cannot be
         reached, drops the connection, returns a non-200 status, or returns
-        a body that is not a JSON list of objects.
+        a body that is not a JSON list of string-valued ``label``/``value``
+        objects.
         """
         try:
             response = await self._http.get("/parse", params={"address": address})
@@ -135,8 +147,8 @@ class LibpostalClient:
             logger.warning("libpostal sidecar returned a non-JSON body")
             raise LibpostalUnavailableError("libpostal sidecar returned a non-JSON body") from exc
 
-        if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
-            # _map_tags would raise AttributeError → unhandled 500.
+        if not _is_libpostal_payload(raw):
+            # _map_tags would raise AttributeError/TypeError → unhandled 500.
             logger.warning("libpostal sidecar returned an unexpected JSON shape")
             raise LibpostalUnavailableError("libpostal sidecar returned an unexpected JSON shape")
 

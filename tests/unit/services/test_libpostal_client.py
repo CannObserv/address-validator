@@ -143,8 +143,14 @@ class TestTransportErrors:
 
     @pytest.mark.parametrize(
         "body",
-        [{"error": "warming up"}, ["house_number"], "1 main st"],
-        ids=["object", "list-of-strings", "string"],
+        [
+            {"error": "warming up"},
+            ["house_number"],
+            "1 main st",
+            [{"label": "city", "value": None}],
+            [{"label": ["city"], "value": "seattle"}],
+        ],
+        ids=["object", "list-of-strings", "string", "null-value", "unhashable-label"],
     )
     async def test_parse_wrong_shape_json_raises_unavailable(self, body: object) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
