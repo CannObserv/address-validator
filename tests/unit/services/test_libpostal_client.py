@@ -161,6 +161,42 @@ class TestTransportErrors:
             await client.parse("123 Main St")
 
 
+class TestProbe:
+    """``probe()`` names why the sidecar is unreachable, for the boot WARNING (GH #244)."""
+
+    @pytest.mark.parametrize(
+        "exc_type",
+        [httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout],
+        ids=lambda t: t.__name__,
+    )
+    async def test_probe_transport_error_returns_class_name(
+        self, exc_type: type[httpx.RequestError]
+    ) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise exc_type("detail that must not appear in the reason", request=request)
+
+        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        assert await client.probe() == exc_type.__name__
+
+    async def test_probe_non_2xx_returns_http_status(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(503)
+
+        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        assert await client.probe() == "HTTP 503"
+
+    async def test_probe_2xx_returns_none(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        assert await client.probe() is None
+
+    async def test_probe_after_aclose_returns_runtime_error(self, client: LibpostalClient) -> None:
+        await client.aclose()
+        assert await client.probe() == "RuntimeError"
+
+
 class TestClosedClient:
     """httpx raises RuntimeError on a closed client (e.g. after lifespan shutdown)."""
 

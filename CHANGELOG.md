@@ -18,6 +18,8 @@ and the project uses semantic versioning.
 
 - **Service no longer exits at boot while the libpostal sidecar warms up** ([#239](https://github.com/CannObserv/address-validator/issues/239)). Docker's port proxy accepts the connection before the container is ready, then drops it (`httpx.RemoteProtocolError`), which the client did not catch: startup exited and relied on `Restart=on-failure` (~6 s of the 2026-09-29 boot outage), `GET /api/v2/health` returned 500 instead of `libpostal: "unavailable"`, and CA parse/standardize/validate returned 500 instead of the designed 503. Every request-level failure (`httpx.RequestError`), plus a non-JSON or malformed sidecar body, now maps to "unavailable": boot proceeds degraded with a WARNING, health stays 200, CA requests get 503.
 
+- **libpostal boot WARNING now says why the sidecar was unreachable** ([#244](https://github.com/CannObserv/address-validator/issues/244)). The line reads `libpostal sidecar not reachable at <url> (<reason>) — …`, where the reason is the exception class (`RemoteProtocolError`, `ConnectError`, `ReadTimeout`, `RuntimeError`) or `HTTP <status>`. Previously a warmup disconnect was indistinguishable from a refused connect or timeout. New `LibpostalClient.probe()` supplies it; `health_check()` keeps its `bool` contract and still logs nothing per poll.
+
 ### Added (operations)
 
 - **`infra/install-units.sh`** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — the single install path for `infra/*.service` + `*.timer` (copy, `daemon-reload`, `reset-failed`; refuses a linked worktree); `--check` reports drift between installed units and `infra/`.

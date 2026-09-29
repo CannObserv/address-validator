@@ -154,8 +154,15 @@ class LibpostalClient:
 
         return _map_tags(raw)
 
-    async def health_check(self) -> bool:
-        """Return True if the sidecar is reachable (responds with HTTP 2xx).
+    async def probe(self) -> str | None:
+        """Return ``None`` if the sidecar is reachable (HTTP 2xx), else a short reason.
+
+        The reason is the exception class name (``RemoteProtocolError``,
+        ``ConnectError``, ``ReadTimeout``, ``RuntimeError``) or ``HTTP <status>``
+        for a non-2xx.  Class name only, never ``str(exc)`` — enough to diagnose
+        and keeps the message fixed.  Logs nothing: the health route polls this
+        via ``health_check()``, so only the boot-time caller logs the reason
+        (GH #244).
 
         Uses a lightweight GET /parse probe.  A 2xx status is sufficient —
         the response body is not inspected, so an empty parse result does
@@ -163,13 +170,17 @@ class LibpostalClient:
 
         ``httpx.HTTPStatusError`` is intentionally absent: we do not call
         ``raise_for_status()``, so non-2xx responses are handled via
-        ``response.is_success`` returning False rather than raising.
+        ``response.is_success`` rather than raising.
         """
         try:
             response = await self._http.get("/parse", params={"address": "1 main st"})
-            return response.is_success
-        except (httpx.RequestError, RuntimeError):
-            return False
+        except (httpx.RequestError, RuntimeError) as exc:
+            return type(exc).__name__
+        return None if response.is_success else f"HTTP {response.status_code}"
+
+    async def health_check(self) -> bool:
+        """Return True if the sidecar is reachable (responds with HTTP 2xx)."""
+        return await self.probe() is None
 
     async def aclose(self) -> None:
         """Close the underlying HTTP connection pool."""
