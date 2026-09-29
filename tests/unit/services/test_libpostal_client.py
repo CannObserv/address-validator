@@ -153,3 +153,16 @@ class TestTransportErrors:
         client = LibpostalClient(transport=httpx.MockTransport(handler))
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
+
+
+class TestClosedClient:
+    """httpx raises RuntimeError on a closed client (e.g. after lifespan shutdown)."""
+
+    async def test_parse_after_aclose_raises_unavailable(self, client: LibpostalClient) -> None:
+        await client.aclose()
+        with pytest.raises(LibpostalUnavailableError):
+            await client.parse("123 Main St")
+
+    async def test_health_check_after_aclose_returns_false(self, client: LibpostalClient) -> None:
+        await client.aclose()
+        assert await client.health_check() is False
