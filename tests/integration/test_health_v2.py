@@ -2,7 +2,10 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
+
+from address_validator.services.libpostal_client import LibpostalClient
 
 pytestmark = pytest.mark.integration
 
@@ -85,6 +88,22 @@ class TestHealthV2:
 
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
+        assert response.json()["libpostal"] == "unavailable"
+
+    def test_libpostal_disconnect_reports_unavailable_not_500(
+        self, client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A sidecar that drops the connection mid-warmup (RemoteProtocolError)
+        reports 'unavailable' with HTTP 200 — never an unhandled 500 (GH #239)."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+        libpostal = LibpostalClient(transport=httpx.MockTransport(handler))
+        monkeypatch.setattr(client.app.state, "libpostal_client", libpostal)
+        response = client.get("/api/v2/health")
+
+        assert response.status_code == 200
         assert response.json()["libpostal"] == "unavailable"
 
     def test_libpostal_unavailable_with_database_error(

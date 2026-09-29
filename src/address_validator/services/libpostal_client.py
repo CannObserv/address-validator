@@ -50,6 +50,17 @@ _TAG_MAP: dict[str, str] = {
 }
 
 
+def _is_libpostal_payload(raw: object) -> bool:
+    """Return True if *raw* meets ``_map_tags``' preconditions: a list of
+    objects whose ``label``/``value``, when present, are strings."""
+    return isinstance(raw, list) and all(
+        isinstance(item, dict)
+        and isinstance(item.get("label", ""), str)
+        and isinstance(item.get("value", ""), str)
+        for item in raw
+    )
+
+
 def _map_tags(raw: list[dict[str, str]]) -> dict[str, str]:
     """Map a libpostal response list to an ISO 19160-4 component dict.
 
@@ -79,23 +90,36 @@ def _map_tags(raw: list[dict[str, str]]) -> dict[str, str]:
 class LibpostalClient:
     """Async HTTP client wrapping the pelias/libpostal-service REST API."""
 
-    def __init__(self, base_url: str = "http://localhost:4400") -> None:
+    def __init__(
+        self,
+        base_url: str = "http://localhost:4400",
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        """*transport* overrides httpx's network transport (tests pass
+        ``httpx.MockTransport``); ``None`` uses the default."""
         self._base_url = base_url.rstrip("/")
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
             timeout=httpx.Timeout(5.0),
+            transport=transport,
         )
 
     async def parse(self, address: str) -> dict[str, str]:
         """Parse *address* and return an ISO 19160-4 component dict.
 
         Raises ``LibpostalUnavailableError`` when the sidecar cannot be
-        reached or returns a non-200 status.
+        reached, drops the connection, returns a non-200 status, or returns
+        a body that is not a JSON list of string-valued ``label``/``value``
+        objects.
         """
         try:
             response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
-        except (httpx.NetworkError, httpx.TimeoutException) as exc:
+        except httpx.RequestError as exc:
+            # RequestError, not NetworkError/TimeoutException: Docker's port proxy
+            # accepts then drops the connection while the container warms up,
+            # raising RemoteProtocolError (a ProtocolError, not a NetworkError).
+            # See GH #239.
             logger.warning("libpostal sidecar unavailable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
         except httpx.HTTPStatusError as exc:
@@ -114,7 +138,21 @@ class LibpostalClient:
             logger.warning("libpostal client not usable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
 
-        return _map_tags(response.json())
+        try:
+            raw = response.json()
+        except ValueError as exc:
+            # Non-JSON 2xx body (json.JSONDecodeError and UnicodeDecodeError are
+            # both ValueError).  Fixed message, never the decoder's: the body
+            # is a parse of the user's address.
+            logger.warning("libpostal sidecar returned a non-JSON body")
+            raise LibpostalUnavailableError("libpostal sidecar returned a non-JSON body") from exc
+
+        if not _is_libpostal_payload(raw):
+            # _map_tags would raise AttributeError/TypeError → unhandled 500.
+            logger.warning("libpostal sidecar returned an unexpected JSON shape")
+            raise LibpostalUnavailableError("libpostal sidecar returned an unexpected JSON shape")
+
+        return _map_tags(raw)
 
     async def health_check(self) -> bool:
         """Return True if the sidecar is reachable (responds with HTTP 2xx).
@@ -130,7 +168,7 @@ class LibpostalClient:
         try:
             response = await self._http.get("/parse", params={"address": "1 main st"})
             return response.is_success
-        except (httpx.NetworkError, httpx.TimeoutException, RuntimeError):
+        except (httpx.RequestError, RuntimeError):
             return False
 
     async def aclose(self) -> None:
