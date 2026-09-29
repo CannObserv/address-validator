@@ -303,17 +303,84 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
   && sudo systemctl enable --now disk-hygiene.timer
 ```
 
-**Failures are reported to the journal.** Every timer-driven service carries
-`OnFailure=unit-failure@%n.service`; the `infra/unit-failure@.service` template
-logs one `crit` line tagged `unit-failure` naming the failed unit. A failed
+**Failures are reported to the journal and pushed through notifier.** Every
+timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
 oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
 A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
-enforces it.
+enforces it. The `infra/unit-failure@.service` template runs two steps:
+
+1. **Journal line (the fallback).** One `crit` line tagged `unit-failure`
+   naming the failed unit. It runs first and needs no network, venv or config.
+2. **Notifier dispatch (#232).** `infra/notify_unit_failure.py` sends the unit,
+   its result, the host, and the failed run's last WARNING-or-higher journal
+   lines to the sibling [notifier](https://github.com/CannObserv/notifier)
+   service, which delivers to Slack and Mailgun. It is **fail-open**: the
+   `ExecStart=-` prefix makes systemd ignore its exit status, and a failure
+   (notifier unreachable, key rejected, config incomplete) logs a WARNING and
+   leaves the journal line as the only signal. With `NOTIFIER_URL` unset, only
+   the journal line is written.
 
 ```bash
-journalctl -t unit-failure              # every reported failure
+journalctl -t unit-failure                        # every reported failure
 journalctl -t unit-failure --since today
+journalctl -u 'unit-failure@*' -p warning         # dispatches that did not deliver
 ```
+
+Only WARNING+ lines leave the host. That filter is the PII guard; see
+`docs/LOGGING.md`. Shell `logger` / `systemd-cat` lines lose their unit
+attribution in journald, so disk-hygiene and docker-prune warnings are missing
+from the tail.
+
+**Notifier config** — in `/etc/address-validator/.env`:
+
+| Variable | Value |
+|---|---|
+| `NOTIFIER_URL` | `http://notifier:9000` (tailnet; unset = journal only) |
+| `NOTIFIER_API_KEY` | `address-validator` tenant key, `nk_…` — pasted by the operator, never through an agent |
+| `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | ULID printed by `publish_notifier_template.py` |
+| `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | comma-separated: `address-validator-slack`, `address-validator-mailgun` ULIDs (CannObserv/notifier#95) |
+
+**Network.** Notifier is reachable only over the `cannobserv.org.github`
+tailnet. This host is node `address-validator` (`100.75.8.39`,
+`tag:address-validator`, non-ephemeral). The ACL grants
+`tag:address-validator → tag:notifier:9000` only, so `:9001` (notifier dev) is
+dropped. `https://notifier.exe.xyz` stops at the exe.dev login gate, so it is
+not an alternative. Tailscale owns `/etc/resolv.conf` (MagicDNS), so every
+outbound name (USPS, Google) now resolves through `tailscaled`. Check it with:
+
+```bash
+tailscale status
+curl -s http://notifier:9000/health     # "environment": "production"
+```
+
+The handler refuses to dispatch unless `/health` reports
+`"environment": "production"`.
+
+**Template.** The wording lives in `infra/notifier/unit-failure.json`.
+Notifier stores a copy under this tenant, and template lookup is tenant-scoped.
+The publisher reads only the `NOTIFIER_*` keys from the env file, so the
+production DSN never enters its environment. It previews the sample through
+notifier, then creates the template (or PATCHes it when
+`NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` is set):
+
+```bash
+.venv/bin/python infra/publish_notifier_template.py --dry-run   # preview only
+.venv/bin/python infra/publish_notifier_template.py             # create / update
+```
+
+**Smoke test.** A manual start carries no `MONITOR_*` variables, so the
+handler reports result `manual` and uses a fresh `{unit}:manual:{uuid}`
+idempotency key. Never a fixed key: notifier returns a replayed key's earlier
+dispatch and delivers nothing.
+
+```bash
+sudo systemctl start unit-failure@smoke-test.service
+journalctl -u unit-failure@smoke-test.service -n 5   # "notifier dispatch … succeeded"
+```
+
+A real failure uses `{unit}:{MONITOR_INVOCATION_ID}`, so one failed run yields
+one dispatch. After changing the handler's unit file, re-install it:
+`sudo infra/install-units.sh unit-failure@.service`.
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 

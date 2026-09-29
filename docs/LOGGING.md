@@ -29,7 +29,7 @@ The filter is attached to the **stdout handler**, not to a logger — a logger-l
 
 The ID is also echoed to callers as the `X-Request-ID` response header.
 
-Standalone CLI scripts (`scripts/db/*`, `infra/sweep_cache.py`, `infra/archive_audit.py`) still use `logging.basicConfig` — they run outside a request context and their output goes to cron logs, not the service's journald stream.
+Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message` lines rather than JSON, since they run outside a request context. The systemd-run infra scripts (`sweep_cache.py`, `archive_audit.py`, `notify_unit_failure.py`) configure logging through `infra/journal_logging.py`: when stderr is the journal, each record's first line carries its sd-daemon `<N>` priority. Without it, journald files every line at info and `journalctl -p warning` misses real errors. Continuation lines (tracebacks, psycopg `DETAIL:`) stay at info. That keeps them out of the WARNING+ journal tail that `notify_unit_failure.py` sends to notifier (#232).
 
 ## Event table
 

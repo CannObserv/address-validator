@@ -24,6 +24,7 @@ dependencies = [
     "google-i18n-address>=3.1.1,<4",
     "python-multipart>=0.0.26,<1",
     "python-json-logger>=3.3,<4",
+    "notifier-client>=0.3.1,<1",
 ]
 
 [dependency-groups]
@@ -36,6 +37,11 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.4",
 ]
+
+[tool.uv.sources]
+# Consumed as a pinned git tag, per CannObserv/notifier docs/RELEASING.md. uv does not
+# enforce the floor above against a git source; the tag is the pin (#232).
+notifier-client = { git = "https://github.com/CannObserv/notifier.git", subdirectory = "clients/python", tag = "v0.3.1" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

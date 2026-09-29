@@ -10,6 +10,7 @@ Guarded here:
 
 - a new ``infra/*.timer`` whose service lacks the hook — the failure is silent again;
 - the handler losing its tag/priority, so ``journalctl -t unit-failure`` finds nothing;
+- the notifier dispatch (#232) losing its ``-`` prefix, or displacing the journal line;
 - the handler gaining its own ``OnFailure=`` — a failing handler would recurse.
 """
 
@@ -51,13 +52,25 @@ def test_timer_service_reports_failure(service: Path) -> None:
     assert HOOK in _section(service, "Unit"), f"{service.name} lacks {HOOK}"
 
 
-def test_handler_logs_tagged_crit_line() -> None:
-    service = _section(HANDLER, "Service")
-    assert "Type=oneshot" in service
-    exec_start = [line for line in service if line.startswith("ExecStart=")]
-    assert len(exec_start) == 1
-    assert "/usr/bin/logger -t unit-failure -p daemon.crit" in exec_start[0]
-    assert "%i" in exec_start[0]
+def _exec_starts() -> list[str]:
+    return [line for line in _section(HANDLER, "Service") if line.startswith("ExecStart=")]
+
+
+def test_handler_logs_tagged_crit_line_first() -> None:
+    """The journal line is the fallback: it runs before, and apart from, the dispatch."""
+    assert "Type=oneshot" in _section(HANDLER, "Service")
+    first = _exec_starts()[0]
+    assert "/usr/bin/logger -t unit-failure -p daemon.crit" in first
+    assert "%i" in first
+
+
+def test_handler_notifier_dispatch_is_fail_open() -> None:
+    """#232: the dispatch is a second ExecStart= whose failure systemd ignores (`-`)."""
+    exec_start = _exec_starts()
+    assert len(exec_start) == 2
+    dispatch = exec_start[1].removeprefix("ExecStart=")
+    assert dispatch.startswith("-"), "a failed dispatch must not fail the handler"
+    assert "infra/notify_unit_failure.py %i" in dispatch
 
 
 def test_handler_does_not_hook_itself() -> None:
