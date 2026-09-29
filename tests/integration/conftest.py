@@ -35,11 +35,19 @@ def _restore_engine_singleton(client: TestClient) -> Generator[None, None, None]
     AsyncEngine singleton, breaking subsequent tests that use the
     session-scoped ``client``.
 
+    The nested lifespan also overwrites ``app.state`` (``engine``,
+    ``libpostal_client``, ``registry``) on the shared ``app`` and closes the
+    objects it installed, so ``app.state`` is snapshotted and restored.
+
     After each test: if the engine singleton was disposed, reinitialise it
     using the session-scoped client's anyio portal so the new engine is
     created in the same event loop as the asyncpg connection pool.
     """
+    state = client.app.state._state
+    snapshot = dict(state)
     yield
+    state.clear()
+    state.update(snapshot)
     if _db_engine_module._engine is None:
         # close_engine() was called by a nested lifespan — reinitialise.
         client.portal.call(_db_engine_module.init_engine)

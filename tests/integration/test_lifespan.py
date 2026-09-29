@@ -2,10 +2,12 @@
 
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from address_validator.main import app
+from address_validator.services.libpostal_client import LibpostalClient
 
 pytestmark = pytest.mark.integration
 
@@ -53,3 +55,42 @@ class TestLifespanValidateConfig:
         ):
             resp = client.get("/api/v2/health")
         assert resp.status_code == 200
+
+
+class TestLifespanLibpostal:
+    def test_sidecar_disconnect_starts_degraded(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Docker's port proxy accepts then drops the connection while libpostal
+        warms up (RemoteProtocolError). Startup must proceed degraded with a
+        WARNING, not exit (GH #239)."""
+        monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+        def disconnecting_client(base_url: str) -> LibpostalClient:
+            client = LibpostalClient(base_url=base_url)
+            client._http = httpx.AsyncClient(
+                base_url=base_url, transport=httpx.MockTransport(handler)
+            )
+            return client
+
+        # Engine isolation: see TestLifespanValidateConfig.test_valid_none_provider_starts_cleanly.
+        with (
+            patch("address_validator.main.LibpostalClient", side_effect=disconnecting_client),
+            patch("address_validator.db.engine.init_engine", AsyncMock()),
+            patch("address_validator.db.engine.close_engine", AsyncMock()),
+            patch(
+                "address_validator.db.engine.get_engine",
+                side_effect=RuntimeError("isolated for lifespan test"),
+            ),
+            patch("address_validator.middleware.audit.write_audit_row", AsyncMock()),
+            patch("address_validator.middleware.audit.write_training_candidate", AsyncMock()),
+            TestClient(app) as client,
+        ):
+            resp = client.get("/api/v2/health")
+
+        assert resp.status_code == 200
+        assert resp.json()["libpostal"] == "unavailable"
+        assert "libpostal sidecar not reachable" in caplog.text

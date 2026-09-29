@@ -109,3 +109,41 @@ class TestTagMapping:
 
         assert "Yonge" not in str(excinfo.value)
         assert "400" in str(excinfo.value)
+
+
+def _disconnecting_client() -> LibpostalClient:
+    """A client whose transport drops the connection without a response —
+    what Docker's port proxy does while the libpostal container warms up (GH #239)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+
+    client = LibpostalClient(base_url="http://localhost:4400")
+    client._http = httpx.AsyncClient(
+        base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
+    )
+    return client
+
+
+class TestTransportErrors:
+    """Every request-level failure maps to 'unavailable', not an escaping exception (GH #239)."""
+
+    async def test_parse_remote_protocol_error_raises_unavailable(self) -> None:
+        client = _disconnecting_client()
+        with pytest.raises(LibpostalUnavailableError):
+            await client.parse("123 Main St")
+
+    async def test_health_check_remote_protocol_error_returns_false(self) -> None:
+        client = _disconnecting_client()
+        assert await client.health_check() is False
+
+    async def test_parse_non_json_body_raises_unavailable(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, text="<html>warming up</html>")
+
+        client = LibpostalClient(base_url="http://localhost:4400")
+        client._http = httpx.AsyncClient(
+            base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
+        )
+        with pytest.raises(LibpostalUnavailableError):
+            await client.parse("123 Main St")

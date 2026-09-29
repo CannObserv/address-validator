@@ -90,12 +90,18 @@ class LibpostalClient:
         """Parse *address* and return an ISO 19160-4 component dict.
 
         Raises ``LibpostalUnavailableError`` when the sidecar cannot be
-        reached or returns a non-200 status.
+        reached, drops the connection, returns a non-200 status, or returns
+        a body that is not JSON.
         """
         try:
             response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
-        except (httpx.NetworkError, httpx.TimeoutException) as exc:
+            raw = response.json()
+        except httpx.RequestError as exc:
+            # RequestError, not NetworkError/TimeoutException: Docker's port proxy
+            # accepts then drops the connection while the container warms up,
+            # raising RemoteProtocolError (a ProtocolError, not a NetworkError).
+            # See GH #239.
             logger.warning("libpostal sidecar unavailable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
         except httpx.HTTPStatusError as exc:
@@ -113,8 +119,13 @@ class LibpostalClient:
             # httpx raises RuntimeError when the client is closed (e.g. during shutdown)
             logger.warning("libpostal client not usable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
+        except ValueError as exc:
+            # Non-JSON 2xx body (json.JSONDecodeError is a ValueError).  The
+            # decoder message carries only position info, never the address.
+            logger.warning("libpostal sidecar returned a non-JSON body")
+            raise LibpostalUnavailableError("libpostal sidecar returned a non-JSON body") from exc
 
-        return _map_tags(response.json())
+        return _map_tags(raw)
 
     async def health_check(self) -> bool:
         """Return True if the sidecar is reachable (responds with HTTP 2xx).
@@ -130,7 +141,7 @@ class LibpostalClient:
         try:
             response = await self._http.get("/parse", params={"address": "1 main st"})
             return response.is_success
-        except (httpx.NetworkError, httpx.TimeoutException, RuntimeError):
+        except (httpx.RequestError, RuntimeError):
             return False
 
     async def aclose(self) -> None:
