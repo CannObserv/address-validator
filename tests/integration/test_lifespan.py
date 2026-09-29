@@ -1,5 +1,6 @@
 """Integration test — validate_config() wired into FastAPI lifespan startup."""
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -89,4 +90,7 @@ class TestLifespanLibpostal:
 
         assert resp.status_code == 200
         assert resp.json()["libpostal"] == "unavailable"
-        assert "libpostal sidecar not reachable" in caplog.text
+        assert any(
+            r.levelno == logging.WARNING and "libpostal sidecar not reachable" in r.getMessage()
+            for r in caplog.records
+        )
