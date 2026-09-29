@@ -91,6 +91,8 @@ class TestLifespanLibpostal:
         assert resp.status_code == 200
         assert resp.json()["libpostal"] == "unavailable"
         assert any(
-            r.levelno == logging.WARNING and "libpostal sidecar not reachable" in r.getMessage()
+            r.levelno == logging.WARNING
+            and "libpostal sidecar not reachable" in r.getMessage()
+            and "(RemoteProtocolError)" in r.getMessage()  # GH #244: reason in the boot line
             for r in caplog.records
         )

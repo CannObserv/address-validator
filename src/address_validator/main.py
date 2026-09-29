@@ -84,12 +84,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     libpostal_url = os.getenv("LIBPOSTAL_URL", "http://localhost:4400")
     libpostal_client = LibpostalClient(base_url=libpostal_url)
-    if await libpostal_client.health_check():
+    libpostal_reason = await libpostal_client.probe()
+    if libpostal_reason is None:
         logger.info("libpostal sidecar reachable at %s", libpostal_url)
     else:
         logger.warning(
-            "libpostal sidecar not reachable at %s — CA parsing will return 503",
+            "libpostal sidecar not reachable at %s (%s) — CA parsing will return 503",
             libpostal_url,
+            libpostal_reason,
         )
     app.state.libpostal_client = libpostal_client
 
