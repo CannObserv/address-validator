@@ -56,6 +56,12 @@ Standalone CLI scripts (`scripts/db/*`, `infra/sweep_cache.py`, `infra/archive_a
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
+| libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |
+| libpostal sidecar not reachable at boot (starts degraded; CA parse → 503) | `WARNING` | `main` | `libpostal_url` |
+| libpostal sidecar unavailable (any `httpx.RequestError`, incl. disconnect during warmup — #239) | `WARNING` | `services.libpostal_client` | httpx error message (never carries the request URL), `request_id` |
+| libpostal sidecar non-2xx | `WARNING` | `services.libpostal_client` | status code only — `str(HTTPStatusError)` embeds the address (#185), `request_id` |
+| libpostal client closed (`RuntimeError`) | `WARNING` | `services.libpostal_client` | `request_id` |
+| libpostal sidecar non-JSON body / unexpected JSON shape | `WARNING` | `services.libpostal_client` | fixed message — the body is a parse of the address, `request_id` |
 
 ## Levels
 
