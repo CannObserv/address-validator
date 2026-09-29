@@ -147,3 +147,19 @@ class TestTransportErrors:
         )
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
+
+    @pytest.mark.parametrize(
+        "body",
+        [{"error": "warming up"}, ["house_number"], "1 main st"],
+        ids=["object", "list-of-strings", "string"],
+    )
+    async def test_parse_wrong_shape_json_raises_unavailable(self, body: object) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=body)
+
+        client = LibpostalClient(base_url="http://localhost:4400")
+        client._http = httpx.AsyncClient(
+            base_url="http://localhost:4400", transport=httpx.MockTransport(handler)
+        )
+        with pytest.raises(LibpostalUnavailableError):
+            await client.parse("123 Main St")

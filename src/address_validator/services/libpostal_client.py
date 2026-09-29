@@ -91,7 +91,7 @@ class LibpostalClient:
 
         Raises ``LibpostalUnavailableError`` when the sidecar cannot be
         reached, drops the connection, returns a non-200 status, or returns
-        a body that is not JSON.
+        a body that is not a JSON list of objects.
         """
         try:
             response = await self._http.get("/parse", params={"address": address})
@@ -127,6 +127,11 @@ class LibpostalClient:
             # is a parse of the user's address.
             logger.warning("libpostal sidecar returned a non-JSON body")
             raise LibpostalUnavailableError("libpostal sidecar returned a non-JSON body") from exc
+
+        if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+            # _map_tags would raise AttributeError → unhandled 500.
+            logger.warning("libpostal sidecar returned an unexpected JSON shape")
+            raise LibpostalUnavailableError("libpostal sidecar returned an unexpected JSON shape")
 
         return _map_tags(raw)
 
