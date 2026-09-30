@@ -74,6 +74,10 @@ class Failure:
     invocation_id: str | None
     exit_code: str | None
     exit_status: str | None
+    # One dispatch per failed invocation. A replayed key returns the earlier
+    # dispatch and delivers nothing, so a manual trigger (no invocation ID) gets a
+    # fresh key — fixed once here, so every reader sees the key that was sent.
+    idempotency_key: str
 
     @property
     def summary(self) -> str:
@@ -81,17 +85,6 @@ class Failure:
         if self.exit_code:
             return f"{self.result} ({self.exit_code}={self.exit_status or '?'})"
         return self.result
-
-    @property
-    def idempotency_key(self) -> str:
-        """One dispatch per failed invocation.
-
-        A replayed key returns the earlier dispatch and delivers nothing new, so a
-        manual trigger (no invocation ID) needs a fresh key, never a literal.
-        """
-        if self.invocation_id:
-            return f"{self.unit}:{self.invocation_id}"
-        return f"{self.unit}:manual:{uuid.uuid4()}"
 
 
 def load_config(env: Mapping[str, str]) -> NotifierConfig | None:
@@ -119,12 +112,16 @@ def load_config(env: Mapping[str, str]) -> NotifierConfig | None:
 
 
 def failure_from_env(unit: str, env: Mapping[str, str]) -> Failure:
+    invocation_id = env.get("MONITOR_INVOCATION_ID") or None
     return Failure(
         unit=unit,
         result=env.get("MONITOR_SERVICE_RESULT") or "manual",
-        invocation_id=env.get("MONITOR_INVOCATION_ID") or None,
+        invocation_id=invocation_id,
         exit_code=env.get("MONITOR_EXIT_CODE") or None,
         exit_status=env.get("MONITOR_EXIT_STATUS") or None,
+        idempotency_key=(
+            f"{unit}:{invocation_id}" if invocation_id else f"{unit}:manual:{uuid.uuid4()}"
+        ),
     )
 
 

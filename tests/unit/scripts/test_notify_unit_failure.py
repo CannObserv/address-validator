@@ -105,10 +105,11 @@ def test_manual_trigger_gets_a_fresh_key_each_time():
     """A replayed key returns the earlier dispatch and delivers nothing (notifier#95)."""
     failure = nuf.failure_from_env(UNIT, {})
     assert failure.summary == "manual"
-    first, second = failure.idempotency_key, failure.idempotency_key
-    assert first.startswith(f"{UNIT}:manual:")
-    assert first != second
-    assert len(first) <= 200  # notifier's idempotency_key maxLength
+    assert failure.idempotency_key == failure.idempotency_key  # stable once built
+    other = nuf.failure_from_env(UNIT, {})
+    assert failure.idempotency_key.startswith(f"{UNIT}:manual:")
+    assert failure.idempotency_key != other.idempotency_key
+    assert len(failure.idempotency_key) <= 200  # notifier's idempotency_key maxLength
 
 
 # --- journal tail ------------------------------------------------------------
