@@ -206,7 +206,7 @@ class ValidationResult(BaseModel):
     dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
         default=None,
         description="USPS DPV match code. Y=confirmed, S=missing secondary, "
-        "D=bad secondary, N=not found. None when undetermined or unavailable.",
+        "D=bad secondary, N=not found. None when the provider returned no DPV code.",
     )
     provider: str | None = Field(
         default=None,
