@@ -86,7 +86,7 @@ Core env vars (see `docs/VALIDATION-PROVIDERS.md` for full reference):
 
 Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 
-- Restart: `sudo systemctl restart address-validator`
+- Restart: `sudo systemctl restart address-validator` (>10 in 600s → stays `failed`; `reset-failed` first, #248)
 - Logs: `journalctl -u address-validator -f`
 - Re-install units: `sudo infra/install-units.sh [unit…]` (restart the service if its unit changed); `infra/install-units.sh --check` flags drift — re-run after moving any path a unit references (#228)
 - Pre-commit hooks: `uv run pre-commit install`
