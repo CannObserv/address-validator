@@ -340,6 +340,12 @@ Manual `systemctl restart`s count toward the burst.
 
 Neither covers a process that hangs while running, or the VM itself being down.
 
+**These two units' alerts carry no journal tail.** Both write every line to
+journald at priority 6 (the API's JSON on stdout, Docker CLI output for
+libpostal), so the tail's WARNING-or-higher filter finds nothing. The alert says
+*that* the unit failed; read *why* with `journalctl -u <unit> -n 50`, as the crit
+line suggests. Tracked in #252.
+
 The `infra/unit-failure@.service` template runs two steps:
 
 1. **Journal line (the fallback).** One `crit` line tagged `unit-failure`
