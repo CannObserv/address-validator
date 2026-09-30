@@ -379,8 +379,10 @@ journalctl -u unit-failure@smoke-test.service -n 5   # "notifier dispatch … su
 ```
 
 A real failure uses `{unit}:{MONITOR_INVOCATION_ID}`, so one failed run yields
-one dispatch. After changing the handler's unit file, re-install it:
-`sudo infra/install-units.sh unit-failure@.service`.
+one dispatch. **Deploying a handler change:** run `uv sync` in the main
+checkout first. Without `notifier-client` in its `.venv`, the import fails
+before any fail-open code runs, and the `-` prefix hides it: failures go
+journal-only, silently. Then `sudo infra/install-units.sh unit-failure@.service`.
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 
