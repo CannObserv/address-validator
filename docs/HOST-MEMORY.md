@@ -16,7 +16,7 @@ swap** with the production service. Two facts make that sharper than it sounds:
   57m 48s (gregoryfoster/skills#295).
 
 **`tailscaled` runs here too** (since 2026-09-29, #232), at about 51 MB RSS.
-It carries the notifier hop, and it owns `/etc/resolv.conf` through MagicDNS,
+It carries the notifier hop ([TAILNET.md](TAILNET.md)), and it owns `/etc/resolv.conf` through MagicDNS,
 so the page-allocation failure above now also takes out DNS for the USPS and
 Google providers, not just the tailnet.
 

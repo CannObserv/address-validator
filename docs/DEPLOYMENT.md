@@ -341,19 +341,8 @@ from the tail (#246).
 | `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | `01M3QRP1BCJW3KFB04FX4V8EQ8,01M3QRP1BDAXK27G60EJQEVEZD` (`address-validator-slack`, `-mailgun`; tenant `01M3QQMHYVVQWAS2SZ7NE66D2N`, CannObserv/notifier#95) |
 
 **Network.** Notifier is reachable only over the `cannobserv.org.github`
-tailnet. This host is node `address-validator` (`100.75.8.39`,
-`tag:address-validator`, non-ephemeral). The ACL grants
-`tag:address-validator → tag:notifier:9000` only, so `:9001` (notifier dev) is
-dropped. `https://notifier.exe.xyz` stops at the exe.dev login gate, so it is
-not an alternative. Tailscale owns `/etc/resolv.conf` (MagicDNS), so every
-outbound name (USPS, Google) now resolves through `tailscaled`. Check it with:
-
-```bash
-tailscale status
-curl -s http://notifier:9000/health     # "environment": "production"
-```
-
-The handler refuses to dispatch unless `/health` reports
+tailnet (`http://notifier:9000`). Node, ACL, DNS takeover, and the join/rejoin
+recipe: [TAILNET.md](TAILNET.md). The handler refuses to dispatch unless `/health` reports
 `"environment": "production"`.
 
 **Template.** The wording lives in `infra/notifier/unit-failure.json`.
