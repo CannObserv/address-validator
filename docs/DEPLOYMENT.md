@@ -368,18 +368,23 @@ notifier, then creates the template (or PATCHes it when
 .venv/bin/python infra/publish_notifier_template.py             # create / update
 ```
 
-**Smoke test.** A manual start carries no `MONITOR_*` variables, so the
-handler reports result `manual` and uses a fresh `{unit}:manual:{uuid}`
-idempotency key. Never a fixed key: notifier returns a replayed key's earlier
-dispatch and delivers nothing.
+**Smoke tests.** The end-to-end check is a throwaway unit that fails. It takes
+the same path a real failure does: `MONITOR_*` variables, the
+`{unit}:{MONITOR_INVOCATION_ID}` key, and the invocation-scoped journal tail.
+`systemd-run` does not expand `%n`, so spell out the handler name:
 
 ```bash
-sudo systemctl start unit-failure@smoke-test.service
-journalctl -u unit-failure@smoke-test.service -n 5   # "notifier dispatch … succeeded"
+sudo systemd-run --unit=av-smoke -p OnFailure=unit-failure@av-smoke.service.service /bin/false
+journalctl -u unit-failure@av-smoke.service.service -n 5   # "notifier dispatch … succeeded"
+sudo systemctl reset-failed av-smoke.service
 ```
 
-A real failure uses `{unit}:{MONITOR_INVOCATION_ID}`, so one failed run yields
-one dispatch. **Deploying a handler change:** run `uv sync` in the main
+The quick check, `sudo systemctl start unit-failure@smoke-test.service`, carries
+no `MONITOR_*` variables. It reports result `manual` and uses a fresh
+`{unit}:manual:{uuid}` key. Never use a fixed key: notifier returns a replayed
+key's earlier dispatch and delivers nothing.
+
+One failed run yields one dispatch. **Deploying a handler change:** run `uv sync` in the main
 checkout first. Without `notifier-client` in its `.venv`, the import fails
 before any fail-open code runs, and the `-` prefix hides it: failures go
 journal-only, silently. Then `sudo infra/install-units.sh unit-failure@.service`.
