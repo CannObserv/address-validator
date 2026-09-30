@@ -335,8 +335,8 @@ Manual `systemctl restart`s count toward the burst.
 
 | Unit | Limit | Trips after | Notes |
 |---|---|---|---|
-| `address-validator` | 10 starts / 600s | ~35s of a hard loop | boot transients: `init_engine()` exits while Postgres is not yet accepting |
-| `libpostal` | 5 starts / 600s | ~30s+ (model load per start) | a clean stop exits 0 (verified 2026-09-30), so reboots and deliberate stops do not alert |
+| `address-validator` | 10 starts / 600s | 10 × (3s + startup): ~35s for an instant exit, longer when the crash follows imports and Alembic | boot transients: `init_engine()` exits while Postgres is not yet accepting |
+| `libpostal` | 5 starts / 600s | 5 × (5s + container start and model load) | a clean stop exits 0 (verified 2026-09-30), so reboots and deliberate stops do not alert |
 
 Neither covers a process that hangs while running, or the VM itself being down.
 
