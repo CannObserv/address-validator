@@ -220,8 +220,13 @@ class TestV2ValidateUndetermined:
                 "uspsData": {"dpvConfirmation": ""},
             }
         }
+        mapped = GoogleClient._map_response(probe)
+        # Precondition (CR 2): the real mapping still yields a DPV-less `confirmed`.
+        # If it stops doing so this test no longer exercises the #258 rule — update
+        # the probe or the docstring rather than let it pass via all-undetermined.
+        assert (mapped["status"], mapped["dpv_match_code"]) == ("confirmed", None)
         google_client = MagicMock()
-        google_client.validate_address = AsyncMock(return_value=GoogleClient._map_response(probe))
+        google_client.validate_address = AsyncMock(return_value=mapped)
         chain = ChainProvider(
             providers=[
                 self._stub(return_value=self._USPS_UNDETERMINED),
