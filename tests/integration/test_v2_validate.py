@@ -13,6 +13,8 @@ from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
 )
+from address_validator.services.validation.google_client import GoogleClient
+from address_validator.services.validation.google_provider import GoogleProvider
 
 pytestmark = pytest.mark.integration
 
@@ -199,3 +201,45 @@ class TestV2ValidateUndetermined:
         assert body["validation"]["status"] == "confirmed"
         assert body["validation"]["provider"] == "google"
         assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE not in body["warnings"]
+
+    def test_fallback_verdict_without_dpv_keeps_usps_answer(self, client) -> None:
+        """GH #258: the 2026-09-30 production probe. Google's CASS returned no DPV
+        code, so the non-CASS path mapped ``addressComplete`` to ``confirmed`` for a
+        different street (AVE→St). The held USPS answer must win."""
+        probe = {
+            "result": {
+                "verdict": {"addressComplete": True, "hasUnconfirmedComponents": True},
+                "address": {
+                    "postalAddress": {
+                        "addressLines": ["301 E Hbr St"],
+                        "locality": "Westport",
+                        "administrativeArea": "WA",
+                        "postalCode": "98595",
+                    }
+                },
+                "uspsData": {"dpvConfirmation": ""},
+            }
+        }
+        google_client = MagicMock()
+        google_client.validate_address = AsyncMock(return_value=GoogleClient._map_response(probe))
+        chain = ChainProvider(
+            providers=[
+                self._stub(return_value=self._USPS_UNDETERMINED),
+                GoogleProvider(google_client),
+            ]
+        )
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "301 E Harbor Ave, Westport, WA 98595"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        google_client.validate_address.assert_awaited_once()
+        assert body["validation"] == {
+            "status": "undetermined",
+            "dpv_match_code": None,
+            "provider": "usps",
+        }
+        assert body["address_line_1"] == "301 E HARBOR AVE"
+        assert body["warnings"] == []
