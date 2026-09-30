@@ -216,6 +216,19 @@ transiently along the way (including a network error once an answer is held), th
 `undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
 call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
 
+**Adding a fallback provider to a single-provider config** (e.g. `usps` → `usps,google`): with no
+chain, `undetermined` answers are cached, and they keep being served for up to
+`VALIDATION_CACHE_TTL_DAYS` without the new fallback ever being asked. To let the fallback see
+them right away, purge those rows (pointers first; the FK has no cascade):
+
+```sql
+BEGIN;
+DELETE FROM query_patterns WHERE canonical_key IN
+  (SELECT canonical_key FROM validated_addresses WHERE status = 'undetermined');
+DELETE FROM validated_addresses WHERE status = 'undetermined';
+COMMIT;
+```
+
 ## Empty-street raw fallback
 
 When the USPS parser cannot extract a street line from a raw `address` input (e.g. a Google
