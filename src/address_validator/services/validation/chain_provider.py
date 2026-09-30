@@ -40,10 +40,12 @@ class ChainProvider:
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
     DPV, GH #250) is a *soft* miss: it is held and the next provider is tried.
-    With nothing held, the first determined answer wins. Once an answer is
+    With nothing held, the first determined answer wins. Once a US answer is
     held, only an answer with a DPV code replaces it: a verdict-only answer
     (Google US non-CASS ``confirmed``/``invalid``/``not_found``, no DPV code)
     is a geocoder opinion, weaker than USPS's own no-determination (GH #258).
+    Non-US answers never carry a DPV code, so any determined one replaces a
+    held answer.
     If no provider determines the address, the first held ``undetermined``
     answer is returned — a 200 answer beats a 429 — and, when any provider
     failed transiently along the way, it carries
@@ -129,11 +131,16 @@ class ChainProvider:
                     logger.info("ChainProvider: %s undetermined", name)
                     if held is None:
                         held = result
-                elif held is None or result.validation.dpv_match_code is not None:
+                elif (
+                    held is None
+                    or std.country != "US"
+                    or result.validation.dpv_match_code is not None
+                ):
                     return result
                 else:
-                    # Verdict-only answer (no DPV code) — weaker than the held
-                    # answer, so it does not replace it (GH #258).
+                    # US verdict-only answer (no DPV code) — weaker than the held
+                    # answer, so it does not replace it (GH #258). Non-US answers
+                    # never carry a DPV code, so they are exempt.
                     logger.info(
                         "ChainProvider: %s answered %s without a DPV code, keeping undetermined",
                         name,

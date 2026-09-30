@@ -526,6 +526,23 @@ class TestChainHeldPrecedence:
         assert result.validation.provider == "google"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["confirmed", "invalid", "not_found"])
+    async def test_non_us_verdict_answer_replaces_held_undetermined(
+        self, status: str, std_address: StandardizeResponseV2
+    ) -> None:
+        """CR 1: non-US answers never carry a DPV code, so the DPV rule cannot
+        apply — any determined non-US answer replaces a held undetermined."""
+        std_ca = std_address.model_copy(update={"country": "CA"})
+        usps_ca = _USPS_UNDETERMINED.model_copy(update={"country": "CA"})
+        google_ca = self._google(status, None).model_copy(update={"country": "CA"})
+        chain = ChainProvider(providers=[_mock_provider(usps_ca), _mock_provider(google_ca)])
+
+        result = await chain.validate(std_ca)
+
+        assert result.validation.status == status
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
     async def test_verdict_answer_returned_when_nothing_held(self, std_address: object) -> None:
         """Scope pin: USPS 400 → Google (e.g. #114 place-name input) holds nothing,
         so the Google verdict answer is still returned as-is."""
