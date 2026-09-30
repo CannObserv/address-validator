@@ -3,10 +3,19 @@ Description=libpostal address parsing service (pelias/libpostal-service)
 Documentation=https://github.com/pelias/libpostal-service
 After=docker.service
 Requires=docker.service
+# Crashloop alert (#248): fires once, when 5 starts land inside 600s
+# (RestartMode=direct below). A dead sidecar is otherwise invisible -- it never
+# affects /api/v2/health's HTTP status. A clean stop exits 0 (verified
+# 2026-09-30), so a deliberate stop or reboot does not alert. Recover with
+#   sudo systemctl reset-failed libpostal && sudo systemctl start libpostal
+OnFailure=unit-failure@%n.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Restart=always
 RestartSec=5
+RestartMode=direct
 TimeoutStartSec=120
 
 # Remove any stale container from a previous run before starting.

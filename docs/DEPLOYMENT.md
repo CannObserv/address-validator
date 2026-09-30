@@ -183,6 +183,15 @@ If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
 just the final `ValueError`.
 
+A crashloop does not run forever. After 10 starts within 600s the unit enters
+`failed`, stays down, and alerts once (#248; see
+[Scheduled timers](#scheduled-timers)). Manual restarts count toward the 10.
+Once the cause is fixed:
+
+```bash
+sudo systemctl reset-failed address-validator && sudo systemctl start address-validator
+```
+
 ### Health endpoint
 
 `GET /api/v2/health` is open (no `X-API-Key`) and is the readiness check for
@@ -307,7 +316,31 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
 oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
 A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
-enforces it. The `infra/unit-failure@.service` template runs two steps:
+enforces it.
+
+The restarting services (`address-validator`, `libpostal`) carry it too, with
+two more settings the test also enforces (#248):
+
+- **`RestartMode=direct`.** Under the default `normal`, every crash passes
+  through `failed` and fires the hook with a fresh invocation ID, and so a fresh
+  idempotency key: one dispatch per restart, roughly every 3s. `direct` restarts
+  without passing through `failed`.
+- **Explicit `StartLimitIntervalSec=` / `StartLimitBurst=`** in `[Unit]`, sized
+  so a crashloop can reach them (`burst × RestartSec < interval`). At the
+  defaults (10s / 5), a `RestartSec=3` loop never does, and never fails.
+
+A crashloop therefore alerts **once**, when the limit trips, and the unit then
+**stays down** until `sudo systemctl reset-failed <unit> && sudo systemctl start <unit>`.
+Manual `systemctl restart`s count toward the burst.
+
+| Unit | Limit | Trips after | Notes |
+|---|---|---|---|
+| `address-validator` | 10 starts / 600s | ~35s of a hard loop | boot transients: `init_engine()` exits while Postgres is not yet accepting |
+| `libpostal` | 5 starts / 600s | ~30s+ (model load per start) | a clean stop exits 0 (verified 2026-09-30), so reboots and deliberate stops do not alert |
+
+Neither covers a process that hangs while running, or the VM itself being down.
+
+The `infra/unit-failure@.service` template runs two steps:
 
 1. **Journal line (the fallback).** One `crit` line tagged `unit-failure`
    naming the failed unit. It runs first and needs no network, venv or config.
@@ -366,6 +399,17 @@ the same path a real failure does: `MONITOR_*` variables, the
 sudo systemd-run --unit=av-smoke -p OnFailure=unit-failure@av-smoke.service.service /bin/false
 journalctl -u unit-failure@av-smoke.service.service -n 5   # "notifier dispatch … succeeded"
 sudo systemctl reset-failed av-smoke.service
+```
+
+For a restarting unit, crashloop with its settings. Expect `NRestarts=10`, then
+`failed`, and exactly **one** `unit-failure` line and one dispatch, about 35s in:
+
+```bash
+sudo systemd-run --unit=av-loop -p Restart=on-failure -p RestartSec=3 -p RestartMode=direct \
+  -p StartLimitIntervalSec=600 -p StartLimitBurst=10 \
+  -p OnFailure=unit-failure@av-loop.service.service /bin/false
+journalctl -t unit-failure --since -2min                   # one line
+sudo systemctl reset-failed av-loop.service
 ```
 
 The quick check, `sudo systemctl start unit-failure@smoke-test.service`, carries
