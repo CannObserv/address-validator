@@ -177,9 +177,13 @@ class ValidationResult(BaseModel):
     * ``confirmed_missing_secondary`` — DPV code S: building confirmed, unit missing.
     * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
     * ``not_confirmed``               — DPV code N: address not found in USPS database.
-    * ``not_found``                   — non-US: address could not be geocoded or verified.
-    * ``invalid``                     — non-US: address is geocodable but incomplete.
-    * ``unavailable``                 — provider not configured or unreachable.
+    * ``not_found``                   — Google verdict (non-US, or US without a CASS DPV):
+      address could not be geocoded or verified.
+    * ``invalid``                     — Google verdict (non-US, or US without a CASS DPV):
+      address is geocodable but incomplete.
+    * ``undetermined``                — a provider answered but made no determination
+      (e.g. USPS returned no DPV code); an answer about the address, not an outage.
+    * ``unavailable``                 — no validation provider is configured.
     * ``error``                       — provider rejected the input as malformed.
     """
 
@@ -195,18 +199,19 @@ class ValidationResult(BaseModel):
         "not_confirmed",
         "not_found",
         "invalid",
+        "undetermined",
         "unavailable",
         "error",
     ]
     dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
         default=None,
         description="USPS DPV match code. Y=confirmed, S=missing secondary, "
-        "D=bad secondary, N=not found. None when unavailable.",
+        "D=bad secondary, N=not found. None when undetermined or unavailable.",
     )
     provider: str | None = Field(
         default=None,
         description="Provider that performed validation ('usps', 'google', etc.). "
-        "None when unavailable.",
+        "None when no provider is configured.",
     )
 
 

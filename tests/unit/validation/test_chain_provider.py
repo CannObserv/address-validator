@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.models import (
     ComponentSet,
     StandardizeResponseV2,
@@ -339,3 +340,124 @@ def std_address():
         ),
         warnings=[],
     )
+
+
+# -- GH #250: undetermined is a soft miss — try the next provider ------------
+
+_USPS_UNDETERMINED = ValidateResponseV2(
+    country="US",
+    address_line_1="301 E HARBOR AVE",
+    validation=ValidationResult(status="undetermined", provider="usps"),
+)
+
+_GOOGLE_UNDETERMINED = ValidateResponseV2(
+    country="US",
+    validation=ValidationResult(status="undetermined", provider="google"),
+)
+
+
+def _raising_provider(exc: Exception) -> AsyncMock:
+    p = AsyncMock()
+    p.validate = AsyncMock(side_effect=exc)
+    return p
+
+
+class TestChainUndetermined:
+    @pytest.mark.asyncio
+    async def test_undetermined_falls_through_to_next_provider(self, std_address: object) -> None:
+        primary = _mock_provider(_USPS_UNDETERMINED)
+        secondary = _mock_provider(_GOOGLE_CONFIRMED)
+        chain = ChainProvider(providers=[primary, secondary])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.provider == "google"
+        assert result.validation.status == "confirmed"
+        secondary.validate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_all_undetermined_returns_first_answer(self, std_address: object) -> None:
+        chain = ChainProvider(
+            providers=[_mock_provider(_USPS_UNDETERMINED), _mock_provider(_GOOGLE_UNDETERMINED)]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_single_provider_undetermined_returned(self, std_address: object) -> None:
+        chain = ChainProvider(providers=[_mock_provider(_USPS_UNDETERMINED)])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ProviderRateLimitedError("google", retry_after_seconds=5.0),
+            ProviderAtCapacityError("google", retry_after_seconds=5.0),
+            ProviderTransientError("google", retry_after_seconds=5.0),
+        ],
+    )
+    async def test_fallback_transient_returns_undetermined_with_warning(
+        self, exc: Exception, std_address: object
+    ) -> None:
+        """A 200 answer beats a 429: the undetermined answer is returned, flagged
+        so the client (and the cache) know a retry may yield a determination."""
+        chain = ChainProvider(
+            providers=[_mock_provider(_USPS_UNDETERMINED), _raising_provider(exc)]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+    @pytest.mark.asyncio
+    async def test_transient_before_undetermined_also_warns(self, std_address: object) -> None:
+        chain = ChainProvider(
+            providers=[
+                _raising_provider(ProviderRateLimitedError("usps")),
+                _mock_provider(_GOOGLE_UNDETERMINED),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.provider == "google"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+    @pytest.mark.asyncio
+    async def test_fallback_bad_request_returns_undetermined_without_warning(
+        self, std_address: object
+    ) -> None:
+        """A 400 is an answer about the input, not an outage — no retry hint."""
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_USPS_UNDETERMINED),
+                _raising_provider(ProviderBadRequestError("google", detail="HTTP 400")),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_undetermined_preserves_existing_warnings(self, std_address: object) -> None:
+        held = _USPS_UNDETERMINED.model_copy(update={"warnings": ["existing"]})
+        chain = ChainProvider(
+            providers=[_mock_provider(held), _raising_provider(ProviderRateLimitedError("google"))]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.warnings == ["existing", warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]

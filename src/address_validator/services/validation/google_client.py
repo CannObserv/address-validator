@@ -18,6 +18,7 @@ import httpx
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
 
+from address_validator.core.validation_status import UNDETERMINED
 from address_validator.services.validation._helpers import _DPV_TO_STATUS
 from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
@@ -275,7 +276,7 @@ class GoogleClient:
         lat = location.get("latitude")
         lng = location.get("longitude")
 
-        dpv = usps.get("dpvConfirmation") or None
+        dpv = (usps.get("dpvConfirmation") or "").strip() or None
 
         if dpv is not None:
             # CASS-confirmed: USPS standardizedAddress is authoritative.
@@ -286,7 +287,10 @@ class GoogleClient:
             address_line_2 = std_addr.get("secondAddressLine", "")
             city = std_addr.get("city", "")
             region = std_addr.get("state", "")
-            status = _DPV_TO_STATUS.get(dpv, "unavailable")
+            status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
+            if dpv not in _DPV_TO_STATUS:
+                # Unknown code: drop it — ValidationResult.dpv_match_code is a Literal.
+                dpv = None
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
             postal_addr = result.get("address", {}).get("postalAddress", {})
@@ -299,7 +303,7 @@ class GoogleClient:
             status = (
                 _verdict_to_status(verdict)
                 if postal_addr or verdict.get("validationGranularity")
-                else "unavailable"
+                else UNDETERMINED
             )
 
         return {

@@ -101,28 +101,31 @@ class TestUSPSProvider:
         assert result.validation.status == "not_confirmed"
 
     @pytest.mark.asyncio
-    async def test_dpv_none_sets_unavailable(
+    async def test_dpv_none_sets_undetermined(
         self, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
+        # USPS answered HTTP 200 but made no DPV determination (GH #250):
+        # an answer about the address, not an outage.
         mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": None}
         result = await provider.validate(_make_std())
-        assert result.validation.status == "unavailable"
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
         assert result.validation.dpv_match_code is None
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("unknown_code", ["X", "Z", "q", "YY", "1"])
-    async def test_unknown_dpv_code_collapses_to_unavailable(
+    async def test_unknown_dpv_code_collapses_to_undetermined(
         self, unknown_code: str, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
         # Defence in depth: any unrecognised DPV code (a future USPS sentinel)
-        # must not raise KeyError; collapse to "unavailable" and drop the
+        # must not raise KeyError; collapse to "undetermined" and drop the
         # unknown value from the response.
         mock_client.validate_address.return_value = {
             **CLIENT_RESULT_Y,
             "dpv_match_code": unknown_code,
         }
         result = await provider.validate(_make_std())
-        assert result.validation.status == "unavailable"
+        assert result.validation.status == "undetermined"
         assert result.validation.dpv_match_code is None
 
     @pytest.mark.asyncio

@@ -1,4 +1,5 @@
-"""ChainProvider — tries providers in order, falling back on recoverable errors.
+"""ChainProvider — tries providers in order, falling back on recoverable errors
+and on ``undetermined`` answers.
 
 Constructed by :class:`~services.validation.registry.ProviderRegistry` when
 ``VALIDATION_PROVIDER`` contains more than one comma-separated value.
@@ -7,6 +8,8 @@ Do not instantiate directly in application code.
 
 import logging
 
+from address_validator.core import warnings as warning_catalogue
+from address_validator.core.validation_status import UNDETERMINED
 from address_validator.models import StandardizedAddress, ValidateResponseV2
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
@@ -32,6 +35,14 @@ class ChainProvider:
     * :class:`~services.validation.errors.ProviderTransientError` (HTTP 5xx /
       unexpected non-2xx)
     * :class:`~services.validation.errors.ProviderBadRequestError` (HTTP 400)
+
+    An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
+    DPV, GH #250) is a *soft* miss: it is held and the next provider is tried.
+    The first determined answer wins. If no provider determines the address,
+    the first held ``undetermined`` answer is returned — a 200 answer beats a
+    429 — and, when any provider failed transiently along the way, it carries
+    :data:`~core.warnings.PROVIDER_FALLBACK_UNREACHABLE` so the client knows a
+    retry may yield a determination (``CachingProvider`` does not cache it).
 
     When all providers fail:
 
@@ -68,10 +79,11 @@ class ChainProvider:
     ) -> ValidateResponseV2:
         last_transient: _TransientErr | None = None
         last_bad_request: ProviderBadRequestError | None = None
+        held: ValidateResponseV2 | None = None
         for provider in self._providers:
             name = type(provider).__name__
             try:
-                return await provider.validate(std, raw_input=raw_input)
+                result = await provider.validate(std, raw_input=raw_input)
             except (
                 ProviderRateLimitedError,
                 ProviderAtCapacityError,
@@ -90,6 +102,23 @@ class ChainProvider:
                     name,
                     type(exc).__name__,
                 )
+            else:
+                if result.validation.status != UNDETERMINED:
+                    return result
+                logger.info("ChainProvider: %s undetermined, trying next provider", name)
+                if held is None:
+                    held = result
+        if held is not None:
+            if last_transient is not None:
+                return held.model_copy(
+                    update={
+                        "warnings": [
+                            *held.warnings,
+                            warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE,
+                        ]
+                    }
+                )
+            return held
         # Prefer transient error — caller can retry when capacity clears.
         if last_transient is not None:
             raise ProviderRateLimitedError(

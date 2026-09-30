@@ -36,6 +36,7 @@ CONFIRMED_BAD_SECONDARY = "confirmed_bad_secondary"
 NOT_CONFIRMED = "not_confirmed"
 NOT_FOUND = "not_found"
 INVALID = "invalid"
+UNDETERMINED = "undetermined"
 UNAVAILABLE = "unavailable"
 ERROR = "error"
 
@@ -50,6 +51,7 @@ VALIDATION_STATUSES: tuple[str, ...] = (
     NOT_CONFIRMED,
     NOT_FOUND,
     INVALID,
+    UNDETERMINED,
     UNAVAILABLE,
     ERROR,
 )

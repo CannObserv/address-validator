@@ -638,7 +638,7 @@ class TestMapResponseUsHasStatusKey:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
         assert result["status"] == "not_confirmed"
 
-    def test_no_dpv_no_postal_address_has_unavailable_status(self) -> None:
+    def test_no_dpv_no_postal_address_has_undetermined_status(self) -> None:
         raw = {
             "result": {
                 "verdict": {},
@@ -647,7 +647,32 @@ class TestMapResponseUsHasStatusKey:
             }
         }
         result = GoogleClient._map_response(raw)
-        assert result["status"] == "unavailable"
+        assert result["status"] == "undetermined"
+
+    def test_unknown_dpv_code_has_undetermined_status(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {},
+                "geocode": {},
+                "uspsData": {"standardizedAddress": {}, "dpvConfirmation": "X"},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+        # Unknown codes are dropped: ValidationResult.dpv_match_code is a Literal.
+        assert result["dpv_match_code"] is None
+
+    def test_blank_dpv_code_treated_as_absent(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {},
+                "geocode": {},
+                "uspsData": {"standardizedAddress": {}, "dpvConfirmation": " "},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+        assert result["dpv_match_code"] is None
 
 
 # -- US postalAddress fallback (GH-114) ------------------------------------

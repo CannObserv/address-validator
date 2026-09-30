@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.pipeline_version import get_pipeline_version
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
@@ -294,6 +295,50 @@ class TestUnavailableNotCached:
         await provider.validate(std)
         await provider.validate(std)
 
+        assert inner.validate.await_count == 2
+
+
+def _make_undetermined_response(warnings: list[str] | None = None) -> ValidateResponseV2:
+    return ValidateResponseV2(
+        address_line_1="301 E HARBOR AVE",
+        address_line_2="",
+        city="WESTPORT",
+        region="WA",
+        postal_code="98595",
+        country="US",
+        validated="301 E HARBOR AVE  WESTPORT, WA 98595",
+        validation=ValidationResult(status="undetermined", provider="usps"),
+        warnings=warnings or [],
+    )
+
+
+class TestUndeterminedCaching:
+    """GH #250: an undetermined answer is cached like any provider answer, unless
+    a fallback provider was unreachable — then a retry may still determine it."""
+
+    async def test_undetermined_stored_and_served_from_cache(self, db: AsyncEngine) -> None:
+        inner = _make_provider(_make_undetermined_response())
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+        second = await provider.validate(std)
+
+        assert await _count_rows(db, "validated_addresses") == 1
+        assert inner.validate.await_count == 1
+        assert second.validation.status == "undetermined"
+
+    async def test_undetermined_with_unreachable_fallback_not_stored(self, db: AsyncEngine) -> None:
+        inner = _make_provider(
+            _make_undetermined_response([warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE])
+        )
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+        await provider.validate(std)
+
+        assert await _count_rows(db, "validated_addresses") == 0
         assert inner.validate.await_count == 2
 
 

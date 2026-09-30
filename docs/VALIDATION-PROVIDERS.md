@@ -30,7 +30,9 @@
 | `S` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
 | `D` | `confirmed_bad_secondary` | Building confirmed; unit not recognised |
 | `N` | `not_confirmed` | Address not found in USPS database |
-| (none) | `unavailable` | Provider not configured or unreachable |
+| (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250) |
+
+`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429 (or 5xx for transport failures), not as a status.
 
 ## Configuring providers
 
@@ -204,6 +206,15 @@ logic would allow. The task is cancelled on application shutdown.
 provider. It also catches `ProviderBadRequestError` (upstream HTTP 400, e.g. USPS or Google
 rejecting a malformed input) and tries the next provider; only if every provider in the chain
 raises `ProviderBadRequestError` does the route handler return `validation.status="error"`.
+
+An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
+it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
+the next provider, and the first determined answer wins. If nothing better comes back, the first
+held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
+transiently along the way, the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
+`CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the
+`undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
+call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
 
 ## Empty-street raw fallback
 

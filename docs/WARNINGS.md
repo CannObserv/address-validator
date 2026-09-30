@@ -37,4 +37,5 @@ This catalogue covers the **response `warnings` channel only**. Operational
 | `Provider inferred one or more address components not present in input` | `services/validation/google_provider.py` | The Google provider inferred components absent from the input. |
 | `Provider replaced one or more address components` | `services/validation/google_provider.py` | The Google provider replaced one or more input components. |
 | `One or more address components are unconfirmed` | `services/validation/google_provider.py` | The Google provider could not confirm one or more components. |
+| `Validation undetermined while a fallback provider was unreachable; a later retry may produce a determination` | `services/validation/chain_provider.py` | Every provider that answered returned `validation.status = "undetermined"`, and at least one provider in the chain failed transiently (429 / at capacity / 5xx). The result is not cached (GH #250). |
 | `Validation provider rejected the address as malformed` | `routers/v2/validate.py` | The validation provider raised a bad-request error (`ProviderBadRequestError`); the address is returned with `validation.status = "error"`. |
