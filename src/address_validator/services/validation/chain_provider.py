@@ -123,7 +123,7 @@ class ChainProvider:
             else:
                 if result.validation.status != UNDETERMINED:
                     return result
-                logger.info("ChainProvider: %s undetermined, trying next provider", name)
+                logger.info("ChainProvider: %s undetermined", name)
                 if held is None:
                     held = result
         if held is not None:
