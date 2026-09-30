@@ -209,7 +209,11 @@ raises `ProviderBadRequestError` does the route handler return `validation.statu
 
 An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
-the next provider, and the first determined answer wins. If nothing better comes back, the first
+the next provider. Once an answer is held, only an answer **with a DPV code** replaces it
+(GH #258): a Google non-CASS verdict (`confirmed`/`invalid`/`not_found`, `dpv_match_code` null)
+is discarded, because Google's own validation logic sends a US answer with an empty
+`dpvConfirmation` to FIX. A Google CASS `N` does replace it. With nothing held (USPS 400/429 →
+Google), the verdict answer is returned as before. If nothing better comes back, the first
 held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
 transiently along the way (including a network error once an answer is held), the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
 `CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the

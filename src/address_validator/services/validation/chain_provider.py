@@ -40,9 +40,13 @@ class ChainProvider:
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
     DPV, GH #250) is a *soft* miss: it is held and the next provider is tried.
-    The first determined answer wins. If no provider determines the address,
-    the first held ``undetermined`` answer is returned — a 200 answer beats a
-    429 — and, when any provider failed transiently along the way, it carries
+    With nothing held, the first determined answer wins. Once an answer is
+    held, only an answer with a DPV code replaces it: a verdict-only answer
+    (Google US non-CASS ``confirmed``/``invalid``/``not_found``, no DPV code)
+    is a geocoder opinion, weaker than USPS's own no-determination (GH #258).
+    If no provider determines the address, the first held ``undetermined``
+    answer is returned — a 200 answer beats a 429 — and, when any provider
+    failed transiently along the way, it carries
     :data:`~core.warnings.PROVIDER_FALLBACK_UNREACHABLE` so the client knows a
     retry may yield a determination (``CachingProvider`` does not cache it).
 
@@ -121,27 +125,46 @@ class ChainProvider:
                     type(exc).__name__,
                 )
             else:
-                if result.validation.status != UNDETERMINED:
+                if result.validation.status == UNDETERMINED:
+                    logger.info("ChainProvider: %s undetermined", name)
+                    if held is None:
+                        held = result
+                elif held is None or result.validation.dpv_match_code is not None:
                     return result
-                logger.info("ChainProvider: %s undetermined", name)
-                if held is None:
-                    held = result
-        if held is not None:
-            if unreachable:
-                return held.model_copy(
-                    update={
-                        "warnings": [
-                            *held.warnings,
-                            warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE,
-                        ]
-                    }
-                )
-            return held
-        # Prefer transient error — caller can retry when capacity clears.
-        if last_transient is not None:
-            raise ProviderRateLimitedError(
-                "all", retry_after_seconds=last_transient.retry_after_seconds
+                else:
+                    # Verdict-only answer (no DPV code) — weaker than the held
+                    # answer, so it does not replace it (GH #258).
+                    logger.info(
+                        "ChainProvider: %s answered %s without a DPV code, keeping undetermined",
+                        name,
+                        result.validation.status,
+                    )
+        return _exhausted(held, unreachable, last_transient, last_bad_request)
+
+
+def _exhausted(
+    held: ValidateResponseV2 | None,
+    unreachable: bool,
+    last_transient: _TransientErr | None,
+    last_bad_request: ProviderBadRequestError | None,
+) -> ValidateResponseV2:
+    """No provider gave a final answer: return the held answer, or raise."""
+    if held is not None:
+        if unreachable:
+            return held.model_copy(
+                update={
+                    "warnings": [
+                        *held.warnings,
+                        warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE,
+                    ]
+                }
             )
-        if last_bad_request is not None:
-            raise ProviderBadRequestError("all", detail=last_bad_request.detail)
-        raise ProviderRateLimitedError("all", retry_after_seconds=0.0)
+        return held
+    # Prefer transient error — caller can retry when capacity clears.
+    if last_transient is not None:
+        raise ProviderRateLimitedError(
+            "all", retry_after_seconds=last_transient.retry_after_seconds
+        )
+    if last_bad_request is not None:
+        raise ProviderBadRequestError("all", detail=last_bad_request.detail)
+    raise ProviderRateLimitedError("all", retry_after_seconds=0.0)
