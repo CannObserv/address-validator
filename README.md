@@ -266,7 +266,7 @@ src/address_validator/
   canada_post_data/            # Canada Post lookup tables (provinces, suffixes, directionals)
 alembic/                       # Database migrations
 docs/                          # Architecture docs, USPS/ISO research, design plans
-infra/                         # systemd units, timer files, and archive_audit.py for VM deployment
+infra/                         # systemd units, timers and their scripts (audit archive, cache sweep, unit-failure → notifier)
 scripts/
   build/                       # Tailwind CLI build and pre-commit hook
   db/                          # DB maintenance and one-time migration scripts

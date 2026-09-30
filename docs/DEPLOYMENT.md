@@ -440,7 +440,7 @@ uv run python infra/archive_audit.py --backfill
 
 | File | Contents | Loaded by |
 |---|---|---|
-| `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH` | systemd `EnvironmentFile=` (required) |
+| `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, above) | systemd `EnvironmentFile=` (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |
 
 ### CORS

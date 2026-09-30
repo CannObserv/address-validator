@@ -10,6 +10,8 @@ Example: after upgrading FastAPI to 0.130.x, update `pyproject.toml` to `fastapi
 
 Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
+**Git-sourced deps** (`notifier-client`, #232) are pinned by tag in `[tool.uv.sources]`, per the source repo's release doc. uv does not enforce the `>=` floor against a git source: the floor records intent, and the tag is the pin. To upgrade, change the tag, run `uv sync`, and raise the floor to match.
+
 Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower bounds.
 
 ## JavaScript (npm + package.json)
