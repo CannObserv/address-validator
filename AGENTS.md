@@ -109,7 +109,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 
 | File | Contents | Loaded by |
 |---|---|---|
-| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`) + `LOG_LEVEL` | systemd (required) |
+| `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*`) + `LOG_LEVEL` | systemd (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
@@ -199,6 +199,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
 - [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md) — memory reservations, OOM ordering, SocratiCode pins
+- [docs/TAILNET.md](docs/TAILNET.md) — tailnet node, ACL, MagicDNS takeover, join/rejoin (notifier hop)
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary

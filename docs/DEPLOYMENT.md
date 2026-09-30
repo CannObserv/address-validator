@@ -303,17 +303,80 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
   && sudo systemctl enable --now disk-hygiene.timer
 ```
 
-**Failures are reported to the journal.** Every timer-driven service carries
-`OnFailure=unit-failure@%n.service`; the `infra/unit-failure@.service` template
-logs one `crit` line tagged `unit-failure` naming the failed unit. A failed
+**Failures are reported to the journal and pushed through notifier.** Every
+timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
 oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
 A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
-enforces it.
+enforces it. The `infra/unit-failure@.service` template runs two steps:
+
+1. **Journal line (the fallback).** One `crit` line tagged `unit-failure`
+   naming the failed unit. It runs first and needs no network, venv or config.
+2. **Notifier dispatch (#232).** `infra/notify_unit_failure.py` sends the unit,
+   its result, the host, and the failed run's last WARNING-or-higher journal
+   lines to the sibling [notifier](https://github.com/CannObserv/notifier)
+   service, which delivers to Slack and Mailgun. It is **fail-open**: the
+   `ExecStart=-` prefix makes systemd ignore its exit status, and a failure
+   (notifier unreachable, key rejected, config incomplete) logs a WARNING and
+   leaves the journal line as the only signal. With `NOTIFIER_URL` unset, only
+   the journal line is written.
 
 ```bash
-journalctl -t unit-failure              # every reported failure
+journalctl -t unit-failure                        # every reported failure
 journalctl -t unit-failure --since today
+journalctl -u 'unit-failure@*' -p warning         # dispatches that did not deliver
 ```
+
+Only WARNING+ lines leave the host. That filter is the PII guard; see
+`docs/LOGGING.md`. Shell `logger` / `systemd-cat` lines lose their unit
+attribution in journald, so disk-hygiene and docker-prune warnings are missing
+from the tail (#246).
+
+**Notifier config** — in `/etc/address-validator/.env`:
+
+| Variable | Value |
+|---|---|
+| `NOTIFIER_URL` | `http://notifier:9000` (tailnet; unset = journal only) |
+| `NOTIFIER_API_KEY` | `address-validator` tenant key, `nk_…` — pasted by the operator, never through an agent |
+| `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | `01M3R970XBXWBKD31Y4EGPMAQE` (printed by `publish_notifier_template.py`) |
+| `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | `01M3QRP1BCJW3KFB04FX4V8EQ8,01M3QRP1BDAXK27G60EJQEVEZD` (`address-validator-slack`, `-mailgun`; tenant `01M3QQMHYVVQWAS2SZ7NE66D2N`, CannObserv/notifier#95) |
+
+**Network.** Notifier is reachable only over the `cannobserv.org.github`
+tailnet (`http://notifier:9000`). Node, ACL, DNS takeover, and the join/rejoin
+recipe: [TAILNET.md](TAILNET.md). The handler refuses to dispatch unless `/health` reports
+`"environment": "production"`.
+
+**Template.** The wording lives in `infra/notifier/unit-failure.json`.
+Notifier stores a copy under this tenant, and template lookup is tenant-scoped.
+The publisher reads only the `NOTIFIER_*` keys from the env file, so the
+production DSN never enters its environment. It previews the sample through
+notifier, then creates the template (or PATCHes it when
+`NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` is set):
+
+```bash
+.venv/bin/python infra/publish_notifier_template.py --dry-run   # preview only
+.venv/bin/python infra/publish_notifier_template.py             # create / update
+```
+
+**Smoke tests.** The end-to-end check is a throwaway unit that fails. It takes
+the same path a real failure does: `MONITOR_*` variables, the
+`{unit}:{MONITOR_INVOCATION_ID}` key, and the invocation-scoped journal tail.
+`systemd-run` does not expand `%n`, so spell out the handler name:
+
+```bash
+sudo systemd-run --unit=av-smoke -p OnFailure=unit-failure@av-smoke.service.service /bin/false
+journalctl -u unit-failure@av-smoke.service.service -n 5   # "notifier dispatch … succeeded"
+sudo systemctl reset-failed av-smoke.service
+```
+
+The quick check, `sudo systemctl start unit-failure@smoke-test.service`, carries
+no `MONITOR_*` variables. It reports result `manual` and uses a fresh
+`{unit}:manual:{uuid}` key. Never use a fixed key: notifier returns a replayed
+key's earlier dispatch and delivers nothing.
+
+One failed run yields one dispatch. **Deploying a handler change:** run `uv sync` in the main
+checkout first. Without `notifier-client` in its `.venv`, the import fails
+before any fail-open code runs, and the `-` prefix hides it: failures go
+journal-only, silently. Then `sudo infra/install-units.sh unit-failure@.service`.
 
 Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
 
@@ -377,7 +440,7 @@ uv run python infra/archive_audit.py --backfill
 
 | File | Contents | Loaded by |
 |---|---|---|
-| `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH` | systemd `EnvironmentFile=` (required) |
+| `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, above) | systemd `EnvironmentFile=` (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |
 
 ### CORS

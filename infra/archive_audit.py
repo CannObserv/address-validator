@@ -45,6 +45,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy as sa
 from google.cloud import storage as gcs
+from journal_logging import configure_logging
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -375,7 +376,7 @@ async def run_archive(
 
 
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    configure_logging()
 
     args = _parse_args()
     dsn, retention_days, bucket, prefix = _get_config()

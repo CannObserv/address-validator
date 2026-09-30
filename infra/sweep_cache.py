@@ -24,6 +24,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from journal_logging import configure_logging
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -141,7 +142,7 @@ async def vacuum_cache_tables(engine: AsyncEngine) -> None:
 
 
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    configure_logging()
 
     args = _parse_args()
     dsn, ttl_days = _get_config()

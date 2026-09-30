@@ -1,9 +1,18 @@
 [Unit]
-Description=Report failure of %i to the journal
+Description=Report failure of %i to the journal and notifier
 # Target of OnFailure=unit-failure@%n.service on every timer-driven unit (#228).
-# One crit line tagged unit-failure: `journalctl -t unit-failure`.
+# 1. One crit line tagged unit-failure: `journalctl -t unit-failure`. Always first,
+#    and needs no network, venv or config — it is the fallback.
+# 2. A notifier dispatch (#232). The leading `-` makes systemd ignore its exit
+#    status, so fail-open holds even if the script itself is broken.
 # Deliberately no OnFailure= of its own — a failing handler would recurse.
 
 [Service]
 Type=oneshot
+User=exedev
+WorkingDirectory=/home/exedev/address-validator
+EnvironmentFile=-/etc/address-validator/.env
 ExecStart=/usr/bin/logger -t unit-failure -p daemon.crit "%i failed; see: journalctl -u %i -n 50"
+ExecStart=-/home/exedev/address-validator/.venv/bin/python infra/notify_unit_failure.py %i
+# The script bounds itself at 70s (journalctl 10s + RUN_BUDGET_SECONDS); this is the backstop.
+TimeoutStartSec=90

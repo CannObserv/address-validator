@@ -23,7 +23,14 @@ and the project uses semantic versioning.
 ### Added (operations)
 
 - **`infra/install-units.sh`** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — the single install path for `infra/*.service` + `*.timer` (copy, `daemon-reload`, `reset-failed`; refuses a linked worktree); `--check` reports drift between installed units and `infra/`.
-- **Timer-driven unit failures reach the journal** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — `OnFailure=unit-failure@%n.service` logs one `crit` line per failure: `journalctl -t unit-failure`. Routing through the notifier service is [#232](https://github.com/CannObserv/address-validator/issues/232).
+- **Timer-driven unit failures reach the journal** ([#228](https://github.com/CannObserv/address-validator/issues/228)) — `OnFailure=unit-failure@%n.service` logs one `crit` line per failure: `journalctl -t unit-failure`. Now also pushed through notifier; see the #232 entry below.
+- **Timer-driven unit failures are pushed to Slack and Mailgun via notifier** ([#232](https://github.com/CannObserv/address-validator/issues/232)).
+  - `unit-failure@.service` keeps the `crit` journal line as its first step, then runs `infra/notify_unit_failure.py`.
+  - The dispatch carries the unit, its result, the host, and the failed run's last WARNING-or-higher journal lines.
+  - It is fail-open: if notifier is unreachable or rejects the call, or the config is incomplete, the journal line stays the only signal. With `NOTIFIER_URL` unset, nothing is dispatched.
+  - The host joined the `cannobserv.org.github` tailnet, and Tailscale now owns DNS.
+  - New dependency: `notifier-client`, pinned to git tag `v0.3.1`. Run `uv sync` in the main checkout before installing the unit.
+  - `infra/sweep_cache.py` and `infra/archive_audit.py` now log with real journal priority when run under systemd. `journalctl -p warning` sees their `ERROR`/`WARNING` lines, which were previously all filed at info.
 
 ### Changed
 

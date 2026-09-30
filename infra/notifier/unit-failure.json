@@ -1,0 +1,23 @@
+{
+  "name": "address-validator-unit-failure",
+  "title_template": "[address-validator] {{ unit }} failed on {{ host }}",
+  "body_template": "{{ unit }} failed on {{ host }}: {{ result }}.\n\nLast WARNING-or-higher journal lines from the failed run:\n{{ journal_tail }}\n\nInspect on the host: journalctl -u {{ unit }} -n 50",
+  "variables_schema": {
+    "type": "object",
+    "required": ["unit", "result", "host", "journal_tail"],
+    "properties": {
+      "unit": {"type": "string"},
+      "result": {"type": "string"},
+      "host": {"type": "string"},
+      "journal_tail": {"type": "string"}
+    },
+    "additionalProperties": true
+  },
+  "sample_variables": {
+    "unit": "audit-archive.service",
+    "result": "exit-code (exited=1)",
+    "host": "address-validator",
+    "journal_tail": "2026-09-29T04:00:03+0000 address-validator python[1234]: ERROR: GCS upload failed for audit_log/2026-08-30.parquet"
+  },
+  "tags": ["address-validator", "unit-failure"]
+}
