@@ -342,6 +342,39 @@ class TestUndeterminedCaching:
         assert inner.validate.await_count == 2
 
 
+class TestCanonicalConflictRefreshesAnswer:
+    """CR 1 (GH #250): the canonical key hashes address fields only, so a
+    re-validation whose answer changed but whose fields did not (USPS
+    undetermined ↔ not_confirmed both carry a bare ZIP5) must refresh the
+    stored answer — latest wins, as for query_patterns — not serve the old one."""
+
+    async def test_status_flip_on_same_canonical_key_is_refreshed(self, db: AsyncEngine) -> None:
+        undetermined = _make_undetermined_response()
+        not_confirmed = undetermined.model_copy(
+            update={
+                "validation": ValidationResult(
+                    status="not_confirmed", dpv_match_code="N", provider="usps"
+                ),
+                "warnings": ["provider-warning"],
+            }
+        )
+        inner = _make_provider(undetermined)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+        await _backdate_validated_at(db, days_ago=40)  # past the 30-day TTL
+        inner.validate.return_value = not_confirmed
+        await provider.validate(std)  # re-validation, same canonical key
+        cached = await provider.validate(std)  # served from cache
+
+        assert inner.validate.await_count == 2
+        assert await _count_rows(db, "validated_addresses") == 1
+        assert cached.validation.status == "not_confirmed"
+        assert cached.validation.dpv_match_code == "N"
+        assert cached.warnings == ["provider-warning"]
+
+
 class TestNotConfirmedCached:
     async def test_not_confirmed_is_stored_and_retrieved(self, db: AsyncEngine) -> None:
         response = _make_not_confirmed_response()
