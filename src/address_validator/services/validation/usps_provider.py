@@ -3,6 +3,7 @@
 import logging
 
 from address_validator.core.address_format import build_validated_string
+from address_validator.core.validation_status import UNDETERMINED
 from address_validator.models import (
     ComponentSet,
     StandardizedAddress,
@@ -50,12 +51,16 @@ class USPSProvider:
             secondary_address=(std.address_line_2 or "").strip() or None,
         )
 
-        # Map known DPV codes; any unrecognised value (a future USPS sentinel
-        # we don't yet handle) collapses to status="unavailable" and is dropped
-        # from the response — ValidationResult.dpv_match_code is restricted to
-        # the documented Literal set.
+        # Map known DPV codes. A 200 with no DPV code (USPS sends a blank
+        # DPVConfirmation when it makes no delivery-point determination) is an
+        # answer about the address, not an outage: status="undetermined", which
+        # ChainProvider treats as a soft miss and passes to the next provider
+        # (GH #250). Any unrecognised value (a future USPS sentinel) collapses
+        # the same way and is dropped from the response —
+        # ValidationResult.dpv_match_code is restricted to the documented
+        # Literal set.
         dpv = raw.get("dpv_match_code")
-        status = _DPV_TO_STATUS.get(dpv, "unavailable")
+        status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
         dpv_for_response = dpv if dpv in _DPV_TO_STATUS else None
 
         address_line_1 = raw.get("address_line_1") or ""

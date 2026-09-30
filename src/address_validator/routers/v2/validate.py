@@ -29,6 +29,8 @@ Warnings from the parse or standardize step are merged into the
 The active provider is controlled by the ``VALIDATION_PROVIDER`` env var
 (see :mod:`services.validation.config`).  When no provider is configured
 the endpoint returns HTTP 200 with ``validation.status='unavailable'``.
+A provider that answers without a determination yields ``'undetermined'``
+(GH #250).
 Non-US validation requires ``VALIDATION_PROVIDER=google`` or any chain
 containing a Google provider (e.g. ``usps,google``).
 
@@ -102,12 +104,18 @@ router = APIRouter(
         "- `S` — building confirmed, secondary address (apt/unit) missing\n"
         "- `D` — building confirmed, secondary address not recognised\n"
         "- `N` — address not found\n\n"
-        "**Non-US validation statuses** (no DPV codes):\n"
+        "**Google verdict statuses** (non-US, or US without a CASS DPV code):\n"
         "- `confirmed` — address complete and geocoded\n"
         "- `invalid` — geocodable but incomplete (e.g. missing street number)\n"
         "- `not_found` — address could not be geocoded or verified\n\n"
+        "`undetermined` — a provider answered but made no determination (e.g. USPS "
+        "returned no DPV code). It is an answer about the address, not an outage; a "
+        "provider chain tries the next provider first. If the response also carries "
+        "a warning that a fallback provider was unreachable, a later retry may "
+        "produce a determination.\n\n"
         "When no validation provider is configured, `validation.status` is "
-        "`unavailable` and all other result fields are `null`.\n\n"
+        "`unavailable` and all other result fields are `null`. Outages never "
+        "surface as a status: they return HTTP 429 or 5xx.\n\n"
         "When the validation provider rejects the input as malformed, "
         "`validation.status` is `error`.\n\n"
         "HTTP 429 is returned when all configured providers are currently "

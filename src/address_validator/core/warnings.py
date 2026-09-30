@@ -27,6 +27,10 @@ PROVIDER_INFERRED = "Provider inferred one or more address components not presen
 PROVIDER_REPLACED = "Provider replaced one or more address components"
 PROVIDER_UNCONFIRMED = "One or more address components are unconfirmed"
 PROVIDER_REJECTED_MALFORMED = "Validation provider rejected the address as malformed"
+PROVIDER_FALLBACK_UNREACHABLE = (
+    "Validation undetermined while a fallback provider was unreachable; "
+    "a later retry may produce a determination"
+)
 
 # --- Parameterised warnings (str.format templates) ---
 
@@ -54,4 +58,5 @@ CATALOGUE: tuple[str, ...] = (
     PROVIDER_REPLACED,
     PROVIDER_UNCONFIRMED,
     PROVIDER_REJECTED_MALFORMED,
+    PROVIDER_FALLBACK_UNREACHABLE,
 )

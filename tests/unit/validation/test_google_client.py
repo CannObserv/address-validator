@@ -1,5 +1,6 @@
 """Unit tests for GoogleClient — response mapping and request construction."""
 
+import copy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -638,7 +639,7 @@ class TestMapResponseUsHasStatusKey:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
         assert result["status"] == "not_confirmed"
 
-    def test_no_dpv_no_postal_address_has_unavailable_status(self) -> None:
+    def test_no_dpv_no_postal_address_has_undetermined_status(self) -> None:
         raw = {
             "result": {
                 "verdict": {},
@@ -647,7 +648,32 @@ class TestMapResponseUsHasStatusKey:
             }
         }
         result = GoogleClient._map_response(raw)
-        assert result["status"] == "unavailable"
+        assert result["status"] == "undetermined"
+
+    def test_unknown_dpv_code_has_undetermined_status(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {},
+                "geocode": {},
+                "uspsData": {"standardizedAddress": {}, "dpvConfirmation": "X"},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+        # Unknown codes are dropped: ValidationResult.dpv_match_code is a Literal.
+        assert result["dpv_match_code"] is None
+
+    def test_blank_dpv_code_treated_as_absent(self) -> None:
+        raw = {
+            "result": {
+                "verdict": {},
+                "geocode": {},
+                "uspsData": {"standardizedAddress": {}, "dpvConfirmation": " "},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+        assert result["dpv_match_code"] is None
 
 
 # -- US postalAddress fallback (GH-114) ------------------------------------
@@ -801,3 +827,30 @@ class TestMapResponseNonCassFoldedUnit:
         )
         assert result["address_line_1"] == "Lynnwood City Hall"
         assert result["address_line_2"] == "44th Ave W"
+
+
+class TestBlankDpvTakesVerdictPath:
+    """CR 14 (GH #250): a blank dpvConfirmation is treated as absent, so a response
+    that carries a postalAddress is read on the non-CASS verdict path — not the
+    CASS branch (which used to yield ``unavailable`` from standardizedAddress)."""
+
+    def test_blank_dpv_with_postal_address_uses_verdict(self) -> None:
+        raw = copy.deepcopy(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        raw["result"]["uspsData"] = {
+            "dpvConfirmation": " ",
+            "standardizedAddress": {
+                "firstAddressLine": "CASS LINE MUST NOT BE USED",
+                "city": "NOT LYNNWOOD",
+                "state": "XX",
+                "zipCode": "00000",
+            },
+        }
+
+        result = GoogleClient._map_response(raw)
+
+        # PREMISE granularity without addressComplete → invalid (_verdict_to_status)
+        assert result["status"] == "invalid"
+        assert result["dpv_match_code"] is None
+        assert result["city"] == "Lynnwood"
+        assert result["region"] == "WA"
+        assert result["postal_code"] == "98036-5635"

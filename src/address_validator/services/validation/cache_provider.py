@@ -26,10 +26,15 @@ requests to surface raw input in the admin audit view.
 
 Store algorithm (after successful inner provider call)
 ------------------------------------------------------
-1. Skip entirely when ``result.validation.status == "unavailable"``
+1. Skip entirely when ``result.validation.status == "unavailable"`` (no provider
+   configured), or when an ``undetermined`` result carries
+   ``PROVIDER_FALLBACK_UNREACHABLE`` — a fallback provider failed transiently, so
+   a retry may still determine the address (GH #250)
 2. Hash the provider-returned address fields → ``canonical_key``
-3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: update last_seen_at,
-   validated_at, and pipeline_version — the stamp refresh rescues stale rows)
+3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: refresh the provider's
+   answer — status, dpv, provider, validated, components, lat/long, warnings — plus
+   last_seen_at, validated_at, and pipeline_version; the stamp refresh rescues
+   stale rows, the answer refresh keeps a changed answer from being masked)
 4. INSERT/upsert into ``query_patterns`` ON CONFLICT: repoint ``canonical_key`` to the
    freshly validated address (latest-wins) and back-fill ``raw_input`` when NULL.
    A ``query_patterns`` row is only ever written here, on a successful validation, and
@@ -50,7 +55,9 @@ from sqlalchemy import RowMapping, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.pipeline_version import get_pipeline_version
+from address_validator.core.validation_status import UNAVAILABLE
 from address_validator.db.tables import query_patterns, validated_addresses
 from address_validator.models import (
     ComponentSet,
@@ -288,7 +295,19 @@ async def _store(
                 index_elements=[validated_addresses.c.canonical_key],
                 # pipeline_version refreshed on conflict too: a re-validation that
                 # reproduces the same canonical output rescues a stale-stamped row.
+                # The provider's answer is refreshed as well (latest wins, as for
+                # query_patterns below): canonical_key hashes address fields only,
+                # so an answer can change while its fields do not — e.g. USPS
+                # undetermined ↔ not_confirmed, both with a bare ZIP5 (GH #250).
                 set_={
+                    "provider": result.validation.provider,
+                    "status": result.validation.status,
+                    "dpv_match_code": result.validation.dpv_match_code,
+                    "validated": result.validated,
+                    "components_json": components_json,
+                    "latitude": result.latitude,
+                    "longitude": result.longitude,
+                    "warnings_json": warnings_json,
                     "last_seen_at": now,
                     "validated_at": now,
                     "pipeline_version": pipeline_version,
@@ -339,7 +358,8 @@ class CachingProvider:
 
     Intercepts calls to ``validate()``, checks the PostgreSQL validation cache,
     and falls through to ``inner`` only on a miss.  Results are stored after
-    every successful provider call (``status != "unavailable"``).
+    every successful provider call (``status != "unavailable"``), except an
+    ``undetermined`` result whose fallback provider was unreachable.
 
     Cache errors (connection failures, query errors) are handled with a
     fail-open policy: on a lookup error the request is forwarded to the inner
@@ -421,10 +441,13 @@ class CachingProvider:
             result.validation.status,
         )
 
-        if result.validation.status == "unavailable":
+        if result.validation.status == UNAVAILABLE or (
+            warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in result.warnings
+        ):
             logger.debug(
-                "cache_store: skip provider=%s status=unavailable",
+                "cache_store: skip provider=%s status=%s",
                 result.validation.provider,
+                result.validation.status,
             )
             return result
 

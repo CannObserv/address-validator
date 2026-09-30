@@ -30,7 +30,9 @@
 | `S` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
 | `D` | `confirmed_bad_secondary` | Building confirmed; unit not recognised |
 | `N` | `not_confirmed` | Address not found in USPS database |
-| (none) | `unavailable` | Provider not configured or unreachable |
+| (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250) |
+
+`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429 (or 5xx for transport failures), not as a status.
 
 ## Configuring providers
 
@@ -44,7 +46,7 @@ VALIDATION_PROVIDER=usps
 VALIDATION_PROVIDER=usps,google
 ```
 
-When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header.
+When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header. The chain also moves on after a 400 or an `undetermined` answer; see [Fallback chain internals](#fallback-chain-internals).
 
 ## USPS provider
 
@@ -124,7 +126,7 @@ quota (default 160/day) becomes the binding limit — watch for
 - Populates `latitude`/`longitude`. Surfaces three verdict flags as warnings.
 - Secondary unit (GH #126/#127): the unit line is folded into the request's single `addressLines[0]` (e.g. `"9 BENNY DR LOT B"`). On the response side:
   - **CASS-confirmed** (`dpvConfirmation` present) → unit comes back in `uspsData.standardizedAddress.secondAddressLine`.
-  - **Non-CASS fallback** (`dpvConfirmation` absent) and **non-US** (`_map_response_international`) → Google echoes street + unit folded into one `postalAddress.addressLines` element. Both paths split the folded unit back into `address_line_2` (via `_split_folded_unit`) by matching the unit we sent (case-insensitive suffix; echoed casing preserved). If Google reformats the unit so the suffix no longer matches, the unit stays in `address_line_1` (no loss — it also survives in `validated`).
+  - **Non-CASS fallback** (`dpvConfirmation` absent or blank) and **non-US** (`_map_response_international`) → Google echoes street + unit folded into one `postalAddress.addressLines` element. Both paths split the folded unit back into `address_line_2` (via `_split_folded_unit`) by matching the unit we sent (case-insensitive suffix; echoed casing preserved). If Google reformats the unit so the suffix no longer matches, the unit stays in `address_line_1` (no loss — it also survives in `validated`).
 - `GoogleProvider` is a module-level singleton in `factory.py` — reset in tests.
 
 ## Rate limit and quota env vars
@@ -204,6 +206,28 @@ logic would allow. The task is cancelled on application shutdown.
 provider. It also catches `ProviderBadRequestError` (upstream HTTP 400, e.g. USPS or Google
 rejecting a malformed input) and tries the next provider; only if every provider in the chain
 raises `ProviderBadRequestError` does the route handler return `validation.status="error"`.
+
+An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
+it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
+the next provider, and the first determined answer wins. If nothing better comes back, the first
+held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
+transiently along the way (including a network error once an answer is held), the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
+`CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the
+`undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
+call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
+
+**Adding a fallback provider to a single-provider config** (e.g. `usps` → `usps,google`): with no
+chain, `undetermined` answers are cached, and they keep being served for up to
+`VALIDATION_CACHE_TTL_DAYS` without the new fallback ever being asked. To let the fallback see
+them right away, purge those rows (pointers first; the FK has no cascade):
+
+```sql
+BEGIN;
+DELETE FROM query_patterns WHERE canonical_key IN
+  (SELECT canonical_key FROM validated_addresses WHERE status = 'undetermined');
+DELETE FROM validated_addresses WHERE status = 'undetermined';
+COMMIT;
+```
 
 ## Empty-street raw fallback
 

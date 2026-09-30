@@ -30,6 +30,7 @@ VS_META: dict[str, dict[str, str]] = {
     "not_confirmed": {"symbol": "\u2717", "label": "Not Confirmed", "color": "red"},
     "not_found": {"symbol": "\u2717", "label": "Not Found", "color": "gray"},
     "invalid": {"symbol": "\u2717", "label": "Invalid", "color": "red"},
+    "undetermined": {"symbol": "?", "label": "Undetermined", "color": "gray"},
     "unavailable": {"symbol": "?", "label": "Unavailable", "color": "gray"},
     "error": {"symbol": "\u2717", "label": "Error", "color": "red"},
 }
