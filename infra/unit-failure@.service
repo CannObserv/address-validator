@@ -1,6 +1,7 @@
 [Unit]
 Description=Report failure of %i to the journal and notifier
-# Target of OnFailure=unit-failure@%n.service on every timer-driven unit (#228).
+# Target of OnFailure=unit-failure@%n.service on every timer-driven unit (#228)
+# and every restarting one, which fires it once per crashloop (#248).
 # 1. One crit line tagged unit-failure: `journalctl -t unit-failure`. Always first,
 #    and needs no network, venv or config — it is the fallback.
 # 2. A notifier dispatch (#232). The leading `-` makes systemd ignore its exit

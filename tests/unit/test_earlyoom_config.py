@@ -161,7 +161,8 @@ def test_memory_alone_decides() -> None:
 def test_what_restarts_on_its_own_is_preferred(comm: str) -> None:
     assert re.search(_flag("--prefer"), comm), (
         f"--prefer does not match {comm!r}. libpostal is what HOST-MEMORY.md loses "
-        "first, and SocratiCode's qdrant and ollama restart on their own. The match is "
+        "first (it restarts on its own up to its #248 start limit), and SocratiCode's "
+        "qdrant and ollama restart on their own. The match is "
         "against the 15-char comm, so never $-anchor a full binary name"
     )
 

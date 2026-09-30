@@ -183,6 +183,10 @@ If the service is crashlooping after a deploy, run
 `journalctl -u address-validator -n 50` and read the **whole** traceback, not
 just the final `ValueError`.
 
+A crashloop stops after 10 starts in 600s (manual restarts count): the unit
+stays `failed` and alerts once ([below](#scheduled-timers), #248). After fixing
+the cause: `sudo systemctl reset-failed address-validator && sudo systemctl start address-validator`.
+
 ### Health endpoint
 
 `GET /api/v2/health` is open (no `X-API-Key`) and is the readiness check for
@@ -307,7 +311,24 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
 oneshot otherwise only sets `failed` state, which is how #228 went unnoticed.
 A new timer's service must carry the hook — `tests/unit/test_unit_failure_hooks.py`
-enforces it. The `infra/unit-failure@.service` template runs two steps:
+enforces it.
+
+The restarting services carry it too (#248), with `RestartMode=direct` and an
+explicit, reachable start limit; the test's docstring says why each is needed. A
+crashloop alerts **once**, when the limit trips, then **stays down** until
+`sudo systemctl reset-failed <unit> && sudo systemctl start <unit>`. Manual
+restarts count toward the burst.
+
+| Unit | Limit | Trips after |
+|---|---|---|
+| `address-validator` | 10 starts / 600s | 10 × (3s + startup) |
+| `libpostal` | 5 starts / 600s | 5 × (5s + container start and model load) |
+
+A hung-but-running process, or the VM itself being down, alerts nothing. These
+two units' alerts also carry no journal tail: every line they write is priority
+6, so read `journalctl -u <unit> -n 50` (#252).
+
+The `infra/unit-failure@.service` template runs two steps:
 
 1. **Journal line (the fallback).** One `crit` line tagged `unit-failure`
    naming the failed unit. It runs first and needs no network, venv or config.
@@ -367,6 +388,10 @@ sudo systemd-run --unit=av-smoke -p OnFailure=unit-failure@av-smoke.service.serv
 journalctl -u unit-failure@av-smoke.service.service -n 5   # "notifier dispatch … succeeded"
 sudo systemctl reset-failed av-smoke.service
 ```
+
+For a restarting unit, add its settings to the same command
+(`-p Restart=on-failure -p RestartSec=3 -p RestartMode=direct -p StartLimitIntervalSec=600 -p StartLimitBurst=10`):
+expect `NRestarts=10`, then `failed`, and **one** `unit-failure` line, about 35s in.
 
 The quick check, `sudo systemctl start unit-failure@smoke-test.service`, carries
 no `MONITOR_*` variables. It reports result `manual` and uses a fresh

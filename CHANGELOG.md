@@ -39,6 +39,11 @@ and the project uses semantic versioning.
   - New dependency: `notifier-client`, pinned to git tag `v0.3.1`. Run `uv sync` in the main checkout before installing the unit.
   - `infra/sweep_cache.py` and `infra/archive_audit.py` now log with real journal priority when run under systemd. `journalctl -p warning` sees their `ERROR`/`WARNING` lines, which were previously all filed at info.
 
+- **Crashloops of the API and the libpostal sidecar alert once** ([#248](https://github.com/CannObserv/address-validator/issues/248)).
+  - `address-validator.service` and `libpostal.service` carry `OnFailure=unit-failure@%n.service`, `RestartMode=direct`, and explicit start limits (10 / 600s and 5 / 600s).
+  - **Behaviour change:** a crashloop now stops at the limit, alerts through notifier, and **stays down** until `systemctl reset-failed` + `start`. Previously both restarted forever, silently. Manual restarts count toward the limit.
+  - `RestartMode=direct` is what keeps it to one alert. Under the default, every crash fires `OnFailure=`, one dispatch per restart.
+
 ### Changed
 
 - **Logs are now structured JSON** ([#185](https://github.com/CannObserv/address-validator/issues/185)). Every line on stdout (and therefore in journald) is a JSON object with `{timestamp, level, logger, message, request_id}`, replacing the previous `LEVEL:name:message` text format — which carried no timestamp and silently dropped the `request_id` ULID. uvicorn's own `uvicorn`/`uvicorn.access`/`uvicorn.error` loggers share the same formatter via `--log-config src/address_validator/core/log_config.json`, so access lines are JSON too and are correlated by `request_id`. Operators grepping journald for the old plain-text shape must update; see [`docs/LOGGING.md`](docs/LOGGING.md).
