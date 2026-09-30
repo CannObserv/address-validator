@@ -46,7 +46,7 @@ VALIDATION_PROVIDER=usps
 VALIDATION_PROVIDER=usps,google
 ```
 
-When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header.
+When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header. The chain also moves on after a 400 or an `undetermined` answer; see [Fallback chain internals](#fallback-chain-internals).
 
 ## USPS provider
 
