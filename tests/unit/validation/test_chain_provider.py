@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
@@ -461,3 +462,35 @@ class TestChainUndetermined:
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 
         assert result.warnings == ["existing", warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+
+class TestChainTransportErrors:
+    """CR 9 (GH #250): a network failure from a fallback provider must not turn a
+    held 200 answer into a 500; with nothing held it still propagates."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exc", [httpx.ConnectError("boom"), httpx.ReadTimeout("slow")])
+    async def test_fallback_transport_error_returns_held_with_warning(
+        self, exc: Exception, std_address: object
+    ) -> None:
+        chain = ChainProvider(
+            providers=[_mock_provider(_USPS_UNDETERMINED), _raising_provider(exc)]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+    @pytest.mark.asyncio
+    async def test_transport_error_with_nothing_held_propagates(self, std_address: object) -> None:
+        chain = ChainProvider(
+            providers=[
+                _raising_provider(httpx.ConnectError("boom")),
+                _mock_provider(_GOOGLE_CONFIRMED),
+            ]
+        )
+
+        with pytest.raises(httpx.ConnectError):
+            await chain.validate(std_address)  # type: ignore[arg-type]

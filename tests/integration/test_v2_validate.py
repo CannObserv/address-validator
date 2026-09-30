@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
@@ -153,6 +154,24 @@ class TestV2ValidateUndetermined:
             "dpv_match_code": None,
             "provider": "usps",
         }
+        assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
+
+    def test_fallback_network_error_returns_200_not_500(self, client) -> None:
+        """CR 9: a Google connect error after a USPS answer must not become a 500."""
+        chain = ChainProvider(
+            providers=[
+                self._stub(return_value=self._USPS_UNDETERMINED),
+                self._stub(side_effect=httpx.ConnectError("boom")),
+            ]
+        )
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "301 E Harbor Ave, Westport, WA 98595"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"]["status"] == "undetermined"
         assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
 
     def test_fallback_determines_address(self, client) -> None:

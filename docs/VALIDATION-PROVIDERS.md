@@ -211,7 +211,7 @@ An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirma
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
 the next provider, and the first determined answer wins. If nothing better comes back, the first
 held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
-transiently along the way, the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
+transiently along the way (including a network error once an answer is held), the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
 `CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the
 `undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
 call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
