@@ -337,7 +337,7 @@ from the tail (#246).
 |---|---|
 | `NOTIFIER_URL` | `http://notifier:9000` (tailnet; unset = journal only) |
 | `NOTIFIER_API_KEY` | `address-validator` tenant key, `nk_…` — pasted by the operator, never through an agent |
-| `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | ULID printed by `publish_notifier_template.py` |
+| `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | `01M3R970XBXWBKD31Y4EGPMAQE` (printed by `publish_notifier_template.py`) |
 | `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | `01M3QRP1BCJW3KFB04FX4V8EQ8,01M3QRP1BDAXK27G60EJQEVEZD` (`address-validator-slack`, `-mailgun`; tenant `01M3QQMHYVVQWAS2SZ7NE66D2N`, CannObserv/notifier#95) |
 
 **Network.** Notifier is reachable only over the `cannobserv.org.github`
