@@ -6,9 +6,11 @@ one test that drives the real SDK points it at a closed local port.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -254,6 +256,27 @@ def test_main_fails_open(monkeypatch, no_journal, caplog, exc):
     with caplog.at_level(logging.WARNING, logger="notify_unit_failure"):
         assert nuf.main([UNIT], env={**CONFIG_ENV, **MONITOR_ENV}) == 0
     assert "the journal line stands" in caplog.text
+
+
+def test_main_stalled_notifier_is_bounded(monkeypatch, no_journal, caplog):
+    """A stall inside the run budget becomes a caught TimeoutError, not a systemd kill."""
+
+    class Stalling(FakeClient):
+        async def health(self):
+            await asyncio.sleep(5)
+
+    monkeypatch.setattr(nuf, "RUN_BUDGET_SECONDS", 0.05)
+    monkeypatch.setattr(nuf, "NotifierClient", Stalling)
+    with caplog.at_level(logging.WARNING, logger="notify_unit_failure"):
+        assert nuf.main([UNIT], env={**CONFIG_ENV, **MONITOR_ENV}) == 0
+    assert "TimeoutError" in caplog.text
+
+
+def test_run_budget_fits_inside_unit_timeout():
+    """journalctl (10s) + the run budget must land before systemd's TimeoutStartSec=."""
+    unit = (Path(nuf.__file__).parent / "unit-failure@.service").read_text()
+    (line,) = [ln for ln in unit.splitlines() if ln.startswith("TimeoutStartSec=")]
+    assert int(line.split("=")[1]) > 10 + nuf.RUN_BUDGET_SECONDS
 
 
 def test_main_partial_config_fails_open(caplog):

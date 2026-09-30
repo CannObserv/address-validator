@@ -30,23 +30,28 @@ import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from journal_logging import configure_logging
 from notifier_client import NotifierClient, NotifierError, RetryConfig
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Coroutine, Mapping
 
 logger = logging.getLogger("notify_unit_failure")
 
 EXPECTED_ENVIRONMENT = "production"
 TAIL_LINES = 10
 TAIL_LINE_CHARS = 500
-REQUEST_TIMEOUT_SECONDS = 10.0
-# Two attempts at 10s each keeps health + dispatch well inside the unit's TimeoutStartSec=.
+# Notifier delivers to every channel before it answers the dispatch, so the read
+# covers Slack + Mailgun round trips. A read timeout on a delivered dispatch would
+# log a false failure and retry into the in-flight request.
+REQUEST_TIMEOUT_SECONDS = 30.0
 RETRY = RetryConfig(max_attempts=2)
+# httpx timeouts are per phase, so attempts alone do not bound a run. This does,
+# with the 10s journalctl call still inside the unit's TimeoutStartSec=90.
+RUN_BUDGET_SECONDS = 60
 JOURNALCTL = "/usr/bin/journalctl"
 
 
@@ -204,6 +209,11 @@ async def notify(
     return status
 
 
+async def _within_budget(coro: Coroutine[Any, Any, str | None]) -> str | None:
+    async with asyncio.timeout(RUN_BUDGET_SECONDS):
+        return await coro
+
+
 def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """Always returns 0: a failing handler would itself need a failure handler."""
     configure_logging()
@@ -219,8 +229,9 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
             logger.info("NOTIFIER_URL unset; %s reported to the journal only", unit)
             return 0
         failure = failure_from_env(unit, env)
-        asyncio.run(notify(config, failure, journal_tail(failure), host=socket.gethostname()))
-    except (ConfigError, NotifierError, httpx.HTTPError) as exc:
+        tail = journal_tail(failure)
+        asyncio.run(_within_budget(notify(config, failure, tail, host=socket.gethostname())))
+    except (ConfigError, NotifierError, httpx.HTTPError, TimeoutError) as exc:
         logger.warning(
             "notifier dispatch for %s failed (%s: %s); the journal line stands",
             unit,
