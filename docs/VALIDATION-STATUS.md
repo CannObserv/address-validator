@@ -45,9 +45,10 @@ USPS spec ([`usps-addresses-v3r2_4.yaml`](usps-addresses-v3r2_4.yaml),
 `DPVConfirmation`). Both providers were affected; Google's
 `uspsData.dpvConfirmation` uses the same codes.
 
-- **Cutover:** _pending deploy_ — the UTC time the production service first
-  started with migration 022 (`systemctl show address-validator -p
-  ActiveEnterTimestamp` right after the restart).
+- **Cutover: 2026-10-01 14:59:38 UTC.** The old process stopped serving at
+  14:59:35; migration 022 ran at 14:59:37 and the new process served from
+  14:59:38. No request was answered in between, so `audit_log` rows before
+  14:59:35 carry the old labels and rows from 14:59:38 on carry the new ones.
 - **Cache:** migration 022 relabelled every cached `D`/`S` row from its stored
   `dpv_match_code`. Cache hits are correct from the cutover on.
 - **`audit_log` was not rewritten.** It records what clients were served, and
