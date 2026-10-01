@@ -100,7 +100,9 @@ class ProviderAtCapacityError(Exception):
     provider:
         Short name of the provider (e.g. ``"usps"``, ``"google"``).
     retry_after_seconds:
-        Hint for how long to wait before retrying.  Defaults to ``0.0``.
+        Seconds until the guard would admit the request — the wait it rejected,
+        or the time until the exhausted window refills or resets (GH #270).
+        Defaults to ``0.0`` (synthetic errors raised in tests).
     """
 
     def __init__(self, provider: str, retry_after_seconds: float = 0.0) -> None:
