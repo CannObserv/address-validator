@@ -16,6 +16,9 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.services.validation.google_client import GoogleClient
 
+# An httpx error message can embed the request URL, and with it the address.
+_ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
+
 # Minimal realistic Google Address Validation API response for a confirmed address.
 GOOGLE_RESPONSE_Y = {
     "result": {
@@ -360,9 +363,9 @@ class TestGoogleClientValidateAddress:
     @pytest.mark.parametrize(
         "exc",
         [
-            httpx.ConnectError("refused"),
-            httpx.ReadTimeout("slow"),
-            httpx.DecodingError("bad gzip"),
+            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
         ],
     )
     async def test_request_error_raises_transient_error(
@@ -379,7 +382,8 @@ class TestGoogleClientValidateAddress:
         assert exc_info.value.__cause__ is exc
         messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
         assert any(type(exc).__name__ in m for m in messages)
-        assert not any("Main St" in m for m in messages)
+        # The message is never logged: it can embed the request URL (CR 3).
+        assert "Main St" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_credential_refresh_transport_error_raises_transient_error(

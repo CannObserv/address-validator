@@ -22,6 +22,9 @@ from address_validator.services.validation.usps_client import (
     _summarise_shape,
 )
 
+# An httpx error message can embed the request URL, and with it the address.
+_ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
+
 TOKEN_RESPONSE = {
     "access_token": "tok-abc",
     "token_type": "Bearer",
@@ -327,9 +330,9 @@ class TestUSPSClient:
     @pytest.mark.parametrize(
         "exc",
         [
-            httpx.ConnectError("refused"),
-            httpx.ReadTimeout("slow"),
-            httpx.DecodingError("bad gzip"),
+            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
         ],
     )
     async def test_request_error_raises_transient_error(
@@ -347,7 +350,8 @@ class TestUSPSClient:
         assert exc_info.value.__cause__ is exc
         messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
         assert any(type(exc).__name__ in m for m in messages)
-        assert not any("Main St" in m for m in messages)
+        # The message is never logged: it can embed the request URL (CR 3).
+        assert "Main St" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_token_endpoint_transport_error_raises_transient_error(
