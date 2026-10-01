@@ -76,19 +76,21 @@ class TestUSPSProvider:
         assert result.validation.status == "confirmed"
         assert result.validation.dpv_match_code == "Y"
 
+    # USPS spec (docs/usps-addresses-v3r2_4.yaml DPVConfirmation): D = secondary
+    # missing, S = secondary present but not confirmed (GH #253).
     @pytest.mark.asyncio
-    async def test_dpv_s_sets_confirmed_missing_secondary(
+    async def test_dpv_d_sets_confirmed_missing_secondary(
         self, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
-        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "S"}
+        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "D"}
         result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed_missing_secondary"
 
     @pytest.mark.asyncio
-    async def test_dpv_d_sets_confirmed_bad_secondary(
+    async def test_dpv_s_sets_confirmed_bad_secondary(
         self, provider: USPSProvider, mock_client: AsyncMock
     ) -> None:
-        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "D"}
+        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": "S"}
         result = await provider.validate(_make_std(address_line_1="123 MAIN ST APT 999"))
         assert result.validation.status == "confirmed_bad_secondary"
 
