@@ -174,8 +174,9 @@ class ValidationResult(BaseModel):
     ``status`` is the primary machine-readable result:
 
     * ``confirmed``                   — DPV code Y: fully confirmed delivery point.
-    * ``confirmed_missing_secondary`` — DPV code S: building confirmed, unit missing.
-    * ``confirmed_bad_secondary``     — DPV code D: building confirmed, unit unrecognised.
+    * ``confirmed_missing_secondary`` — DPV code D: building confirmed, unit missing.
+    * ``confirmed_bad_secondary``     — DPV code S: building confirmed, unit supplied
+      but not confirmed.
     * ``not_confirmed``               — DPV code N: address not found in USPS database.
     * ``not_found``                   — Google verdict (non-US, or US without a CASS DPV):
       address could not be geocoded or verified.
@@ -205,8 +206,9 @@ class ValidationResult(BaseModel):
     ]
     dpv_match_code: Literal["Y", "S", "D", "N"] | None = Field(
         default=None,
-        description="USPS DPV match code. Y=confirmed, S=missing secondary, "
-        "D=bad secondary, N=not found. None when the provider returned no DPV code.",
+        description="USPS DPV match code. Y=confirmed, D=secondary missing, "
+        "S=secondary supplied but not confirmed, N=not found. None when the provider "
+        "returned no DPV code.",
     )
     provider: str | None = Field(
         default=None,

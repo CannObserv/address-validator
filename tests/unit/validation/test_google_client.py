@@ -118,6 +118,22 @@ class TestGoogleClientMapResponse:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
         assert result["dpv_match_code"] == "N"
 
+    @pytest.mark.parametrize(
+        ("dpv", "status"),
+        [
+            # Google's uspsData.dpvConfirmation uses the USPS CASS codes: D =
+            # secondary missing, S = secondary present but not confirmed (GH #253).
+            ("D", "confirmed_missing_secondary"),
+            ("S", "confirmed_bad_secondary"),
+        ],
+    )
+    def test_secondary_dpv_maps_to_status(self, dpv: str, status: str) -> None:
+        raw = copy.deepcopy(GOOGLE_RESPONSE_WITH_SECONDARY)
+        raw["result"]["uspsData"]["dpvConfirmation"] = dpv
+        result = GoogleClient._map_response(raw)
+        assert result["dpv_match_code"] == dpv
+        assert result["status"] == status
+
     def test_address_line_1_extracted(self) -> None:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_Y)
         assert result["address_line_1"] == "123 MAIN ST"

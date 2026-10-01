@@ -27,8 +27,8 @@
 | DPV code | `validation.status` | Meaning |
 |---|---|---|
 | `Y` | `confirmed` | Fully confirmed delivery point |
-| `S` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
-| `D` | `confirmed_bad_secondary` | Building confirmed; unit not recognised |
+| `D` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
+| `S` | `confirmed_bad_secondary` | Building confirmed; unit supplied but not confirmed |
 | `N` | `not_confirmed` | Address not found in USPS database |
 | (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250) |
 

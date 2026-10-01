@@ -505,8 +505,8 @@ class TestChainHeldPrecedence:
         ("status", "dpv"),
         [
             ("confirmed", "Y"),
-            ("confirmed_missing_secondary", "S"),
-            ("confirmed_bad_secondary", "D"),
+            ("confirmed_missing_secondary", "D"),
+            ("confirmed_bad_secondary", "S"),
             ("not_confirmed", "N"),
         ],
     )

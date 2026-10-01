@@ -96,24 +96,24 @@ class TestGoogleProvider:
         assert result.validation.dpv_match_code == "Y"
 
     @pytest.mark.asyncio
-    async def test_dpv_s_sets_confirmed_missing_secondary(
+    async def test_dpv_d_sets_confirmed_missing_secondary(
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = {
             **CLIENT_RESULT_Y,
-            "dpv_match_code": "S",
+            "dpv_match_code": "D",
             "status": "confirmed_missing_secondary",
         }
         result = await provider.validate(_make_std())
         assert result.validation.status == "confirmed_missing_secondary"
 
     @pytest.mark.asyncio
-    async def test_dpv_d_sets_confirmed_bad_secondary(
+    async def test_dpv_s_sets_confirmed_bad_secondary(
         self, provider: GoogleProvider, mock_client: AsyncMock
     ) -> None:
         mock_client.validate_address.return_value = {
             **CLIENT_RESULT_Y,
-            "dpv_match_code": "D",
+            "dpv_match_code": "S",
             "status": "confirmed_bad_secondary",
         }
         result = await provider.validate(_make_std(address_line_1="123 MAIN ST APT 999"))
