@@ -281,9 +281,9 @@ class GoogleClient:
         lng = location.get("longitude")
 
         if usps.get("errorMessage"):
-            # Documented as "USPS processing is suspended because of the
-            # detection of artificially created addresses"; there is then no
-            # DPV code. The text is undocumented free form, so it is not logged.
+            # Documented as populated "when USPS processing is suspended because
+            # of the detection of artificially created addresses". The text is
+            # undocumented free form, so it is not logged.
             cass_processed = usps.get("cassProcessed")
             if not (cass_processed is None or isinstance(cass_processed, bool)):
                 # Documented as a bool; anything else is shown by type only.
