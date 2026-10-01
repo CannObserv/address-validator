@@ -1,6 +1,8 @@
 """Integration tests for POST /api/v2/validate."""
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -169,6 +171,16 @@ class TestV2ValidateQuotaExhausted:
     """GH #270: when every provider's local QuotaGuard refuses, the 429 carries the
     wait the guards computed, not Retry-After: 0."""
 
+    @pytest.fixture(autouse=True)
+    def _pinned_clock(self):
+        """21:00 PT: Google's daily window resets in exactly 3 h. Covers guard
+        construction too, or should_reset() would refill the drained window."""
+        now = datetime(2026, 10, 1, 21, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+        with patch(
+            "address_validator.services.validation._rate_limit._now_in_tz", return_value=now
+        ):
+            yield
+
     @staticmethod
     def _drained_usps() -> USPSProvider:
         """USPS-shaped guard: soft daily window drained, one token every 10 s."""
@@ -220,7 +232,7 @@ class TestV2ValidateQuotaExhausted:
         chain = ChainProvider(providers=[self._drained_google()])
         response = self._post(client, chain)
         assert response.status_code == 429, response.text
-        assert int(response.headers["Retry-After"]) > 10
+        assert response.headers["Retry-After"] == "10800"
 
     def test_both_drained_retry_after_is_soonest(self, client) -> None:
         chain = ChainProvider(providers=[self._drained_usps(), self._drained_google()])
