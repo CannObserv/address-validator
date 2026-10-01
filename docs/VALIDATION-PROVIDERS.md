@@ -30,7 +30,9 @@
 | `D` | `confirmed_missing_secondary` | Building confirmed; unit/apt missing |
 | `S` | `confirmed_bad_secondary` | Building confirmed; unit supplied but not confirmed |
 | `N` | `not_confirmed` | Address not found in USPS database |
-| (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250) |
+| (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250). An unknown code is dropped from the response and logs a WARNING once per distinct code (GH #254) |
+
+Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`confirmed`/`invalid`/`not_found`, see [Google provider](#google-provider)) and is `undetermined` only when there is no `postalAddress` or granularity either. An unknown Google code is `undetermined`, as for USPS.
 
 `unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429 (or 5xx for transport failures), not as a status.
 

@@ -50,9 +50,12 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | USPS 400 Bad Request | `WARNING` | `services.validation.usps_client` | `request_id` |
 | USPS 429 received | `WARNING` | `services.validation.usps_client` | `request_id` |
 | Recon: novel USPS response shape (issue #122) | `INFO` | `services.validation.usps_client` | `dpv=`, `extras=`, `request_id` |
+| USPS unrecognised `additionalInfo.DPVConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.usps_provider` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
 | Google API call start | `DEBUG` | `services.validation.google_provider` | `country=`, `request_id` |
 | Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
+| Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.google_client` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
+| Google `uspsData.errorMessage` present — USPS processing suspended (once per `cassProcessed` value per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
 | US input: fallback provider answered without a DPV code after an `undetermined` answer was held (answer kept, GH #258) | `INFO` | `services.validation.chain_provider` | provider class name, discarded status, `request_id` |
@@ -98,5 +101,10 @@ A side benefit: because these two are pinned, `LOG_LEVEL=DEBUG` is effectively a
 USPS and Google are unaffected — they `POST`, so the address is in the request body and `httpx` logs only method and URL.
 
 Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
+
+Raw values from a validation response body reach a log line in only these places, each with a bound (GH #254):
+
+- **DPV codes**, in the unrecognised-DPV warnings and as recon `dpv=`. Logged verbatim only when code-sized (≤ 2 characters, `_DPV_CODE_MAX_LOG_LEN` in `services/validation/_helpers.py`). A longer value could be address text: the warning logs only its length, recon shows `<long>`, and all long values share one dedup signature.
+- **Google `cassProcessed`**, on the `errorMessage` warning. It is logged only as a bool (or absent); any other value is shown by its type name. The text of `uspsData.errorMessage` itself is never logged.
 
 New modules: one `getLogger(__name__)` per module; `caplog` assertions in corresponding unit tests.

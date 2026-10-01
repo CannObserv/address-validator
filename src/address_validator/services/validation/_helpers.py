@@ -1,5 +1,6 @@
-"""DPV status mapping shared across validation providers."""
+"""DPV status mapping and unknown-value warnings shared across validation providers."""
 
+import logging
 from typing import Literal
 
 from address_validator.core.validation_status import (
@@ -34,3 +35,61 @@ _DPV_TO_STATUS: dict[
     "S": CONFIRMED_BAD_SECONDARY,
     "N": NOT_CONFIRMED,
 }
+
+# Longest unrecognised DPV value logged verbatim (GH #254). A DPV code is one
+# character, so a new sentinel fits; anything longer could be address text.
+_DPV_CODE_MAX_LOG_LEN = 2
+
+# (logger name, signature) pairs already warned about. Spans the process
+# lifetime so each is logged at most once; reset via _reset_warn_once() in tests.
+_warned: set[tuple[str, str]] = set()
+
+
+def _warn_once(logger: logging.Logger, signature: str, msg: str, *args: object) -> None:
+    """Log *msg* at WARNING the first time *signature* is seen on *logger* (GH #254).
+
+    #250 made an unexpected provider value silent: it no longer fails response
+    validation, so nothing surfaces it. One line per distinct signature per
+    process flags a contract change without flooding.
+    """
+    key = (logger.name, signature)
+    if key in _warned:
+        return
+    _warned.add(key)
+    logger.warning(msg, *args)
+
+
+def _warn_unknown_dpv(logger: logging.Logger, source: str, field: str, dpv: str) -> None:
+    """Warn once per distinct unrecognised DPV code, which maps to ``undetermined``.
+
+    A code-sized value (at most :data:`_DPV_CODE_MAX_LOG_LEN` characters) is
+    logged verbatim, once per value. A longer one could be address text, so
+    only its length is logged, and all long values share one signature, which
+    also keeps the dedup set small. *source* is the class prefix the module's
+    other log lines carry (``"GoogleClient"``); *field* names the provider's
+    response field, e.g. ``"uspsData.dpvConfirmation"``.
+    """
+    if len(dpv) <= _DPV_CODE_MAX_LOG_LEN:
+        _warn_once(
+            logger,
+            f"dpv={dpv!r}",
+            "%s: unrecognised %s %r (len=%d), mapped to undetermined",
+            source,
+            field,
+            dpv,
+            len(dpv),
+        )
+        return
+    _warn_once(
+        logger,
+        "dpv=<long>",
+        "%s: unrecognised %s (len=%d, value not logged), mapped to undetermined",
+        source,
+        field,
+        len(dpv),
+    )
+
+
+def _reset_warn_once() -> None:
+    """Clear the warn-once dedup set — test-only hook (GH #254)."""
+    _warned.clear()

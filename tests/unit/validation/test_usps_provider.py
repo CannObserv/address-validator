@@ -56,17 +56,19 @@ def _make_std(
     )
 
 
+@pytest.fixture()
+def mock_client() -> AsyncMock:
+    return AsyncMock()
+
+
+@pytest.fixture()
+def provider(mock_client: AsyncMock) -> USPSProvider:
+    p = USPSProvider.__new__(USPSProvider)
+    p._client = mock_client
+    return p
+
+
 class TestUSPSProvider:
-    @pytest.fixture()
-    def mock_client(self) -> AsyncMock:
-        return AsyncMock()
-
-    @pytest.fixture()
-    def provider(self, mock_client: AsyncMock) -> USPSProvider:
-        p = USPSProvider.__new__(USPSProvider)
-        p._client = mock_client
-        return p
-
     @pytest.mark.asyncio
     async def test_dpv_y_sets_confirmed_status(
         self, provider: USPSProvider, mock_client: AsyncMock
@@ -259,3 +261,45 @@ class TestUSPSProvider:
 
     def test_supports_non_us_is_false(self, provider: USPSProvider) -> None:
         assert provider.supports_non_us is False
+
+
+_USPS_PROVIDER_LOGGER = "address_validator.services.validation.usps_provider"
+
+
+class TestUnknownDpvWarning:
+    """GH #254: an unrecognised DPVConfirmation is dropped to ``undetermined``
+    without failing (#121, #250), so warn once per distinct value."""
+
+    @staticmethod
+    def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+
+    @pytest.mark.asyncio
+    async def test_unknown_code_warns_once_per_value(
+        self, provider: USPSProvider, mock_client: AsyncMock, caplog
+    ) -> None:
+        with caplog.at_level("WARNING", logger=_USPS_PROVIDER_LOGGER):
+            for code in ("X", "X", "Z", "X"):
+                mock_client.validate_address.return_value = {
+                    **CLIENT_RESULT_Y,
+                    "dpv_match_code": code,
+                }
+                result = await provider.validate(_make_std())
+                assert result.validation.status == "undetermined"
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 2
+        assert msgs[0].startswith("USPSProvider: ")
+        assert "DPVConfirmation" in msgs[0]
+        assert "'X'" in msgs[0]
+        assert "len=1" in msgs[0]
+        assert "'Z'" in msgs[1]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("code", ["Y", "D", "S", "N", None])
+    async def test_documented_or_absent_code_does_not_warn(
+        self, code: str | None, provider: USPSProvider, mock_client: AsyncMock, caplog
+    ) -> None:
+        mock_client.validate_address.return_value = {**CLIENT_RESULT_Y, "dpv_match_code": code}
+        with caplog.at_level("WARNING", logger=_USPS_PROVIDER_LOGGER):
+            await provider.validate(_make_std())
+        assert self._warnings(caplog) == []

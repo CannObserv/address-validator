@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 
+from address_validator.services.validation._helpers import _DPV_CODE_MAX_LOG_LEN
 from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
@@ -293,12 +294,15 @@ class USPSClient:
 
         PII safety: ``_summarise_shape`` never emits scalar values. Only
         schema-level metadata reaches INFO logs — consistent with
-        ``docs/LOGGING.md``.
+        ``docs/LOGGING.md``. The DPV value is the one raw scalar; past code
+        size it could be address text, so it is shown as ``<long>`` (GH #254).
         """
         extras = {k: v for k, v in raw.items() if k not in _CONSUMED_TOP_LEVEL_KEYS}
         if not extras:
             return
         shape = {k: _summarise_shape(v) for k, v in extras.items()}
+        if dpv_label is not None and len(dpv_label) > _DPV_CODE_MAX_LOG_LEN:
+            dpv_label = "<long>"
         signature = f"dpv={dpv_label}|{sorted(shape.items())}"
         if signature in cls._recon_seen_signatures:
             return

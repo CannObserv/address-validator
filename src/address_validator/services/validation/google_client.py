@@ -19,7 +19,11 @@ from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
 
 from address_validator.core.validation_status import UNDETERMINED
-from address_validator.services.validation._helpers import _DPV_TO_STATUS
+from address_validator.services.validation._helpers import (
+    _DPV_TO_STATUS,
+    _warn_once,
+    _warn_unknown_dpv,
+)
 from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
@@ -276,6 +280,21 @@ class GoogleClient:
         lat = location.get("latitude")
         lng = location.get("longitude")
 
+        if usps.get("errorMessage"):
+            # Documented as populated "when USPS processing is suspended because
+            # of the detection of artificially created addresses". The text is
+            # undocumented free form, so it is not logged.
+            cass_processed = usps.get("cassProcessed")
+            if not (cass_processed is None or isinstance(cass_processed, bool)):
+                # Documented as a bool; anything else is shown by type only.
+                cass_processed = f"<{type(cass_processed).__name__}>"
+            _warn_once(
+                logger,
+                f"errorMessage|cassProcessed={cass_processed}",
+                "GoogleClient: uspsData.errorMessage present (cassProcessed=%s)",
+                cass_processed,
+            )
+
         dpv = (usps.get("dpvConfirmation") or "").strip() or None
 
         if dpv is not None:
@@ -290,6 +309,7 @@ class GoogleClient:
             status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
             if dpv not in _DPV_TO_STATUS:
                 # Unknown code: drop it — ValidationResult.dpv_match_code is a Literal.
+                _warn_unknown_dpv(logger, "GoogleClient", "uspsData.dpvConfirmation", dpv)
                 dpv = None
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.

@@ -728,6 +728,23 @@ class TestReconLogging:
         seen = {code for code in observed_codes if any(code in r.getMessage() for r in recon)}
         assert seen == observed_codes
 
+    def test_long_dpv_value_is_not_logged_and_shares_one_signature(self, caplog) -> None:
+        # GH #254: the DPV value is the one raw scalar in the recon line. Past
+        # code size it could be address text, so it shows as <long>, and long
+        # values share one signature (bounded dedup set).
+        base = {
+            "address": {"streetAddress": "X", "ZIPCode": "00000"},
+            "firm": {"name": "ACME"},
+        }
+        with caplog.at_level("INFO", logger="address_validator.services.validation.usps_client"):
+            for dpv in ("123 MAIN ST", "456 OAK AVE"):
+                USPSClient._map_response({**base, "additionalInfo": {"DPVConfirmation": dpv}})
+        recon = [r.getMessage() for r in caplog.records if "recon" in r.getMessage()]
+        assert len(recon) == 1
+        assert "dpv=<long>" in recon[0]
+        assert "MAIN" not in recon[0]
+        assert "OAK" not in recon[0]
+
     def test_truly_unknown_top_level_keys_are_logged(self, caplog) -> None:
         # A new USPS field we've never seen — recon should pick it up.
         raw = {
