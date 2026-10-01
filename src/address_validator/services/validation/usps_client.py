@@ -25,7 +25,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
-    _raise_for_transport_error,
+    _raise_for_request_error,
     _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
@@ -255,9 +255,9 @@ class USPSClient:
                     headers={"Authorization": f"Bearer {token}"},
                     params=params,
                 )
-            except httpx.TransportError as exc:
+            except httpx.RequestError as exc:
                 # Covers the token fetch too: both are network calls (GH #257).
-                _raise_for_transport_error(exc, provider="usps", logger=logger)
+                _raise_for_request_error(exc, provider="usps", logger=logger)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:

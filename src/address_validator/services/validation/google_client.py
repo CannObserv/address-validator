@@ -31,7 +31,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
-    _raise_for_transport_error,
+    _raise_for_request_error,
     _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
@@ -237,10 +237,10 @@ class GoogleClient:
                     headers=await self._get_auth_headers(),
                     json=payload,
                 )
-            except (httpx.TransportError, google.auth.exceptions.TransportError) as exc:
+            except (httpx.RequestError, google.auth.exceptions.TransportError) as exc:
                 # google-auth raises its own TransportError when a credential
                 # refresh cannot reach its token endpoint (GH #257).
-                _raise_for_transport_error(exc, provider="google", logger=logger)
+                _raise_for_request_error(exc, provider="google", logger=logger)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:

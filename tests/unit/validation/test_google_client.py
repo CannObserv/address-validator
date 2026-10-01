@@ -357,12 +357,19 @@ class TestGoogleClientValidateAddress:
             await client.validate_address("123 Main St")
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("exc", [httpx.ConnectError("refused"), httpx.ReadTimeout("slow")])
-    async def test_transport_error_raises_transient_error(
-        self, exc: httpx.TransportError, client: GoogleClient, mock_http: AsyncMock, caplog
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.ConnectError("refused"),
+            httpx.ReadTimeout("slow"),
+            httpx.DecodingError("bad gzip"),
+        ],
+    )
+    async def test_request_error_raises_transient_error(
+        self, exc: httpx.RequestError, client: GoogleClient, mock_http: AsyncMock, caplog
     ) -> None:
         """GH #257: a network failure maps to ProviderTransientError so the chain
-        falls through — the raw httpx.TransportError surfaced as HTTP 500."""
+        falls through — the raw httpx error surfaced as HTTP 500."""
         mock_http.post.side_effect = exc
 
         with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
