@@ -922,17 +922,32 @@ class TestUnexpectedUspsDataWarning:
         assert "'X'" in msgs[0]
         assert "'Z'" in msgs[1]
 
-    def test_long_unknown_value_is_truncated(self, caplog) -> None:
-        raw = _us_response_with_usps(
-            {"standardizedAddress": {}, "dpvConfirmation": "ABCDEFGHIJKLMNOP"}
-        )
+    def test_two_char_unknown_value_is_logged_verbatim(self, caplog) -> None:
+        raw = _us_response_with_usps({"standardizedAddress": {}, "dpvConfirmation": "YY"})
         with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
             GoogleClient._map_response(raw)
         msgs = self._warnings(caplog)
         assert len(msgs) == 1
-        assert "'ABCDEFGH'" in msgs[0]
+        assert "'YY'" in msgs[0]
+
+    def test_long_unknown_value_is_not_logged_and_warns_once(self, caplog) -> None:
+        # Longer than a code: could be address text, so only the length is
+        # logged, and every long value shares one signature (bounded dedup set).
+        raw_a = _us_response_with_usps(
+            {"standardizedAddress": {}, "dpvConfirmation": "ABCDEFGHIJKLMNOP"}
+        )
+        raw_b = _us_response_with_usps(
+            {"standardizedAddress": {}, "dpvConfirmation": "123 MAIN ST"}
+        )
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            result = GoogleClient._map_response(raw_a)
+            GoogleClient._map_response(raw_b)
+        assert result["status"] == "undetermined"
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 1
         assert "len=16" in msgs[0]
-        assert "IJKLMNOP" not in msgs[0]
+        assert "ABC" not in msgs[0]
+        assert "MAIN" not in msgs[0]
 
     @pytest.mark.parametrize("dpv", ["Y", "D", "S", "N", " ", "", None])
     def test_documented_or_blank_dpv_does_not_warn(self, dpv: str | None, caplog) -> None:

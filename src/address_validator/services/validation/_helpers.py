@@ -36,9 +36,9 @@ _DPV_TO_STATUS: dict[
     "N": NOT_CONFIRMED,
 }
 
-# How much of an unrecognised DPV value reaches the log (GH #254). A DPV code
-# is one character; the cap guards against an undocumented blob.
-_UNKNOWN_DPV_LOG_CHARS = 8
+# Longest unrecognised DPV value logged verbatim (GH #254). A DPV code is one
+# character, so a new sentinel fits; anything longer could be address text.
+_DPV_CODE_MAX_LOG_LEN = 2
 
 # (logger name, signature) pairs already warned about. Spans the process
 # lifetime so each is logged at most once; reset via _reset_warn_once() in tests.
@@ -62,17 +62,27 @@ def _warn_once(logger: logging.Logger, signature: str, msg: str, *args: object) 
 def _warn_unknown_dpv(logger: logging.Logger, field: str, dpv: str) -> None:
     """Warn once per distinct unrecognised DPV code, which maps to ``undetermined``.
 
-    Logs the first :data:`_UNKNOWN_DPV_LOG_CHARS` characters and the length;
-    a DPV code is not address content. *field* names the provider's response
+    A code-sized value (at most :data:`_DPV_CODE_MAX_LOG_LEN` characters) is
+    logged verbatim, once per value. A longer one could be address text, so
+    only its length is logged, and all long values share one signature, which
+    also keeps the dedup set small. *field* names the provider's response
     field, e.g. ``"uspsData.dpvConfirmation"``.
     """
-    head = dpv[:_UNKNOWN_DPV_LOG_CHARS]
+    if len(dpv) <= _DPV_CODE_MAX_LOG_LEN:
+        _warn_once(
+            logger,
+            f"dpv={dpv!r}",
+            "unrecognised %s %r (len=%d), mapped to undetermined",
+            field,
+            dpv,
+            len(dpv),
+        )
+        return
     _warn_once(
         logger,
-        f"dpv={head!r}",
-        "unrecognised %s %r (len=%d), mapped to undetermined",
+        "dpv=<long>",
+        "unrecognised %s (len=%d, value not logged), mapped to undetermined",
         field,
-        head,
         len(dpv),
     )
 
