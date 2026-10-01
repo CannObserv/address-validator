@@ -61,10 +61,12 @@ class ChainProvider:
       ``ProviderBadRequestError("all")`` is raised — the input itself is
       the problem, not transient capacity.
 
-    Any other exception (programming bug, etc.) is re-raised immediately
-    without trying further providers.  The list above is closed: a client must
-    map every upstream failure to one of those errors, never leak a raw
-    ``httpx`` exception.
+    Any other exception is re-raised immediately without trying further
+    providers.  The list above is closed: the clients map every non-2xx
+    response and every failed request to one of those errors and never leak
+    a raw ``httpx`` exception (GH #257).  What they do not map still ends the
+    chain as a 500 — e.g. an unparseable 200 body, or a non-retryable Google
+    credential-refresh failure (operator action).
 
     Parameters
     ----------
