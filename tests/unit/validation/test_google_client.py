@@ -1,6 +1,7 @@
 """Unit tests for GoogleClient — response mapping and request construction."""
 
 import copy
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -870,3 +871,98 @@ class TestBlankDpvTakesVerdictPath:
         assert result["city"] == "Lynnwood"
         assert result["region"] == "WA"
         assert result["postal_code"] == "98036-5635"
+
+
+_GOOGLE_LOGGER = "address_validator.services.validation.google_client"
+
+
+def _us_response_with_usps(usps_data: dict) -> dict:
+    """A minimal US response whose ``uspsData`` is *usps_data*."""
+    return {"result": {"verdict": {}, "geocode": {}, "uspsData": usps_data}}
+
+
+class TestUnexpectedUspsDataWarning:
+    """GH #254: #250 made an unrecognised dpvConfirmation silent (dropped →
+    ``undetermined``). Warn once per distinct value so a new code is noticed;
+    likewise warn once when Google reports USPS processing suspended."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_warn_state(self) -> Generator[None, None, None]:
+        GoogleClient._reset_warn_state()
+        yield
+        GoogleClient._reset_warn_state()
+
+    @staticmethod
+    def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+
+    def test_unknown_dpv_code_warns_with_value_and_length(self, caplog) -> None:
+        raw = _us_response_with_usps({"standardizedAddress": {}, "dpvConfirmation": "X"})
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+        assert result["dpv_match_code"] is None
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 1
+        assert "dpvConfirmation" in msgs[0]
+        assert "'X'" in msgs[0]
+        assert "len=1" in msgs[0]
+
+    def test_unknown_dpv_code_warns_once_per_value(self, caplog) -> None:
+        raw_x = _us_response_with_usps({"standardizedAddress": {}, "dpvConfirmation": "X"})
+        raw_z = _us_response_with_usps({"standardizedAddress": {}, "dpvConfirmation": "Z"})
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(raw_x)
+            GoogleClient._map_response(raw_x)
+            GoogleClient._map_response(raw_z)
+            GoogleClient._map_response(raw_x)
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 2
+        assert "'X'" in msgs[0]
+        assert "'Z'" in msgs[1]
+
+    def test_long_unknown_value_is_truncated(self, caplog) -> None:
+        raw = _us_response_with_usps(
+            {"standardizedAddress": {}, "dpvConfirmation": "ABCDEFGHIJKLMNOP"}
+        )
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(raw)
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 1
+        assert "'ABCDEFGH'" in msgs[0]
+        assert "len=16" in msgs[0]
+        assert "IJKLMNOP" not in msgs[0]
+
+    @pytest.mark.parametrize("dpv", ["Y", "D", "S", "N", " ", "", None])
+    def test_documented_or_blank_dpv_does_not_warn(self, dpv: str | None, caplog) -> None:
+        usps: dict = {"standardizedAddress": {}}
+        if dpv is not None:
+            usps["dpvConfirmation"] = dpv
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(_us_response_with_usps(usps))
+        assert self._warnings(caplog) == []
+
+    def test_error_message_warns_once_without_its_text(self, caplog) -> None:
+        raw = _us_response_with_usps(
+            {
+                "standardizedAddress": {},
+                "cassProcessed": False,
+                "errorMessage": "USPS processing suspended for 123 MAIN ST",
+            }
+        )
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(raw)
+            GoogleClient._map_response(raw)
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 1
+        assert "errorMessage" in msgs[0]
+        assert "cassProcessed=False" in msgs[0]
+        # The message text is undocumented free text — never logged.
+        assert "suspended for" not in msgs[0]
+        assert "MAIN" not in msgs[0]
+
+    def test_captured_no_dpv_response_does_not_warn(self, caplog) -> None:
+        # Live capture (GH-114): no dpvConfirmation key, no errorMessage.
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert self._warnings(caplog) == []
