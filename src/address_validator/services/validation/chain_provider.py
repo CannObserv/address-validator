@@ -33,8 +33,8 @@ class ChainProvider:
     * :class:`~services.validation.errors.ProviderRateLimitedError` (HTTP 429)
     * :class:`~services.validation.errors.ProviderAtCapacityError` (local quota)
     * :class:`~services.validation.errors.ProviderTransientError` (HTTP 5xx /
-      unexpected non-2xx / network failure — the clients wrap connect errors
-      and timeouts, GH #257)
+      unexpected non-2xx / failed request or credential refresh — the clients
+      wrap connect errors, timeouts and undecodable bodies, GH #257)
     * :class:`~services.validation.errors.ProviderBadRequestError` (HTTP 400)
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank

@@ -227,8 +227,8 @@ class USPSClient:
         (operator action required: fix OAuth credentials).
 
         Raises :class:`~services.validation.errors.ProviderTransientError`
-        on HTTP 5xx, any unexpected non-2xx response, or a network failure
-        (connect error, timeout) on the token or address call.
+        on HTTP 5xx, any unexpected non-2xx response, or a failed request
+        (connect error, timeout, undecodable body) on the token or address call.
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if secondary_address:

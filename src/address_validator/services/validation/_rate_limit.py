@@ -313,7 +313,7 @@ def _raise_for_request_error(
     provider: str,
     logger: logging.Logger,
 ) -> NoReturn:
-    """Map a failed request (no HTTP response) to ``ProviderTransientError``.
+    """Map a failed request (no usable HTTP response) to ``ProviderTransientError``.
 
     The request-layer counterpart of :func:`_raise_for_unexpected_status`:
     a raw :class:`httpx.RequestError` — connect error, timeout, protocol

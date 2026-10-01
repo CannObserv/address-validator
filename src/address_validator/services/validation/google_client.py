@@ -218,9 +218,9 @@ class GoogleClient:
                 or fix IAM).
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
             ProviderTransientError: on HTTP 5xx, any other unexpected
-                non-2xx response, a network failure (connect error,
-                timeout) on the API call or a credential refresh, or a
-                retryable credential-refresh failure (token endpoint 5xx).
+                non-2xx response, a failed request (connect error, timeout,
+                undecodable body) on the API call, or a transient
+                credential-refresh failure (see ``_get_auth_headers``).
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
