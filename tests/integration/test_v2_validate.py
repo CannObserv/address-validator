@@ -2,11 +2,17 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.main import app
 from address_validator.models import ValidateResponseV2, ValidationResult
+from address_validator.services.validation._rate_limit import (
+    FixedResetQuotaWindow,
+    QuotaGuard,
+    QuotaWindow,
+)
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -14,6 +20,8 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
+from address_validator.services.validation.usps_client import USPSClient
+from address_validator.services.validation.usps_provider import USPSProvider
 from tests.conftest import unreachable_google, unreachable_usps
 
 pytestmark = pytest.mark.integration
@@ -155,6 +163,70 @@ class TestV2ValidateProviderUnreachable:
         assert response.status_code == 429, response.text
         assert response.json()["error"] == "provider_rate_limited"
         assert int(response.headers["Retry-After"]) >= 1
+
+
+class TestV2ValidateQuotaExhausted:
+    """GH #270: when every provider's local QuotaGuard refuses, the 429 carries the
+    wait the guards computed, not Retry-After: 0."""
+
+    @staticmethod
+    def _drained_usps() -> USPSProvider:
+        """USPS-shaped guard: soft daily window drained, one token every 10 s."""
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=1.0, mode="soft"),
+                QuotaWindow(limit=8640, duration_s=86_400.0, mode="soft"),
+            ],
+            latency_budget_s=1.0,
+            provider_name="usps",
+        )
+        guard._tokens[1] = 0.0
+        return USPSProvider(
+            USPSClient(
+                consumer_key="key",
+                consumer_secret="secret",
+                http_client=AsyncMock(spec=httpx.AsyncClient),
+                quota_guard=guard,
+            )
+        )
+
+    @staticmethod
+    def _drained_google() -> GoogleProvider:
+        """Google-shaped guard: hard daily window drained until midnight PT."""
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=60, duration_s=60.0, mode="soft"),
+                FixedResetQuotaWindow(limit=160, mode="hard"),
+            ],
+            provider_name="google",
+        )
+        guard._tokens[1] = 0.0
+        return GoogleProvider(
+            GoogleClient(
+                credentials=MagicMock(valid=True, token="tok"),
+                http_client=AsyncMock(spec=httpx.AsyncClient),
+                quota_guard=guard,
+            )
+        )
+
+    def _post(self, client, chain: ChainProvider):
+        with _mock_registry_with(chain):
+            return client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+
+    def test_google_daily_quota_retry_after_is_time_until_reset(self, client) -> None:
+        chain = ChainProvider(providers=[self._drained_google()])
+        response = self._post(client, chain)
+        assert response.status_code == 429, response.text
+        assert int(response.headers["Retry-After"]) > 10
+
+    def test_both_drained_retry_after_is_soonest(self, client) -> None:
+        chain = ChainProvider(providers=[self._drained_usps(), self._drained_google()])
+        response = self._post(client, chain)
+        assert response.status_code == 429, response.text
+        assert response.headers["Retry-After"] == "10"
 
 
 class TestV2ValidateUndetermined:

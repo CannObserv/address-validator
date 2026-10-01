@@ -346,6 +346,117 @@ class TestQuotaGuard:
             await guard.acquire()
 
 
+class TestAtCapacityRetryAfter:
+    """GH #270: ProviderAtCapacityError carries the wait the guard computed, so the
+    route's 429 sends a real Retry-After instead of 0."""
+
+    _NOW_TARGET = "address_validator.services.validation._rate_limit._now_in_tz"
+
+    @pytest.mark.asyncio
+    async def test_soft_window_rejection_carries_rejected_wait(self) -> None:
+        # rate = 1 token/s; tokens=0 → wait ≈ 1s; budget 0.5s → rejected
+        guard = QuotaGuard(
+            windows=[QuotaWindow(limit=1, duration_s=1.0, mode="soft")],
+            latency_budget_s=0.5,
+        )
+        guard._tokens[0] = 0.0
+        guard._last_refill[0] = time.monotonic()
+
+        with pytest.raises(ProviderAtCapacityError) as exc_info:
+            await guard.acquire()
+        assert exc_info.value.retry_after_seconds == pytest.approx(1.0, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_soft_daily_window_rejection_carries_wait_for_next_token(self) -> None:
+        # USPS-shaped: soft daily window, 8640/day → one token every 10 s
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=5, duration_s=1.0, mode="soft"),
+                QuotaWindow(limit=8640, duration_s=86_400.0, mode="soft"),
+            ],
+            latency_budget_s=1.0,
+        )
+        guard._tokens[1] = 0.0
+        guard._last_refill[1] = time.monotonic()
+
+        with pytest.raises(ProviderAtCapacityError) as exc_info:
+            await guard.acquire()
+        assert exc_info.value.retry_after_seconds == pytest.approx(10.0, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_hard_rolling_window_rejection_carries_wait_for_next_token(self) -> None:
+        # rate = 160/86400 tokens/s; tokens=0.5 → (1 - 0.5) / rate = 270 s
+        guard = QuotaGuard(
+            windows=[QuotaWindow(limit=160, duration_s=86_400.0, mode="hard")],
+            latency_budget_s=5.0,
+        )
+        guard._tokens[0] = 0.5
+        guard._last_refill[0] = time.monotonic()
+
+        with pytest.raises(ProviderAtCapacityError) as exc_info:
+            await guard.acquire()
+        assert exc_info.value.retry_after_seconds == pytest.approx(270.0, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_fixed_reset_window_rejection_carries_time_until_midnight(self) -> None:
+        PT = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 10, 1, 21, 0, 0, tzinfo=PT)
+        with patch(self._NOW_TARGET, return_value=now):
+            guard = QuotaGuard(windows=[FixedResetQuotaWindow(limit=160, mode="hard")])
+            guard._tokens[0] = 0.0
+            with pytest.raises(ProviderAtCapacityError) as exc_info:
+                await guard.acquire()
+        assert exc_info.value.retry_after_seconds == 3 * 3600
+
+    @pytest.mark.asyncio
+    async def test_fixed_reset_wait_counts_elapsed_time_across_dst_change(self) -> None:
+        # 2026-11-01 01:30 PDT → 2026-11-02 00:00 PST: 22.5 h of wall clock,
+        # 23.5 h elapsed (01:00-02:00 repeats when clocks fall back)
+        PT = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 11, 1, 1, 30, 0, tzinfo=PT)
+        with patch(self._NOW_TARGET, return_value=now):
+            guard = QuotaGuard(windows=[FixedResetQuotaWindow(limit=160, mode="hard")])
+            guard._tokens[0] = 0.0
+            with pytest.raises(ProviderAtCapacityError) as exc_info:
+                await guard.acquire()
+        assert exc_info.value.retry_after_seconds == 23.5 * 3600
+
+    @pytest.mark.asyncio
+    async def test_hard_rejection_carries_longest_wait_across_windows(self) -> None:
+        # Google-shaped: soft per-minute window drained too, but the hard daily
+        # window gates the retry — the wait is the max, not the soft one
+        PT = ZoneInfo("America/Los_Angeles")
+        now = datetime(2026, 10, 1, 23, 0, 0, tzinfo=PT)
+        with patch(self._NOW_TARGET, return_value=now):
+            guard = QuotaGuard(
+                windows=[
+                    QuotaWindow(limit=60, duration_s=60.0, mode="soft"),
+                    FixedResetQuotaWindow(limit=160, mode="hard"),
+                ],
+            )
+            guard._tokens = [0.0, 0.0]
+            with pytest.raises(ProviderAtCapacityError) as exc_info:
+                await guard.acquire()
+        assert exc_info.value.retry_after_seconds == 3600
+
+    @pytest.mark.asyncio
+    async def test_hard_rejection_includes_soft_wait_when_longer(self) -> None:
+        # hard window refills in ~0.5 s, soft window in ~2 s → retry after ~2 s
+        guard = QuotaGuard(
+            windows=[
+                QuotaWindow(limit=1, duration_s=2.0, mode="soft"),
+                QuotaWindow(limit=2, duration_s=1.0, mode="hard"),
+            ],
+        )
+        guard._tokens = [0.0, 0.0]
+        now = time.monotonic()
+        guard._last_refill = [now, now]
+
+        with pytest.raises(ProviderAtCapacityError) as exc_info:
+            await guard.acquire()
+        assert exc_info.value.retry_after_seconds == pytest.approx(2.0, abs=0.01)
+
+
 class TestParseRetryAfter:
     def _make_response(self, headers: dict) -> httpx.Response:
         resp = MagicMock(spec=httpx.Response)
