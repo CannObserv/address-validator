@@ -10,7 +10,7 @@ from address_validator.models import (
     ValidateResponseV2,
     ValidationResult,
 )
-from address_validator.services.validation._helpers import _DPV_TO_STATUS
+from address_validator.services.validation._helpers import _DPV_TO_STATUS, _warn_unknown_dpv
 from address_validator.services.validation.usps_client import USPSClient
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -58,10 +58,12 @@ class USPSProvider:
         # (GH #250). Any unrecognised value (a future USPS sentinel) collapses
         # the same way and is dropped from the response —
         # ValidationResult.dpv_match_code is restricted to the documented
-        # Literal set.
+        # Literal set — with a once-per-value WARNING so it is not silent (GH #254).
         dpv = raw.get("dpv_match_code")
         status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
         dpv_for_response = dpv if dpv in _DPV_TO_STATUS else None
+        if dpv is not None and dpv_for_response is None:
+            _warn_unknown_dpv(logger, "additionalInfo.DPVConfirmation", dpv)
 
         address_line_1 = raw.get("address_line_1") or ""
         address_line_2 = raw.get("address_line_2") or ""

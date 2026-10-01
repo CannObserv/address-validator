@@ -19,7 +19,11 @@ from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
 
 from address_validator.core.validation_status import UNDETERMINED
-from address_validator.services.validation._helpers import _DPV_TO_STATUS
+from address_validator.services.validation._helpers import (
+    _DPV_TO_STATUS,
+    _warn_once,
+    _warn_unknown_dpv,
+)
 from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
@@ -39,10 +43,6 @@ _VALIDATE_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
 
 # Verdict granularities that indicate the address was not geocodable at all.
 _NON_GRANULAR: frozenset[str] = frozenset({"GRANULARITY_UNSPECIFIED", "OTHER", ""})
-
-# How much of an unrecognised dpvConfirmation value reaches the log (GH #254).
-# A DPV code is one character; the cap guards against an undocumented blob.
-_UNKNOWN_DPV_LOG_CHARS = 8
 
 
 def _verdict_to_status(verdict: dict[str, Any]) -> str:
@@ -133,11 +133,6 @@ class GoogleClient:
         managing rate limits and quota constraints.
     """
 
-    # Class-level dedup set for unexpected-uspsData warnings (GH #254). Spans
-    # the process lifetime so each signature is logged at most once; reset via
-    # :meth:`_reset_warn_state` in tests.
-    _warned_signatures: set[str] = set()  # noqa: RUF012
-
     def __init__(
         self,
         credentials: Credentials,
@@ -147,24 +142,6 @@ class GoogleClient:
         self._credentials = credentials
         self._http = http_client
         self._rate_limiter = quota_guard
-
-    @classmethod
-    def _reset_warn_state(cls) -> None:
-        """Clear the warning dedup set — test-only hook (GH #254)."""
-        cls._warned_signatures.clear()
-
-    @classmethod
-    def _warn_once(cls, signature: str, msg: str, *args: object) -> None:
-        """Log *msg* at WARNING the first time *signature* is seen (GH #254).
-
-        #250 made an unexpected ``uspsData`` shape silent: it no longer fails
-        response validation, so nothing surfaces it. One line per distinct
-        signature per process flags a contract change without flooding.
-        """
-        if signature in cls._warned_signatures:
-            return
-        cls._warned_signatures.add(signature)
-        logger.warning(msg, *args)
 
     @property
     def quota_guard(self) -> QuotaGuard:
@@ -308,7 +285,8 @@ class GoogleClient:
             # detection of artificially created addresses"; there is then no
             # DPV code. The text is undocumented free form, so it is not logged.
             cass_processed = usps.get("cassProcessed")
-            GoogleClient._warn_once(
+            _warn_once(
+                logger,
                 f"errorMessage|cassProcessed={cass_processed}",
                 "GoogleClient: uspsData.errorMessage present (cassProcessed=%s)",
                 cass_processed,
@@ -328,14 +306,7 @@ class GoogleClient:
             status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
             if dpv not in _DPV_TO_STATUS:
                 # Unknown code: drop it — ValidationResult.dpv_match_code is a Literal.
-                head = dpv[:_UNKNOWN_DPV_LOG_CHARS]
-                GoogleClient._warn_once(
-                    f"dpv={head!r}",
-                    "GoogleClient: unrecognised uspsData.dpvConfirmation %r (len=%d), "
-                    "mapped to undetermined",
-                    head,
-                    len(dpv),
-                )
+                _warn_unknown_dpv(logger, "uspsData.dpvConfirmation", dpv)
                 dpv = None
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.

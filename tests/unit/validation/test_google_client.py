@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from address_validator.services.validation._helpers import _reset_warn_once
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
@@ -888,9 +889,9 @@ class TestUnexpectedUspsDataWarning:
 
     @pytest.fixture(autouse=True)
     def _isolate_warn_state(self) -> Generator[None, None, None]:
-        GoogleClient._reset_warn_state()
+        _reset_warn_once()
         yield
-        GoogleClient._reset_warn_state()
+        _reset_warn_once()
 
     @staticmethod
     def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:

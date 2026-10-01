@@ -54,6 +54,7 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct value per process, GH #254) | `WARNING` | `services.validation.google_client` | first 8 chars of the code + its length, `request_id` |
+| USPS unrecognised `additionalInfo.DPVConfirmation`, mapped to `undetermined` (once per distinct value per process, GH #254) | `WARNING` | `services.validation.usps_provider` | first 8 chars of the code + its length, `request_id` |
 | Google `uspsData.errorMessage` present — USPS processing suspended (once per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
