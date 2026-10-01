@@ -1,13 +1,11 @@
 """Unit tests for GoogleClient — response mapping and request construction."""
 
 import copy
-from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
-from address_validator.services.validation._helpers import _reset_warn_once
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
@@ -886,12 +884,6 @@ class TestUnexpectedUspsDataWarning:
     """GH #254: #250 made an unrecognised dpvConfirmation silent (dropped →
     ``undetermined``). Warn once per distinct value so a new code is noticed;
     likewise warn once when Google reports USPS processing suspended."""
-
-    @pytest.fixture(autouse=True)
-    def _isolate_warn_state(self) -> Generator[None, None, None]:
-        _reset_warn_once()
-        yield
-        _reset_warn_once()
 
     @staticmethod
     def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:

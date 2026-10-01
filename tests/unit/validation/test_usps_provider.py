@@ -1,13 +1,11 @@
 """Unit tests for USPSProvider — validates request→response mapping."""
 
-from collections.abc import Generator
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 
 from address_validator.models import ComponentSet, StandardizeResponseV2
-from address_validator.services.validation._helpers import _reset_warn_once
 from address_validator.services.validation.usps_provider import USPSProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -271,12 +269,6 @@ _USPS_PROVIDER_LOGGER = "address_validator.services.validation.usps_provider"
 class TestUnknownDpvWarning:
     """GH #254: an unrecognised DPVConfirmation is dropped to ``undetermined``
     without failing (#121, #250), so warn once per distinct value."""
-
-    @pytest.fixture(autouse=True)
-    def _isolate_warn_state(self) -> Generator[None, None, None]:
-        _reset_warn_once()
-        yield
-        _reset_warn_once()
 
     @staticmethod
     def _warnings(caplog: pytest.LogCaptureFixture) -> list[str]:
