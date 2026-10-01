@@ -905,6 +905,7 @@ class TestUnexpectedUspsDataWarning:
         assert result["dpv_match_code"] is None
         msgs = self._warnings(caplog)
         assert len(msgs) == 1
+        assert msgs[0].startswith("GoogleClient: ")
         assert "dpvConfirmation" in msgs[0]
         assert "'X'" in msgs[0]
         assert "len=1" in msgs[0]

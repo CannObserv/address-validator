@@ -296,6 +296,7 @@ class TestUnknownDpvWarning:
                 assert result.validation.status == "undetermined"
         msgs = self._warnings(caplog)
         assert len(msgs) == 2
+        assert msgs[0].startswith("USPSProvider: ")
         assert "DPVConfirmation" in msgs[0]
         assert "'X'" in msgs[0]
         assert "len=1" in msgs[0]

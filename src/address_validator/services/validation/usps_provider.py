@@ -63,7 +63,7 @@ class USPSProvider:
         status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
         dpv_for_response = dpv if dpv in _DPV_TO_STATUS else None
         if dpv is not None and dpv_for_response is None:
-            _warn_unknown_dpv(logger, "additionalInfo.DPVConfirmation", dpv)
+            _warn_unknown_dpv(logger, "USPSProvider", "additionalInfo.DPVConfirmation", dpv)
 
         address_line_1 = raw.get("address_line_1") or ""
         address_line_2 = raw.get("address_line_2") or ""

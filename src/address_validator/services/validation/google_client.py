@@ -306,7 +306,7 @@ class GoogleClient:
             status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
             if dpv not in _DPV_TO_STATUS:
                 # Unknown code: drop it — ValidationResult.dpv_match_code is a Literal.
-                _warn_unknown_dpv(logger, "uspsData.dpvConfirmation", dpv)
+                _warn_unknown_dpv(logger, "GoogleClient", "uspsData.dpvConfirmation", dpv)
                 dpv = None
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
