@@ -102,6 +102,9 @@ USPS and Google are unaffected — they `POST`, so the address is in the request
 
 Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
 
-The unrecognised-DPV warnings (GH #254) are the one place a raw provider value is logged, and only when it is code-sized (≤ 2 characters). A longer value could be address text, so only its length is logged, and all long values share one dedup signature. `_warn_unknown_dpv` in `services/validation/_helpers.py` enforces this. The text of Google's `uspsData.errorMessage` is never logged.
+Raw provider values reach a log line in only these places, each with a bound (GH #254):
+
+- **DPV codes**, in the unrecognised-DPV warnings and as recon `dpv=`. Logged verbatim only when code-sized (≤ 2 characters, `_DPV_CODE_MAX_LOG_LEN` in `services/validation/_helpers.py`). A longer value could be address text: the warning logs only its length, recon shows `<long>`, and all long values share one dedup signature.
+- **Google `cassProcessed`**, on the `errorMessage` warning. The text of `uspsData.errorMessage` itself is never logged.
 
 New modules: one `getLogger(__name__)` per module; `caplog` assertions in corresponding unit tests.
