@@ -105,6 +105,6 @@ Recon `extras=` carries structural labels only (key names, length buckets, type 
 Raw provider values reach a log line in only these places, each with a bound (GH #254):
 
 - **DPV codes**, in the unrecognised-DPV warnings and as recon `dpv=`. Logged verbatim only when code-sized (≤ 2 characters, `_DPV_CODE_MAX_LOG_LEN` in `services/validation/_helpers.py`). A longer value could be address text: the warning logs only its length, recon shows `<long>`, and all long values share one dedup signature.
-- **Google `cassProcessed`**, on the `errorMessage` warning. The text of `uspsData.errorMessage` itself is never logged.
+- **Google `cassProcessed`**, on the `errorMessage` warning. It is logged only as a bool (or absent); any other value is shown by its type name. The text of `uspsData.errorMessage` itself is never logged.
 
 New modules: one `getLogger(__name__)` per module; `caplog` assertions in corresponding unit tests.

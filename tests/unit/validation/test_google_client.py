@@ -970,6 +970,19 @@ class TestUnexpectedUspsDataWarning:
         assert "suspended for" not in msgs[0]
         assert "MAIN" not in msgs[0]
 
+    def test_non_bool_cass_processed_is_logged_by_type_only(self, caplog) -> None:
+        # Documented as a bool; anything else could be free text, so only its
+        # type name is logged (and the dedup key stays bounded).
+        raw = _us_response_with_usps(
+            {"standardizedAddress": {}, "cassProcessed": "123 MAIN ST", "errorMessage": "x"}
+        )
+        with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
+            GoogleClient._map_response(raw)
+        msgs = self._warnings(caplog)
+        assert len(msgs) == 1
+        assert "cassProcessed=<str>" in msgs[0]
+        assert "MAIN" not in msgs[0]
+
     def test_captured_no_dpv_response_does_not_warn(self, caplog) -> None:
         # Live capture (GH-114): no dpvConfirmation key, no errorMessage.
         with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):

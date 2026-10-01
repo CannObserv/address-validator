@@ -285,6 +285,9 @@ class GoogleClient:
             # detection of artificially created addresses"; there is then no
             # DPV code. The text is undocumented free form, so it is not logged.
             cass_processed = usps.get("cassProcessed")
+            if not (cass_processed is None or isinstance(cass_processed, bool)):
+                # Documented as a bool; anything else is shown by type only.
+                cass_processed = f"<{type(cass_processed).__name__}>"
             _warn_once(
                 logger,
                 f"errorMessage|cassProcessed={cass_processed}",
