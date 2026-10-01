@@ -193,6 +193,23 @@ class TestChainProvider:
         assert exc_info.value.retry_after_seconds == 1.0
 
     @pytest.mark.asyncio
+    async def test_transient_fallback_log_names_retry_after(
+        self, std_address: object, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """GH #270: the WARNING says how long the provider is out, so an operator
+        can tell a drained daily quota (hours) from a blip."""
+        drained = AsyncMock()
+        drained.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("google", retry_after_seconds=10800.0)
+        )
+        chain = ChainProvider(providers=[drained, _mock_provider(_CONFIRMED)])
+
+        with caplog.at_level("WARNING", logger="address_validator.services.validation"):
+            await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert "ProviderAtCapacityError, retry after 10800s" in caplog.text
+
+    @pytest.mark.asyncio
     async def test_falls_back_to_second_on_bad_request(self, std_address: object) -> None:
         primary = AsyncMock()
         primary.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", detail="400"))

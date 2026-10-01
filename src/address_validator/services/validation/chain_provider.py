@@ -109,9 +109,10 @@ class ChainProvider:
                 )
                 unreachable = True
                 logger.warning(
-                    "ChainProvider: %s unavailable (%s), trying next provider",
+                    "ChainProvider: %s unavailable (%s, retry after %.0fs), trying next provider",
                     name,
                     type(exc).__name__,
+                    exc.retry_after_seconds,
                 )
             except ProviderBadRequestError as exc:
                 last_bad_request = exc
