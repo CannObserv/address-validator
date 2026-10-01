@@ -49,17 +49,19 @@ class ProviderBadRequestError(Exception):
 
 
 class ProviderTransientError(Exception):
-    """Raised when an upstream provider returns a transient server-side failure.
+    """Raised when an upstream provider fails transiently or cannot be reached.
 
-    Covers HTTP 5xx and any unexpected non-2xx status not handled by the
-    400/429 paths.  Semantically distinct from:
+    Covers HTTP 5xx, any unexpected non-2xx status not handled by the
+    400/429 paths, and network failures (connect error, timeout — GH #257).
+    Semantically distinct from:
 
     * :class:`ProviderRateLimitedError` — upstream returned HTTP 429 (quota
       exhausted); has explicit ``Retry-After`` semantics.
     * :class:`ProviderAtCapacityError` — local quota decision; the request
       was *not sent*.
 
-    This error means the request *was* sent and the upstream service failed.
+    This error means the request was attempted and the upstream service
+    failed or was unreachable.
     Tracking it separately preserves the distinction for metrics, alerting,
     and triage.  :class:`~services.validation.chain_provider.ChainProvider`
     catches it and advances to the next provider, mirroring the rate-limit

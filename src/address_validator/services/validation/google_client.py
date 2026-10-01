@@ -14,6 +14,7 @@ import asyncio
 import logging
 from typing import Any, NamedTuple
 
+import google.auth.exceptions
 import httpx
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
@@ -30,6 +31,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
+    _raise_for_transport_error,
     _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
@@ -193,8 +195,9 @@ class GoogleClient:
                 or HTTP 401/403 (operator action required: rotate credentials
                 or fix IAM).
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
-            ProviderTransientError: on HTTP 5xx or any other unexpected
-                non-2xx response.
+            ProviderTransientError: on HTTP 5xx, any other unexpected
+                non-2xx response, or a network failure (connect error,
+                timeout) on the API call or a credential refresh.
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
@@ -228,11 +231,16 @@ class GoogleClient:
                 len(address_lines),
                 country,
             )
-            resp = await self._http.post(
-                _VALIDATE_URL,
-                headers=await self._get_auth_headers(),
-                json=payload,
-            )
+            try:
+                resp = await self._http.post(
+                    _VALIDATE_URL,
+                    headers=await self._get_auth_headers(),
+                    json=payload,
+                )
+            except (httpx.TransportError, google.auth.exceptions.TransportError) as exc:
+                # google-auth raises its own TransportError when a credential
+                # refresh cannot reach its token endpoint (GH #257).
+                _raise_for_transport_error(exc, provider="google", logger=logger)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:

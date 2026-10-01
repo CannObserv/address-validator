@@ -324,6 +324,37 @@ class TestUSPSClient:
         mock_http.get.assert_not_called()
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("exc", [httpx.ConnectError("refused"), httpx.ReadTimeout("slow")])
+    async def test_transport_error_raises_transient_error(
+        self, exc: httpx.TransportError, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #257: a network failure maps to ProviderTransientError so the chain
+        falls through — the raw httpx.TransportError surfaced as HTTP 500."""
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.side_effect = exc
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+        assert exc_info.value.__cause__ is exc
+        messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(type(exc).__name__ in m for m in messages)
+        assert not any("Main St" in m for m in messages)
+
+    @pytest.mark.asyncio
+    async def test_token_endpoint_transport_error_raises_transient_error(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH #257: the OAuth2 token fetch is a network call too."""
+        mock_http.post.side_effect = httpx.ConnectTimeout("slow")
+
+        with pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        mock_http.get.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:

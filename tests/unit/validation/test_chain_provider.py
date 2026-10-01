@@ -1,6 +1,6 @@
 """Unit tests for ChainProvider — fallback logic and error handling."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -12,6 +12,7 @@ from address_validator.models import (
     ValidateResponseV2,
     ValidationResult,
 )
+from address_validator.services.validation._rate_limit import QuotaGuard, QuotaWindow
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
@@ -19,6 +20,10 @@ from address_validator.services.validation.errors import (
     ProviderRateLimitedError,
     ProviderTransientError,
 )
+from address_validator.services.validation.google_client import GoogleClient
+from address_validator.services.validation.google_provider import GoogleProvider
+from address_validator.services.validation.usps_client import USPSClient
+from address_validator.services.validation.usps_provider import USPSProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 _CONFIRMED = ValidateResponseV2(
@@ -559,33 +564,72 @@ class TestChainHeldPrecedence:
         assert result.validation.provider == "google"
 
 
+def _quota_guard(name: str) -> QuotaGuard:
+    return QuotaGuard(
+        windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
+        latency_budget_s=1.0,
+        provider_name=name,
+    )
+
+
+def _unreachable_usps() -> USPSProvider:
+    """Real USPS client + provider whose network layer fails (token fetch)."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.side_effect = httpx.ConnectError("refused")
+    return USPSProvider(
+        USPSClient(
+            consumer_key="key",
+            consumer_secret="secret",
+            http_client=http,
+            quota_guard=_quota_guard("usps"),
+        )
+    )
+
+
+def _unreachable_google() -> GoogleProvider:
+    """Real Google client + provider whose network layer times out."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.side_effect = httpx.ReadTimeout("slow")
+    creds = MagicMock(valid=True, token="tok")
+    return GoogleProvider(
+        GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
+    )
+
+
 class TestChainTransportErrors:
-    """CR 9 (GH #250): a network failure from a fallback provider must not turn a
-    held 200 answer into a 500; with nothing held it still propagates."""
+    """GH #257: the clients wrap a network failure (connect error, timeout) in
+    ProviderTransientError, so the chain falls through on it like a 5xx.
+    The raw httpx.TransportError used to escape the chain as HTTP 500."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("exc", [httpx.ConnectError("boom"), httpx.ReadTimeout("slow")])
-    async def test_fallback_transport_error_returns_held_with_warning(
-        self, exc: Exception, std_address: object
+    async def test_unreachable_primary_falls_back(self, std_address: object) -> None:
+        chain = ChainProvider(providers=[_unreachable_usps(), _mock_provider(_GOOGLE_CONFIRMED)])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "confirmed"
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
+    async def test_all_unreachable_raises_rate_limited_all(self, std_address: object) -> None:
+        """The router maps ProviderRateLimitedError to 429 + Retry-After."""
+        chain = ChainProvider(providers=[_unreachable_usps(), _unreachable_google()])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds > 0
+
+    @pytest.mark.asyncio
+    async def test_unreachable_fallback_returns_held_with_warning(
+        self, std_address: object
     ) -> None:
-        chain = ChainProvider(
-            providers=[_mock_provider(_USPS_UNDETERMINED), _raising_provider(exc)]
-        )
+        """CR 9 (GH #250): a network failure from a fallback provider must not
+        turn a held 200 answer into a 500."""
+        chain = ChainProvider(providers=[_mock_provider(_USPS_UNDETERMINED), _unreachable_google()])
 
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 
         assert result.validation.status == "undetermined"
         assert result.validation.provider == "usps"
         assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
-
-    @pytest.mark.asyncio
-    async def test_transport_error_with_nothing_held_propagates(self, std_address: object) -> None:
-        chain = ChainProvider(
-            providers=[
-                _raising_provider(httpx.ConnectError("boom")),
-                _mock_provider(_GOOGLE_CONFIRMED),
-            ]
-        )
-
-        with pytest.raises(httpx.ConnectError):
-            await chain.validate(std_address)  # type: ignore[arg-type]

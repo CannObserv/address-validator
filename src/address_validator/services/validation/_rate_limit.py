@@ -13,7 +13,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime
 from time import monotonic
-from typing import Literal
+from typing import Literal, NoReturn
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -302,6 +302,27 @@ def _raise_for_unexpected_status(
             provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
         ) from exc
     logger.warning("%s provider returned unexpected HTTP %d", provider, status)
+    raise ProviderTransientError(
+        provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+    ) from exc
+
+
+def _raise_for_transport_error(
+    exc: Exception,
+    *,
+    provider: str,
+    logger: logging.Logger,
+) -> NoReturn:
+    """Map a network failure (connect error, timeout) to ``ProviderTransientError``.
+
+    The transport-layer counterpart of :func:`_raise_for_unexpected_status`:
+    a raw :class:`httpx.TransportError` (or google-auth's own
+    ``TransportError`` from a credential refresh) never escapes the client,
+    so the chain provider falls through to the next provider (GH #257).
+
+    Logs the exception type only — its message is not ours to vet for PII.
+    """
+    logger.warning("%s provider unreachable (%s)", provider, type(exc).__name__)
     raise ProviderTransientError(
         provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
     ) from exc

@@ -3,6 +3,7 @@
 import copy
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import google.auth.exceptions
 import httpx
 import pytest
 
@@ -297,12 +298,6 @@ class TestGoogleClientValidateAddress:
         assert body["address"]["addressLines"][0] == "9 BENNY DR"
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(self, client: GoogleClient, mock_http: AsyncMock) -> None:
-        mock_http.post.side_effect = httpx.TimeoutException("timeout")
-        with pytest.raises(httpx.TimeoutException):
-            await client.validate_address("123 Main St")
-
-    @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 403])
     async def test_auth_status_raises_bad_request(
         self, status: int, client: GoogleClient, mock_http: AsyncMock, caplog
@@ -360,6 +355,42 @@ class TestGoogleClientValidateAddress:
 
         with pytest.raises(ProviderTransientError):
             await client.validate_address("123 Main St")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("exc", [httpx.ConnectError("refused"), httpx.ReadTimeout("slow")])
+    async def test_transport_error_raises_transient_error(
+        self, exc: httpx.TransportError, client: GoogleClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #257: a network failure maps to ProviderTransientError so the chain
+        falls through — the raw httpx.TransportError surfaced as HTTP 500."""
+        mock_http.post.side_effect = exc
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+        assert exc_info.value.__cause__ is exc
+        messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(type(exc).__name__ in m for m in messages)
+        assert not any("Main St" in m for m in messages)
+
+    @pytest.mark.asyncio
+    async def test_credential_refresh_transport_error_raises_transient_error(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        """GH #257: an ADC token refresh that cannot reach its endpoint raises
+        google-auth's own TransportError (it runs on ``requests``, not httpx)."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = google.auth.exceptions.TransportError("unreachable")
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        mock_http.post.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(
