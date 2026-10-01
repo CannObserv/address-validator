@@ -34,7 +34,7 @@
 
 Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`confirmed`/`invalid`/`not_found`, see [Google provider](#google-provider)) and is `undetermined` only when there is no `postalAddress` or granularity either. An unknown Google code is `undetermined`, as for USPS.
 
-`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: with a chain, every provider error short of a 400 — 429, local quota, 5xx, connect error, timeout — falls through, and an exhausted chain returns 429. A single-provider config still returns 500 for a 5xx, network failure or local-quota rejection: the route maps only `ProviderRateLimitedError` to 429 (GH #268).
+`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single-provider config still returns 500 for a 5xx, network failure or local-quota rejection: the route maps only `ProviderRateLimitedError` to 429 (GH #268).
 
 ## Configuring providers
 
