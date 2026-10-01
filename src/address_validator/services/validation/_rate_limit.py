@@ -13,7 +13,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime
 from time import monotonic
-from typing import Literal
+from typing import Literal, NoReturn
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -269,7 +269,7 @@ def _raise_for_unexpected_status(
     *,
     provider: str,
     logger: logging.Logger,
-) -> None:
+) -> NoReturn:
     """Map a non-2xx response outside the 400/429 paths to a typed provider error.
 
     Callers handle HTTP 400 (``ProviderBadRequestError``) and 429
@@ -302,6 +302,29 @@ def _raise_for_unexpected_status(
             provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
         ) from exc
     logger.warning("%s provider returned unexpected HTTP %d", provider, status)
+    raise ProviderTransientError(
+        provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+    ) from exc
+
+
+def _raise_for_request_error(
+    exc: Exception,
+    *,
+    provider: str,
+    logger: logging.Logger,
+) -> NoReturn:
+    """Map a failed request (no usable HTTP response) to ``ProviderTransientError``.
+
+    The request-layer counterpart of :func:`_raise_for_unexpected_status`:
+    a raw :class:`httpx.RequestError` — connect error, timeout, protocol
+    error, undecodable body — or google-auth's own ``TransportError`` from a
+    credential refresh never escapes the client, so the chain provider falls
+    through to the next provider (GH #257).  ``RequestError``, not
+    ``TransportError``, for the reason ``libpostal_client`` gives (#239).
+
+    Logs the exception type only — its message is not ours to vet for PII.
+    """
+    logger.warning("%s provider request failed (%s)", provider, type(exc).__name__)
     raise ProviderTransientError(
         provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
     ) from exc

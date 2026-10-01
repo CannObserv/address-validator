@@ -2,7 +2,9 @@
 
 import os
 from collections.abc import Generator
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -19,6 +21,14 @@ os.environ.setdefault("API_KEY", TEST_API_KEY)
 os.environ.setdefault("VALIDATION_CACHE_DSN", TEST_CACHE_DSN)
 
 from address_validator.main import app  # noqa: E402
+from address_validator.services.validation._rate_limit import (  # noqa: E402
+    QuotaGuard,
+    QuotaWindow,
+)
+from address_validator.services.validation.google_client import GoogleClient  # noqa: E402
+from address_validator.services.validation.google_provider import GoogleProvider  # noqa: E402
+from address_validator.services.validation.usps_client import USPSClient  # noqa: E402
+from address_validator.services.validation.usps_provider import USPSProvider  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -75,3 +85,41 @@ def admin_headers() -> dict[str, str]:
         "X-ExeDev-UserID": "test-user-123",
         "X-ExeDev-Email": "admin@test.example.com",
     }
+
+
+# -- Real providers whose network layer fails (GH #257) -----------------------
+# Real client + provider, mocked httpx: exercises the clients' error mapping,
+# not a stub's. Shared by the chain unit tests and the route integration tests.
+
+
+def _quota_guard(name: str) -> QuotaGuard:
+    return QuotaGuard(
+        windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
+        latency_budget_s=1.0,
+        provider_name=name,
+    )
+
+
+def unreachable_usps() -> USPSProvider:
+    """USPS provider whose every request is refused (token fetch and address call)."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.side_effect = httpx.ConnectError("refused")
+    http.get.side_effect = httpx.ConnectError("refused")
+    return USPSProvider(
+        USPSClient(
+            consumer_key="key",
+            consumer_secret="secret",
+            http_client=http,
+            quota_guard=_quota_guard("usps"),
+        )
+    )
+
+
+def unreachable_google() -> GoogleProvider:
+    """Google provider whose every request times out."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.side_effect = httpx.ReadTimeout("slow")
+    creds = MagicMock(valid=True, token="tok")
+    return GoogleProvider(
+        GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
+    )

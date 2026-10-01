@@ -14,6 +14,7 @@ import asyncio
 import logging
 from typing import Any, NamedTuple
 
+import google.auth.exceptions
 import httpx
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
@@ -28,13 +29,16 @@ from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
+    _TRANSIENT_DEFAULT_RETRY_AFTER_S,
     QuotaGuard,
     _parse_retry_after,
+    _raise_for_request_error,
     _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 
 logger = logging.getLogger(__name__)
@@ -154,9 +158,29 @@ class GoogleClient:
         Credential refresh is a blocking HTTP call (token endpoint or metadata
         server).  We offload it to a thread to avoid stalling the event loop.
         Refreshes are infrequent (~once per hour).
+
+        Two ``RefreshError`` shapes are transient and map to
+        ``ProviderTransientError``, like a USPS token-endpoint 5xx (GH-115):
+        ``retryable=True`` (a token-endpoint 5xx google-auth's own retries could
+        not clear), and one caused by google-auth's ``TransportError`` — Compute
+        Engine credentials wrap a metadata-server network failure that way,
+        with ``retryable`` left False.  Any other ``RefreshError`` (bad or
+        revoked credentials) propagates: operator action, not a fallback.
         """
         if not self._credentials.valid:
-            await asyncio.to_thread(self._credentials.refresh, AuthRequest())
+            try:
+                await asyncio.to_thread(self._credentials.refresh, AuthRequest())
+            except google.auth.exceptions.RefreshError as exc:
+                if not (
+                    exc.retryable
+                    or isinstance(exc.__cause__, google.auth.exceptions.TransportError)
+                ):
+                    raise
+                # Fixed text: the exception carries the token endpoint's error body.
+                logger.warning("GoogleClient: credential refresh failed transiently")
+                raise ProviderTransientError(
+                    "google", retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+                ) from exc
         return {"Authorization": f"Bearer {self._credentials.token}"}
 
     async def validate_address(
@@ -193,8 +217,10 @@ class GoogleClient:
                 or HTTP 401/403 (operator action required: rotate credentials
                 or fix IAM).
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
-            ProviderTransientError: on HTTP 5xx or any other unexpected
-                non-2xx response.
+            ProviderTransientError: on HTTP 5xx, any other unexpected
+                non-2xx response, a failed request (connect error, timeout,
+                undecodable body) on the API call, or a transient
+                credential-refresh failure (see ``_get_auth_headers``).
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
@@ -228,11 +254,16 @@ class GoogleClient:
                 len(address_lines),
                 country,
             )
-            resp = await self._http.post(
-                _VALIDATE_URL,
-                headers=await self._get_auth_headers(),
-                json=payload,
-            )
+            try:
+                resp = await self._http.post(
+                    _VALIDATE_URL,
+                    headers=await self._get_auth_headers(),
+                    json=payload,
+                )
+            except (httpx.RequestError, google.auth.exceptions.TransportError) as exc:
+                # google-auth raises its own TransportError when a credential
+                # refresh cannot reach its token endpoint (GH #257).
+                _raise_for_request_error(exc, provider="google", logger=logger)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:

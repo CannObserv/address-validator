@@ -8,8 +8,6 @@ Do not instantiate directly in application code.
 
 import logging
 
-import httpx
-
 from address_validator.core import warnings as warning_catalogue
 from address_validator.core.validation_status import UNDETERMINED
 from address_validator.models import StandardizedAddress, ValidateResponseV2
@@ -35,7 +33,8 @@ class ChainProvider:
     * :class:`~services.validation.errors.ProviderRateLimitedError` (HTTP 429)
     * :class:`~services.validation.errors.ProviderAtCapacityError` (local quota)
     * :class:`~services.validation.errors.ProviderTransientError` (HTTP 5xx /
-      unexpected non-2xx)
+      unexpected non-2xx / failed request or credential refresh — the clients
+      wrap connect errors, timeouts and undecodable bodies, GH #257)
     * :class:`~services.validation.errors.ProviderBadRequestError` (HTTP 400)
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
@@ -55,17 +54,19 @@ class ChainProvider:
     When all providers fail:
 
     * If **any** provider raised a transient error (rate-limited / at-capacity
-      / upstream 5xx), a :class:`~services.validation.errors.ProviderRateLimitedError`
+      / upstream 5xx / unreachable), a :class:`~services.validation.errors.ProviderRateLimitedError`
       with ``provider="all"`` is raised — the caller should retry later.
     * If **every** provider raised
       :class:`~services.validation.errors.ProviderBadRequestError`, a
       ``ProviderBadRequestError("all")`` is raised — the input itself is
       the problem, not transient capacity.
 
-    Any other exception (network error, programming bug, etc.) is re-raised
-    immediately without trying further providers — except a network error
-    (``httpx.TransportError``) raised after an ``undetermined`` answer is held,
-    which counts as transient so the held 200 answer is still returned.
+    Any other exception is re-raised immediately without trying further
+    providers.  The list above is closed: the clients map every non-2xx
+    response and every failed request to one of those errors and never leak
+    a raw ``httpx`` exception (GH #257).  What they do not map still ends the
+    chain as a 500 — e.g. an unparseable 200 body, or a non-retryable Google
+    credential-refresh failure (operator action).
 
     Parameters
     ----------
@@ -90,7 +91,7 @@ class ChainProvider:
         last_transient: _TransientErr | None = None
         last_bad_request: ProviderBadRequestError | None = None
         held: ValidateResponseV2 | None = None
-        unreachable = False  # any provider failed transiently or at the transport layer
+        unreachable = False  # any provider failed transiently
         for provider in self._providers:
             name = type(provider).__name__
             try:
@@ -111,18 +112,6 @@ class ChainProvider:
                 last_bad_request = exc
                 logger.warning(
                     "ChainProvider: %s unavailable (%s), trying next provider",
-                    name,
-                    type(exc).__name__,
-                )
-            except httpx.TransportError as exc:
-                # Network failure (connect error, timeout) — not wrapped by the
-                # clients. With nothing held it propagates as before; once a 200
-                # answer is held it must not turn that answer into a 500 (GH #250).
-                if held is None:
-                    raise
-                unreachable = True
-                logger.warning(
-                    "ChainProvider: %s unreachable (%s), keeping undetermined answer",
                     name,
                     type(exc).__name__,
                 )

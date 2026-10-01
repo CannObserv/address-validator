@@ -2,10 +2,10 @@
 
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
 from address_validator.models import ComponentSet, StandardizeResponseV2
+from address_validator.services.validation.errors import ProviderTransientError
 from address_validator.services.validation.usps_provider import USPSProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -245,9 +245,13 @@ class TestUSPSProvider:
         assert mock_client.validate_address.call_args.kwargs["secondary_address"] is None
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
-        mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
-        with pytest.raises(httpx.TimeoutException):
+    async def test_client_error_propagates(
+        self, provider: USPSProvider, mock_client: AsyncMock
+    ) -> None:
+        """The client maps every upstream failure, network ones included (GH #257);
+        the provider passes its typed error through to the chain."""
+        mock_client.validate_address.side_effect = ProviderTransientError("usps")
+        with pytest.raises(ProviderTransientError):
             await provider.validate(_make_std())
 
     @pytest.mark.asyncio

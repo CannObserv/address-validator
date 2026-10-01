@@ -22,6 +22,9 @@ from address_validator.services.validation.usps_client import (
     _summarise_shape,
 )
 
+# An httpx error message can embed the request URL, and with it the address.
+_ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
+
 TOKEN_RESPONSE = {
     "access_token": "tok-abc",
     "token_type": "Bearer",
@@ -319,6 +322,45 @@ class TestUSPSClient:
         mock_http.post.return_value = token_fail
 
         with caplog.at_level("ERROR"), pytest.raises(ProviderBadRequestError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        mock_http.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
+        ],
+    )
+    async def test_request_error_raises_transient_error(
+        self, exc: httpx.RequestError, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #257: a network failure maps to ProviderTransientError so the chain
+        falls through — the raw httpx error surfaced as HTTP 500."""
+        mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
+        mock_http.get.side_effect = exc
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+        assert exc_info.value.__cause__ is exc
+        messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(type(exc).__name__ in m for m in messages)
+        # The message is never logged: it can embed the request URL (CR 3).
+        assert "Main St" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_token_endpoint_transport_error_raises_transient_error(
+        self, client: USPSClient, mock_http: AsyncMock
+    ) -> None:
+        """GH #257: the OAuth2 token fetch is a network call too."""
+        mock_http.post.side_effect = httpx.ConnectTimeout("slow")
+
+        with pytest.raises(ProviderTransientError) as exc_info:
             await client.validate_address("123 Main St", "Springfield", "IL")
         assert exc_info.value.provider == "usps"
         mock_http.get.assert_not_called()

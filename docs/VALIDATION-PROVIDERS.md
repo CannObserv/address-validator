@@ -34,7 +34,7 @@
 
 Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`confirmed`/`invalid`/`not_found`, see [Google provider](#google-provider)) and is `undetermined` only when there is no `postalAddress` or granularity either. An unknown Google code is `undetermined`, as for USPS.
 
-`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429 (or 5xx for transport failures), not as a status.
+`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single-provider config still returns 500 for a 5xx, network failure or local-quota rejection: the route maps only `ProviderRateLimitedError` to 429 (GH #268).
 
 ## Configuring providers
 
@@ -203,11 +203,14 @@ logic would allow. The task is cancelled on application shutdown.
 
 ## Fallback chain internals
 
-`ChainProvider` catches both `ProviderRateLimitedError` (upstream HTTP 429 after retries) and
-`ProviderAtCapacityError` (local quota exhausted before sending) and delegates to the next
-provider. It also catches `ProviderBadRequestError` (upstream HTTP 400, e.g. USPS or Google
-rejecting a malformed input) and tries the next provider; only if every provider in the chain
-raises `ProviderBadRequestError` does the route handler return `validation.status="error"`.
+`ChainProvider` catches `ProviderRateLimitedError` (upstream HTTP 429 after retries),
+`ProviderAtCapacityError` (local quota exhausted before sending) and `ProviderTransientError`
+(upstream 5xx, or a network failure — connect error, timeout — that the client wraps, GH #257)
+and delegates to the next provider. It also catches `ProviderBadRequestError` (upstream HTTP
+400, e.g. USPS or Google rejecting a malformed input) and tries the next provider; only if every
+provider in the chain raises `ProviderBadRequestError` does the route handler return
+`validation.status="error"`. Nothing else is caught, so a client must never leak a raw `httpx`
+exception: it would skip the remaining providers and return HTTP 500.
 
 An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
@@ -218,7 +221,7 @@ is discarded, because Google's own validation logic sends a US answer with an em
 never carry a DPV code, so any determined non-US answer replaces a held one. With nothing held
 (USPS 400/429 → Google), the verdict answer is returned as before. If nothing better comes back, the first
 held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
-transiently along the way (including a network error once an answer is held), the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
+transiently along the way, the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
 `CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the
 `undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
 call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.

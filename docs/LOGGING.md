@@ -55,11 +55,12 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.google_client` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
+| Google credential refresh failed transiently — token endpoint 5xx after google-auth's retries, or a metadata-server network failure (Compute Engine credentials), raised as `ProviderTransientError` (GH #257) | `WARNING` | `services.validation.google_client` | fixed message only — the exception carries the token endpoint's error body, `request_id` |
 | Google `uspsData.errorMessage` present — USPS processing suspended (once per `cassProcessed` value per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
-| Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
+| Provider request failed — any `httpx.RequestError` (connect error, timeout, undecodable body) or google-auth `TransportError`, raised as `ProviderTransientError` (GH #257) | `WARNING` | `services.validation.usps_client` / `services.validation.google_client` | provider name, exception class name only — never `str(exc)`, `request_id` |
+| Provider rate-limited / at-capacity / transient / bad request (chain fallback) | `WARNING` | `services.validation.chain_provider` | provider class name, exception class name, `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
 | US input: fallback provider answered without a DPV code after an `undetermined` answer was held (answer kept, GH #258) | `INFO` | `services.validation.chain_provider` | provider class name, discarded status, `request_id` |
-| Fallback provider network error after an `undetermined` answer was held (answer kept, GH #250) | `WARNING` | `services.validation.chain_provider` | provider class name, exception class name, `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
 | libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |

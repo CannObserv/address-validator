@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
@@ -15,6 +14,7 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
+from tests.conftest import unreachable_google, unreachable_usps
 
 pytestmark = pytest.mark.integration
 
@@ -116,6 +116,47 @@ class TestV2ValidateUnparseableInput:
         assert warning_catalogue.PROVIDER_REJECTED_MALFORMED in body["warnings"]
 
 
+class TestV2ValidateProviderUnreachable:
+    """GH #257: a provider network failure (connect error, timeout) falls back to
+    the next provider, and ends as 429 + Retry-After when none answers —
+    never as a 500."""
+
+    _GOOGLE_CONFIRMED = ValidateResponseV2(
+        address_line_1="123 MAIN ST",
+        city="SEATTLE",
+        region="WA",
+        postal_code="98101-1234",
+        country="US",
+        validation=ValidationResult(status="confirmed", dpv_match_code="Y", provider="google"),
+    )
+
+    def test_unreachable_primary_falls_back(self, client) -> None:
+        google = AsyncMock()
+        google.validate = AsyncMock(return_value=self._GOOGLE_CONFIRMED)
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[unreachable_usps(), google])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"]["status"] == "confirmed"
+        assert body["validation"]["provider"] == "google"
+
+    def test_all_unreachable_returns_429_with_retry_after(self, client) -> None:
+        chain = ChainProvider(providers=[unreachable_usps(), unreachable_google()])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+        assert response.status_code == 429, response.text
+        assert response.json()["error"] == "provider_rate_limited"
+        assert int(response.headers["Retry-After"]) >= 1
+
+
 class TestV2ValidateUndetermined:
     """GH #250: a USPS no-DPV answer reaches the client as 200 + `undetermined`,
     through a real ChainProvider, with the fallback-unreachable warning when the
@@ -163,7 +204,7 @@ class TestV2ValidateUndetermined:
         chain = ChainProvider(
             providers=[
                 self._stub(return_value=self._USPS_UNDETERMINED),
-                self._stub(side_effect=httpx.ConnectError("boom")),
+                unreachable_google(),
             ]
         )
         with _mock_registry_with(chain):

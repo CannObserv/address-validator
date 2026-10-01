@@ -3,6 +3,7 @@
 import copy
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import google.auth.exceptions
 import httpx
 import pytest
 
@@ -14,6 +15,9 @@ from address_validator.services.validation.errors import (
     ProviderTransientError,
 )
 from address_validator.services.validation.google_client import GoogleClient
+
+# An httpx error message can embed the request URL, and with it the address.
+_ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
 
 # Minimal realistic Google Address Validation API response for a confirmed address.
 GOOGLE_RESPONSE_Y = {
@@ -297,12 +301,6 @@ class TestGoogleClientValidateAddress:
         assert body["address"]["addressLines"][0] == "9 BENNY DR"
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(self, client: GoogleClient, mock_http: AsyncMock) -> None:
-        mock_http.post.side_effect = httpx.TimeoutException("timeout")
-        with pytest.raises(httpx.TimeoutException):
-            await client.validate_address("123 Main St")
-
-    @pytest.mark.asyncio
     @pytest.mark.parametrize("status", [401, 403])
     async def test_auth_status_raises_bad_request(
         self, status: int, client: GoogleClient, mock_http: AsyncMock, caplog
@@ -360,6 +358,107 @@ class TestGoogleClientValidateAddress:
 
         with pytest.raises(ProviderTransientError):
             await client.validate_address("123 Main St")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
+        ],
+    )
+    async def test_request_error_raises_transient_error(
+        self, exc: httpx.RequestError, client: GoogleClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #257: a network failure maps to ProviderTransientError so the chain
+        falls through — the raw httpx error surfaced as HTTP 500."""
+        mock_http.post.side_effect = exc
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+        assert exc_info.value.__cause__ is exc
+        messages = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any(type(exc).__name__ in m for m in messages)
+        # The message is never logged: it can embed the request URL (CR 3).
+        assert "Main St" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_credential_refresh_transport_error_raises_transient_error(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        """GH #257: an ADC token refresh that cannot reach its endpoint raises
+        google-auth's own TransportError (it runs on ``requests``, not httpx)."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = google.auth.exceptions.TransportError("unreachable")
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        mock_http.post.assert_not_called()
+
+    @staticmethod
+    def _metadata_unreachable() -> google.auth.exceptions.RefreshError:
+        """How Compute Engine credentials report a metadata-server network failure."""
+        cause = google.auth.exceptions.TransportError("metadata server unavailable")
+        err = google.auth.exceptions.RefreshError(cause)
+        err.__cause__ = cause
+        return err
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "make_error",
+        [
+            lambda: google.auth.exceptions.RefreshError(
+                "server_error: backend unavailable", retryable=True
+            ),
+            _metadata_unreachable,
+        ],
+        ids=["retryable", "wrapped-transport-error"],
+    )
+    async def test_transient_refresh_error_raises_transient_error(
+        self, make_error, mock_http: AsyncMock, _default_guard: QuotaGuard, caplog
+    ) -> None:
+        """CR 2, CR 9 (GH #257): a token-endpoint 5xx that google-auth's own
+        retries could not clear, or a metadata-server network failure that
+        Compute Engine credentials wrap with ``retryable`` False, is transient."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = make_error()
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+        mock_http.post.assert_not_called()
+        assert "unavailable" not in caplog.text  # fixed text only, never the error body
+
+    @pytest.mark.asyncio
+    async def test_non_retryable_refresh_error_propagates(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        """Bad or revoked credentials are operator action, not a fallback."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = google.auth.exceptions.RefreshError(
+            "invalid_grant", retryable=False
+        )
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with pytest.raises(google.auth.exceptions.RefreshError):
+            await client.validate_address("123 Main St")
+        mock_http.post.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(

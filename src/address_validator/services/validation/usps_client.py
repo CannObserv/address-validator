@@ -25,6 +25,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     QuotaGuard,
     _parse_retry_after,
+    _raise_for_request_error,
     _raise_for_unexpected_status,
 )
 from address_validator.services.validation.errors import (
@@ -226,7 +227,8 @@ class USPSClient:
         (operator action required: fix OAuth credentials).
 
         Raises :class:`~services.validation.errors.ProviderTransientError`
-        on HTTP 5xx or any unexpected non-2xx response.
+        on HTTP 5xx, any unexpected non-2xx response, or a failed request
+        (connect error, timeout, undecodable body) on the token or address call.
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if secondary_address:
@@ -246,12 +248,16 @@ class USPSClient:
 
         for attempt in range(_RETRY_MAX + 1):
             await self._rate_limiter.acquire()
-            token = await self._get_token()
-            resp = await self._http.get(
-                self._address_url,
-                headers={"Authorization": f"Bearer {token}"},
-                params=params,
-            )
+            try:
+                token = await self._get_token()
+                resp = await self._http.get(
+                    self._address_url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    params=params,
+                )
+            except httpx.RequestError as exc:
+                # Covers the token fetch too: both are network calls (GH #257).
+                _raise_for_request_error(exc, provider="usps", logger=logger)
             try:
                 resp.raise_for_status()
             except httpx.HTTPStatusError as exc:

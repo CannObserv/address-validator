@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
@@ -20,6 +19,7 @@ from address_validator.services.validation.errors import (
     ProviderTransientError,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
+from tests.conftest import unreachable_google, unreachable_usps
 
 _CONFIRMED = ValidateResponseV2(
     country="US",
@@ -560,32 +560,39 @@ class TestChainHeldPrecedence:
 
 
 class TestChainTransportErrors:
-    """CR 9 (GH #250): a network failure from a fallback provider must not turn a
-    held 200 answer into a 500; with nothing held it still propagates."""
+    """GH #257: the clients wrap a network failure (connect error, timeout) in
+    ProviderTransientError, so the chain falls through on it like a 5xx.
+    The raw httpx.TransportError used to escape the chain as HTTP 500."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("exc", [httpx.ConnectError("boom"), httpx.ReadTimeout("slow")])
-    async def test_fallback_transport_error_returns_held_with_warning(
-        self, exc: Exception, std_address: object
+    async def test_unreachable_primary_falls_back(self, std_address: object) -> None:
+        chain = ChainProvider(providers=[unreachable_usps(), _mock_provider(_GOOGLE_CONFIRMED)])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "confirmed"
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
+    async def test_all_unreachable_raises_rate_limited_all(self, std_address: object) -> None:
+        """The router maps ProviderRateLimitedError to 429 + Retry-After."""
+        chain = ChainProvider(providers=[unreachable_usps(), unreachable_google()])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds > 0
+
+    @pytest.mark.asyncio
+    async def test_unreachable_fallback_returns_held_with_warning(
+        self, std_address: object
     ) -> None:
-        chain = ChainProvider(
-            providers=[_mock_provider(_USPS_UNDETERMINED), _raising_provider(exc)]
-        )
+        """CR 9 (GH #250): a network failure from a fallback provider must not
+        turn a held 200 answer into a 500."""
+        chain = ChainProvider(providers=[_mock_provider(_USPS_UNDETERMINED), unreachable_google()])
 
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 
         assert result.validation.status == "undetermined"
         assert result.validation.provider == "usps"
         assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
-
-    @pytest.mark.asyncio
-    async def test_transport_error_with_nothing_held_propagates(self, std_address: object) -> None:
-        chain = ChainProvider(
-            providers=[
-                _raising_provider(httpx.ConnectError("boom")),
-                _mock_provider(_GOOGLE_CONFIRMED),
-            ]
-        )
-
-        with pytest.raises(httpx.ConnectError):
-            await chain.validate(std_address)  # type: ignore[arg-type]
