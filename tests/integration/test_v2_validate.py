@@ -2,13 +2,11 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.main import app
 from address_validator.models import ValidateResponseV2, ValidationResult
-from address_validator.services.validation._rate_limit import QuotaGuard, QuotaWindow
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -16,8 +14,7 @@ from address_validator.services.validation.errors import (
 )
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
-from address_validator.services.validation.usps_client import USPSClient
-from address_validator.services.validation.usps_provider import USPSProvider
+from tests.conftest import unreachable_google, unreachable_usps
 
 pytestmark = pytest.mark.integration
 
@@ -26,39 +23,6 @@ def _mock_registry_with(provider):
     mock_reg = MagicMock()
     mock_reg.get_provider.return_value = provider
     return patch.object(app.state, "registry", mock_reg)
-
-
-def _quota_guard(name: str) -> QuotaGuard:
-    return QuotaGuard(
-        windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
-        latency_budget_s=1.0,
-        provider_name=name,
-    )
-
-
-def _unreachable_usps() -> USPSProvider:
-    """Real USPS client + provider whose network layer refuses the connection."""
-    http = AsyncMock(spec=httpx.AsyncClient)
-    http.post.side_effect = httpx.ConnectError("refused")
-    http.get.side_effect = httpx.ConnectError("refused")
-    return USPSProvider(
-        USPSClient(
-            consumer_key="key",
-            consumer_secret="secret",
-            http_client=http,
-            quota_guard=_quota_guard("usps"),
-        )
-    )
-
-
-def _unreachable_google() -> GoogleProvider:
-    """Real Google client + provider whose network layer times out."""
-    http = AsyncMock(spec=httpx.AsyncClient)
-    http.post.side_effect = httpx.ReadTimeout("slow")
-    creds = MagicMock(valid=True, token="tok")
-    return GoogleProvider(
-        GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
-    )
 
 
 class TestV2ValidateBasic:
@@ -170,7 +134,7 @@ class TestV2ValidateProviderUnreachable:
         google = AsyncMock()
         google.validate = AsyncMock(return_value=self._GOOGLE_CONFIRMED)
         google.supports_non_us = True
-        chain = ChainProvider(providers=[_unreachable_usps(), google])
+        chain = ChainProvider(providers=[unreachable_usps(), google])
         with _mock_registry_with(chain):
             response = client.post(
                 "/api/v2/validate",
@@ -182,7 +146,7 @@ class TestV2ValidateProviderUnreachable:
         assert body["validation"]["provider"] == "google"
 
     def test_all_unreachable_returns_429_with_retry_after(self, client) -> None:
-        chain = ChainProvider(providers=[_unreachable_usps(), _unreachable_google()])
+        chain = ChainProvider(providers=[unreachable_usps(), unreachable_google()])
         with _mock_registry_with(chain):
             response = client.post(
                 "/api/v2/validate",
@@ -240,7 +204,7 @@ class TestV2ValidateUndetermined:
         chain = ChainProvider(
             providers=[
                 self._stub(return_value=self._USPS_UNDETERMINED),
-                _unreachable_google(),
+                unreachable_google(),
             ]
         )
         with _mock_registry_with(chain):
