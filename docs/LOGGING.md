@@ -50,12 +50,12 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | USPS 400 Bad Request | `WARNING` | `services.validation.usps_client` | `request_id` |
 | USPS 429 received | `WARNING` | `services.validation.usps_client` | `request_id` |
 | Recon: novel USPS response shape (issue #122) | `INFO` | `services.validation.usps_client` | `dpv=`, `extras=`, `request_id` |
+| USPS unrecognised `additionalInfo.DPVConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.usps_provider` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
 | Google API call start | `DEBUG` | `services.validation.google_provider` | `country=`, `request_id` |
 | Google 400 Bad Request | `WARNING` | `services.validation.google_client` | `request_id` |
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
-| Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct value per process, GH #254) | `WARNING` | `services.validation.google_client` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
-| USPS unrecognised `additionalInfo.DPVConfirmation`, mapped to `undetermined` (once per distinct value per process, GH #254) | `WARNING` | `services.validation.usps_provider` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
-| Google `uspsData.errorMessage` present — USPS processing suspended (once per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
+| Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.google_client` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
+| Google `uspsData.errorMessage` present — USPS processing suspended (once per `cassProcessed` value per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
 | US input: fallback provider answered without a DPV code after an `undetermined` answer was held (answer kept, GH #258) | `INFO` | `services.validation.chain_provider` | provider class name, discarded status, `request_id` |
