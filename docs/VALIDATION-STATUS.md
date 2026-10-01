@@ -15,8 +15,11 @@ and the admin `VS_META` table
 ([`routers/admin/_config.py`](../src/address_validator/routers/admin/_config.py)) —
 are kept in sync by the drift test
 [`tests/unit/test_validation_status_catalogue.py`](../tests/unit/test_validation_status_catalogue.py),
-which fails CI if any side gains or loses an entry. To add or change a status,
-edit `core/validation_status.py` and this table together.
+which fails CI if any side gains or loses an entry. It also requires the DPV
+column below, and the DPV table in
+[`VALIDATION-PROVIDERS.md`](VALIDATION-PROVIDERS.md), to match the DPV→status
+map. To add or change a status, edit `core/validation_status.py` and this table
+together.
 
 This mirrors the response-warning catalogue pattern
 ([`WARNINGS.md`](WARNINGS.md), GH #131/#132).
@@ -26,11 +29,31 @@ This mirrors the response-warning catalogue pattern
 | Status | DPV code | Meaning |
 |---|---|---|
 | `confirmed` | Y | Fully confirmed delivery point. |
-| `confirmed_missing_secondary` | S | Building confirmed, unit (secondary) missing. |
-| `confirmed_bad_secondary` | D | Building confirmed, unit (secondary) unrecognised. |
+| `confirmed_missing_secondary` | D | Building confirmed, unit (secondary) missing. |
+| `confirmed_bad_secondary` | S | Building confirmed, unit (secondary) supplied but not confirmed. |
 | `not_confirmed` | N | Address not found in the USPS database. |
 | `not_found` | — | Google verdict (non-US, or US without a CASS DPV code): address could not be geocoded or verified. |
 | `invalid` | — | Google verdict (non-US, or US without a CASS DPV code): address is geocodable but incomplete. |
 | `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
 | `unavailable` | — | No validation provider is configured. Never a per-address outcome; an outage surfaces as HTTP 429/5xx, not as a status. |
 | `error` | — | Provider rejected the input as malformed. |
+
+## D/S correction (GH #253)
+
+Until GH #253, DPV `D` and `S` were mapped to each other's status, against the
+USPS spec ([`usps-addresses-v3r2_4.yaml`](usps-addresses-v3r2_4.yaml),
+`DPVConfirmation`). Both providers were affected; Google's
+`uspsData.dpvConfirmation` uses the same codes.
+
+- **Cutover:** _pending deploy_ — the UTC time the production service first
+  started with migration 022 (`systemctl show address-validator -p
+  ActiveEnterTimestamp` right after the restart).
+- **Cache:** migration 022 relabelled every cached `D`/`S` row from its stored
+  `dpv_match_code`. Cache hits are correct from the cutover on.
+- **`audit_log` was not rewritten.** It records what clients were served, and
+  rows older than `AUDIT_RETENTION_DAYS` (default 90) are already in the GCS
+  Parquet archive. Before the cutover, `confirmed_missing_secondary` always
+  meant DPV `S` and `confirmed_bad_secondary` always meant DPV `D`, so swap the
+  two labels to read those rows correctly.
+- **Admin dashboard:** the provider view's status breakdown reads `audit_log`,
+  so for one retention window after the cutover it mixes both meanings.

@@ -7,8 +7,10 @@ sync with every downstream consumer:
 - the ``ValidationResult.status`` ``Literal`` in ``models.py``,
 - the ``validated_addresses.status`` ``CheckConstraint`` in ``db/tables.py``,
 - the DPV→status map in ``services/validation/_helpers.py`` (subset),
-- the ``VS_META`` display table in ``routers/admin/_config.py``, and
-- the consumer-facing catalogue ``docs/VALIDATION-STATUS.md``.
+- the ``VS_META`` display table in ``routers/admin/_config.py``,
+- the consumer-facing catalogue ``docs/VALIDATION-STATUS.md``, and
+- the DPV code columns of ``docs/VALIDATION-STATUS.md`` and
+  ``docs/VALIDATION-PROVIDERS.md`` (must equal the DPV→status map, GH #253).
 
 If you add or change a validation status, update both
 ``core/validation_status.py`` and ``docs/VALIDATION-STATUS.md`` — this test
@@ -27,6 +29,7 @@ from address_validator.services.validation._helpers import _DPV_TO_STATUS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATUS_DOC = REPO_ROOT / "docs" / "VALIDATION-STATUS.md"
+PROVIDERS_DOC = REPO_ROOT / "docs" / "VALIDATION-PROVIDERS.md"
 
 
 def _documented_statuses() -> set[str]:
@@ -34,6 +37,22 @@ def _documented_statuses() -> set[str]:
     table in ``docs/VALIDATION-STATUS.md``."""
     text = STATUS_DOC.read_text(encoding="utf-8")
     return {m.group(1) for m in re.finditer(r"^\|\s*`([^`]+)`\s*\|", text, flags=re.MULTILINE)}
+
+
+def _status_doc_dpv_map() -> dict[str, str]:
+    """DPV code → status from the catalogue table rows that carry a DPV code
+    (``| `status` | D | ... |``) in ``docs/VALIDATION-STATUS.md``."""
+    text = STATUS_DOC.read_text(encoding="utf-8")
+    rows = re.finditer(r"^\|\s*`([a-z_]+)`\s*\|\s*([A-Z])\s*\|", text, flags=re.MULTILINE)
+    return {m.group(2): m.group(1) for m in rows}
+
+
+def _providers_doc_dpv_map() -> dict[str, str]:
+    """DPV code → status from the "DPV status mapping" table
+    (``| `D` | `status` | ... |``) in ``docs/VALIDATION-PROVIDERS.md``."""
+    text = PROVIDERS_DOC.read_text(encoding="utf-8")
+    rows = re.finditer(r"^\|\s*`([A-Z])`\s*\|\s*`([a-z_]+)`\s*\|", text, flags=re.MULTILINE)
+    return {m.group(1): m.group(2) for m in rows}
 
 
 def _check_constraint_statuses() -> set[str]:
@@ -72,6 +91,18 @@ def test_check_constraint_matches_catalogue() -> None:
 def test_dpv_map_values_are_subset() -> None:
     extra = set(_DPV_TO_STATUS.values()) - set(VALIDATION_STATUSES)
     assert not extra, f"DPV→status map emits statuses absent from VALIDATION_STATUSES: {extra}"
+
+
+def test_status_doc_dpv_column_matches_map() -> None:
+    assert _status_doc_dpv_map() == _DPV_TO_STATUS, (
+        "docs/VALIDATION-STATUS.md DPV column diverges from _DPV_TO_STATUS"
+    )
+
+
+def test_providers_doc_dpv_table_matches_map() -> None:
+    assert _providers_doc_dpv_map() == _DPV_TO_STATUS, (
+        "docs/VALIDATION-PROVIDERS.md DPV status mapping diverges from _DPV_TO_STATUS"
+    )
 
 
 def test_vs_meta_keys_match_catalogue() -> None:
