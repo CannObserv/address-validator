@@ -269,7 +269,7 @@ def _raise_for_unexpected_status(
     *,
     provider: str,
     logger: logging.Logger,
-) -> None:
+) -> NoReturn:
     """Map a non-2xx response outside the 400/429 paths to a typed provider error.
 
     Callers handle HTTP 400 (``ProviderBadRequestError``) and 429
