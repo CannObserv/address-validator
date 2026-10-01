@@ -55,6 +55,7 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | Google 429 received | `WARNING` | `services.validation.google_client` | `request_id` |
 | Provider rate-limited / at-capacity (chain fallback) | `WARNING` | `services.validation.chain_provider` | `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
+| US input: fallback provider answered without a DPV code after an `undetermined` answer was held (answer kept, GH #258) | `INFO` | `services.validation.chain_provider` | provider class name, discarded status, `request_id` |
 | Fallback provider network error after an `undetermined` answer was held (answer kept, GH #250) | `WARNING` | `services.validation.chain_provider` | provider class name, exception class name, `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |

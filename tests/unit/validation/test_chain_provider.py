@@ -464,6 +464,101 @@ class TestChainUndetermined:
         assert result.warnings == ["existing", warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
 
 
+class TestChainHeldPrecedence:
+    """GH #258: once an undetermined answer is held, only a fallback answer with a
+    DPV code replaces it. A Google verdict answer (US non-CASS: no DPV code) is a
+    geocoder opinion, weaker than USPS's own no-determination."""
+
+    @staticmethod
+    def _google(status: str, dpv: str | None) -> ValidateResponseV2:
+        return ValidateResponseV2(
+            country="US",
+            address_line_1="301 E Hbr St",
+            validation=ValidationResult(
+                status=status,  # type: ignore[arg-type]
+                dpv_match_code=dpv,  # type: ignore[arg-type]
+                provider="google",
+            ),
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["confirmed", "invalid", "not_found"])
+    async def test_verdict_answer_without_dpv_keeps_held_undetermined(
+        self, status: str, std_address: object
+    ) -> None:
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_USPS_UNDETERMINED),
+                _mock_provider(self._google(status, None)),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.address_line_1 == "301 E HARBOR AVE"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("status", "dpv"),
+        [
+            ("confirmed", "Y"),
+            ("confirmed_missing_secondary", "S"),
+            ("confirmed_bad_secondary", "D"),
+            ("not_confirmed", "N"),
+        ],
+    )
+    async def test_dpv_answer_replaces_held_undetermined(
+        self, status: str, dpv: str, std_address: object
+    ) -> None:
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_USPS_UNDETERMINED),
+                _mock_provider(self._google(status, dpv)),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == status
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["confirmed", "invalid", "not_found"])
+    async def test_non_us_verdict_answer_replaces_held_undetermined(
+        self, status: str, std_address: StandardizeResponseV2
+    ) -> None:
+        """CR 1: non-US answers never carry a DPV code, so the DPV rule cannot
+        apply — any determined non-US answer replaces a held undetermined."""
+        std_ca = std_address.model_copy(update={"country": "CA"})
+        usps_ca = _USPS_UNDETERMINED.model_copy(update={"country": "CA"})
+        google_ca = self._google(status, None).model_copy(update={"country": "CA"})
+        chain = ChainProvider(providers=[_mock_provider(usps_ca), _mock_provider(google_ca)])
+
+        result = await chain.validate(std_ca)
+
+        assert result.validation.status == status
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
+    async def test_verdict_answer_returned_when_nothing_held(self, std_address: object) -> None:
+        """Scope pin: USPS 400 → Google (e.g. #114 place-name input) holds nothing,
+        so the Google verdict answer is still returned as-is."""
+        chain = ChainProvider(
+            providers=[
+                _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
+                _mock_provider(self._google("confirmed", None)),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "confirmed"
+        assert result.validation.provider == "google"
+
+
 class TestChainTransportErrors:
     """CR 9 (GH #250): a network failure from a fallback provider must not turn a
     held 200 answer into a 500; with nothing held it still propagates."""
