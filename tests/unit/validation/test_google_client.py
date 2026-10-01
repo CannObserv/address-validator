@@ -400,6 +400,46 @@ class TestGoogleClientValidateAddress:
         mock_http.post.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_retryable_refresh_error_raises_transient_error(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard, caplog
+    ) -> None:
+        """CR 2 (GH #257): a token-endpoint 5xx that google-auth's own retries
+        could not clear is transient, like a USPS token-endpoint 5xx (GH-115)."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = google.auth.exceptions.RefreshError(
+            "server_error: backend unavailable", retryable=True
+        )
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St")
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+        mock_http.post.assert_not_called()
+        assert "backend unavailable" not in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_non_retryable_refresh_error_propagates(
+        self, mock_http: AsyncMock, _default_guard: QuotaGuard
+    ) -> None:
+        """Bad or revoked credentials are operator action, not a fallback."""
+        expired_creds = MagicMock()
+        expired_creds.valid = False
+        expired_creds.refresh.side_effect = google.auth.exceptions.RefreshError(
+            "invalid_grant", retryable=False
+        )
+        client = GoogleClient(
+            credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
+        )
+
+        with pytest.raises(google.auth.exceptions.RefreshError):
+            await client.validate_address("123 Main St")
+        mock_http.post.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:

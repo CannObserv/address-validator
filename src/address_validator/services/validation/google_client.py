@@ -29,6 +29,7 @@ from address_validator.services.validation._rate_limit import (
     _HTTP_BAD_REQUEST,
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
+    _TRANSIENT_DEFAULT_RETRY_AFTER_S,
     QuotaGuard,
     _parse_retry_after,
     _raise_for_request_error,
@@ -37,6 +38,7 @@ from address_validator.services.validation._rate_limit import (
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,9 +158,24 @@ class GoogleClient:
         Credential refresh is a blocking HTTP call (token endpoint or metadata
         server).  We offload it to a thread to avoid stalling the event loop.
         Refreshes are infrequent (~once per hour).
+
+        A token-endpoint 5xx that google-auth's own retries could not clear
+        raises ``RefreshError`` with ``retryable=True``; it is mapped to
+        ``ProviderTransientError`` like a USPS token-endpoint 5xx (GH-115).
+        A non-retryable ``RefreshError`` (bad or revoked credentials) still
+        propagates: operator action, not a fallback.
         """
         if not self._credentials.valid:
-            await asyncio.to_thread(self._credentials.refresh, AuthRequest())
+            try:
+                await asyncio.to_thread(self._credentials.refresh, AuthRequest())
+            except google.auth.exceptions.RefreshError as exc:
+                if not exc.retryable:
+                    raise
+                # Fixed text: the exception carries the token endpoint's error body.
+                logger.warning("GoogleClient: credential refresh failed transiently")
+                raise ProviderTransientError(
+                    "google", retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+                ) from exc
         return {"Authorization": f"Bearer {self._credentials.token}"}
 
     async def validate_address(
@@ -196,8 +213,9 @@ class GoogleClient:
                 or fix IAM).
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
             ProviderTransientError: on HTTP 5xx, any other unexpected
-                non-2xx response, or a network failure (connect error,
-                timeout) on the API call or a credential refresh.
+                non-2xx response, a network failure (connect error,
+                timeout) on the API call or a credential refresh, or a
+                retryable credential-refresh failure (token endpoint 5xx).
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
