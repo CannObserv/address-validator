@@ -159,17 +159,22 @@ class GoogleClient:
         server).  We offload it to a thread to avoid stalling the event loop.
         Refreshes are infrequent (~once per hour).
 
-        A token-endpoint 5xx that google-auth's own retries could not clear
-        raises ``RefreshError`` with ``retryable=True``; it is mapped to
-        ``ProviderTransientError`` like a USPS token-endpoint 5xx (GH-115).
-        A non-retryable ``RefreshError`` (bad or revoked credentials) still
-        propagates: operator action, not a fallback.
+        Two ``RefreshError`` shapes are transient and map to
+        ``ProviderTransientError``, like a USPS token-endpoint 5xx (GH-115):
+        ``retryable=True`` (a token-endpoint 5xx google-auth's own retries could
+        not clear), and one caused by google-auth's ``TransportError`` — Compute
+        Engine credentials wrap a metadata-server network failure that way,
+        with ``retryable`` left False.  Any other ``RefreshError`` (bad or
+        revoked credentials) propagates: operator action, not a fallback.
         """
         if not self._credentials.valid:
             try:
                 await asyncio.to_thread(self._credentials.refresh, AuthRequest())
             except google.auth.exceptions.RefreshError as exc:
-                if not exc.retryable:
+                if not (
+                    exc.retryable
+                    or isinstance(exc.__cause__, google.auth.exceptions.TransportError)
+                ):
                     raise
                 # Fixed text: the exception carries the token endpoint's error body.
                 logger.warning("GoogleClient: credential refresh failed transiently")

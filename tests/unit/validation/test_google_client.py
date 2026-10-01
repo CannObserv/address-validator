@@ -403,17 +403,34 @@ class TestGoogleClientValidateAddress:
         assert exc_info.value.provider == "google"
         mock_http.post.assert_not_called()
 
+    @staticmethod
+    def _metadata_unreachable() -> google.auth.exceptions.RefreshError:
+        """How Compute Engine credentials report a metadata-server network failure."""
+        cause = google.auth.exceptions.TransportError("metadata server unavailable")
+        err = google.auth.exceptions.RefreshError(cause)
+        err.__cause__ = cause
+        return err
+
     @pytest.mark.asyncio
-    async def test_retryable_refresh_error_raises_transient_error(
-        self, mock_http: AsyncMock, _default_guard: QuotaGuard, caplog
+    @pytest.mark.parametrize(
+        "make_error",
+        [
+            lambda: google.auth.exceptions.RefreshError(
+                "server_error: backend unavailable", retryable=True
+            ),
+            _metadata_unreachable,
+        ],
+        ids=["retryable", "wrapped-transport-error"],
+    )
+    async def test_transient_refresh_error_raises_transient_error(
+        self, make_error, mock_http: AsyncMock, _default_guard: QuotaGuard, caplog
     ) -> None:
-        """CR 2 (GH #257): a token-endpoint 5xx that google-auth's own retries
-        could not clear is transient, like a USPS token-endpoint 5xx (GH-115)."""
+        """CR 2, CR 9 (GH #257): a token-endpoint 5xx that google-auth's own
+        retries could not clear, or a metadata-server network failure that
+        Compute Engine credentials wrap with ``retryable`` False, is transient."""
         expired_creds = MagicMock()
         expired_creds.valid = False
-        expired_creds.refresh.side_effect = google.auth.exceptions.RefreshError(
-            "server_error: backend unavailable", retryable=True
-        )
+        expired_creds.refresh.side_effect = make_error()
         client = GoogleClient(
             credentials=expired_creds, http_client=mock_http, quota_guard=_default_guard
         )
@@ -423,7 +440,7 @@ class TestGoogleClientValidateAddress:
         assert exc_info.value.provider == "google"
         assert exc_info.value.retry_after_seconds > 0
         mock_http.post.assert_not_called()
-        assert "backend unavailable" not in caplog.text
+        assert "unavailable" not in caplog.text  # fixed text only, never the error body
 
     @pytest.mark.asyncio
     async def test_non_retryable_refresh_error_propagates(
