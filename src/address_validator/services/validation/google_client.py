@@ -50,7 +50,12 @@ _NON_GRANULAR: frozenset[str] = frozenset({"GRANULARITY_UNSPECIFIED", "OTHER", "
 
 
 def _verdict_to_status(verdict: dict[str, Any]) -> str:
-    """Derive a validation status from a non-US Google verdict dict."""
+    """Derive a validation status from a Google verdict dict (no DPV code).
+
+    Non-US answers use it as-is. The US non-CASS path never calls it for an
+    ``addressComplete`` verdict (that is ``undetermined``, GH #262), so for US
+    input it yields only ``invalid`` / ``not_found``.
+    """
     if verdict.get("addressComplete"):
         return "confirmed"
     if verdict.get("validationGranularity", "") not in _NON_GRANULAR:
@@ -351,9 +356,14 @@ class GoogleClient:
             city = fields.city
             region = fields.region
             postal_code = fields.postal_code
+            # addressComplete only says the components are consistent, not that
+            # USPS delivers there: with no DPV code Google's own logic says FIX,
+            # so a complete verdict is no determination (GH #262). The negative
+            # verdicts (invalid / not_found) are kept.
             status = (
                 _verdict_to_status(verdict)
-                if postal_addr or verdict.get("validationGranularity")
+                if (postal_addr or verdict.get("validationGranularity"))
+                and not verdict.get("addressComplete")
                 else UNDETERMINED
             )
 

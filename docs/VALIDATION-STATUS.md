@@ -28,13 +28,13 @@ This mirrors the response-warning catalogue pattern
 
 | Status | DPV code | Meaning |
 |---|---|---|
-| `confirmed` | Y | Fully confirmed delivery point. |
+| `confirmed` | Y | Fully confirmed delivery point. For non-US input (no DPV code), a Google verdict with `addressComplete`. A US answer without a DPV code is never `confirmed` (GH #262). |
 | `confirmed_missing_secondary` | D | Building confirmed, unit (secondary) missing. |
 | `confirmed_bad_secondary` | S | Building confirmed, unit (secondary) supplied but not confirmed. |
 | `not_confirmed` | N | Address not found in the USPS database. |
 | `not_found` | — | Google verdict (non-US, or US without a CASS DPV code): address could not be geocoded or verified. |
 | `invalid` | — | Google verdict (non-US, or US without a CASS DPV code): address is geocodable but incomplete. |
-| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
+| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. Google's US answer is also `undetermined` when its verdict is complete but CASS returned no DPV code (GH #262). An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
 | `unavailable` | — | No validation provider is configured. Never a per-address outcome; an outage surfaces as HTTP 429/5xx, not as a status. |
 | `error` | — | Provider rejected the input as malformed. |
 

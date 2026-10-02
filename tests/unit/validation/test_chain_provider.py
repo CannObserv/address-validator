@@ -585,17 +585,18 @@ class TestChainHeldPrecedence:
     @pytest.mark.asyncio
     async def test_verdict_answer_returned_when_nothing_held(self, std_address: object) -> None:
         """Scope pin: USPS 400 → Google (e.g. #114 place-name input) holds nothing,
-        so the Google verdict answer is still returned as-is."""
+        so a negative Google verdict answer is still returned as-is. (A complete
+        US verdict is ``undetermined`` since GH #262, so it is held instead.)"""
         chain = ChainProvider(
             providers=[
                 _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
-                _mock_provider(self._google("confirmed", None)),
+                _mock_provider(self._google("invalid", None)),
             ]
         )
 
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 
-        assert result.validation.status == "confirmed"
+        assert result.validation.status == "invalid"
         assert result.validation.provider == "google"
 
 

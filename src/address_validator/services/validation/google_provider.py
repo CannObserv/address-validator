@@ -30,6 +30,10 @@ class GoogleProvider:
     ``validationGranularity`` and ``addressComplete`` from the verdict are mapped
     to ``confirmed`` / ``invalid`` / ``not_found``.
 
+    **US addresses without a CASS DPV code** read the same verdict, except that
+    ``addressComplete`` maps to ``undetermined``, not ``confirmed``: ``confirmed``
+    means DPV ``Y``, and Google's own logic sends an empty DPV to FIX (GH #262).
+
     Constructed by :class:`~services.validation.registry.ProviderRegistry`; do not
     instantiate directly in application code.
     """
