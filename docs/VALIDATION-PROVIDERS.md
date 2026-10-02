@@ -108,6 +108,13 @@ active and a canary run comes back clean (exit 0; reads prod creds itself):
 # per-probe detail in /home/exedev/address-validator/scratch/usps-canary.log
 ```
 
+Then purge the cached `undetermined` rows as in
+[Adding a fallback provider to a single-provider config](#fallback-chain-internals)
+(GH #262). Google-only caches every complete US verdict without a DPV code as
+`undetermined`, and with no chain no warning keeps them out of the cache, so
+without the purge they are served for up to `VALIDATION_CACHE_TTL_DAYS` and
+USPS is never asked.
+
 During a Google-only gap: `validation.provider="google"` on all rows,
 DPV codes still populated via CASS (`enableUspsCass: true`), Google daily
 quota (default 160/day) becomes the binding limit — watch for
