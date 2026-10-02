@@ -32,7 +32,7 @@
 | `N` | `not_confirmed` | Address not found in USPS database |
 | (none / blank / unknown) | `undetermined` | Provider answered HTTP 200 without a DPV determination; the chain tries the next provider (GH #250). An unknown code is dropped from the response and logs a WARNING once per distinct code (GH #254) |
 
-Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`confirmed`/`invalid`/`not_found`, see [Google provider](#google-provider)) and is `undetermined` only when there is no `postalAddress` or granularity either. An unknown Google code is `undetermined`, as for USPS.
+Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`invalid`/`not_found`, see [Google provider](#google-provider)). It is `undetermined` when there is no `postalAddress` or granularity either, and when the verdict is `addressComplete`: that says the components are consistent, not that USPS delivers there, and Google's own logic sends an empty DPV to FIX (GH #262). Non-US answers have no DPV, so there `addressComplete` is `confirmed`. An unknown Google code is `undetermined`, as for USPS.
 
 `unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single-provider config still returns 500 for a 5xx, network failure or local-quota rejection: the route maps only `ProviderRateLimitedError` to 429 (GH #268).
 
@@ -107,6 +107,13 @@ active and a canary run comes back clean (exit 0; reads prod creds itself):
 /home/exedev/address-validator/scripts/usps_canary.sh && echo "USPS probes OK"
 # per-probe detail in /home/exedev/address-validator/scratch/usps-canary.log
 ```
+
+Then purge the cached `undetermined` rows as in
+[Adding a fallback provider to a single-provider config](#fallback-chain-internals)
+(GH #262). Google-only caches every complete US verdict without a DPV code as
+`undetermined`, and with no chain no warning keeps them out of the cache, so
+without the purge they are served for up to `VALIDATION_CACHE_TTL_DAYS` and
+USPS is never asked.
 
 During a Google-only gap: `validation.provider="google"` on all rows,
 DPV codes still populated via CASS (`enableUspsCass: true`), Google daily
@@ -228,11 +235,13 @@ error's value, rounded up to whole seconds by the route:
 An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
 the next provider. Once an answer is held, only an answer **with a DPV code** replaces it
-(GH #258): a Google non-CASS verdict (`confirmed`/`invalid`/`not_found`, `dpv_match_code` null)
+(GH #258): a Google non-CASS verdict (`invalid`/`not_found`, `dpv_match_code` null)
 is discarded, because Google's own validation logic sends a US answer with an empty
 `dpvConfirmation` to FIX. A Google CASS `N` does replace it. The rule is US-only: non-US answers
 never carry a DPV code, so any determined non-US answer replaces a held one. With nothing held
-(USPS 400/429 → Google), the verdict answer is returned as before. If nothing better comes back, the first
+(USPS 400/429 → Google), an `invalid`/`not_found` verdict is returned. A complete verdict is
+itself `undetermined` (GH #262), so it is held: after a USPS 429 it comes back with the warning
+below and is not cached, and with `google,usps` USPS is asked next. If nothing better comes back, the first
 held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
 transiently along the way, the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
 `CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the

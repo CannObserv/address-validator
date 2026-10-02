@@ -28,13 +28,13 @@ This mirrors the response-warning catalogue pattern
 
 | Status | DPV code | Meaning |
 |---|---|---|
-| `confirmed` | Y | Fully confirmed delivery point. |
+| `confirmed` | Y | Fully confirmed delivery point. For non-US input (no DPV code), a Google verdict with `addressComplete`. A US answer without a DPV code is never `confirmed` (GH #262). |
 | `confirmed_missing_secondary` | D | Building confirmed, unit (secondary) missing. |
 | `confirmed_bad_secondary` | S | Building confirmed, unit (secondary) supplied but not confirmed. |
 | `not_confirmed` | N | Address not found in the USPS database. |
 | `not_found` | — | Google verdict (non-US, or US without a CASS DPV code): address could not be geocoded or verified. |
 | `invalid` | — | Google verdict (non-US, or US without a CASS DPV code): address is geocodable but incomplete. |
-| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
+| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. Google's US answer is also `undetermined` when its verdict is complete but CASS returned no DPV code (GH #262). An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
 | `unavailable` | — | No validation provider is configured. Never a per-address outcome; an outage surfaces as HTTP 429/5xx, not as a status. |
 | `error` | — | Provider rejected the input as malformed. |
 
@@ -58,3 +58,17 @@ USPS spec ([`usps-addresses-v3r2_4.yaml`](usps-addresses-v3r2_4.yaml),
   two labels to read those rows correctly.
 - **Admin dashboard:** the provider view's status breakdown reads `audit_log`,
   so for one retention window after the cutover it mixes both meanings.
+
+## US `confirmed` without a DPV code (GH #262)
+
+Until GH #262, a Google US answer with no CASS DPV code was `confirmed`
+whenever its verdict had `addressComplete`; it is now `undetermined`.
+
+- **Cache:** the deploy purges cached rows with `provider = 'google'`,
+  `country = 'US'`, `dpv_match_code IS NULL` and `status = 'confirmed'`.
+- **`audit_log` was not rewritten.** Rows from before the deploy with
+  `provider = 'google'`, a US address, no DPV code and `confirmed` read as
+  `undetermined`. The null DPV code identifies them, so no cutover time is
+  needed.
+- **Admin dashboard:** the provider view counts those rows as confirmed
+  until they age out of `audit_log`.

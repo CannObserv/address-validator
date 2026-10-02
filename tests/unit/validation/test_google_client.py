@@ -868,6 +868,12 @@ class TestMapResponseUsPostalFallback:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
         assert result["has_inferred_components"] is True
 
+    def test_not_found_when_granularity_other(self) -> None:
+        raw = copy.deepcopy(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        raw["result"]["verdict"]["validationGranularity"] = "OTHER"
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "not_found"
+
     def test_existing_cass_path_unchanged_when_dpv_present(self) -> None:
         """When dpvConfirmation is present, USPS standardized fields still win."""
         result = GoogleClient._map_response(GOOGLE_RESPONSE_Y)
@@ -875,6 +881,63 @@ class TestMapResponseUsPostalFallback:
         assert result["address_line_1"] == "123 MAIN ST"
         assert result["city"] == "SPRINGFIELD"
         assert result["postal_code"] == "62701-1234"
+
+
+# -- US non-CASS addressComplete (GH #262) ----------------------------------
+# Modeled on a 2026-10-01 wslcb-licensing-tracker answer: "7234 NE PARKWAY ST,
+# SUQUAMISH, WA 98392-8392" came back `confirmed` as "7234 NE Pkwy" with no DPV
+# code, echoing the fake ZIP+4.
+GOOGLE_RESPONSE_US_NO_DPV_COMPLETE = {
+    "result": {
+        "verdict": {
+            "inputGranularity": "PREMISE",
+            "validationGranularity": "PREMISE",
+            "geocodeGranularity": "PREMISE",
+            "addressComplete": True,
+            "hasUnconfirmedComponents": True,
+            "hasReplacedComponents": True,
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "US",
+                "postalCode": "98392-8392",
+                "administrativeArea": "WA",
+                "locality": "Suquamish",
+                "addressLines": ["7234 NE Pkwy"],
+            },
+        },
+        "geocode": {"location": {"latitude": 47.73, "longitude": -122.55}},
+        "uspsData": {"standardizedAddress": {}},
+    }
+}
+
+
+class TestMapResponseUsNonCassAddressComplete:
+    """GH #262: a US answer with no DPV code is never `confirmed`. `addressComplete`
+    says nothing about delivery; Google's own logic sends an empty DPV to FIX."""
+
+    def test_address_complete_without_dpv_is_undetermined(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_COMPLETE)
+        assert result["status"] == "undetermined"
+        assert result["dpv_match_code"] is None
+
+    def test_blank_dpv_with_address_complete_is_undetermined(self) -> None:
+        raw = copy.deepcopy(GOOGLE_RESPONSE_US_NO_DPV_COMPLETE)
+        raw["result"]["uspsData"]["dpvConfirmation"] = ""
+        result = GoogleClient._map_response(raw)
+        assert result["status"] == "undetermined"
+
+    def test_postal_address_and_flags_still_read(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_COMPLETE)
+        assert result["address_line_1"] == "7234 NE Pkwy"
+        assert result["postal_code"] == "98392-8392"
+        assert result["has_unconfirmed_components"] is True
+        assert result["has_replaced_components"] is True
+
+    def test_non_us_address_complete_still_confirmed(self) -> None:
+        """Scope pin: outside the US a verdict is the only determination possible."""
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
+        assert result["status"] == "confirmed"
 
 
 # -- US non-CASS folded-unit recovery (GH #127) ----------------------------

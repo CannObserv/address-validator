@@ -241,6 +241,28 @@ class TestV2ValidateQuotaExhausted:
         assert response.headers["Retry-After"] == "10"
 
 
+# GH #262: the 2026-10-01 wslcb-licensing-tracker backfill received 24 DPV-less
+# `confirmed` answers after USPS 429s fell through to Google.
+_GOOGLE_NON_CASS_COMPLETE = {
+    "result": {
+        "verdict": {
+            "validationGranularity": "PREMISE",
+            "addressComplete": True,
+            "hasUnconfirmedComponents": True,
+        },
+        "address": {
+            "postalAddress": {
+                "addressLines": ["7234 NE Pkwy"],
+                "locality": "Suquamish",
+                "administrativeArea": "WA",
+                "postalCode": "98392-8392",
+            }
+        },
+        "uspsData": {"standardizedAddress": {}},
+    }
+}
+
+
 class TestV2ValidateUndetermined:
     """GH #250: a USPS no-DPV answer reaches the client as 200 + `undetermined`,
     through a real ChainProvider, with the fallback-unreachable warning when the
@@ -329,8 +351,8 @@ class TestV2ValidateUndetermined:
 
     def test_fallback_verdict_without_dpv_keeps_usps_answer(self, client) -> None:
         """GH #258: the 2026-09-30 production probe. Google's CASS returned no DPV
-        code, so the non-CASS path mapped ``addressComplete`` to ``confirmed`` for a
-        different street (AVE→St). The held USPS answer must win."""
+        code, so the non-CASS path mapped ``addressComplete`` to ``confirmed`` (before
+        GH #262) for a different street (AVE→St). The held USPS answer must win."""
         probe = {
             "result": {
                 "verdict": {"addressComplete": True, "hasUnconfirmedComponents": True},
@@ -346,10 +368,10 @@ class TestV2ValidateUndetermined:
             }
         }
         mapped = GoogleClient._map_response(probe)
-        # Precondition (CR 2): the real mapping still yields a DPV-less `confirmed`.
-        # If it stops doing so this test no longer exercises the #258 rule — update
-        # the probe or the docstring rather than let it pass via all-undetermined.
-        assert (mapped["status"], mapped["dpv_match_code"]) == ("confirmed", None)
+        # Since GH #262 the real mapping yields `undetermined` here, so the held
+        # (first) undetermined answer wins; the #258 DPV rule itself is pinned with
+        # `invalid`/`not_found` stubs in test_chain_provider.TestChainHeldPrecedence.
+        assert (mapped["status"], mapped["dpv_match_code"]) == ("undetermined", None)
         google_client = MagicMock()
         google_client.validate_address = AsyncMock(return_value=mapped)
         chain = ChainProvider(
@@ -373,3 +395,59 @@ class TestV2ValidateUndetermined:
         }
         assert body["address_line_1"] == "301 E HARBOR AVE"
         assert body["warnings"] == []
+
+    def _google_non_cass(self) -> tuple[GoogleProvider, MagicMock]:
+        google_client = MagicMock()
+        google_client.validate_address = AsyncMock(
+            return_value=GoogleClient._map_response(_GOOGLE_NON_CASS_COMPLETE)
+        )
+        return GoogleProvider(google_client), google_client
+
+    def test_usps_rate_limited_google_complete_without_dpv_is_undetermined(self, client) -> None:
+        """GH #262: not `confirmed`, and flagged so the cache skips it and the
+        client's retry reaches USPS."""
+        google, _ = self._google_non_cass()
+        chain = ChainProvider(
+            providers=[
+                self._stub(side_effect=ProviderRateLimitedError("usps", retry_after_seconds=5)),
+                google,
+            ]
+        )
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "7234 NE Parkway St, Suquamish, WA 98392-8392"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"] == {
+            "status": "undetermined",
+            "dpv_match_code": None,
+            "provider": "google",
+        }
+        assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
+
+    def test_google_first_complete_without_dpv_falls_back_to_usps(self, client) -> None:
+        """GH #262: `google,usps` no longer returns a DPV-less `confirmed` — the
+        Google answer is held and USPS determines the address."""
+        google, google_client = self._google_non_cass()
+        usps_confirmed = self._USPS_UNDETERMINED.model_copy(
+            update={
+                "validation": ValidationResult(
+                    status="confirmed", dpv_match_code="Y", provider="usps"
+                )
+            }
+        )
+        chain = ChainProvider(providers=[google, self._stub(return_value=usps_confirmed)])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "301 E Harbor Ave, Westport, WA 98595"},
+            )
+        assert response.status_code == 200, response.text
+        google_client.validate_address.assert_awaited_once()
+        assert response.json()["validation"] == {
+            "status": "confirmed",
+            "dpv_match_code": "Y",
+            "provider": "usps",
+        }

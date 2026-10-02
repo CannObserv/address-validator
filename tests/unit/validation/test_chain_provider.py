@@ -522,6 +522,8 @@ class TestChainHeldPrecedence:
         )
 
     @pytest.mark.asyncio
+    # Google no longer answers a US `confirmed` without a DPV code (GH #262); the
+    # case stays as a guard: the rule keys on the DPV code, whatever the status.
     @pytest.mark.parametrize("status", ["confirmed", "invalid", "not_found"])
     async def test_verdict_answer_without_dpv_keeps_held_undetermined(
         self, status: str, std_address: object
@@ -585,17 +587,18 @@ class TestChainHeldPrecedence:
     @pytest.mark.asyncio
     async def test_verdict_answer_returned_when_nothing_held(self, std_address: object) -> None:
         """Scope pin: USPS 400 → Google (e.g. #114 place-name input) holds nothing,
-        so the Google verdict answer is still returned as-is."""
+        so a negative Google verdict answer is still returned as-is. (A complete
+        US verdict is ``undetermined`` since GH #262, so it is held instead.)"""
         chain = ChainProvider(
             providers=[
                 _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
-                _mock_provider(self._google("confirmed", None)),
+                _mock_provider(self._google("invalid", None)),
             ]
         )
 
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 
-        assert result.validation.status == "confirmed"
+        assert result.validation.status == "invalid"
         assert result.validation.provider == "google"
 
 

@@ -173,7 +173,8 @@ class ValidationResult(BaseModel):
 
     ``status`` is the primary machine-readable result:
 
-    * ``confirmed``                   — DPV code Y: fully confirmed delivery point.
+    * ``confirmed``                   — DPV code Y: fully confirmed delivery point;
+      for non-US input, Google verdict ``addressComplete``.
     * ``confirmed_missing_secondary`` — DPV code D: building confirmed, unit missing.
     * ``confirmed_bad_secondary``     — DPV code S: building confirmed, unit supplied
       but not confirmed.
@@ -183,7 +184,8 @@ class ValidationResult(BaseModel):
     * ``invalid``                     — Google verdict (non-US, or US without a CASS DPV):
       address is geocodable but incomplete.
     * ``undetermined``                — a provider answered but made no determination
-      (e.g. USPS returned no DPV code); an answer about the address, not an outage.
+      (e.g. USPS returned no DPV code, or Google's US verdict was complete without
+      one); an answer about the address, not an outage.
     * ``unavailable``                 — no validation provider is configured.
     * ``error``                       — provider rejected the input as malformed.
     """

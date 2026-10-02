@@ -39,8 +39,10 @@ class ChainProvider:
     DPV, GH #250) is a *soft* miss: it is held and the next provider is tried.
     With nothing held, the first determined answer wins. Once a US answer is
     held, only an answer with a DPV code replaces it: a verdict-only answer
-    (Google US non-CASS ``confirmed``/``invalid``/``not_found``, no DPV code)
-    is a geocoder opinion, weaker than USPS's own no-determination (GH #258).
+    (Google US non-CASS ``invalid``/``not_found``, no DPV code) is a geocoder
+    opinion, weaker than USPS's own no-determination (GH #258). Google's US
+    non-CASS ``addressComplete`` is itself ``undetermined`` (GH #262), so with
+    ``google,usps`` it is held and USPS is asked.
     Non-US answers never carry a DPV code, so any determined one replaces a
     held answer.
     If no provider determines the address, the first held ``undetermined``
