@@ -58,3 +58,17 @@ USPS spec ([`usps-addresses-v3r2_4.yaml`](usps-addresses-v3r2_4.yaml),
   two labels to read those rows correctly.
 - **Admin dashboard:** the provider view's status breakdown reads `audit_log`,
   so for one retention window after the cutover it mixes both meanings.
+
+## US `confirmed` without a DPV code (GH #262)
+
+Until GH #262, a Google US answer with no CASS DPV code was `confirmed`
+whenever its verdict had `addressComplete`; it is now `undetermined`.
+
+- **Cache:** the deploy purges cached rows with `provider = 'google'`,
+  `country = 'US'`, `dpv_match_code IS NULL` and `status = 'confirmed'`.
+- **`audit_log` was not rewritten.** Rows from before the deploy with
+  `provider = 'google'`, a US address, no DPV code and `confirmed` read as
+  `undetermined`. The null DPV code identifies them, so no cutover time is
+  needed.
+- **Admin dashboard:** the provider view counts those rows as confirmed
+  until they age out of `audit_log`.
