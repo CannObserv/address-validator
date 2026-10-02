@@ -522,6 +522,8 @@ class TestChainHeldPrecedence:
         )
 
     @pytest.mark.asyncio
+    # Google no longer answers a US `confirmed` without a DPV code (GH #262); the
+    # case stays as a guard: the rule keys on the DPV code, whatever the status.
     @pytest.mark.parametrize("status", ["confirmed", "invalid", "not_found"])
     async def test_verdict_answer_without_dpv_keeps_held_undetermined(
         self, status: str, std_address: object
