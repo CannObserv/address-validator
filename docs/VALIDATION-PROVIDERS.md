@@ -48,7 +48,7 @@ VALIDATION_PROVIDER=usps
 VALIDATION_PROVIDER=usps,google
 ```
 
-When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header. The chain also moves on after a 400 or an `undetermined` answer; see [Fallback chain internals](#fallback-chain-internals).
+When a provider is rate-limited (HTTP 429 after all retries), the next provider in the comma-separated list is tried. If all providers are exhausted, the `/api/v2/validate` endpoint returns HTTP 429 with a `Retry-After` header (see [Retry-After on exhaustion](#retry-after-on-exhaustion)). The chain also moves on after a 400 or an `undetermined` answer; see [Fallback chain internals](#fallback-chain-internals).
 
 ## USPS provider
 
@@ -211,6 +211,19 @@ and delegates to the next provider. It also catches `ProviderBadRequestError` (u
 provider in the chain raises `ProviderBadRequestError` does the route handler return
 `validation.status="error"`. Nothing else is caught, so a client must never leak a raw `httpx`
 exception: it would skip the remaining providers and return HTTP 500.
+
+### Retry-After on exhaustion
+
+The 429's `Retry-After` is the **minimum** `retry_after_seconds` across the providers that failed
+transiently — the soonest any of them could answer, whatever the chain order (GH #270). Each
+error's value, rounded up to whole seconds by the route:
+
+| Error | `retry_after_seconds` |
+|---|---|
+| `ProviderRateLimitedError` | last backoff delay (upstream `Retry-After`, else exponential backoff) |
+| `ProviderTransientError` | `1.0` |
+| `ProviderAtCapacityError`, soft window over `VALIDATION_LATENCY_BUDGET_S` | the wait the guard rejected — e.g. USPS daily window drained: time until it refills one token (`86400 / USPS_DAILY_LIMIT` s from empty) |
+| `ProviderAtCapacityError`, hard window exhausted | time until every window holds a token; for Google's daily window, time until midnight PT — hours |
 
 An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries

@@ -21,8 +21,6 @@ from address_validator.services.validation.protocol import ValidationProvider
 
 logger = logging.getLogger(__name__)
 
-_TransientErr = ProviderRateLimitedError | ProviderAtCapacityError | ProviderTransientError
-
 
 class ChainProvider:
     """Tries each provider in order, falling back on recoverable errors.
@@ -56,6 +54,9 @@ class ChainProvider:
     * If **any** provider raised a transient error (rate-limited / at-capacity
       / upstream 5xx / unreachable), a :class:`~services.validation.errors.ProviderRateLimitedError`
       with ``provider="all"`` is raised — the caller should retry later.
+      Its ``retry_after_seconds`` is the *minimum* across the transient
+      errors: the soonest any provider could answer, whatever the chain
+      order (GH #270).
     * If **every** provider raised
       :class:`~services.validation.errors.ProviderBadRequestError`, a
       ``ProviderBadRequestError("all")`` is raised — the input itself is
@@ -88,7 +89,7 @@ class ChainProvider:
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None
     ) -> ValidateResponseV2:
-        last_transient: _TransientErr | None = None
+        retry_after: float | None = None  # min across transient errors
         last_bad_request: ProviderBadRequestError | None = None
         held: ValidateResponseV2 | None = None
         unreachable = False  # any provider failed transiently
@@ -101,12 +102,17 @@ class ChainProvider:
                 ProviderAtCapacityError,
                 ProviderTransientError,
             ) as exc:
-                last_transient = exc
+                retry_after = (
+                    exc.retry_after_seconds
+                    if retry_after is None
+                    else min(retry_after, exc.retry_after_seconds)
+                )
                 unreachable = True
                 logger.warning(
-                    "ChainProvider: %s unavailable (%s), trying next provider",
+                    "ChainProvider: %s unavailable (%s, retry after %.0fs), trying next provider",
                     name,
                     type(exc).__name__,
+                    exc.retry_after_seconds,
                 )
             except ProviderBadRequestError as exc:
                 last_bad_request = exc
@@ -135,13 +141,13 @@ class ChainProvider:
                         name,
                         result.validation.status,
                     )
-        return _exhausted(held, unreachable, last_transient, last_bad_request)
+        return _exhausted(held, unreachable, retry_after, last_bad_request)
 
 
 def _exhausted(
     held: ValidateResponseV2 | None,
     unreachable: bool,
-    last_transient: _TransientErr | None,
+    retry_after: float | None,
     last_bad_request: ProviderBadRequestError | None,
 ) -> ValidateResponseV2:
     """No provider gave a final answer: return the held answer, or raise."""
@@ -157,10 +163,8 @@ def _exhausted(
             )
         return held
     # Prefer transient error — caller can retry when capacity clears.
-    if last_transient is not None:
-        raise ProviderRateLimitedError(
-            "all", retry_after_seconds=last_transient.retry_after_seconds
-        )
+    if retry_after is not None:
+        raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)
     if last_bad_request is not None:
         raise ProviderBadRequestError("all", detail=last_bad_request.detail)
     raise ProviderRateLimitedError("all", retry_after_seconds=0.0)

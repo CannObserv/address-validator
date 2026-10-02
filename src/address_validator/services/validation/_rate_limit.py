@@ -11,7 +11,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from time import monotonic
 from typing import Literal, NoReturn
 from zoneinfo import ZoneInfo
@@ -129,6 +129,16 @@ class FixedResetQuotaWindow:
         now = _now_in_tz(self.timezone)
         return now.date() != last_reset.date()
 
+    def seconds_until_reset(self) -> float:
+        """Return the seconds until the next midnight in the configured timezone.
+
+        Measured in elapsed time (via timestamps), not wall-clock time, so a day
+        with a DST change counts its real 23 or 25 hours.
+        """
+        now = _now_in_tz(self.timezone)
+        midnight = datetime.combine(now.date() + timedelta(days=1), time(), tzinfo=self.timezone)
+        return midnight.timestamp() - now.timestamp()
+
 
 class QuotaGuard:
     """Multi-window async rate limiter with a latency budget.
@@ -147,6 +157,10 @@ class QuotaGuard:
     5. Releases lock, sleeps the required wait, re-acquires lock, then
        re-checks token availability and consumes one token from every
        window (loops if needed).
+
+    Either raise carries ``retry_after_seconds``: the time until every window
+    holds a token again — the longest wait, or for a ``FixedResetQuotaWindow``
+    the time until its reset (GH #270).
 
     Parameters
     ----------
@@ -177,7 +191,7 @@ class QuotaGuard:
         ]
         self._lock = asyncio.Lock()
 
-    async def acquire(self) -> None:  # noqa: PLR0912
+    async def acquire(self) -> None:
         """Acquire one token from every window, blocking up to the latency budget."""
         deadline = monotonic() + self._latency_budget_s
 
@@ -203,20 +217,22 @@ class QuotaGuard:
                     self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
                     self._last_refill[i] = now
 
-                # --- Hard windows: reject immediately if exhausted ---
-                for i, window in enumerate(self._windows):
-                    if window.mode == "hard" and self._tokens[i] < 1:
-                        raise ProviderAtCapacityError(self._provider_name)
-
                 # --- Soft windows: compute max wait ---
                 max_wait = 0.0
                 for i, window in enumerate(self._windows):
-                    if isinstance(window, FixedResetQuotaWindow):
-                        continue
-                    if self._tokens[i] < 1:
-                        rate = window.limit / window.duration_s
-                        wait = (1 - self._tokens[i]) / rate
-                        max_wait = max(max_wait, wait)
+                    if not isinstance(window, FixedResetQuotaWindow):
+                        max_wait = max(max_wait, self._wait_for_token(i))
+
+                # --- Hard windows: reject immediately if exhausted ---
+                hard_waits = [
+                    self._wait_for_token(i)
+                    for i, window in enumerate(self._windows)
+                    if window.mode == "hard" and self._tokens[i] < 1
+                ]
+                if hard_waits:
+                    raise ProviderAtCapacityError(
+                        self._provider_name, retry_after_seconds=max(max_wait, *hard_waits)
+                    )
 
                 # --- No wait needed: consume and return ---
                 if max_wait < _WAIT_EPSILON_S:
@@ -226,13 +242,25 @@ class QuotaGuard:
 
                 # --- Wait would exceed deadline: reject ---
                 if now + max_wait > deadline:
-                    raise ProviderAtCapacityError(self._provider_name)
+                    raise ProviderAtCapacityError(self._provider_name, retry_after_seconds=max_wait)
 
                 wait = max_wait
 
             # --- Lock released: sleep concurrently with other waiters ---
             await asyncio.sleep(wait)
             # Loop back to re-acquire lock and re-check token availability
+
+    def _wait_for_token(self, i: int) -> float:
+        """Return the seconds until window *i* holds a whole token (0 if it does).
+
+        Call after the refill step, under the lock.
+        """
+        if self._tokens[i] >= 1:
+            return 0.0
+        window = self._windows[i]
+        if isinstance(window, FixedResetQuotaWindow):
+            return window.seconds_until_reset()
+        return (1 - self._tokens[i]) / (window.limit / window.duration_s)
 
     def adjust_tokens(self, window_index: int, delta: float) -> None:
         """Adjust the token count for a specific window by *delta*.

@@ -15,9 +15,10 @@ class ProviderRateLimitedError(Exception):
         ``"google"``, or ``"all"`` when the chain is exhausted).
     retry_after_seconds:
         How long (in seconds) the caller should wait before retrying.
-        Set to the last backoff delay computed by the client.  Defaults to
-        ``0.0`` when no delay information is available (e.g. synthetic errors
-        raised in tests).
+        Set to the last backoff delay computed by the client; for ``"all"``,
+        the minimum across the chain's transient errors (GH #270).  Defaults
+        to ``0.0`` when no delay information is available (e.g. synthetic
+        errors raised in tests).
     """
 
     def __init__(self, provider: str, retry_after_seconds: float = 0.0) -> None:
@@ -100,7 +101,9 @@ class ProviderAtCapacityError(Exception):
     provider:
         Short name of the provider (e.g. ``"usps"``, ``"google"``).
     retry_after_seconds:
-        Hint for how long to wait before retrying.  Defaults to ``0.0``.
+        Seconds until the guard would admit the request — the wait it rejected,
+        or the time until the exhausted window refills or resets (GH #270).
+        Defaults to ``0.0`` (synthetic errors raised in tests).
     """
 
     def __init__(self, provider: str, retry_after_seconds: float = 0.0) -> None:

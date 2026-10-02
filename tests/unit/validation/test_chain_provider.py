@@ -74,7 +74,7 @@ class TestChainProvider:
         assert exc_info.value.provider == "all"
 
     @pytest.mark.asyncio
-    async def test_retry_after_propagated_from_last_provider(self, std_address: object) -> None:
+    async def test_retry_after_is_minimum_across_providers(self, std_address: object) -> None:
         p1 = AsyncMock()
         p1.validate = AsyncMock(
             side_effect=ProviderRateLimitedError("usps", retry_after_seconds=2.0)
@@ -87,7 +87,7 @@ class TestChainProvider:
 
         with pytest.raises(ProviderRateLimitedError) as exc_info:
             await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.retry_after_seconds == 5.5
+        assert exc_info.value.retry_after_seconds == 2.0
 
     @pytest.mark.asyncio
     async def test_non_rate_limit_error_propagates_immediately(self, std_address: object) -> None:
@@ -149,12 +149,13 @@ class TestChainProvider:
 
         with pytest.raises(ProviderRateLimitedError) as exc_info:
             await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.retry_after_seconds == 2.0
+        assert exc_info.value.retry_after_seconds == 0.5
 
     @pytest.mark.asyncio
-    async def test_at_capacity_mixed_with_rate_limited_propagates_last(
+    async def test_at_capacity_mixed_with_rate_limited_propagates_minimum(
         self, std_address: object
     ) -> None:
+        """GH #270: the soonest any provider could answer, whatever the order."""
         p1 = AsyncMock()
         p1.validate = AsyncMock(
             side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.1)
@@ -167,7 +168,46 @@ class TestChainProvider:
 
         with pytest.raises(ProviderRateLimitedError) as exc_info:
             await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.retry_after_seconds == 3.0
+        assert exc_info.value.retry_after_seconds == 0.1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("drained_first", [True, False])
+    async def test_retry_after_is_minimum_regardless_of_order(
+        self, drained_first: bool, std_address: object
+    ) -> None:
+        """GH #270: USPS daily quota drained (hours) + Google 5xx (1 s) → 1 s,
+        whichever provider failed last."""
+        drained = AsyncMock()
+        drained.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("usps", retry_after_seconds=7200.0)
+        )
+        erroring = AsyncMock()
+        erroring.validate = AsyncMock(
+            side_effect=ProviderTransientError("google", retry_after_seconds=1.0)
+        )
+        providers = [drained, erroring] if drained_first else [erroring, drained]
+        chain = ChainProvider(providers=providers)
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.retry_after_seconds == 1.0
+
+    @pytest.mark.asyncio
+    async def test_transient_fallback_log_names_retry_after(
+        self, std_address: object, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """GH #270: the WARNING says how long the provider is out, so an operator
+        can tell a drained daily quota (hours) from a blip."""
+        drained = AsyncMock()
+        drained.validate = AsyncMock(
+            side_effect=ProviderAtCapacityError("google", retry_after_seconds=10800.0)
+        )
+        chain = ChainProvider(providers=[drained, _mock_provider(_CONFIRMED)])
+
+        with caplog.at_level("WARNING", logger="address_validator.services.validation"):
+            await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert "ProviderAtCapacityError, retry after 10800s" in caplog.text
 
     @pytest.mark.asyncio
     async def test_falls_back_to_second_on_bad_request(self, std_address: object) -> None:
@@ -281,7 +321,7 @@ class TestChainProvider:
         with pytest.raises(ProviderRateLimitedError) as exc_info:
             await chain.validate(std_address)  # type: ignore[arg-type]
         assert exc_info.value.provider == "all"
-        assert exc_info.value.retry_after_seconds == 2.5
+        assert exc_info.value.retry_after_seconds == 1.0
 
     @pytest.mark.asyncio
     async def test_transient_then_bad_request_raises_rate_limited(
