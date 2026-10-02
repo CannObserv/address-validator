@@ -351,8 +351,8 @@ class TestV2ValidateUndetermined:
 
     def test_fallback_verdict_without_dpv_keeps_usps_answer(self, client) -> None:
         """GH #258: the 2026-09-30 production probe. Google's CASS returned no DPV
-        code, so the non-CASS path mapped ``addressComplete`` to ``confirmed`` for a
-        different street (AVE→St). The held USPS answer must win."""
+        code, so the non-CASS path mapped ``addressComplete`` to ``confirmed`` (before
+        GH #262) for a different street (AVE→St). The held USPS answer must win."""
         probe = {
             "result": {
                 "verdict": {"addressComplete": True, "hasUnconfirmedComponents": True},
