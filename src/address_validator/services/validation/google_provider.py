@@ -33,6 +33,8 @@ class GoogleProvider:
     **US addresses without a CASS DPV code** read the same verdict, except that
     ``addressComplete`` maps to ``undetermined``, not ``confirmed``: ``confirmed``
     means DPV ``Y``, and Google's own logic sends an empty DPV to FIX (GH #262).
+    Their components are Google's ``postalAddress`` text, labelled ``raw`` like
+    non-US ones, with the unverified ZIP+4 extension dropped (GH #263).
 
     Constructed by :class:`~services.validation.registry.ProviderRegistry`; do not
     instantiate directly in application code.
@@ -89,8 +91,9 @@ class GoogleProvider:
                 }.items()
                 if v
             }
-            # US results follow USPS Pub 28; non-US results are raw Google components.
-            if std.country == "US":
+            # Only USPS CASS standardizedAddress is Pub 28; Google's postalAddress
+            # text (non-US, and US without a CASS DPV code) is raw (GH #263).
+            if raw.get("cass_standardized"):
                 comp_spec = USPS_PUB28_SPEC
                 comp_spec_version = USPS_PUB28_SPEC_VERSION
             else:

@@ -271,13 +271,14 @@ class ValidateResponseV2(BaseModel):
     """Response body for POST /api/v2/validate.
 
     Address fields default to empty strings (not ``None``) because they
-    are always present in the response shape.  When the validation provider
-    cannot confirm or correct an address, the fields hold the post-standardize
-    values; ``validation.status`` indicates the outcome.
+    are always present in the response shape.  They hold what the validation
+    provider returned, and are empty when it returned no address; the service
+    never fills them from the input.  ``validation.status`` indicates the outcome.
 
     ``postal_code`` is the jurisdiction-neutral postal identifier.  For US
-    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when the
-    provider returns it, or the 5-digit ZIP otherwise.
+    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when a
+    provider verified it (USPS, or Google with a CASS DPV code), or the
+    5-digit ZIP otherwise (GH #263).
 
     ``vacant`` and other USPS-specific indicators appear in
     ``components.values`` when the provider returns them.

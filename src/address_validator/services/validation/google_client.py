@@ -212,10 +212,13 @@ class GoogleClient:
         ``city``, ``region``, ``postal_code``, ``vacant``,
         ``latitude``, ``longitude``,
         ``has_inferred_components``, ``has_replaced_components``,
-        ``has_unconfirmed_components``.
+        ``has_unconfirmed_components``, ``cass_standardized``.
 
         ``status`` is always present.  ``dpv_match_code`` is ``None`` for
-        non-US addresses (USPS-specific field).
+        non-US addresses (USPS-specific field).  ``cass_standardized`` is
+        ``True`` only when the address fields come from USPS CASS
+        ``standardizedAddress`` (Pub 28); otherwise they are Google's
+        ``postalAddress`` text (GH #263).
 
         Raises:
             ProviderBadRequestError: on HTTP 400 (input the provider rejects)
@@ -305,6 +308,10 @@ class GoogleClient:
         *secondary_address* is the unit line folded into the request (#126); on the
         non-CASS path it is used to split a folded unit back into ``address_line_2``
         (GH #127) when Google echoes street + unit as one ``addressLines`` element.
+
+        On the non-CASS path the ZIP+4 extension is dropped: Google echoes the
+        input's extension (``-0000``, the ZIP's last four digits) and nothing
+        verified it (GH #263).
         """
         result = raw.get("result", {})
         verdict = result.get("verdict", {})
@@ -332,8 +339,10 @@ class GoogleClient:
             )
 
         dpv = (usps.get("dpvConfirmation") or "").strip() or None
+        # Captured before an unknown code is dropped: the fields still come from CASS.
+        dpv_present = dpv is not None
 
-        if dpv is not None:
+        if dpv_present:
             # CASS-confirmed: USPS standardizedAddress is authoritative.
             zip_code = std_addr.get("zipCode", "")
             zip_ext = std_addr.get("zipCodeExtension", "") or ""
@@ -355,7 +364,8 @@ class GoogleClient:
             address_line_2 = fields.address_line_2
             city = fields.city
             region = fields.region
-            postal_code = fields.postal_code
+            # Unverified ZIP+4 — keep the ZIP5 only (GH #263).
+            postal_code = fields.postal_code.partition("-")[0]
             # addressComplete only says the components are consistent, not that
             # USPS delivers there: with no DPV code Google's own logic says FIX,
             # so a complete verdict is no determination (GH #262). The negative
@@ -381,6 +391,7 @@ class GoogleClient:
             "has_inferred_components": verdict.get("hasInferredComponents", False),
             "has_replaced_components": verdict.get("hasReplacedComponents", False),
             "has_unconfirmed_components": verdict.get("hasUnconfirmedComponents", False),
+            "cass_standardized": dpv_present,
         }
 
     @staticmethod
@@ -414,4 +425,5 @@ class GoogleClient:
             "has_inferred_components": verdict.get("hasInferredComponents", False),
             "has_replaced_components": verdict.get("hasReplacedComponents", False),
             "has_unconfirmed_components": verdict.get("hasUnconfirmedComponents", False),
+            "cass_standardized": False,
         }
