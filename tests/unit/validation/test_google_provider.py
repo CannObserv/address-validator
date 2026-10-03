@@ -178,7 +178,8 @@ class TestGoogleProvider:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std())
         assert result.components is not None
-        assert result.components.spec == "usps-pub28"
+        assert result.components.spec == USPS_PUB28_SPEC
+        assert result.components.spec_version == USPS_PUB28_SPEC_VERSION
 
     @pytest.mark.asyncio
     async def test_components_contains_vacant(
@@ -446,12 +447,3 @@ class TestGoogleProviderUsNonCass:
         assert result.components is not None
         assert result.components.values["address_line_1"] == "301 E Hbr St"
         assert result.validated == "301 E Hbr St  Westport, WA 98595"
-
-    @pytest.mark.asyncio
-    async def test_cass_components_keep_pub28_version(self) -> None:
-        client = AsyncMock()
-        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_Y)
-        result = await GoogleProvider(client).validate(_make_std())
-        assert result.components is not None
-        assert result.components.spec == USPS_PUB28_SPEC
-        assert result.components.spec_version == USPS_PUB28_SPEC_VERSION
