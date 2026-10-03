@@ -80,7 +80,7 @@ class TestV2ValidateUnparseableInput:
             address_line_2="44th Ave W",
             city="Lynnwood",
             region="WA",
-            postal_code="98036-5635",
+            postal_code="98036",  # non-CASS: no ZIP+4 (GH #263)
             country="US",
             latitude=47.8253139,
             longitude=-122.2936207,
@@ -100,7 +100,7 @@ class TestV2ValidateUnparseableInput:
         assert body["validation"]["status"] == "invalid"
         assert body["city"] == "Lynnwood"
         assert body["region"] == "WA"
-        assert body["postal_code"] == "98036-5635"
+        assert body["postal_code"] == "98036"
         # Provider must have been called (i.e. pipeline didn't short-circuit on empty street).
         assert provider.validate.await_count == 1
         call_std = provider.validate.await_args.args[0]
