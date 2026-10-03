@@ -405,7 +405,8 @@ class TestV2ValidateUndetermined:
 
     def test_usps_rate_limited_google_complete_without_dpv_is_undetermined(self, client) -> None:
         """GH #262: not `confirmed`, and flagged so the cache skips it and the
-        client's retry reaches USPS."""
+        client's retry reaches USPS. GH #263: its components are `raw`, not Pub 28,
+        and the echoed ZIP+4 is dropped."""
         google, _ = self._google_non_cass()
         chain = ChainProvider(
             providers=[
@@ -426,6 +427,10 @@ class TestV2ValidateUndetermined:
             "provider": "google",
         }
         assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
+        assert (body["components"]["spec"], body["components"]["spec_version"]) == ("raw", "1")
+        assert body["postal_code"] == "98392"
+        assert body["components"]["values"]["postal_code"] == "98392"
+        assert body["validated"] == "7234 NE Pkwy  Suquamish, WA 98392"
 
     def test_google_first_complete_without_dpv_falls_back_to_usps(self, client) -> None:
         """GH #262: `google,usps` no longer returns a DPV-less `confirmed` — the
