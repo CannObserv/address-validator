@@ -858,7 +858,7 @@ class TestMapResponseUsPostalFallback:
 
     def test_postal_code_from_postal_address(self) -> None:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
-        assert result["postal_code"] == "98036-5635"
+        assert result["postal_code"] == "98036"  # ZIP+4 unverified (GH #263)
 
     def test_latitude_preserved(self) -> None:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
@@ -930,7 +930,7 @@ class TestMapResponseUsNonCassAddressComplete:
     def test_postal_address_and_flags_still_read(self) -> None:
         result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_COMPLETE)
         assert result["address_line_1"] == "7234 NE Pkwy"
-        assert result["postal_code"] == "98392-8392"
+        assert result["postal_code"] == "98392"  # ZIP+4 unverified (GH #263)
         assert result["has_unconfirmed_components"] is True
         assert result["has_replaced_components"] is True
 
@@ -1031,7 +1031,7 @@ class TestBlankDpvTakesVerdictPath:
         assert result["dpv_match_code"] is None
         assert result["city"] == "Lynnwood"
         assert result["region"] == "WA"
-        assert result["postal_code"] == "98036-5635"
+        assert result["postal_code"] == "98036"  # ZIP+4 unverified (GH #263)
 
 
 _GOOGLE_LOGGER = "address_validator.services.validation.google_client"
@@ -1150,3 +1150,86 @@ class TestUnexpectedUspsDataWarning:
         with caplog.at_level("WARNING", logger=_GOOGLE_LOGGER):
             GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
         assert self._warnings(caplog) == []
+
+
+# -- Component source on the US non-CASS path (GH #263) ---------------------
+# Modeled on the 2026-09-30 #258 probe: Google's postalAddress text is mixed
+# case and abbreviates street names ("Hbr"), so it is not Pub 28.
+GOOGLE_RESPONSE_US_NO_DPV_JUNK_ZIP4 = {
+    "result": {
+        "verdict": {
+            "inputGranularity": "PREMISE",
+            "validationGranularity": "PREMISE",
+            "addressComplete": True,
+        },
+        "address": {
+            "postalAddress": {
+                "regionCode": "US",
+                "postalCode": "98595-0000",
+                "administrativeArea": "WA",
+                "locality": "Westport",
+                "addressLines": ["301 E Hbr St"],
+            },
+        },
+        "uspsData": {"standardizedAddress": {}},
+    }
+}
+
+
+class TestMapResponseComponentSource:
+    """GH #263: the mapper says whether the fields came from USPS CASS, so the
+    provider labels Pub 28 only what CASS standardized."""
+
+    def test_cass_path_is_cass_standardized(self) -> None:
+        assert GoogleClient._map_response(GOOGLE_RESPONSE_Y)["cass_standardized"] is True
+
+    def test_unknown_dpv_code_still_cass_standardized(self) -> None:
+        """The DPV code is dropped, but the fields still come from standardizedAddress."""
+        raw = copy.deepcopy(GOOGLE_RESPONSE_Y)
+        raw["result"]["uspsData"]["dpvConfirmation"] = "Q"
+        assert GoogleClient._map_response(raw)["cass_standardized"] is True
+
+    def test_non_cass_path_is_not_cass_standardized(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_JUNK_ZIP4)
+        assert result["cass_standardized"] is False
+
+    def test_no_dpv_no_postal_address_is_not_cass_standardized(self) -> None:
+        result = GoogleClient._map_response(_us_response_with_usps({}))
+        assert result["cass_standardized"] is False
+
+    def test_international_is_not_cass_standardized(self) -> None:
+        result = GoogleClient._map_response_international(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
+        assert result["cass_standardized"] is False
+
+
+class TestMapResponseNonCassZipPlus4:
+    """GH #263: on the US non-CASS path Google echoes the input's ZIP+4 unverified
+    (wslcb-licensing-tracker: 990 of 1,850 such answers carried `-0000` or a
+    repeat of the ZIP), so only the ZIP5 is returned."""
+
+    def test_extension_dropped(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_JUNK_ZIP4)
+        assert result["postal_code"] == "98595"
+
+    def test_plausible_extension_also_dropped(self) -> None:
+        """Nothing verified it, however real it looks."""
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_RICH_POSTAL)
+        assert result["postal_code"] == "98036"
+
+    def test_bare_zip5_unchanged(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_FOLDED_UNIT)
+        assert result["postal_code"] == "98840"
+
+    def test_cass_zip_plus4_kept(self) -> None:
+        assert GoogleClient._map_response(GOOGLE_RESPONSE_Y)["postal_code"] == "62701-1234"
+
+    def test_text_otherwise_kept_as_google_returned_it(self) -> None:
+        result = GoogleClient._map_response(GOOGLE_RESPONSE_US_NO_DPV_JUNK_ZIP4)
+        assert result["address_line_1"] == "301 E Hbr St"
+        assert result["city"] == "Westport"
+
+    def test_international_postal_code_unchanged(self) -> None:
+        raw = copy.deepcopy(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
+        raw["result"]["address"]["postalAddress"]["postalCode"] = "K1A-0B1"
+        result = GoogleClient._map_response_international(raw)
+        assert result["postal_code"] == "K1A-0B1"

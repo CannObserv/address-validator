@@ -24,6 +24,7 @@ CLIENT_RESULT_Y = {
     "has_inferred_components": False,
     "has_replaced_components": False,
     "has_unconfirmed_components": False,
+    "cass_standardized": True,
 }
 
 CLIENT_RESULT_N = {
@@ -40,6 +41,7 @@ CLIENT_RESULT_N = {
     "has_inferred_components": False,
     "has_replaced_components": False,
     "has_unconfirmed_components": False,
+    "cass_standardized": False,
 }
 
 CLIENT_RESULT_WITH_WARNINGS = {
@@ -304,6 +306,7 @@ CLIENT_RESULT_INTERNATIONAL_CONFIRMED = {
     "has_inferred_components": False,
     "has_replaced_components": False,
     "has_unconfirmed_components": False,
+    "cass_standardized": False,
 }
 
 CLIENT_RESULT_INTERNATIONAL_NOT_FOUND = {
@@ -320,6 +323,7 @@ CLIENT_RESULT_INTERNATIONAL_NOT_FOUND = {
     "has_inferred_components": False,
     "has_replaced_components": False,
     "has_unconfirmed_components": False,
+    "cass_standardized": False,
 }
 
 
@@ -399,3 +403,55 @@ class TestGoogleProviderNonUS:
         provider = GoogleProvider(client)
         result = await provider.validate(_make_gb_std())
         assert result.validation.status == "invalid"
+
+
+# Modeled on the 2026-09-30 #258 probe: a US answer read from Google's
+# postalAddress (no CASS DPV code), mixed case and not Pub 28 (GH #263).
+CLIENT_RESULT_US_NON_CASS = {
+    "dpv_match_code": None,
+    "status": "undetermined",
+    "address_line_1": "301 E Hbr St",
+    "address_line_2": "",
+    "city": "Westport",
+    "region": "WA",
+    "postal_code": "98595",
+    "vacant": None,
+    "latitude": 46.89,
+    "longitude": -124.1,
+    "has_inferred_components": False,
+    "has_replaced_components": True,
+    "has_unconfirmed_components": False,
+    "cass_standardized": False,
+}
+
+
+class TestGoogleProviderUsNonCass:
+    """GH #263: US components read from Google's postalAddress are labelled
+    ``raw``; only CASS-standardized fields are labelled Pub 28."""
+
+    @pytest.mark.asyncio
+    async def test_components_spec_is_raw(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_US_NON_CASS)
+        result = await GoogleProvider(client).validate(_make_std())
+        assert result.components is not None
+        assert result.components.spec == "raw"
+        assert result.components.spec_version == "1"
+
+    @pytest.mark.asyncio
+    async def test_text_passed_through(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_US_NON_CASS)
+        result = await GoogleProvider(client).validate(_make_std())
+        assert result.components is not None
+        assert result.components.values["address_line_1"] == "301 E Hbr St"
+        assert result.validated == "301 E Hbr St  Westport, WA 98595"
+
+    @pytest.mark.asyncio
+    async def test_cass_components_keep_pub28_version(self) -> None:
+        client = AsyncMock()
+        client.validate_address = AsyncMock(return_value=CLIENT_RESULT_Y)
+        result = await GoogleProvider(client).validate(_make_std())
+        assert result.components is not None
+        assert result.components.spec == USPS_PUB28_SPEC
+        assert result.components.spec_version == USPS_PUB28_SPEC_VERSION
