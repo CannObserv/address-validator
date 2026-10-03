@@ -1228,8 +1228,11 @@ class TestMapResponseNonCassZipPlus4:
         assert result["address_line_1"] == "301 E Hbr St"
         assert result["city"] == "Westport"
 
-    def test_international_postal_code_unchanged(self) -> None:
+    def test_international_hyphenated_postal_code_unchanged(self) -> None:
+        """A hyphen is part of some countries' codes (Brazil's CEP), not an extension."""
         raw = copy.deepcopy(GOOGLE_RESPONSE_INTERNATIONAL_CONFIRMED)
-        raw["result"]["address"]["postalAddress"]["postalCode"] = "K1A-0B1"
+        postal = raw["result"]["address"]["postalAddress"]
+        postal["regionCode"] = "BR"
+        postal["postalCode"] = "01310-100"
         result = GoogleClient._map_response_international(raw)
-        assert result["postal_code"] == "K1A-0B1"
+        assert result["postal_code"] == "01310-100"
