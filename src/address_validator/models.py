@@ -276,8 +276,9 @@ class ValidateResponseV2(BaseModel):
     values; ``validation.status`` indicates the outcome.
 
     ``postal_code`` is the jurisdiction-neutral postal identifier.  For US
-    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when the
-    provider returns it, or the 5-digit ZIP otherwise.
+    addresses it carries the full ZIP+4 (e.g. ``"62701-1234"``) when a
+    provider verified it (USPS, or Google with a CASS DPV code), or the
+    5-digit ZIP otherwise (GH #263).
 
     ``vacant`` and other USPS-specific indicators appear in
     ``components.values`` when the provider returns them.
