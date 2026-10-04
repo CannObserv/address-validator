@@ -70,7 +70,8 @@ class ChainProvider:
     response, every failed request (GH #257) and every 2xx body that is not
     a JSON object (GH #271) to one of those errors.  What they do not map
     still ends the chain as a 500 — e.g. a non-retryable Google
-    credential-refresh failure (operator action).
+    credential-refresh failure (operator action), or a body whose nested
+    field is not an object (GH #278).
 
     Parameters
     ----------
