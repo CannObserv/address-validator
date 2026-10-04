@@ -296,6 +296,27 @@ class TestV2ValidateSingleProvider:
         assert response.headers["Retry-After"] == retry_after
 
     @pytest.mark.parametrize(
+        "exc",
+        [
+            ProviderTransientError("usps", retry_after_seconds=1.0),
+            ProviderAtCapacityError("usps", retry_after_seconds=9.2),
+        ],
+        ids=["transient", "at_capacity"],
+    )
+    def test_provider_failure_logs_warning(self, client, caplog, exc: Exception) -> None:
+        """A QuotaGuard refusal logs nothing of its own; without a chain to log the
+        fallback, the route's WARNING is the only journal signal."""
+        provider = AsyncMock()
+        provider.validate = AsyncMock(side_effect=exc)
+        provider.supports_non_us = False
+        with caplog.at_level("WARNING", logger="address_validator.routers.v2.validate"):
+            self._post(client, provider)
+        [record] = [r for r in caplog.records if r.name == "address_validator.routers.v2.validate"]
+        assert record.levelname == "WARNING"
+        assert "usps" in record.getMessage()
+        assert type(exc).__name__ in record.getMessage()
+
+    @pytest.mark.parametrize(
         "make_provider",
         [unreachable_usps, unreachable_google, unusable_usps, unusable_google],
     )
