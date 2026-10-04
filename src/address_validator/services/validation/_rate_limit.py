@@ -341,6 +341,7 @@ def _raise_for_unusable_body(
     *,
     provider: str,
     logger: logging.Logger,
+    cause: Exception | None = None,
 ) -> NoReturn:
     """Map a 2xx response whose body cannot be used to ``ProviderTransientError``.
 
@@ -351,9 +352,12 @@ def _raise_for_unusable_body(
 
     *reason* must be a fixed string.  Never the body or a decoder's message:
     provider bodies carry the address, and the USPS token body the secret.
+    *cause*, when given, is chained as ``__cause__`` like the sibling helpers.
     """
     logger.warning("%s provider returned %s", provider, reason)
-    raise ProviderTransientError(provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S)
+    raise ProviderTransientError(
+        provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+    ) from cause
 
 
 def _json_object(
@@ -372,8 +376,8 @@ def _json_object(
     """
     try:
         raw = resp.json()
-    except ValueError:
-        _raise_for_unusable_body("a non-JSON body", provider=provider, logger=logger)
+    except ValueError as exc:
+        _raise_for_unusable_body("a non-JSON body", provider=provider, logger=logger, cause=exc)
     if not isinstance(raw, dict):
         _raise_for_unusable_body(
             f"an unexpected JSON shape ({type(raw).__name__})", provider=provider, logger=logger

@@ -393,6 +393,8 @@ class TestUSPSClient:
         assert exc_info.value.provider == "usps"
         assert exc_info.value.retry_after_seconds > 0
         assert any(logged in r.getMessage() for r in caplog.records)
+        # The decode error is the cause, like the request-error path (CR 2).
+        assert isinstance(exc_info.value.__cause__, ValueError) == (logged == "non-JSON body")
         # Never the body or the decoder's message: both can carry the address.
         assert "Main St" not in caplog.text
 
