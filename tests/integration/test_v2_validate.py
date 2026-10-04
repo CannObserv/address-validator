@@ -243,8 +243,8 @@ class TestV2ValidateQuotaExhausted:
             )
         )
 
-    def _post(self, client, chain: ChainProvider):
-        with _mock_registry_with(chain):
+    def _post(self, client, provider):
+        with _mock_registry_with(provider):
             return client.post(
                 "/api/v2/validate",
                 json={"address": "123 Main St, Seattle, WA 98101"},
@@ -253,6 +253,12 @@ class TestV2ValidateQuotaExhausted:
     def test_google_daily_quota_retry_after_is_time_until_reset(self, client) -> None:
         chain = ChainProvider(providers=[self._drained_google()])
         response = self._post(client, chain)
+        assert response.status_code == 429, response.text
+        assert response.headers["Retry-After"] == "10800"
+
+    def test_single_provider_drained_retry_after_is_time_until_reset(self, client) -> None:
+        """GH #268: a bare provider (no chain) carries the guard's wait too."""
+        response = self._post(client, self._drained_google())
         assert response.status_code == 429, response.text
         assert response.headers["Retry-After"] == "10800"
 
@@ -324,15 +330,6 @@ class TestV2ValidateSingleProvider:
         response = self._post(client, make_provider())
         assert response.status_code == 429, response.text
         assert int(response.headers["Retry-After"]) >= 1
-
-    def test_drained_quota_returns_429_with_time_until_reset(self, client) -> None:
-        with patch(
-            "address_validator.services.validation._rate_limit._now_in_tz",
-            return_value=datetime(2026, 10, 1, 21, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles")),
-        ):
-            response = self._post(client, TestV2ValidateQuotaExhausted._drained_google())
-        assert response.status_code == 429, response.text
-        assert response.headers["Retry-After"] == "10800"
 
     def test_bad_request_keeps_provider_name(self, client) -> None:
         """Option 2 (a one-element chain) was rejected because a 400 would then
