@@ -6,7 +6,8 @@ class ProviderRateLimitedError(Exception):
 
     :class:`~services.validation.chain_provider.ChainProvider` catches this to
     try the next provider in the chain.  If all providers raise it, the router
-    catches the final instance and returns HTTP 429.
+    catches the final instance and returns HTTP 429; a bare single provider's
+    error reaches the router directly (GH #268).
 
     Parameters
     ----------
