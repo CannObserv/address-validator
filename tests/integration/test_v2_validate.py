@@ -24,7 +24,12 @@ from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
 from address_validator.services.validation.usps_client import USPSClient
 from address_validator.services.validation.usps_provider import USPSProvider
-from tests.conftest import unreachable_google, unreachable_usps
+from tests.conftest import (
+    unreachable_google,
+    unreachable_usps,
+    unusable_google,
+    unusable_usps,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -165,6 +170,21 @@ class TestV2ValidateProviderUnreachable:
         assert response.status_code == 429, response.text
         assert response.json()["error"] == "provider_rate_limited"
         assert int(response.headers["Retry-After"]) >= 1
+
+    def test_unusable_primary_body_falls_back(self, client) -> None:
+        """GH #271: a 200 whose body is not a JSON object (a gateway page) falls
+        back like a network failure — it used to escape as a 500."""
+        google = AsyncMock()
+        google.validate = AsyncMock(return_value=self._GOOGLE_CONFIRMED)
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[unusable_usps(), google])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["validation"]["provider"] == "google"
 
 
 class TestV2ValidateQuotaExhausted:
@@ -311,6 +331,24 @@ class TestV2ValidateUndetermined:
             providers=[
                 self._stub(return_value=self._USPS_UNDETERMINED),
                 unreachable_google(),
+            ]
+        )
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "301 E Harbor Ave, Westport, WA 98595"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"]["status"] == "undetermined"
+        assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
+
+    def test_fallback_unusable_body_returns_200_not_500(self, client) -> None:
+        """GH #271: an unusable Google body after a USPS answer must not become a 500."""
+        chain = ChainProvider(
+            providers=[
+                self._stub(return_value=self._USPS_UNDETERMINED),
+                unusable_google(),
             ]
         )
         with _mock_registry_with(chain):

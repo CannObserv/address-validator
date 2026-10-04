@@ -1,6 +1,7 @@
 """Unit tests for the USPS v3 client (token caching, request shape, response mapping)."""
 
 import asyncio
+import json
 from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,6 +22,7 @@ from address_validator.services.validation.usps_client import (
     _normalise_flag,
     _summarise_shape,
 )
+from tests.conftest import UNUSABLE_BODY, ok_response
 
 # An httpx error message can embed the request URL, and with it the address.
 _ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
@@ -30,6 +32,7 @@ TOKEN_RESPONSE = {
     "token_type": "Bearer",
     "expires_in": 3600,
 }
+TOKEN_BODY = json.dumps(TOKEN_RESPONSE).encode()
 
 VALID_ADDRESS_RESPONSE = {
     "address": {
@@ -364,6 +367,65 @@ class TestUSPSClient:
             await client.validate_address("123 Main St", "Springfield", "IL")
         assert exc_info.value.provider == "usps"
         mock_http.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("body", "logged"),
+        [
+            (UNUSABLE_BODY, "non-JSON body"),
+            (b"", "non-JSON body"),
+            (b"\x80 123 Main St", "non-JSON body"),  # UnicodeDecodeError
+            (b'["123 Main St"]', "unexpected JSON shape (list)"),
+            (b'"123 Main St"', "unexpected JSON shape (str)"),
+            (b"null", "unexpected JSON shape (NoneType)"),
+        ],
+    )
+    async def test_unusable_address_body_raises_transient_error(
+        self, body: bytes, logged: str, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #271: a 2xx body that is not a JSON object maps to
+        ProviderTransientError — the raw ValueError/AttributeError was a 500."""
+        mock_http.post.return_value = ok_response(TOKEN_BODY)
+        mock_http.get.return_value = ok_response(body)
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+        assert any(logged in r.getMessage() for r in caplog.records)
+        # Never the body or the decoder's message: both can carry the address.
+        assert "Main St" not in caplog.text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "body",
+        [
+            UNUSABLE_BODY,
+            b'["tok-secret"]',
+            b'{"token_type": "Bearer", "expires_in": 3600}',
+            b'{"access_token": "", "expires_in": 3600}',
+            b'{"access_token": 42, "expires_in": 3600}',
+            b'{"access_token": "tok-secret", "expires_in": "soon"}',
+            b'{"access_token": "tok-secret", "expires_in": null}',
+            b'{"access_token": "tok-secret", "expires_in": Infinity}',  # OverflowError
+        ],
+    )
+    async def test_unusable_token_body_raises_transient_error(
+        self, body: bytes, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #271: a 2xx token response with no usable access_token/expires_in
+        maps to ProviderTransientError; nothing is cached and no address call
+        is sent."""
+        mock_http.post.return_value = ok_response(body)
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+        mock_http.get.assert_not_called()
+        assert client._token is None
+        assert "tok-secret" not in caplog.text
+        assert "Main St" not in caplog.text
 
     @pytest.mark.asyncio
     async def test_400_raises_provider_bad_request_error(

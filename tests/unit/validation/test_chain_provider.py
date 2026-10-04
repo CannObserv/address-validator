@@ -19,7 +19,12 @@ from address_validator.services.validation.errors import (
     ProviderTransientError,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
-from tests.conftest import unreachable_google, unreachable_usps
+from tests.conftest import (
+    unreachable_google,
+    unreachable_usps,
+    unusable_google,
+    unusable_usps,
+)
 
 _CONFIRMED = ValidateResponseV2(
     country="US",
@@ -633,6 +638,57 @@ class TestChainTransportErrors:
         """CR 9 (GH #250): a network failure from a fallback provider must not
         turn a held 200 answer into a 500."""
         chain = ChainProvider(providers=[_mock_provider(_USPS_UNDETERMINED), unreachable_google()])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+
+class TestChainUnusableBody:
+    """GH #271: the clients map a 2xx body they cannot use (non-JSON, not an
+    object, a token response with no access_token) to ProviderTransientError,
+    so the chain falls through on it. The raw ValueError/KeyError/AttributeError
+    used to escape the chain as HTTP 500."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "bodies",
+        [
+            pytest.param({}, id="usps-address-non-json"),
+            pytest.param({"address": b"[]"}, id="usps-address-list"),
+            pytest.param({"token": b'{"expires_in": 3600}'}, id="usps-token"),
+        ],
+    )
+    async def test_unusable_primary_falls_back(
+        self, bodies: dict[str, bytes], std_address: object
+    ) -> None:
+        chain = ChainProvider(
+            providers=[unusable_usps(**bodies), _mock_provider(_GOOGLE_CONFIRMED)]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "confirmed"
+        assert result.validation.provider == "google"
+
+    @pytest.mark.asyncio
+    async def test_all_unusable_raises_rate_limited_all(self, std_address: object) -> None:
+        chain = ChainProvider(providers=[unusable_usps(), unusable_google()])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address)  # type: ignore[arg-type]
+        assert exc_info.value.provider == "all"
+        assert exc_info.value.retry_after_seconds > 0
+
+    @pytest.mark.asyncio
+    async def test_unusable_fallback_returns_held_with_warning(self, std_address: object) -> None:
+        """An unusable Google body after a held USPS answer keeps the 200 —
+        the body-layer twin of CR 9 (GH #250)."""
+        chain = ChainProvider(
+            providers=[_mock_provider(_USPS_UNDETERMINED), unusable_google(b'["x"]')]
+        )
 
         result = await chain.validate(std_address)  # type: ignore[arg-type]
 

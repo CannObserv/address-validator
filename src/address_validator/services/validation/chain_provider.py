@@ -31,8 +31,9 @@ class ChainProvider:
     * :class:`~services.validation.errors.ProviderRateLimitedError` (HTTP 429)
     * :class:`~services.validation.errors.ProviderAtCapacityError` (local quota)
     * :class:`~services.validation.errors.ProviderTransientError` (HTTP 5xx /
-      unexpected non-2xx / failed request or credential refresh — the clients
-      wrap connect errors, timeouts and undecodable bodies, GH #257)
+      unexpected non-2xx / failed request or credential refresh / unusable 2xx
+      body — the clients wrap connect errors, timeouts and undecodable bodies,
+      GH #257, and a 2xx body that is not a JSON object, GH #271)
     * :class:`~services.validation.errors.ProviderBadRequestError` (HTTP 400)
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
@@ -66,9 +67,9 @@ class ChainProvider:
 
     Any other exception is re-raised immediately without trying further
     providers.  The list above is closed: the clients map every non-2xx
-    response and every failed request to one of those errors and never leak
-    a raw ``httpx`` exception (GH #257).  What they do not map still ends the
-    chain as a 500 — e.g. an unparseable 200 body, or a non-retryable Google
+    response, every failed request (GH #257) and every 2xx body that is not
+    a JSON object (GH #271) to one of those errors.  What they do not map
+    still ends the chain as a 500 — e.g. a non-retryable Google
     credential-refresh failure (operator action).
 
     Parameters

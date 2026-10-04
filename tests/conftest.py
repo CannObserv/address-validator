@@ -123,3 +123,43 @@ def unreachable_google() -> GoogleProvider:
     return GoogleProvider(
         GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
     )
+
+
+# -- Real providers whose 2xx body is unusable (GH #271) ----------------------
+# A gateway or captive-proxy page served with HTTP 200. The body names the
+# address so a test can prove it never reaches the log.
+
+UNUSABLE_BODY = b"<html><body>Gateway: 123 Main St</body></html>"
+_USPS_TOKEN_BODY = b'{"access_token": "tok", "expires_in": 3600}'
+
+
+def ok_response(content: bytes) -> httpx.Response:
+    """A real HTTP 200 carrying *content*, so ``resp.json()`` decodes for real."""
+    return httpx.Response(200, content=content, request=httpx.Request("GET", "https://test"))
+
+
+def unusable_usps(
+    *, token: bytes = _USPS_TOKEN_BODY, address: bytes = UNUSABLE_BODY
+) -> USPSProvider:
+    """USPS provider whose token or address call answers 200 with an unusable body."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.return_value = ok_response(token)
+    http.get.return_value = ok_response(address)
+    return USPSProvider(
+        USPSClient(
+            consumer_key="key",
+            consumer_secret="secret",
+            http_client=http,
+            quota_guard=_quota_guard("usps"),
+        )
+    )
+
+
+def unusable_google(body: bytes = UNUSABLE_BODY) -> GoogleProvider:
+    """Google provider whose API call answers 200 with an unusable body."""
+    http = AsyncMock(spec=httpx.AsyncClient)
+    http.post.return_value = ok_response(body)
+    creds = MagicMock(valid=True, token="tok")
+    return GoogleProvider(
+        GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
+    )
