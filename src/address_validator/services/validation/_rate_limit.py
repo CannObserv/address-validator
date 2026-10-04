@@ -4,6 +4,7 @@ Provides:
 - :class:`QuotaWindow` — descriptor for a single quota constraint
 - :class:`QuotaGuard` — multi-window async rate limiter
 - :func:`_parse_retry_after` — extracts backoff delay from a 429 response
+- :func:`_json_object` — decodes a 2xx body, mapping an unusable one to a typed error
 - Retry constants: :data:`_RETRY_MAX`, :data:`_RETRY_BASE_DELAY_S`
 """
 
@@ -13,7 +14,7 @@ import random
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from time import monotonic
-from typing import Literal, NoReturn
+from typing import Any, Literal, NoReturn
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -333,6 +334,55 @@ def _raise_for_unexpected_status(
     raise ProviderTransientError(
         provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
     ) from exc
+
+
+def _raise_for_unusable_body(
+    reason: str,
+    *,
+    provider: str,
+    logger: logging.Logger,
+    cause: Exception | None = None,
+) -> NoReturn:
+    """Map a 2xx response whose body cannot be used to ``ProviderTransientError``.
+
+    The body-layer counterpart of :func:`_raise_for_request_error`.  A gateway
+    or captive-proxy page served with HTTP 200 is the plausible cause — an
+    upstream fault, so transient: bad-request would end an all-providers-failed
+    chain blaming the input (GH #271).
+
+    *reason* must be a fixed string.  Never the body or a decoder's message:
+    provider bodies carry the address, and the USPS token body the secret.
+    *cause*, when given, is chained as ``__cause__`` like the sibling helpers.
+    """
+    logger.warning("%s provider returned %s", provider, reason)
+    raise ProviderTransientError(
+        provider, retry_after_seconds=_TRANSIENT_DEFAULT_RETRY_AFTER_S
+    ) from cause
+
+
+def _json_object(
+    resp: httpx.Response,
+    *,
+    provider: str,
+    logger: logging.Logger,
+) -> dict[str, Any]:
+    """Return a 2xx response's body as a JSON object, else raise ``ProviderTransientError``.
+
+    The clients' mappers call ``.get`` on the top level, so a list, string or
+    null would raise ``AttributeError`` and 500 the request (GH #271).  Follows
+    ``libpostal_client`` (#239): ``json.JSONDecodeError`` and
+    ``UnicodeDecodeError`` are both ``ValueError``.  The shape is logged by
+    type name only.
+    """
+    try:
+        raw = resp.json()
+    except ValueError as exc:
+        _raise_for_unusable_body("a non-JSON body", provider=provider, logger=logger, cause=exc)
+    if not isinstance(raw, dict):
+        _raise_for_unusable_body(
+            f"an unexpected JSON shape ({type(raw).__name__})", provider=provider, logger=logger
+        )
+    return raw
 
 
 def _raise_for_request_error(

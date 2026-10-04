@@ -24,9 +24,11 @@ from address_validator.services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
     QuotaGuard,
+    _json_object,
     _parse_retry_after,
     _raise_for_request_error,
     _raise_for_unexpected_status,
+    _raise_for_unusable_body,
 )
 from address_validator.services.validation.errors import (
     ProviderBadRequestError,
@@ -188,11 +190,23 @@ class USPSClient:
                 # semantics as the address endpoint: 401/403 → bad-request
                 # (creds bad), 5xx → transient (USPS outage).
                 _raise_for_unexpected_status(exc, provider="usps", logger=logger)
-            data: dict[str, Any] = resp.json()
+            data = _json_object(resp, provider="usps", logger=logger)
 
-            expires_in: int = int(data.get("expires_in", 3600))
+            access_token = data.get("access_token")
+            try:
+                # OverflowError: Python's json accepts Infinity (GH #271).
+                expires_in = int(data.get("expires_in", 3600))
+            except (TypeError, ValueError, OverflowError):
+                expires_in = None
+            if not (isinstance(access_token, str) and access_token) or expires_in is None:
+                # Never log the body: it holds the token (GH #271).
+                _raise_for_unusable_body(
+                    "a token response without a usable access_token/expires_in",
+                    provider="usps",
+                    logger=logger,
+                )
             self._token = USPSToken(
-                access_token=data["access_token"],
+                access_token=access_token,
                 expires_at=datetime.now(tz=UTC)
                 + timedelta(seconds=expires_in - _TOKEN_REFRESH_BUFFER_S),
             )
@@ -227,8 +241,10 @@ class USPSClient:
         (operator action required: fix OAuth credentials).
 
         Raises :class:`~services.validation.errors.ProviderTransientError`
-        on HTTP 5xx, any unexpected non-2xx response, or a failed request
-        (connect error, timeout, undecodable body) on the token or address call.
+        on HTTP 5xx, any unexpected non-2xx response, a failed request
+        (connect error, timeout, undecodable body) on the token or address call,
+        or a 2xx body it cannot use — not a JSON object, or a token response
+        without a usable ``access_token``/``expires_in`` (GH #271).
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if secondary_address:
@@ -279,8 +295,7 @@ class USPSClient:
                     raise ProviderRateLimitedError("usps", retry_after_seconds=delay) from exc
                 _raise_for_unexpected_status(exc, provider="usps", logger=logger)
 
-            raw: dict[str, Any] = resp.json()
-            return self._map_response(raw)
+            return self._map_response(_json_object(resp, provider="usps", logger=logger))
 
         # unreachable — satisfies the type checker
         raise ProviderRateLimitedError("usps", retry_after_seconds=0.0)

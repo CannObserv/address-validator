@@ -31,6 +31,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     _TRANSIENT_DEFAULT_RETRY_AFTER_S,
     QuotaGuard,
+    _json_object,
     _parse_retry_after,
     _raise_for_request_error,
     _raise_for_unexpected_status,
@@ -227,8 +228,9 @@ class GoogleClient:
             ProviderRateLimitedError: on HTTP 429 after all retries exhausted.
             ProviderTransientError: on HTTP 5xx, any other unexpected
                 non-2xx response, a failed request (connect error, timeout,
-                undecodable body) on the API call, or a transient
-                credential-refresh failure (see ``_get_auth_headers``).
+                undecodable body) on the API call, a 2xx body that is not a
+                JSON object (GH #271), or a transient credential-refresh
+                failure (see ``_get_auth_headers``).
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
@@ -293,7 +295,7 @@ class GoogleClient:
                     raise ProviderRateLimitedError("google", retry_after_seconds=delay) from exc
                 _raise_for_unexpected_status(exc, provider="google", logger=logger)
 
-            raw: dict[str, Any] = resp.json()
+            raw = _json_object(resp, provider="google", logger=logger)
             if country == "US":
                 return self._map_response(raw, secondary_address=secondary_address)
             return self._map_response_international(raw, secondary_address=secondary_address)
