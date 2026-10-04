@@ -162,19 +162,20 @@ async def validate_address(
     except (ProviderRateLimitedError, ProviderAtCapacityError, ProviderTransientError) as exc:
         # A ChainProvider folds all three into ProviderRateLimitedError("all"); a
         # single provider is used bare and raises them directly (GH #268).
+        retry_after = math.ceil(exc.retry_after_seconds)
         if not isinstance(exc, ProviderRateLimitedError):
             # No chain logged the failure, and a QuotaGuard refusal logs nothing.
             logger.warning(
-                "Validation provider %s unavailable (%s, retry after %.0fs)",
+                "Validation provider %s unavailable (%s, retry after %ds)",
                 exc.provider,
                 type(exc).__name__,
-                exc.retry_after_seconds,
+                retry_after,
             )
         raise APIError(
             status_code=429,
             error="provider_rate_limited",
             message="No configured validation provider is currently available. Retry later.",
-            headers={"Retry-After": str(math.ceil(exc.retry_after_seconds))},
+            headers={"Retry-After": str(retry_after)},
         ) from None
 
     if std.warnings:

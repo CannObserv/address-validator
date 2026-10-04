@@ -302,14 +302,16 @@ class TestV2ValidateSingleProvider:
         assert response.headers["Retry-After"] == retry_after
 
     @pytest.mark.parametrize(
-        "exc",
+        ("exc", "retry_after"),
         [
-            ProviderTransientError("usps", retry_after_seconds=1.0),
-            ProviderAtCapacityError("usps", retry_after_seconds=9.2),
+            (ProviderTransientError("usps", retry_after_seconds=1.0), "1"),
+            (ProviderAtCapacityError("usps", retry_after_seconds=9.2), "10"),
         ],
         ids=["transient", "at_capacity"],
     )
-    def test_provider_failure_logs_warning(self, client, caplog, exc: Exception) -> None:
+    def test_provider_failure_logs_warning(
+        self, client, caplog, exc: Exception, retry_after: str
+    ) -> None:
         """A QuotaGuard refusal logs nothing of its own; without a chain to log the
         fallback, the route's WARNING is the only journal signal."""
         provider = AsyncMock()
@@ -321,6 +323,8 @@ class TestV2ValidateSingleProvider:
         assert record.levelname == "WARNING"
         assert "usps" in record.getMessage()
         assert type(exc).__name__ in record.getMessage()
+        # The wait the client was sent, not a rounding of it.
+        assert f"retry after {retry_after}s" in record.getMessage()
 
     @pytest.mark.parametrize(
         "make_provider",
