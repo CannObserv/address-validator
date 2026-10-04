@@ -56,7 +56,7 @@ class ProviderTransientError(Exception):
     400/429 paths, a failed request (connect error, timeout, undecodable
     body), a transient credential-refresh failure (GH #257), and a 2xx body
     the client cannot use — not a JSON object, or a USPS token response
-    without a usable ``access_token`` (GH #271).
+    without a usable ``access_token``/``expires_in`` (GH #271).
     Semantically distinct from:
 
     * :class:`ProviderRateLimitedError` — upstream returned HTTP 429 (quota
