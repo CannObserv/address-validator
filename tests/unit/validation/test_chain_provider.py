@@ -806,3 +806,24 @@ class TestChainCountryRouting:
             await chain.validate(std_address.model_copy(update={"country": "CA"}))
         p1.validate.assert_not_awaited()
         p2.validate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_skip_logged_only_when_a_provider_is_dropped(
+        self, std_address: StandardizeResponseV2, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """CR 4: an all-non-US chain drops nothing, so it logs no skip."""
+        chain = ChainProvider(providers=[_non_us(self._answer("CA", "google"))])
+
+        with caplog.at_level("DEBUG", logger="address_validator.services.validation"):
+            await chain.validate(std_address.model_copy(update={"country": "CA"}))
+
+        assert not [r for r in caplog.records if "skipping" in r.getMessage()]
+
+        chain = ChainProvider(
+            providers=[_us_only(self._answer("CA", "usps")), _non_us(self._answer("CA", "google"))]
+        )
+        with caplog.at_level("DEBUG", logger="address_validator.services.validation"):
+            await chain.validate(std_address.model_copy(update={"country": "CA"}))
+
+        skips = [r.getMessage() for r in caplog.records if "skipping" in r.getMessage()]
+        assert skips == ["ChainProvider: skipping 1 US-only provider(s) for country=CA"]

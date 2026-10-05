@@ -163,6 +163,8 @@ class ChainProvider:
             # reached; falling through to _exhausted would report it as a
             # retryable outage instead of the routing bug it is.
             raise ValueError(f"ChainProvider: no provider serves country {country!r}")
+        if len(eligible) == len(self._providers):
+            return self._providers
         logger.debug(
             "ChainProvider: skipping %d US-only provider(s) for country=%s",
             len(self._providers) - len(eligible),
