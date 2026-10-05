@@ -589,6 +589,46 @@ class TestV2ValidateUndetermined:
         assert body["components"]["values"]["postal_code"] == "98392"
         assert body["validated"] == "7234 NE Pkwy  Suquamish, WA 98392"
 
+    def test_usps_rate_limited_google_invalid_without_dpv_flagged(self, client) -> None:
+        """GH #275: the real mapping of a US non-CASS incomplete verdict is weak
+        (``dpv_match_code`` None, not ""): returned after a USPS 429 with the retry
+        warning, so the cache skips it, instead of being final on sight."""
+        payload = {
+            "result": {
+                "verdict": {"validationGranularity": "ROUTE"},
+                "address": {
+                    "postalAddress": {
+                        "addressLines": ["NE Pkwy"],
+                        "locality": "Suquamish",
+                        "administrativeArea": "WA",
+                        "postalCode": "98392",
+                    }
+                },
+                "uspsData": {"dpvConfirmation": ""},
+            }
+        }
+        google_client = MagicMock()
+        google_client.validate_address = AsyncMock(return_value=GoogleClient._map_response(payload))
+        chain = ChainProvider(
+            providers=[
+                self._stub(side_effect=ProviderRateLimitedError("usps", retry_after_seconds=5)),
+                GoogleProvider(google_client),
+            ]
+        )
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "NE Parkway, Suquamish, WA 98392"},
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"] == {
+            "status": "invalid",
+            "dpv_match_code": None,
+            "provider": "google",
+        }
+        assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in body["warnings"]
+
     def test_google_first_complete_without_dpv_falls_back_to_usps(self, client) -> None:
         """GH #262: `google,usps` no longer returns a DPV-less `confirmed` — the
         Google answer is held and USPS determines the address."""
