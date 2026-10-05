@@ -220,7 +220,8 @@ use the US pipeline instead is GH #281.
 `ChainProvider` catches `ProviderRateLimitedError` (upstream HTTP 429 after retries),
 `ProviderAtCapacityError` (local quota exhausted before sending) and `ProviderTransientError`
 (upstream 5xx, a network failure — connect error, timeout — that the client wraps, GH #257, or a
-2xx body that is not a JSON object or a USPS token response without a usable `access_token`/`expires_in`, GH #271)
+2xx body that is not a JSON object or a USPS token response without a usable `access_token`/`expires_in`, GH #271,
+or one with a field of the wrong JSON type, GH #278)
 and delegates to the next provider. It also catches `ProviderBadRequestError` (upstream HTTP
 400, e.g. USPS or Google rejecting a malformed input) and tries the next provider; only if every
 provider in the chain raises `ProviderBadRequestError` does the route handler return
