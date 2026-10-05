@@ -32,9 +32,9 @@ This mirrors the response-warning catalogue pattern
 | `confirmed_missing_secondary` | D | Building confirmed, unit (secondary) missing. |
 | `confirmed_bad_secondary` | S | Building confirmed, unit (secondary) supplied but not confirmed. |
 | `not_confirmed` | N | Address not found in the USPS database. |
-| `not_found` | — | Google verdict (non-US, or US without a CASS DPV code): address could not be geocoded or verified. |
-| `invalid` | — | Google verdict (non-US, or US without a CASS DPV code): address is geocodable but incomplete. |
-| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. Google's US answer is also `undetermined` when its verdict is complete but CASS returned no DPV code (GH #262). An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when the fallback answered without a DPV code: that answer is discarded, not merged (GH #258). |
+| `not_found` | — | Google verdict (non-US, or US without a CASS DPV code): address could not be geocoded or verified. For a US address a provider chain returns it only when no other provider answered with a DPV code or `undetermined`; with the fallback-unreachable warning it is not cached and a retry may reach USPS (GH #275). |
+| `invalid` | — | Google verdict (non-US, or US without a CASS DPV code): address is geocodable but incomplete. For a US address, chain handling as for `not_found` (GH #275). |
+| `undetermined` | — | A provider answered (HTTP 200) but made no determination — e.g. USPS returned no DPV code. Google's US answer is also `undetermined` when its verdict is complete but CASS returned no DPV code (GH #262). An answer about the address, not an outage: retrying returns the same answer. When a fallback provider was unreachable, the response carries a warning and a retry may yield a determination (GH #250). For a US address it is also returned when another provider answered without a DPV code: an `undetermined` answer beats such a verdict in either chain order, and the two are never merged (GH #258, #275). |
 | `unavailable` | — | No validation provider is configured. Never a per-address outcome; an outage surfaces as HTTP 429/5xx, not as a status. |
 | `error` | — | Provider rejected the input as malformed. |
 
