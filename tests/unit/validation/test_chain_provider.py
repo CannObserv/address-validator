@@ -578,13 +578,16 @@ class TestChainHeldPrecedence:
         self, status: str, std_address: StandardizeResponseV2
     ) -> None:
         """CR 1: non-US answers never carry a DPV code, so the DPV rule cannot
-        apply — any determined non-US answer replaces a held undetermined."""
-        std_ca = std_address.model_copy(update={"country": "CA"})
-        usps_ca = _USPS_UNDETERMINED.model_copy(update={"country": "CA"})
-        google_ca = self._google(status, None).model_copy(update={"country": "CA"})
-        chain = ChainProvider(providers=[_mock_provider(usps_ca), _mock_provider(google_ca)])
+        apply — any determined non-US answer replaces a held undetermined.
 
-        result = await chain.validate(std_ca)
+        PR, not CA: since GH #260 USPS is never asked about CA, but it still
+        reaches the territories, which the rule treats as non-US (GH #281)."""
+        std_pr = std_address.model_copy(update={"country": "PR"})
+        usps_pr = _USPS_UNDETERMINED.model_copy(update={"country": "PR"})
+        google_pr = self._google(status, None).model_copy(update={"country": "PR"})
+        chain = ChainProvider(providers=[_us_only(usps_pr), _non_us(google_pr)])
+
+        result = await chain.validate(std_pr)
 
         assert result.validation.status == status
         assert result.validation.provider == "google"
