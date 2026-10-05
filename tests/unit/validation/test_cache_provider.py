@@ -30,7 +30,11 @@ from address_validator.services.validation.cache_provider import (
     _make_pattern_key,
     _store,
 )
-from address_validator.services.validation.errors import ProviderRateLimitedError
+from address_validator.services.validation.chain_provider import ChainProvider
+from address_validator.services.validation.errors import (
+    ProviderBadRequestError,
+    ProviderRateLimitedError,
+)
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 # ---------------------------------------------------------------------------
@@ -340,6 +344,51 @@ class TestUndeterminedCaching:
 
         assert await _count_rows(db, "validated_addresses") == 0
         assert inner.validate.await_count == 2
+
+
+class TestWeakVerdictThroughChainCaching:
+    """GH #275: a US Google verdict with no DPV code reached after a transient
+    USPS failure is not cached (one 429 used to lock USPS out for a full TTL);
+    after a USPS 400 it is the final answer and is cached."""
+
+    @staticmethod
+    def _chain(usps_exc: Exception) -> tuple[ChainProvider, AsyncMock]:
+        usps = AsyncMock()
+        usps.validate = AsyncMock(side_effect=usps_exc)
+        google = _make_provider(
+            _make_undetermined_response().model_copy(
+                update={
+                    "validation": ValidationResult(status="not_found", provider="google"),
+                }
+            )
+        )
+        return ChainProvider(providers=[usps, google]), google
+
+    async def test_usps_rate_limited_google_not_found_not_stored(self, db: AsyncEngine) -> None:
+        chain, google = self._chain(ProviderRateLimitedError("usps", retry_after_seconds=5))
+        provider = CachingProvider(inner=chain, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        result = await provider.validate(std)
+        await provider.validate(std)
+
+        assert result.validation.status == "not_found"
+        assert warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE in result.warnings
+        assert await _count_rows(db, "validated_addresses") == 0
+        assert google.validate.await_count == 2
+
+    async def test_usps_bad_request_google_not_found_stored(self, db: AsyncEngine) -> None:
+        chain, google = self._chain(ProviderBadRequestError("usps", detail="HTTP 400"))
+        provider = CachingProvider(inner=chain, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        await provider.validate(std)
+        cached = await provider.validate(std)
+
+        assert cached.validation.status == "not_found"
+        assert cached.warnings == []
+        assert await _count_rows(db, "validated_addresses") == 1
+        assert google.validate.await_count == 1
 
 
 class TestCanonicalConflictRefreshesAnswer:
