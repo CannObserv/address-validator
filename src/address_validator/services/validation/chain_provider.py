@@ -1,5 +1,5 @@
-"""ChainProvider — tries providers in order, falling back on recoverable errors
-and on ``undetermined`` answers.
+"""ChainProvider — tries providers in order, falling back on recoverable errors,
+on ``undetermined`` answers and on US answers without a DPV code.
 
 Constructed by :class:`~services.validation.registry.ProviderRegistry` when
 ``VALIDATION_PROVIDER`` contains more than one comma-separated value.
@@ -43,17 +43,18 @@ class ChainProvider:
 
     An ``undetermined`` answer (HTTP 200, no determination — e.g. USPS blank
     DPV, GH #250) is a *soft* miss: it is held and the next provider is tried.
-    With nothing held, the first determined answer wins. Once a US answer is
-    held, only an answer with a DPV code replaces it: a verdict-only answer
-    (Google US non-CASS ``invalid``/``not_found``, no DPV code) is a geocoder
-    opinion, weaker than USPS's own no-determination (GH #258). Google's US
-    non-CASS ``addressComplete`` is itself ``undetermined`` (GH #262), so with
-    ``google,usps`` it is held and USPS is asked.
-    Non-US answers never carry a DPV code, so any determined one replaces a
-    held answer.
+    Google's US non-CASS ``addressComplete`` is itself ``undetermined``
+    (GH #262), so with ``google,usps`` it is held and USPS is asked.
+    For US input, a determined answer with no DPV code (Google non-CASS
+    ``invalid``/``not_found``) is *weak*: a geocoder opinion, not a USPS
+    determination. It is kept in its own slot and the next provider is tried
+    too (GH #275). Only an answer with a DPV code is returned on sight.
+    Non-US answers never carry a DPV code, so any determined one is returned
+    on sight.
     If no provider determines the address, the first held ``undetermined``
-    answer is returned — a 200 answer beats a 429 — and, when any provider
-    failed transiently along the way, it carries
+    answer is returned, else the first weak one (GH #258's ordering, whichever
+    provider answered first) — a 200 answer beats a 429 — and, when any
+    provider failed transiently along the way, it carries
     :data:`~core.warnings.PROVIDER_FALLBACK_UNREACHABLE` so the client knows a
     retry may yield a determination (``CachingProvider`` does not cache it).
 
@@ -100,7 +101,8 @@ class ChainProvider:
     ) -> ValidateResponseV2:
         retry_after: float | None = None  # min across transient errors
         last_bad_request: ProviderBadRequestError | None = None
-        held: ValidateResponseV2 | None = None
+        held: ValidateResponseV2 | None = None  # first undetermined answer
+        weak: ValidateResponseV2 | None = None  # first US answer without a DPV code
         unreachable = False  # any provider failed transiently
         for provider in self._eligible(std.country):
             name = type(provider).__name__
@@ -135,22 +137,21 @@ class ChainProvider:
                     logger.info("ChainProvider: %s undetermined", name)
                     if held is None:
                         held = result
-                elif (
-                    held is None
-                    or std.country != "US"
-                    or result.validation.dpv_match_code is not None
-                ):
+                elif std.country != "US" or result.validation.dpv_match_code is not None:
                     return result
                 else:
-                    # US verdict-only answer (no DPV code) — weaker than the held
-                    # answer, so it does not replace it (GH #258). Non-US answers
-                    # never carry a DPV code, so they are exempt.
+                    # US verdict-only answer (no DPV code) — a geocoder opinion,
+                    # returned only if nothing better comes back (GH #258, #275).
+                    # Non-US answers never carry a DPV code, so they are exempt.
                     logger.info(
-                        "ChainProvider: %s answered %s without a DPV code, keeping undetermined",
+                        "ChainProvider: %s answered %s without a DPV code, holding it as weak",
                         name,
                         result.validation.status,
                     )
-        return _exhausted(held, unreachable, retry_after, last_bad_request)
+                    if weak is None:
+                        weak = result
+        best = held if held is not None else weak  # GH #258 ordering
+        return _exhausted(best, unreachable, retry_after, last_bad_request)
 
     def _eligible(self, country: str) -> list[ValidationProvider]:
         """Providers that serve *country*: US-only ones are dropped outside
@@ -179,7 +180,7 @@ def _exhausted(
     retry_after: float | None,
     last_bad_request: ProviderBadRequestError | None,
 ) -> ValidateResponseV2:
-    """No provider gave a final answer: return the held answer, or raise."""
+    """No provider gave a final answer: return the best held answer, or raise."""
     if held is not None:
         if unreachable:
             return held.model_copy(

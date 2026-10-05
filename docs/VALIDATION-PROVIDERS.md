@@ -243,18 +243,21 @@ error's value, GH #268):
 
 An `undetermined` answer (HTTP 200, no DPV — USPS returns a blank `DPVConfirmation` for addresses
 it cannot match to a delivery point) is a **soft miss** (GH #250): the chain holds it and tries
-the next provider. Once an answer is held, only an answer **with a DPV code** replaces it
-(GH #258): a Google non-CASS verdict (`invalid`/`not_found`, `dpv_match_code` null)
-is discarded, because Google's own validation logic sends a US answer with an empty
-`dpvConfirmation` to FIX. A Google CASS `N` does replace it. The rule is US-only: non-US answers
-never carry a DPV code, so any determined non-US answer replaces a held one. With nothing held
-(USPS 400/429 → Google), an `invalid`/`not_found` verdict is returned. A complete verdict is
-itself `undetermined` (GH #262), so it is held: after a USPS 429 it comes back with the warning
-below and is not cached, and with `google,usps` USPS is asked next. If nothing better comes back, the first
-held `undetermined` answer is returned (a 200 answer beats a 429). If any provider failed
-transiently along the way, the response carries the `PROVIDER_FALLBACK_UNREACHABLE` warning and
-`CachingProvider` does not cache it, so a later retry can reach the fallback. Otherwise the
-`undetermined` answer is cached like any other. Each USPS-undetermined address costs one Google
+the next provider. For US input, only an answer **with a DPV code** is returned on sight
+(GH #258, #275). A Google non-CASS verdict (`invalid`/`not_found`, `dpv_match_code` null) is
+**weak**, because Google's own validation logic sends a US answer with an empty
+`dpvConfirmation` to FIX: the chain keeps it in a separate slot and asks the next provider too.
+A Google CASS `N` is returned on sight. The rule is US-only: non-US answers never carry a DPV
+code, so any determined non-US answer is returned on sight. A complete verdict is itself
+`undetermined` (GH #262), so it is held. When the chain runs out, precedence is: the first held
+`undetermined` answer, then the first weak verdict, whichever provider answered first (a 200
+answer beats a 429). If any provider failed transiently along the way, the response carries the
+`PROVIDER_FALLBACK_UNREACHABLE` warning and `CachingProvider` does not cache it, so a later
+retry can reach the fallback: e.g. USPS 429 → Google `not_found` comes back flagged and
+uncached instead of locking USPS out for a full TTL. Otherwise the answer is cached like any
+other: USPS 400 → Google `invalid` (a #114 place-name input) is final and cached. With
+`google,usps`, every US weak verdict costs a USPS call too; with `usps,google` USPS was already
+asked. Each USPS-undetermined address costs one Google
 call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
 
 **Adding a fallback provider to a single-provider config** (e.g. `usps` → `usps,google`): with no

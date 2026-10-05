@@ -63,7 +63,7 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | Single provider (no chain) at-capacity / transient — returned as 429 (GH #268) | `WARNING` | `routers.v2.validate` | provider name, exception class name, retry-after seconds as sent in `Retry-After`, `request_id` |
 | US-only provider(s) skipped for a country outside `US_POSTAL_COUNTRIES` (logged only when one is dropped, GH #260) | `DEBUG` | `services.validation.chain_provider` | number skipped, `country=`, `request_id` |
 | Provider answered `undetermined` (chain soft fallback, GH #250) | `INFO` | `services.validation.chain_provider` | provider class name, `request_id` |
-| US input: fallback provider answered without a DPV code after an `undetermined` answer was held (answer kept, GH #258) | `INFO` | `services.validation.chain_provider` | provider class name, discarded status, `request_id` |
+| US input: provider answered a verdict without a DPV code (weak — next provider tried; returned only if nothing better comes back, GH #258, #275) | `INFO` | `services.validation.chain_provider` | provider class name, weak status, `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
 | libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |
