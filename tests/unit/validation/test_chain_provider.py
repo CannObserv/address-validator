@@ -509,22 +509,23 @@ class TestChainUndetermined:
         assert result.warnings == ["existing", warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
 
 
+def _google_verdict(status: str, dpv: str | None) -> ValidateResponseV2:
+    """A Google US answer; ``dpv=None`` is the non-CASS (verdict-only) case."""
+    return ValidateResponseV2(
+        country="US",
+        address_line_1="301 E Hbr St",
+        validation=ValidationResult(
+            status=status,  # type: ignore[arg-type]
+            dpv_match_code=dpv,  # type: ignore[arg-type]
+            provider="google",
+        ),
+    )
+
+
 class TestChainHeldPrecedence:
     """GH #258: once an undetermined answer is held, only a fallback answer with a
     DPV code replaces it. A Google verdict answer (US non-CASS: no DPV code) is a
     geocoder opinion, weaker than USPS's own no-determination."""
-
-    @staticmethod
-    def _google(status: str, dpv: str | None) -> ValidateResponseV2:
-        return ValidateResponseV2(
-            country="US",
-            address_line_1="301 E Hbr St",
-            validation=ValidationResult(
-                status=status,  # type: ignore[arg-type]
-                dpv_match_code=dpv,  # type: ignore[arg-type]
-                provider="google",
-            ),
-        )
 
     @pytest.mark.asyncio
     # Google no longer answers a US `confirmed` without a DPV code (GH #262); the
@@ -536,7 +537,7 @@ class TestChainHeldPrecedence:
         chain = ChainProvider(
             providers=[
                 _mock_provider(_USPS_UNDETERMINED),
-                _mock_provider(self._google(status, None)),
+                _mock_provider(_google_verdict(status, None)),
             ]
         )
 
@@ -563,7 +564,7 @@ class TestChainHeldPrecedence:
         chain = ChainProvider(
             providers=[
                 _mock_provider(_USPS_UNDETERMINED),
-                _mock_provider(self._google(status, dpv)),
+                _mock_provider(_google_verdict(status, dpv)),
             ]
         )
 
@@ -584,7 +585,7 @@ class TestChainHeldPrecedence:
         reaches the territories, which the rule treats as non-US (GH #281)."""
         std_pr = std_address.model_copy(update={"country": "PR"})
         usps_pr = _USPS_UNDETERMINED.model_copy(update={"country": "PR"})
-        google_pr = self._google(status, None).model_copy(update={"country": "PR"})
+        google_pr = _google_verdict(status, None).model_copy(update={"country": "PR"})
         chain = ChainProvider(providers=[_us_only(usps_pr), _non_us(google_pr)])
 
         result = await chain.validate(std_pr)
@@ -593,14 +594,14 @@ class TestChainHeldPrecedence:
         assert result.validation.provider == "google"
 
     @pytest.mark.asyncio
-    async def test_verdict_answer_returned_when_nothing_held(self, std_address: object) -> None:
-        """Scope pin: USPS 400 → Google (e.g. #114 place-name input) holds nothing,
-        so a negative Google verdict answer is still returned as-is. (A complete
-        US verdict is ``undetermined`` since GH #262, so it is held instead.)"""
+    async def test_verdict_answer_returned_when_nothing_better(self, std_address: object) -> None:
+        """Scope pin: USPS 400 → Google (e.g. #114 place-name input) — a 400 is not
+        transient and nothing better came back, so the negative Google verdict is
+        returned as-is, with no retry warning (GH #275)."""
         chain = ChainProvider(
             providers=[
                 _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
-                _mock_provider(self._google("invalid", None)),
+                _mock_provider(_google_verdict("invalid", None)),
             ]
         )
 
@@ -608,6 +609,136 @@ class TestChainHeldPrecedence:
 
         assert result.validation.status == "invalid"
         assert result.validation.provider == "google"
+        assert result.warnings == []
+
+
+class TestChainWeakVerdict:
+    """GH #275: a US answer with no DPV code (Google non-CASS ``invalid`` /
+    ``not_found``) is *weak* — held while later providers are tried, returned only
+    when nothing better came back. Precedence on exhaustion: held
+    ``undetermined`` > weak verdict, whichever provider order answered."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", ["invalid", "not_found"])
+    async def test_weak_verdict_first_asks_next_provider(
+        self, status: str, std_address: object
+    ) -> None:
+        """``google,usps``: USPS is asked, and its DPV answer wins."""
+        usps = _mock_provider(_CONFIRMED)
+        chain = ChainProvider(providers=[_mock_provider(_google_verdict(status, None)), usps])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        usps.validate.assert_awaited_once()
+        assert result.validation.status == "confirmed"
+        assert result.validation.provider == "usps"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("usps_first", [True, False], ids=["usps,google", "google,usps"])
+    async def test_held_undetermined_beats_weak_verdict_in_either_order(
+        self, usps_first: bool, std_address: object
+    ) -> None:
+        """#258's ordering holds whichever provider answers first."""
+        usps = _mock_provider(_USPS_UNDETERMINED)
+        google = _mock_provider(_google_verdict("not_found", None))
+        chain = ChainProvider(providers=[usps, google] if usps_first else [google, usps])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ProviderRateLimitedError("usps", retry_after_seconds=5.0),
+            ProviderAtCapacityError("usps", retry_after_seconds=5.0),
+            ProviderTransientError("usps", retry_after_seconds=5.0),
+        ],
+    )
+    async def test_transient_before_weak_verdict_warns(
+        self, exc: Exception, std_address: object
+    ) -> None:
+        """``usps,google``, USPS out → Google ``not_found``: returned (a 200 beats a
+        429), flagged so the cache skips it and a retry can reach USPS."""
+        chain = ChainProvider(
+            providers=[_raising_provider(exc), _mock_provider(_google_verdict("not_found", None))]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "not_found"
+        assert result.validation.provider == "google"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+    @pytest.mark.asyncio
+    async def test_transient_after_weak_verdict_warns(self, std_address: object) -> None:
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_google_verdict("invalid", None)),
+                _raising_provider(ProviderRateLimitedError("usps")),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "invalid"
+        assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+    @pytest.mark.asyncio
+    async def test_bad_request_after_weak_verdict_returns_it_without_warning(
+        self, std_address: object
+    ) -> None:
+        """``google,usps``, USPS 400: a 400 is about the input, not an outage, so the
+        verdict is final — no warning, and the cache stores it."""
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_google_verdict("invalid", None)),
+                _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "invalid"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_single_provider_weak_verdict_returned(self, std_address: object) -> None:
+        chain = ChainProvider(providers=[_mock_provider(_google_verdict("invalid", None))])
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "invalid"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
+    async def test_first_weak_verdict_kept(self, std_address: object) -> None:
+        first = _google_verdict("invalid", None)
+        chain = ChainProvider(
+            providers=[_mock_provider(first), _mock_provider(_google_verdict("not_found", None))]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result is first
+
+    @pytest.mark.asyncio
+    async def test_non_us_verdict_returned_on_sight(
+        self, std_address: StandardizeResponseV2
+    ) -> None:
+        """Out of scope outside the US: there a verdict is the only determination."""
+        std_ca = std_address.model_copy(update={"country": "CA"})
+        google_ca = _google_verdict("not_found", None).model_copy(update={"country": "CA"})
+        later = _non_us(_GOOGLE_CONFIRMED)
+        chain = ChainProvider(providers=[_non_us(google_ca), later])
+
+        result = await chain.validate(std_ca)
+
+        assert result is google_ca
+        later.validate.assert_not_awaited()
 
 
 class TestChainTransportErrors:

@@ -28,7 +28,7 @@ PROVIDER_REPLACED = "Provider replaced one or more address components"
 PROVIDER_UNCONFIRMED = "One or more address components are unconfirmed"
 PROVIDER_REJECTED_MALFORMED = "Validation provider rejected the address as malformed"
 PROVIDER_FALLBACK_UNREACHABLE = (
-    "Validation undetermined while a fallback provider was unreachable; "
+    "Validation incomplete while a fallback provider was unreachable; "
     "a later retry may produce a determination"
 )
 

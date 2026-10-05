@@ -27,9 +27,10 @@ requests to surface raw input in the admin audit view.
 Store algorithm (after successful inner provider call)
 ------------------------------------------------------
 1. Skip entirely when ``result.validation.status == "unavailable"`` (no provider
-   configured), or when an ``undetermined`` result carries
-   ``PROVIDER_FALLBACK_UNREACHABLE`` — a fallback provider failed transiently, so
-   a retry may still determine the address (GH #250)
+   configured), or when a result carries ``PROVIDER_FALLBACK_UNREACHABLE``
+   (``undetermined``, or a US ``invalid``/``not_found`` with no DPV code) — a
+   fallback provider failed transiently, so a retry may still determine the
+   address (GH #250, #275)
 2. Hash the provider-returned address fields → ``canonical_key``
 3. INSERT/upsert into ``validated_addresses`` (ON CONFLICT: refresh the provider's
    answer — status, dpv, provider, validated, components, lat/long, warnings — plus
