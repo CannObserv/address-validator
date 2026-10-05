@@ -175,23 +175,24 @@ class ChainProvider:
 
 
 def _exhausted(
-    held: ValidateResponseV2 | None,
+    answer: ValidateResponseV2 | None,
     unreachable: bool,
     retry_after: float | None,
     last_bad_request: ProviderBadRequestError | None,
 ) -> ValidateResponseV2:
-    """No provider gave a final answer: return the best held answer, or raise."""
-    if held is not None:
+    """No provider gave a final answer: return the best non-final *answer*
+    (held ``undetermined``, else weak verdict), or raise."""
+    if answer is not None:
         if unreachable:
-            return held.model_copy(
+            return answer.model_copy(
                 update={
                     "warnings": [
-                        *held.warnings,
+                        *answer.warnings,
                         warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE,
                     ]
                 }
             )
-        return held
+        return answer
     # Prefer transient error — caller can retry when capacity clears.
     if retry_after is not None:
         raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)
