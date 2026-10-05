@@ -257,8 +257,8 @@ retry can reach the fallback: e.g. USPS 429 → Google `not_found` comes back fl
 uncached instead of locking USPS out for a full TTL. Otherwise the answer is cached like any
 other: USPS 400 → Google `invalid` (a #114 place-name input) is final and cached. With
 `google,usps`, every US weak verdict costs a USPS call too; with `usps,google` USPS was already
-asked. Each USPS-undetermined address costs one Google
-call on a cache miss; watch `GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
+asked. Each USPS-undetermined address costs one Google call on a cache miss; watch
+`GOOGLE_DAILY_LIMIT` when bulk re-checking such addresses.
 
 **Adding a fallback provider to a single-provider config** (e.g. `usps` → `usps,google`): with no
 chain, `undetermined` answers are cached, and they keep being served for up to
