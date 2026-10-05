@@ -211,6 +211,12 @@ logic would allow. The task is cancelled on application shutdown.
 
 ## Fallback chain internals
 
+**Country routing (GH #260).** A US-only provider (`supports_non_us = False`: USPS) is asked only
+about `US_POSTAL_COUNTRIES` (`core/countries.py`: `US`, `PR`, `GU`, `VI`, `AS`, `MP`). For any
+other country it is skipped outright — not called, not counted as a failure — so a CA request
+under `usps,google` goes straight to Google. Territories still reach USPS; whether they should
+use the US pipeline instead is GH #281.
+
 `ChainProvider` catches `ProviderRateLimitedError` (upstream HTTP 429 after retries),
 `ProviderAtCapacityError` (local quota exhausted before sending) and `ProviderTransientError`
 (upstream 5xx, a network failure — connect error, timeout — that the client wraps, GH #257, or a

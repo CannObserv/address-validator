@@ -188,6 +188,39 @@ class TestV2ValidateProviderUnreachable:
         assert response.status_code == 200, response.text
         assert response.json()["validation"]["provider"] == "google"
 
+    def test_non_us_request_never_reaches_usps(self, client) -> None:
+        """GH #260: under ``usps,google`` a CA request skips USPS. Were it asked,
+        the refused call would mark the held Google answer unreachable."""
+        usps = unreachable_usps()
+        google = AsyncMock()
+        google.validate = AsyncMock(
+            return_value=ValidateResponseV2(
+                country="CA",
+                validation=ValidationResult(status="undetermined", provider="google"),
+            )
+        )
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[usps, google])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={
+                    "country": "CA",
+                    "components": {
+                        "address_line_1": "111 Wellington St",
+                        "city": "Ottawa",
+                        "region": "ON",
+                        "postal_code": "K1A 0A9",
+                    },
+                },
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["validation"]["provider"] == "google"
+        assert body["warnings"] == []
+        usps.client._http.post.assert_not_called()
+        usps.client._http.get.assert_not_called()
+
 
 class TestV2ValidateQuotaExhausted:
     """GH #270: when every provider's local QuotaGuard refuses, the 429 carries the

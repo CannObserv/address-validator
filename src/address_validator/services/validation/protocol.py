@@ -19,7 +19,11 @@ class ValidationProvider(Protocol):
     """
 
     supports_non_us: bool
-    """True if this provider can validate non-US addresses."""
+    """True if this provider can validate non-US addresses.
+
+    When False, :class:`~services.validation.chain_provider.ChainProvider` asks
+    it only about :data:`~core.countries.US_POSTAL_COUNTRIES` (GH #260).
+    """
 
     async def validate(
         self, std: StandardizedAddress, *, raw_input: str | None = None

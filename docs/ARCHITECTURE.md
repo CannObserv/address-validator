@@ -65,7 +65,7 @@ db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_st
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
 models.py           API contract source of truth; StandardizedAddress = StandardizeResponseV2 type alias — use StandardizedAddress in service/provider code for version-neutral typing, StandardizeResponseV2 as the public response model on /api/v2/standardize
 core/address_format.py  build_validated_string — canonical single-line address string builder; shared across validation providers and the router layer
-core/countries.py  SUPPORTED_COUNTRIES (US+CA), VALID_ISO2 frozensets; check_country() — canonical home for country validation used by all v2 routes
+core/countries.py  SUPPORTED_COUNTRIES (US+CA), VALID_ISO2, US_POSTAL_COUNTRIES (US + territories; the only countries ChainProvider asks a US-only provider about, GH #260) frozensets; check_country() — canonical home for country validation used by all v2 routes
 core/errors.py     APIError exception class; api_error_response() — serialises APIError to JSONResponse; registered in main.py exception handler; imported by all router layers
 core/warnings.py   single source of truth for response `warnings` strings (static constants + str.format templates + CATALOGUE tuple); catalogued in docs/WARNINGS.md, kept in sync by tests/unit/test_warnings_catalogue.py
 services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC, ISO_19160_4_SPEC_VERSION); used by v2 routers; USPS Pub 28 identifiers remain in usps_data/spec.py
