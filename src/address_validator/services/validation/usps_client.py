@@ -24,6 +24,7 @@ from address_validator.services.validation._rate_limit import (
     _HTTP_TOO_MANY_REQUESTS,
     _RETRY_MAX,
     QuotaGuard,
+    _FieldReader,
     _json_object,
     _parse_retry_after,
     _raise_for_request_error,
@@ -38,6 +39,9 @@ from address_validator.services.validation.errors import (
 _ZIP5_LENGTH = 5
 
 logger = logging.getLogger(__name__)
+
+# Typed field reads for _map_response (GH #278).
+_read = _FieldReader("usps", logger)
 
 _DEFAULT_API_BASE = "https://apis.usps.com"
 _TOKEN_PATH = "/oauth2/v3/token"  # noqa: S105
@@ -244,7 +248,8 @@ class USPSClient:
         on HTTP 5xx, any unexpected non-2xx response, a failed request
         (connect error, timeout, undecodable body) on the token or address call,
         or a 2xx body it cannot use — not a JSON object, or a token response
-        without a usable ``access_token``/``expires_in`` (GH #271).
+        without a usable ``access_token``/``expires_in`` (GH #271), or a field
+        of the wrong JSON type (GH #278).
         """
         params: dict[str, str] = {"streetAddress": street_address}
         if secondary_address:
@@ -341,23 +346,27 @@ class USPSClient:
         Returns a flat dict with keys:
         ``dpv_match_code``, ``address_line_1``, ``address_line_2``,
         ``city``, ``region``, ``postal_code``, ``vacant``.
-        """
-        addr = raw.get("address", {})
-        extra = raw.get("additionalInfo", {})
 
-        dpv_label = _normalise_flag(extra.get("DPVConfirmation"))
+        Raises :class:`~services.validation.errors.ProviderTransientError` for a
+        field of the wrong JSON type (GH #278); an absent or ``null`` field
+        reads as empty.
+        """
+        addr = _read.obj(raw, "address")
+        extra = _read.obj(raw, "additionalInfo")
+
+        dpv_label = _normalise_flag(_read.text(extra, "DPVConfirmation"))
         USPSClient._log_recon_shape(raw, dpv_label)
 
-        zip_code = addr.get("ZIPCode", "")
-        zip_ext = addr.get("ZIPPlus4", "") or ""
+        zip_code = _read.text(addr, "ZIPCode")
+        zip_ext = _read.text(addr, "ZIPPlus4")
         postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
 
         return {
             "dpv_match_code": dpv_label,
-            "address_line_1": addr.get("streetAddress", ""),
-            "address_line_2": addr.get("secondaryAddress", ""),
-            "city": addr.get("city", ""),
-            "region": addr.get("state", ""),
+            "address_line_1": _read.text(addr, "streetAddress"),
+            "address_line_2": _read.text(addr, "secondaryAddress"),
+            "city": _read.text(addr, "city"),
+            "region": _read.text(addr, "state"),
             "postal_code": postal_code,
-            "vacant": _normalise_flag(extra.get("vacant")),
+            "vacant": _normalise_flag(_read.text(extra, "vacant")),
         }

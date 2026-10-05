@@ -5,6 +5,7 @@ Provides:
 - :class:`QuotaGuard` — multi-window async rate limiter
 - :func:`_parse_retry_after` — extracts backoff delay from a 429 response
 - :func:`_json_object` — decodes a 2xx body, mapping an unusable one to a typed error
+- :class:`_FieldReader` — reads a body's fields, mapping a wrong-typed one to a typed error
 - Retry constants: :data:`_RETRY_MAX`, :data:`_RETRY_BASE_DELAY_S`
 """
 
@@ -383,6 +384,72 @@ def _json_object(
             f"an unexpected JSON shape ({type(raw).__name__})", provider=provider, logger=logger
         )
     return raw
+
+
+class _FieldReader:
+    """Typed reads of a decoded provider body's fields (GH #278).
+
+    :func:`_json_object` checks the top level only.  A nested field of the wrong
+    JSON type — ``"address": []``, a numeric ``ZIPCode`` — raised
+    ``AttributeError`` (a 500) or gave a wrong answer.  Each read returns the
+    field when it has the expected type and its default when it is absent or
+    ``null``; any other value raises ``ProviderTransientError`` via
+    :func:`_raise_for_unusable_body`.  The log names the field and its JSON type,
+    never the value: provider bodies carry the address.
+    """
+
+    def __init__(self, provider: str, logger: logging.Logger) -> None:
+        self._provider = provider
+        self._logger = logger
+
+    def _wrong_type(self, field: str, value: object) -> NoReturn:
+        _raise_for_unusable_body(
+            f"a wrong-typed field ({field}: {type(value).__name__})",
+            provider=self._provider,
+            logger=self._logger,
+        )
+
+    def obj(self, container: dict[str, Any], key: str) -> dict[str, Any]:
+        value = container.get(key)
+        if value is None:
+            return {}
+        if not isinstance(value, dict):
+            self._wrong_type(key, value)
+        return value
+
+    def text(self, container: dict[str, Any], key: str) -> str:
+        value = container.get(key)
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            self._wrong_type(key, value)
+        return value
+
+    def text_list(self, container: dict[str, Any], key: str) -> list[str]:
+        value = container.get(key)
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            self._wrong_type(key, value)
+        for item in value:
+            if not isinstance(item, str):
+                self._wrong_type(f"{key}[]", item)
+        return value
+
+    def flag(self, container: dict[str, Any], key: str) -> bool:
+        value = container.get(key)
+        if value is None:
+            return False
+        if not isinstance(value, bool):
+            self._wrong_type(key, value)
+        return value
+
+    def number(self, container: dict[str, Any], key: str) -> float | None:
+        value = container.get(key)
+        # bool is an int subclass, so it would pass the number check.
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int | float)):
+            self._wrong_type(key, value)
+        return value
 
 
 def _raise_for_request_error(
