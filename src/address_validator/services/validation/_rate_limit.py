@@ -11,6 +11,7 @@ Provides:
 
 import asyncio
 import logging
+import math
 import random
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -449,6 +450,13 @@ class _FieldReader:
         # bool is an int subclass, so it would pass the number check.
         if value is not None and (isinstance(value, bool) or not isinstance(value, int | float)):
             self._wrong_type(key, value)
+        if isinstance(value, float) and not math.isfinite(value):
+            # Python's json decodes NaN/Infinity; the response encoder rejects them (a 500).
+            _raise_for_unusable_body(
+                f"a non-finite number field ({key})",
+                provider=self._provider,
+                logger=self._logger,
+            )
         return value
 
 

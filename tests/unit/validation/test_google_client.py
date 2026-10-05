@@ -524,6 +524,22 @@ class TestGoogleClientValidateAddress:
         # The field name and JSON type only — never the value (address).
         assert "Main St" not in caplog.text
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("country", ["US", "CA"])
+    @pytest.mark.parametrize("number", [b"NaN", b"Infinity", b"-Infinity"])
+    async def test_non_finite_coordinate_raises_transient_error(
+        self, country: str, number: bytes, client: GoogleClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #278 CR 1: Python's json decodes NaN/Infinity as floats, which pass
+        the type check but fail response serialization — a 500."""
+        body = b'{"result": {"geocode": {"location": {"latitude": ' + number + b"}}}}"
+        mock_http.post.return_value = ok_response(body)
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", country=country)
+        assert exc_info.value.provider == "google"
+        assert any("non-finite number field (latitude)" in r.getMessage() for r in caplog.records)
+
     @pytest.mark.parametrize(
         "mapper", [GoogleClient._map_response, GoogleClient._map_response_international]
     )
