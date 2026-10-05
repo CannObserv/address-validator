@@ -688,6 +688,24 @@ class TestChainWeakVerdict:
         assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
 
     @pytest.mark.asyncio
+    async def test_bad_request_after_weak_verdict_returns_it_without_warning(
+        self, std_address: object
+    ) -> None:
+        """``google,usps``, USPS 400: a 400 is about the input, not an outage, so the
+        verdict is final — no warning, and the cache stores it."""
+        chain = ChainProvider(
+            providers=[
+                _mock_provider(_google_verdict("invalid", None)),
+                _raising_provider(ProviderBadRequestError("usps", detail="HTTP 400")),
+            ]
+        )
+
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "invalid"
+        assert result.warnings == []
+
+    @pytest.mark.asyncio
     async def test_single_provider_weak_verdict_returned(self, std_address: object) -> None:
         chain = ChainProvider(providers=[_mock_provider(_google_verdict("invalid", None))])
 
