@@ -188,6 +188,28 @@ class TestV2ValidateProviderUnreachable:
         assert response.status_code == 200, response.text
         assert response.json()["validation"]["provider"] == "google"
 
+    @pytest.mark.parametrize(
+        "body",
+        [
+            b'{"address": []}',
+            b'{"address": {"streetAddress": 123}, "additionalInfo": {"DPVConfirmation": "Y"}}',
+        ],
+    )
+    def test_wrong_typed_primary_field_falls_back(self, client, body: bytes) -> None:
+        """GH #278: a wrong-typed field one level down falls back like #271's
+        unusable body — the AttributeError / response ValidationError was a 500."""
+        google = AsyncMock()
+        google.validate = AsyncMock(return_value=self._GOOGLE_CONFIRMED)
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[unusable_usps(address=body), google])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["validation"]["provider"] == "google"
+
     def test_non_us_request_never_reaches_usps(self, client) -> None:
         """GH #260: under ``usps,google`` a CA request skips USPS. Were it asked,
         the refused call would mark the held Google answer unreachable."""

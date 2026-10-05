@@ -423,6 +423,128 @@ class TestGoogleClientValidateAddress:
         assert "Main St" not in caplog.text
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("country", "body", "logged"),
+        [
+            ("US", b'{"result": "123 Main St"}', "result: str"),
+            ("US", b'{"result": {"uspsData": []}}', "uspsData: list"),
+            ("US", b'{"result": {"verdict": ["123 Main St"]}}', "verdict: list"),
+            ("US", b'{"result": {"geocode": []}}', "geocode: list"),
+            ("US", b'{"result": {"geocode": {"location": "x"}}}', "location: str"),
+            ("US", b'{"result": {"geocode": {"location": {"latitude": "47.6"}}}}', "latitude: str"),
+            (
+                "US",
+                b'{"result": {"geocode": {"location": {"longitude": true}}}}',
+                "longitude: bool",
+            ),
+            (
+                "US",
+                b'{"result": {"uspsData": {"dpvConfirmation": "Y", "standardizedAddress": []}}}',
+                "standardizedAddress: list",
+            ),
+            (
+                "US",
+                b'{"result": {"uspsData": {"dpvConfirmation": "Y",'
+                b' "standardizedAddress": {"firstAddressLine": ["123 Main St"]}}}}',
+                "firstAddressLine: list",
+            ),
+            ("US", b'{"result": {"uspsData": {"dpvConfirmation": 1}}}', "dpvConfirmation: int"),
+            (
+                "US",
+                b'{"result": {"uspsData": {"dpvConfirmation": "Y", "dpvVacant": true}}}',
+                "dpvVacant: bool",
+            ),
+            ("US", b'{"result": {"address": []}}', "address: list"),
+            ("US", b'{"result": {"address": {"postalAddress": []}}}', "postalAddress: list"),
+            (
+                "US",
+                b'{"result": {"address": {"postalAddress": {"addressLines": "123 Main St"}}}}',
+                "addressLines: str",
+            ),
+            (
+                "US",
+                b'{"result": {"address": {"postalAddress": {"addressLines": [["123 Main St"]]}}}}',
+                "addressLines[]: list",
+            ),
+            (
+                "US",
+                b'{"result": {"address": {"postalAddress": {"locality": ["Main St"]}}}}',
+                "locality: list",
+            ),
+            (
+                "US",
+                b'{"result": {"verdict": {"validationGranularity": ["PREMISE"]}}}',
+                "validationGranularity: list",
+            ),
+            (
+                "US",
+                b'{"result": {"verdict": {"validationGranularity": "PREMISE",'
+                b' "addressComplete": "false"}}}',
+                "addressComplete: str",
+            ),
+            (
+                "US",
+                b'{"result": {"verdict": {"hasInferredComponents": "false"}}}',
+                "hasInferredComponents: str",
+            ),
+            ("CA", b'{"result": []}', "result: list"),
+            ("CA", b'{"result": {"verdict": "123 Main St"}}', "verdict: str"),
+            ("CA", b'{"result": {"address": {"postalAddress": []}}}', "postalAddress: list"),
+            ("CA", b'{"result": {"geocode": {"location": []}}}', "location: list"),
+            ("CA", b'{"result": {"verdict": {"addressComplete": 1}}}', "addressComplete: int"),
+            (
+                "CA",
+                b'{"result": {"address": {"postalAddress": {"postalCode": 12345}}}}',
+                "postalCode: int",
+            ),
+        ],
+    )
+    async def test_wrong_typed_field_raises_transient_error(
+        self,
+        country: str,
+        body: bytes,
+        logged: str,
+        client: GoogleClient,
+        mock_http: AsyncMock,
+        caplog,
+    ) -> None:
+        """GH #278: a field the mapper reads with the wrong JSON type maps to
+        ProviderTransientError — an object's ``.get`` raised AttributeError (a
+        500), and a wrong-typed scalar gave a wrong answer or failed response
+        validation."""
+        mock_http.post.return_value = ok_response(body)
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", country=country)
+        assert exc_info.value.provider == "google"
+        assert exc_info.value.retry_after_seconds > 0
+        assert any(f"wrong-typed field ({logged})" in r.getMessage() for r in caplog.records), (
+            caplog.text
+        )
+        # The field name and JSON type only — never the value (address).
+        assert "Main St" not in caplog.text
+
+    @pytest.mark.parametrize(
+        "mapper", [GoogleClient._map_response, GoogleClient._map_response_international]
+    )
+    def test_null_fields_read_as_absent(self, mapper) -> None:
+        """GH #278: JSON null is an absent field, not a wrong-typed one."""
+        raw = {
+            "result": {
+                "verdict": {"validationGranularity": None, "addressComplete": None},
+                "geocode": {"location": {"latitude": None, "longitude": 1}},
+                "uspsData": None,
+                "address": {"postalAddress": {"addressLines": None, "locality": "Ottawa"}},
+            }
+        }
+        result = mapper(raw)
+        assert result["latitude"] is None
+        assert result["longitude"] == 1
+        assert result["city"] == "Ottawa"
+        assert result["address_line_1"] == ""
+        assert mapper({"result": None})["status"] in {"undetermined", "not_found"}
+
+    @pytest.mark.asyncio
     async def test_credential_refresh_transport_error_raises_transient_error(
         self, mock_http: AsyncMock, _default_guard: QuotaGuard
     ) -> None:
