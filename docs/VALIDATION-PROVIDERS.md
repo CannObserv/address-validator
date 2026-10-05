@@ -34,7 +34,7 @@
 
 Google differs for none/blank: its docs define a missing `dpvConfirmation` as "not submitted for DPV confirmation", so that answer takes the non-CASS verdict path (`invalid`/`not_found`, see [Google provider](#google-provider)). It is `undetermined` when there is no `postalAddress` or granularity either, and when the verdict is `addressComplete`: that says the components are consistent, not that USPS delivers there, and Google's own logic sends an empty DPV to FIX (GH #262). Non-US answers have no DPV, so there `addressComplete` is `confirmed`. An unknown Google code is `undetermined`, as for USPS.
 
-`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single-provider config still returns 500 for a 5xx, network failure or local-quota rejection: the route maps only `ProviderRateLimitedError` to 429 (GH #268).
+`unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single provider is used without a chain; the route maps its `ProviderRateLimitedError`, `ProviderAtCapacityError` and `ProviderTransientError` to the same 429, with that error's `retry_after_seconds` as `Retry-After` (GH #268).
 
 ## Configuring providers
 
@@ -225,7 +225,8 @@ exception: it would skip the remaining providers and return HTTP 500.
 
 The 429's `Retry-After` is the **minimum** `retry_after_seconds` across the providers that failed
 transiently — the soonest any of them could answer, whatever the chain order (GH #270). Each
-error's value, rounded up to whole seconds by the route:
+error's value, rounded up to whole seconds by the route (a single provider's 429 carries its own
+error's value, GH #268):
 
 | Error | `retry_after_seconds` |
 |---|---|

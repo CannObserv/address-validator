@@ -17,8 +17,10 @@ from address_validator.services.validation._rate_limit import (
 )
 from address_validator.services.validation.chain_provider import ChainProvider
 from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.services.validation.google_client import GoogleClient
 from address_validator.services.validation.google_provider import GoogleProvider
@@ -241,8 +243,8 @@ class TestV2ValidateQuotaExhausted:
             )
         )
 
-    def _post(self, client, chain: ChainProvider):
-        with _mock_registry_with(chain):
+    def _post(self, client, provider):
+        with _mock_registry_with(provider):
             return client.post(
                 "/api/v2/validate",
                 json={"address": "123 Main St, Seattle, WA 98101"},
@@ -254,11 +256,95 @@ class TestV2ValidateQuotaExhausted:
         assert response.status_code == 429, response.text
         assert response.headers["Retry-After"] == "10800"
 
+    def test_single_provider_drained_retry_after_is_time_until_reset(self, client) -> None:
+        """GH #268: a bare provider (no chain) carries the guard's wait too."""
+        response = self._post(client, self._drained_google())
+        assert response.status_code == 429, response.text
+        assert response.headers["Retry-After"] == "10800"
+
     def test_both_drained_retry_after_is_soonest(self, client) -> None:
         chain = ChainProvider(providers=[self._drained_usps(), self._drained_google()])
         response = self._post(client, chain)
         assert response.status_code == 429, response.text
         assert response.headers["Retry-After"] == "10"
+
+
+class TestV2ValidateSingleProvider:
+    """GH #268: a single-provider config is used bare, without a ChainProvider. A
+    transient or local-quota failure must reach the client as 429 + Retry-After,
+    as chain exhaustion does — it used to escape as a 500."""
+
+    def _post(self, client, provider):
+        with _mock_registry_with(provider):
+            return client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+
+    @pytest.mark.parametrize(
+        ("exc", "retry_after"),
+        [
+            (ProviderTransientError("usps", retry_after_seconds=1.0), "1"),
+            (ProviderAtCapacityError("usps", retry_after_seconds=9.2), "10"),
+            (ProviderRateLimitedError("usps", retry_after_seconds=4.0), "4"),
+        ],
+        ids=["transient", "at_capacity", "rate_limited"],
+    )
+    def test_provider_failure_returns_429_with_retry_after(
+        self, client, exc: Exception, retry_after: str
+    ) -> None:
+        provider = AsyncMock()
+        provider.validate = AsyncMock(side_effect=exc)
+        provider.supports_non_us = False
+        response = self._post(client, provider)
+        assert response.status_code == 429, response.text
+        assert response.json()["error"] == "provider_rate_limited"
+        assert response.headers["Retry-After"] == retry_after
+
+    @pytest.mark.parametrize(
+        ("exc", "retry_after"),
+        [
+            (ProviderTransientError("usps", retry_after_seconds=1.0), "1"),
+            (ProviderAtCapacityError("usps", retry_after_seconds=9.2), "10"),
+        ],
+        ids=["transient", "at_capacity"],
+    )
+    def test_provider_failure_logs_warning(
+        self, client, caplog, exc: Exception, retry_after: str
+    ) -> None:
+        """A QuotaGuard refusal logs nothing of its own; without a chain to log the
+        fallback, the route's WARNING is the only journal signal."""
+        provider = AsyncMock()
+        provider.validate = AsyncMock(side_effect=exc)
+        provider.supports_non_us = False
+        with caplog.at_level("WARNING", logger="address_validator.routers.v2.validate"):
+            self._post(client, provider)
+        [record] = [r for r in caplog.records if r.name == "address_validator.routers.v2.validate"]
+        assert record.levelname == "WARNING"
+        assert "usps" in record.getMessage()
+        assert type(exc).__name__ in record.getMessage()
+        # The wait the client was sent, not a rounding of it.
+        assert f"retry after {retry_after}s" in record.getMessage()
+
+    @pytest.mark.parametrize(
+        "make_provider",
+        [unreachable_usps, unreachable_google, unusable_usps, unusable_google],
+    )
+    def test_real_provider_failure_returns_429(self, client, make_provider) -> None:
+        response = self._post(client, make_provider())
+        assert response.status_code == 429, response.text
+        assert int(response.headers["Retry-After"]) >= 1
+
+    def test_bad_request_keeps_provider_name(self, client) -> None:
+        """Option 2 (a one-element chain) was rejected because a 400 would then
+        read provider="all"; the bare provider's name must survive."""
+        provider = AsyncMock()
+        provider.validate = AsyncMock(side_effect=ProviderBadRequestError("usps", "bad"))
+        provider.supports_non_us = False
+        response = self._post(client, provider)
+        assert response.status_code == 200, response.text
+        assert response.json()["validation"]["status"] == "error"
+        assert response.json()["validation"]["provider"] == "usps"
 
 
 # GH #262: the 2026-10-01 wslcb-licensing-tracker backfill received 24 DPV-less

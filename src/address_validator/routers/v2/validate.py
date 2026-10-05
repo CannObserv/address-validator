@@ -58,8 +58,10 @@ from address_validator.services.audit import set_audit_context
 from address_validator.services.component_profiles import valid_component_profile
 from address_validator.services.libpostal_client import LibpostalClient
 from address_validator.services.validation.errors import (
+    ProviderAtCapacityError,
     ProviderBadRequestError,
     ProviderRateLimitedError,
+    ProviderTransientError,
 )
 from address_validator.services.validation.pipeline import (
     run_non_us_pipeline,
@@ -115,12 +117,13 @@ router = APIRouter(
         "a warning that a fallback provider was unreachable, a later retry may "
         "produce a determination.\n\n"
         "When no validation provider is configured, `validation.status` is "
-        "`unavailable` and all other result fields are `null`. Outages never "
-        "surface as a status: they return HTTP 429 or 5xx.\n\n"
+        "`unavailable` and all other result fields are `null`. Validation-provider "
+        "outages never surface as a status: they return HTTP 429.\n\n"
         "When the validation provider rejects the input as malformed, "
         "`validation.status` is `error`.\n\n"
-        "HTTP 429 is returned when all configured providers are currently "
-        "rate-limited and no further fallbacks are available. "
+        "HTTP 429 is returned when no configured provider can answer — "
+        "rate-limited, over local quota, failing (5xx) or unreachable — "
+        "and no further fallbacks are available. "
         "The response includes a `Retry-After` header indicating the "
         "recommended number of seconds to wait before retrying.\n\n"
         "HTTP 503 is returned when CA address parsing (libpostal sidecar) is "
@@ -156,12 +159,23 @@ async def validate_address(
             warnings=[*std.warnings, warning_catalogue.PROVIDER_REJECTED_MALFORMED],
         )
         return result
-    except ProviderRateLimitedError as exc:
+    except (ProviderRateLimitedError, ProviderAtCapacityError, ProviderTransientError) as exc:
+        # A ChainProvider folds all three into ProviderRateLimitedError("all"); a
+        # single provider is used bare and raises them directly (GH #268).
+        retry_after = math.ceil(exc.retry_after_seconds)
+        if not isinstance(exc, ProviderRateLimitedError):
+            # No chain logged the failure, and a QuotaGuard refusal logs nothing.
+            logger.warning(
+                "Validation provider %s unavailable (%s, retry after %ds)",
+                exc.provider,
+                type(exc).__name__,
+                retry_after,
+            )
         raise APIError(
             status_code=429,
             error="provider_rate_limited",
-            message="All configured validation providers are currently rate-limited. Retry later.",
-            headers={"Retry-After": str(math.ceil(exc.retry_after_seconds))},
+            message="No configured validation provider is currently available. Retry later.",
+            headers={"Retry-After": str(retry_after)},
         ) from None
 
     if std.warnings:

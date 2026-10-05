@@ -6,7 +6,8 @@ class ProviderRateLimitedError(Exception):
 
     :class:`~services.validation.chain_provider.ChainProvider` catches this to
     try the next provider in the chain.  If all providers raise it, the router
-    catches the final instance and returns HTTP 429.
+    catches the final instance and returns HTTP 429; a bare single provider's
+    error reaches the router directly (GH #268).
 
     Parameters
     ----------
@@ -69,7 +70,8 @@ class ProviderTransientError(Exception):
     Tracking it separately preserves the distinction for metrics, alerting,
     and triage.  :class:`~services.validation.chain_provider.ChainProvider`
     catches it and advances to the next provider, mirroring the rate-limit
-    and at-capacity paths.
+    and at-capacity paths; a bare single provider's error reaches the router,
+    which returns HTTP 429 (GH #268).
 
     Parameters
     ----------
@@ -96,7 +98,8 @@ class ProviderAtCapacityError(Exception):
     ``ProviderRateLimitedError`` means the upstream API returned HTTP 429.
 
     :class:`~services.validation.chain_provider.ChainProvider` catches both
-    and advances to the next provider.
+    and advances to the next provider; a bare single provider's error reaches
+    the router, which returns HTTP 429 (GH #268).
 
     Parameters
     ----------
