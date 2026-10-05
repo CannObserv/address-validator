@@ -634,20 +634,20 @@ class TestChainWeakVerdict:
         assert result.validation.provider == "usps"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("usps_first", [True, False], ids=["usps,google", "google,usps"])
     async def test_held_undetermined_beats_weak_verdict_in_either_order(
-        self, std_address: object
+        self, usps_first: bool, std_address: object
     ) -> None:
         """#258's ordering holds whichever provider answers first."""
-        google = _google_verdict("not_found", None)
-        for providers in (
-            [_mock_provider(_USPS_UNDETERMINED), _mock_provider(google)],
-            [_mock_provider(google), _mock_provider(_USPS_UNDETERMINED)],
-        ):
-            result = await ChainProvider(providers=providers).validate(std_address)  # type: ignore[arg-type]
+        usps = _mock_provider(_USPS_UNDETERMINED)
+        google = _mock_provider(_google_verdict("not_found", None))
+        chain = ChainProvider(providers=[usps, google] if usps_first else [google, usps])
 
-            assert result.validation.status == "undetermined"
-            assert result.validation.provider == "usps"
-            assert result.warnings == []
+        result = await chain.validate(std_address)  # type: ignore[arg-type]
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "usps"
+        assert result.warnings == []
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
