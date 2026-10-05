@@ -9,6 +9,7 @@ Do not instantiate directly in application code.
 import logging
 
 from address_validator.core import warnings as warning_catalogue
+from address_validator.core.countries import US_POSTAL_COUNTRIES
 from address_validator.core.validation_status import UNDETERMINED
 from address_validator.models import StandardizedAddress, ValidateResponseV2
 from address_validator.services.validation.errors import (
@@ -24,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 class ChainProvider:
     """Tries each provider in order, falling back on recoverable errors.
+
+    A provider with ``supports_non_us = False`` (USPS) is skipped for a country
+    outside :data:`~core.countries.US_POSTAL_COUNTRIES` — it is neither asked
+    nor counted as failed (GH #260).
 
     On any of the following errors from the current provider, the next
     provider in the chain is tried:
@@ -97,7 +102,7 @@ class ChainProvider:
         last_bad_request: ProviderBadRequestError | None = None
         held: ValidateResponseV2 | None = None
         unreachable = False  # any provider failed transiently
-        for provider in self._providers:
+        for provider in self._eligible(std.country):
             name = type(provider).__name__
             try:
                 result = await provider.validate(std, raw_input=raw_input)
@@ -146,6 +151,24 @@ class ChainProvider:
                         result.validation.status,
                     )
         return _exhausted(held, unreachable, retry_after, last_bad_request)
+
+    def _eligible(self, country: str) -> list[ValidationProvider]:
+        """Providers that serve *country*: US-only ones are dropped outside
+        :data:`~core.countries.US_POSTAL_COUNTRIES` (GH #260)."""
+        if country in US_POSTAL_COUNTRIES:
+            return self._providers
+        eligible = [p for p in self._providers if p.supports_non_us]
+        if not eligible:
+            # run_non_us_pipeline rejects this with a 422 before the chain is
+            # reached; falling through to _exhausted would report it as a
+            # retryable outage instead of the routing bug it is.
+            raise ValueError(f"ChainProvider: no provider serves country {country!r}")
+        logger.debug(
+            "ChainProvider: skipping %d US-only provider(s) for country=%s",
+            len(self._providers) - len(eligible),
+            country,
+        )
+        return eligible
 
 
 def _exhausted(

@@ -695,3 +695,114 @@ class TestChainUnusableBody:
         assert result.validation.status == "undetermined"
         assert result.validation.provider == "usps"
         assert result.warnings == [warning_catalogue.PROVIDER_FALLBACK_UNREACHABLE]
+
+
+# -- GH #260: a US-only provider is not asked about addresses outside US postal service
+
+
+def _us_only(response: ValidateResponseV2) -> AsyncMock:
+    p = _mock_provider(response)
+    p.supports_non_us = False
+    return p
+
+
+def _non_us(response: ValidateResponseV2) -> AsyncMock:
+    p = _mock_provider(response)
+    p.supports_non_us = True
+    return p
+
+
+class TestChainCountryRouting:
+    """GH #260: ``supports_non_us`` was only checked chain-wide, so under
+    ``usps,google`` USPS was asked about every CA/foreign address first."""
+
+    @staticmethod
+    def _answer(country: str, provider: str, status: str = "invalid") -> ValidateResponseV2:
+        return ValidateResponseV2(
+            country=country,
+            validation=ValidationResult(status=status, provider=provider),  # type: ignore[arg-type]
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("country", ["CA", "MX", "GB", "FM", "MH", "PW"])
+    async def test_us_only_provider_skipped_outside_us_postal_service(
+        self, country: str, std_address: StandardizeResponseV2
+    ) -> None:
+        usps = _us_only(self._answer(country, "usps", "confirmed"))
+        google = _non_us(self._answer(country, "google"))
+        chain = ChainProvider(providers=[usps, google])
+
+        result = await chain.validate(std_address.model_copy(update={"country": country}))
+
+        assert result.validation.provider == "google"
+        usps.validate.assert_not_awaited()
+        google.validate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("country", ["US", "PR", "GU", "VI", "AS", "MP"])
+    async def test_us_only_provider_asked_within_us_postal_service(
+        self, country: str, std_address: StandardizeResponseV2
+    ) -> None:
+        """Territories keep reaching USPS — their routing is GH #281's decision."""
+        usps = _us_only(
+            ValidateResponseV2(
+                country=country,
+                validation=ValidationResult(
+                    status="confirmed", dpv_match_code="Y", provider="usps"
+                ),
+            )
+        )
+        google = _non_us(self._answer(country, "google"))
+        chain = ChainProvider(providers=[usps, google])
+
+        result = await chain.validate(std_address.model_copy(update={"country": country}))
+
+        assert result.validation.provider == "usps"
+        usps.validate.assert_awaited_once()
+        google.validate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_held_undetermined_returned_without_asking_us_only_fallback(
+        self, std_address: StandardizeResponseV2
+    ) -> None:
+        """``google,usps``: a CA ``undetermined`` from Google is returned as-is —
+        the skipped USPS neither answers nor counts as unreachable."""
+        google = _non_us(self._answer("CA", "google", "undetermined"))
+        usps = _us_only(self._answer("CA", "usps", "confirmed"))
+        chain = ChainProvider(providers=[google, usps])
+
+        result = await chain.validate(std_address.model_copy(update={"country": "CA"}))
+
+        assert result.validation.status == "undetermined"
+        assert result.validation.provider == "google"
+        assert result.warnings == []
+        usps.validate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_transient_failure_after_skip_raises_rate_limited_all(
+        self, std_address: StandardizeResponseV2
+    ) -> None:
+        """The skipped USPS cannot rescue a CA request when Google is down."""
+        usps = _us_only(self._answer("CA", "usps", "confirmed"))
+        google = _raising_provider(ProviderTransientError("google", retry_after_seconds=5.0))
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[usps, google])
+
+        with pytest.raises(ProviderRateLimitedError) as exc_info:
+            await chain.validate(std_address.model_copy(update={"country": "CA"}))
+
+        assert exc_info.value.provider == "all"
+        usps.validate.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_eligible_provider_raises(self, std_address: StandardizeResponseV2) -> None:
+        """The pipeline guard rejects this before the chain; reaching it is a
+        routing bug, so it must not masquerade as a retryable outage."""
+        p1 = _us_only(self._answer("CA", "usps"))
+        p2 = _us_only(self._answer("CA", "usps"))
+        chain = ChainProvider(providers=[p1, p2])
+
+        with pytest.raises(ValueError, match="CA"):
+            await chain.validate(std_address.model_copy(update={"country": "CA"}))
+        p1.validate.assert_not_awaited()
+        p2.validate.assert_not_awaited()
