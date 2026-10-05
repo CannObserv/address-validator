@@ -541,9 +541,14 @@ class TestGoogleClientValidateAddress:
         assert any("non-finite number field (latitude)" in r.getMessage() for r in caplog.records)
 
     @pytest.mark.parametrize(
-        "mapper", [GoogleClient._map_response, GoogleClient._map_response_international]
+        ("mapper", "empty_status"),
+        [
+            # US: no DPV, no postalAddress, no granularity → no determination.
+            (GoogleClient._map_response, "undetermined"),
+            (GoogleClient._map_response_international, "not_found"),
+        ],
     )
-    def test_null_fields_read_as_absent(self, mapper) -> None:
+    def test_null_fields_read_as_absent(self, mapper, empty_status: str) -> None:
         """GH #278: JSON null is an absent field, not a wrong-typed one."""
         raw = {
             "result": {
@@ -558,7 +563,7 @@ class TestGoogleClientValidateAddress:
         assert result["longitude"] == 1
         assert result["city"] == "Ottawa"
         assert result["address_line_1"] == ""
-        assert mapper({"result": None})["status"] in {"undetermined", "not_found"}
+        assert mapper({"result": None})["status"] == empty_status
 
     @pytest.mark.asyncio
     async def test_credential_refresh_transport_error_raises_transient_error(
