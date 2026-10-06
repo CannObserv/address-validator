@@ -300,7 +300,13 @@ pyproject.toml                 # Project metadata, dependencies, tool config
 - Periods removed from all components
 - ZIP codes normalized to 5-digit or 5+4 format
 - Unit designators mis-tagged as city by the parser are recovered
-  (e.g. `BASEMENT, FREELAND` → line 2 `BSMT`, city `FREELAND`)
+  (e.g. `BASEMENT, FREELAND` → line 2 `BSMT`, city `FREELAND`;
+  `BLG A SEATTLE` → line 2 `BLDG A`, city `SEATTLE`)
+- Units mis-tagged as a PO Box beside a street are recovered
+  (`123 MAIN ST SUITES 100` → line 2 `STE 100`); a real box beside a
+  street is left off the lines with a warning
+- City and state mis-tagged as a recipient (no ZIP) are recovered
+  (`123 MAIN ST BLG A SEATTLE WA` → `BLDG A`, `SEATTLE`, `WA`)
 - Non-address wayfinding words (e.g. `YARD`) dropped from city
 - Line 2 ordering: larger container (BLDG) before specific unit (STE)
 - Intersections formatted as `STREET1 & STREET2`

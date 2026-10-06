@@ -57,7 +57,11 @@ class ParseOutcome:
 # raw input is worth labelling for CRF retraining.  DUPLICATE_UNIT_COLLAPSED
 # is excluded — a data-entry duplicate is an input problem, not a model one.
 _CANDIDATE_RECOVERY_KINDS = frozenset(
-    {RecoveryKind.UNIT_RECOVERED, RecoveryKind.FRAGMENT_RECOVERED}
+    {
+        RecoveryKind.UNIT_RECOVERED,
+        RecoveryKind.FRAGMENT_RECOVERED,
+        RecoveryKind.LOCALITY_RECOVERED,
+    }
 )
 
 # Map usaddress tag names to friendlier keys.

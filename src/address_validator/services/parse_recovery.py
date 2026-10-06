@@ -7,7 +7,8 @@ These functions repair common usaddress mis-tagging *after* the raw parse:
   multiple secondary-unit designators).
 - :func:`recover_components` runs the post-parse recovery heuristics over an
   already-built component dict: moving unit designators and stray identifier
-  fragments that usaddress folded into the city back onto the occupancy fields.
+  fragments that usaddress folded into the city, a USPS box, or a trailing
+  recipient back onto the fields they belong in.
 
 Pure helpers — no request-scoped side effects.  Extracted from ``parser.py``
 (GH #137); ``parser.py`` retains parse orchestration and the ``TAG_NAMES`` map,
@@ -16,6 +17,7 @@ which it passes into :func:`collect_ambiguous_components`.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -36,6 +38,7 @@ class RecoveryKind(StrEnum):
 
     UNIT_RECOVERED = "unit_recovered"
     FRAGMENT_RECOVERED = "fragment_recovered"
+    LOCALITY_RECOVERED = "locality_recovered"
     DUPLICATE_UNIT_COLLAPSED = "duplicate_unit_collapsed"
 
 
@@ -97,6 +100,53 @@ _UNIT_TYPE_TO_ID: dict[str, str] = dict(_UNIT_SLOT_PAIRS)
 
 # Keys that signal the end of the street portion of an address.
 _POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area", "postcode"})
+
+# Key prefixes that make up the primary street line (number + street name).
+_STREET_KEY_PREFIXES: tuple[str, ...] = ("premise_number", "thoroughfare_")
+
+# The USPS box pair usaddress fills from USPSBoxType / USPSBoxID.
+_BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
+
+# A token shaped like a unit identifier: one letter, or alphanumeric with a
+# digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
+_UNIT_IDENTIFIER_RE = re.compile(r"#?(?:[A-Z]|[A-Z0-9-]*\d[A-Z0-9-]*)")
+
+# Longest state name in STATE_MAP, in words ("NORTHERN MARIANA ISLANDS").
+_MAX_STATE_WORDS: int = 3
+
+
+def _is_street_key(key: str) -> bool:
+    return key.startswith(_STREET_KEY_PREFIXES)
+
+
+def _has_street(components: dict[str, str]) -> bool:
+    """True when a primary street number or street name was parsed."""
+    return any(_is_street_key(k) and v for k, v in components.items())
+
+
+def _looks_like_unit_identifier(token: str) -> bool:
+    return bool(_UNIT_IDENTIFIER_RE.fullmatch(token.upper().strip(",;")))
+
+
+def _splice(
+    components: dict[str, str],
+    old_keys: tuple[str, ...],
+    new_items: dict[str, str],
+) -> None:
+    """Replace *old_keys* with *new_items* where the first old key sat.
+
+    Key order is source token order, which decides line-2 slot order for
+    same-level unit pairs (``_sub_renders_first``), so recovered fields take
+    the position of the fields they came from instead of trailing the dict.
+    """
+    items = list(components.items())
+    pos = next(i for i, (k, _) in enumerate(items) if k in old_keys)
+    # A stale (empty) copy of a new key would otherwise override it.
+    dropped = {*old_keys, *new_items}
+    before = [(k, v) for k, v in items[:pos] if k not in dropped]
+    after = [(k, v) for k, v in items[pos:] if k not in dropped]
+    components.clear()
+    components.update([*before, *new_items.items(), *after])
 
 
 def _next_free_unit_slot(
@@ -313,10 +363,12 @@ def _recover_unit_phase2(
 ) -> None:
     """Phase 2: strip bare leading unit designator (no comma) from city.
 
-    Only no-identifier designators (BSMT, FRNT, LOWR …) are stored
-    into a slot here.  Designators like KEY, LOT, UNIT always expect
-    an identifier, so a bare "KEY WEST" is almost certainly a city.
-    When all unit slots are full, orphaned designator words are dropped.
+    No-identifier designators (BSMT, FRNT, LOWR …) are stored into a slot
+    on their own.  Designators like KEY, LOT, UNIT always expect an
+    identifier, so they lift only together with an identifier-shaped
+    token and a remaining city ("BLG A SEATTLE" → BLG A; GH #285) — a
+    bare "KEY WEST" is almost certainly a city.  When all unit slots are
+    full, orphaned designator words are dropped.
     """
     city = components.get("locality", "")
     if not city or " " not in city:
@@ -335,6 +387,17 @@ def _recover_unit_phase2(
             components[slot[0]] = first
         components["locality"] = rest
         _record_unit_recovered(events, first)
+    elif word in UNIT_MAP and slot is not None:
+        # A designator that takes an identifier ("BLG A SEATTLE" — GH #285)
+        # lifts only with an identifier-shaped token AND a city left over,
+        # so "KEY WEST" / "KEY LARGO" stay cities.
+        identifier, _, city_rest = rest.partition(" ")
+        city_rest = city_rest.strip()
+        if city_rest and _looks_like_unit_identifier(identifier):
+            components[slot[0]] = first
+            components[slot[1]] = identifier.strip(",;")
+            components["locality"] = city_rest
+            _record_unit_recovered(events, first)
     elif word in UNIT_MAP and slot is None:
         # All slots full — just strip the orphaned designator word.
         components["locality"] = rest
@@ -358,6 +421,123 @@ def _recover_unit_from_city(
     """
     _recover_unit_phase1(components, events)
     _recover_unit_phase2(components, events)
+
+
+def _recover_unit_from_general_delivery(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Move a unit usaddress tagged as a USPS box onto a free unit slot.
+
+    usaddress tags some unit phrases as ``USPSBoxType`` / ``USPSBoxID``
+    (``"123 MAIN ST SUITES 100"`` — GH #285).  With a street present the
+    standardizer renders the street on line 1 and never renders the box, so
+    the unit was silently lost.  When the box type is a Pub 28 unit
+    designator (any UNIT_MAP key) and a unit slot is free, the pair moves
+    to that slot.  Real box types (``PO BOX``, ``PMB``), unknown words, and
+    rural-route groups are left alone; the standardizer warns about those.
+
+    With no ZIP or state, usaddress can also fold the city into the box ID
+    (``"BLG"`` / ``"A SEATTLE"``).  When no locality was parsed, an ID whose
+    first token is identifier-shaped, and whose second is not, keeps that
+    first token and the rest becomes the city (``"100 B"`` stays whole).
+    """
+    if not _has_street(components):
+        return
+    if components.get("general_delivery_group_type") or components.get("general_delivery_group"):
+        return
+    box_type = components.get("general_delivery_type", "")
+    if _normalize_unit_value(box_type) not in UNIT_MAP:
+        return
+    slot = _next_free_unit_slot(components)
+    if slot is None:
+        return
+
+    type_key, id_key = slot
+    identifier = components.get("general_delivery", "").strip()
+    city = ""
+    if not components.get("locality"):
+        head, _, tail = identifier.partition(" ")
+        tail = tail.strip()
+        # "100 B" is one compound identifier; only "A SEATTLE" splits.
+        if (
+            tail
+            and _looks_like_unit_identifier(head)
+            and not _looks_like_unit_identifier(tail.split()[0])
+        ):
+            identifier, city = head, tail
+
+    moved = {type_key: box_type}
+    if identifier:
+        moved[id_key] = identifier
+    if city:
+        moved["locality"] = city
+    _splice(components, _BOX_KEYS, moved)
+    _record_unit_recovered(events, box_type)
+
+
+def _split_recipient_from_city(text: str) -> tuple[str, str]:
+    """Split comma segments ahead of the city into ``(recipient, city)``.
+
+    The city is the last comma segment.  A leading segment that starts with a
+    unit designator stays ahead of it, for :func:`_recover_unit_from_city` to
+    lift; any other leading segment (``"ATTN JOHN"``) is the recipient.
+    """
+    *leading, city = (seg.strip() for seg in text.strip().rstrip(",;").split(","))
+    units = [seg for seg in leading if seg and _try_extract_designator(seg)]
+    recipient = [seg for seg in leading if seg and not _try_extract_designator(seg)]
+    return ", ".join(recipient), ", ".join([*units, city])
+
+
+def _recover_locality_from_trailing_addressee(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Split a recipient tagged after the street back into city and state.
+
+    With no ZIP, usaddress can tag the whole tail after the street as
+    ``Recipient`` (``"123 MAIN ST BLG A SEATTLE WA"`` → ``addressee =
+    "BLG A SEATTLE WA"`` — GH #285).  The standardizer never renders
+    ``addressee``, so unit, city and state were all lost.
+
+    Fires only when the addressee follows a parsed street, no city, state or
+    ZIP was parsed, and the addressee ends in a STATE_MAP entry with at least
+    a city before it.  The words before the state become the city, less
+    any leading comma segment that is not a unit (``"ATTN JOHN, SEATTLE WA"``
+    keeps ``"ATTN JOHN"`` as the recipient); unit recovery from the city
+    (:func:`_recover_unit_from_city`) runs after this.  A recipient before
+    the street is a real recipient and is left alone.
+
+    Limit: without commas a trailing recipient cannot be told from the city
+    (``"ATTN JOHN SEATTLE WA"`` → city ``"ATTN JOHN SEATTLE"``); the
+    recovery warning tells the client the city was inferred.
+    """
+    tail = components.get("addressee", "")
+    if not tail or any(components.get(k) for k in _POST_STREET_KEYS):
+        return
+    keys = list(components)
+    if not any(_is_street_key(k) and components[k] for k in keys[: keys.index("addressee")]):
+        return
+
+    tokens = tail.split()
+    # Longest state name first, so "NEW YORK" wins over "YORK".
+    for n in range(min(_MAX_STATE_WORDS, len(tokens) - 1), 0, -1):
+        state = " ".join(tokens[-n:])
+        if state.upper().replace(".", "").strip(",;") in STATE_MAP:
+            recipient, city = _split_recipient_from_city(" ".join(tokens[:-n]))
+            if not city:
+                return
+            recovered = {"addressee": recipient} if recipient else {}
+            recovered |= {"locality": city, "administrative_area": state}
+            _splice(components, ("addressee",), recovered)
+            if events is not None:
+                events.append(
+                    RecoveryEvent(
+                        kind=RecoveryKind.LOCALITY_RECOVERED,
+                        warning=warning_catalogue.LOCALITY_FROM_RECIPIENT,
+                    )
+                )
+            return
 
 
 def _recover_identifier_fragment_from_city(
@@ -542,8 +722,9 @@ def recover_components(
 ) -> list[RecoveryEvent]:
     """Run all post-parse recovery heuristics over *component_values* in place.
 
-    Mutates *component_values*: moves unit designators mis-tagged into the
-    city back onto occupancy slots, repairs a stray single-letter identifier
+    Mutates *component_values*: splits a recipient tagged after the street
+    back into city and state, moves a unit tagged as a USPS box or as part of
+    the city onto occupancy slots, repairs a stray single-letter identifier
     fragment at the city head, then collapses an identical-duplicate secondary
     unit into a single slot.
 
@@ -556,6 +737,8 @@ def recover_components(
     ambiguous (RepeatedLabelError) US paths.
     """
     events: list[RecoveryEvent] = []
+    _recover_locality_from_trailing_addressee(component_values, events)
+    _recover_unit_from_general_delivery(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
     _dedupe_secondary_units(component_values, events)

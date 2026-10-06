@@ -22,6 +22,7 @@ positive. Put unrelated constants elsewhere.
 
 REPEATED_LABELS = "Ambiguous parse: repeated labels detected; parse may be inaccurate."
 UNIT_FRAGMENT_FROM_CITY = "Unit identifier fragment recovered from city field"
+LOCALITY_FROM_RECIPIENT = "City and state recovered from mis-tagged recipient field"
 NO_PARSEABLE_STREET = "Address has no parseable street line; passing raw input to provider"
 PROVIDER_INFERRED = "Provider inferred one or more address components not present in input"
 PROVIDER_REPLACED = "Provider replaced one or more address components"
@@ -40,6 +41,10 @@ UNIT_RECOVERED_FROM_FIELD = "Unit designator recovered from mis-tagged field: '{
 UNRECOGNIZED_UNIT_DESIGNATOR = "Unrecognized unit designator preserved: '{designator}'"
 DUPLICATE_UNIT_COLLAPSED = "Duplicate secondary unit collapsed into '{designator} {identifier}'"
 UNRECOGNIZED_REGION = "Unrecognized province/territory: '{region}'"
+GENERAL_DELIVERY_DISCARDED = (
+    "PO Box / general delivery omitted from standardized address "
+    "because a street address is present: '{text}'"
+)
 
 # Authoritative list of every catalogued response warning. The drift test
 # checks this against docs/WARNINGS.md in both directions, so a new warning is
@@ -50,9 +55,11 @@ CATALOGUE: tuple[str, ...] = (
     REPEATED_LABELS,
     UNIT_RECOVERED_FROM_FIELD,
     UNIT_FRAGMENT_FROM_CITY,
+    LOCALITY_FROM_RECIPIENT,
     UNRECOGNIZED_UNIT_DESIGNATOR,
     DUPLICATE_UNIT_COLLAPSED,
     NO_PARSEABLE_STREET,
+    GENERAL_DELIVERY_DISCARDED,
     UNRECOGNIZED_REGION,
     PROVIDER_INFERRED,
     PROVIDER_REPLACED,
