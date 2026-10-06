@@ -4,6 +4,7 @@ import logging
 
 import pytest
 
+from address_validator.core.warnings import GENERAL_DELIVERY_DISCARDED
 from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import _get, _lookup, _std_zip, standardize
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
@@ -275,6 +276,57 @@ class TestStandardize:
         assert result.postal_code == "79901"
         assert "general_delivery_type" in result.components.values
         assert "general_delivery" in result.components.values
+
+    @pytest.mark.parametrize(
+        ("raw", "line_2", "city", "state"),
+        [
+            ("123 MAIN ST SUITES 100, SEATTLE, WA 98101", "STE 100", "SEATTLE", "WA"),
+            ("123 MAIN ST FLOORS 2-3, SEATTLE, WA 98101", "FL 2-3", "SEATTLE", "WA"),
+            ("123 MAIN ST BLG A, SEATTLE, WA 98101", "BLDG A", "SEATTLE", "WA"),
+            ("123 MAIN ST SUITES 100 SEATTLE WA 98101", "STE 100", "SEATTLE", "WA"),
+            ("123 MAIN ST BLG A SEATTLE WA 98101", "BLDG A", "SEATTLE", "WA"),
+            ("123 MAIN ST BLG A SEATTLE WA", "BLDG A", "SEATTLE", "WA"),
+            ("123 MAIN ST BLG A SEATTLE", "BLDG A", "SEATTLE", ""),
+        ],
+    )
+    async def test_unit_tagged_outside_unit_slots_reaches_line_2(
+        self, raw: str, line_2: str, city: str, state: str
+    ) -> None:
+        """GH-285: a unit usaddress tags as a USPS box, as part of the city, or
+        inside a trailing recipient is recovered onto line 2 — never dropped."""
+        parsed = (await parse_address(raw)).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == line_2
+        assert result.city == city
+        assert result.region == state
+        assert any("Unit designator recovered" in w for w in result.warnings)
+
+    @pytest.mark.parametrize(
+        ("box_type", "box_id", "dropped"),
+        [("LOCKER", "7", "LOCKER 7"), ("PO BOX", "5", "PO BOX 5")],
+    )
+    def test_general_delivery_beside_street_warns(
+        self, box_type: str, box_id: str, dropped: str
+    ) -> None:
+        """GH-285: a box the standardizer cannot place next to a street is
+        still left off the lines, but the client is told."""
+        comps = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "general_delivery_type": box_type,
+            "general_delivery": box_id,
+            "locality": "SEATTLE",
+        }
+        result = standardize(comps)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == ""
+        assert result.warnings == [GENERAL_DELIVERY_DISCARDED.format(text=dropped)]
+
+    def test_general_delivery_without_street_does_not_warn(self) -> None:
+        comps = {"general_delivery_type": "PO BOX", "general_delivery": "42"}
+        assert standardize(comps).warnings == []
 
     def test_both_occupancy_and_subaddress_in_line2(self) -> None:
         """STE 300 and SMP 2 should both appear on line 2."""

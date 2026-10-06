@@ -13,7 +13,9 @@ from address_validator.services.parse_recovery import (
     RecoveryEvent,
     RecoveryKind,
     _recover_identifier_fragment_from_city,
+    _recover_locality_from_trailing_addressee,
     _recover_unit_from_city,
+    _recover_unit_from_general_delivery,
     recover_components,
 )
 from address_validator.services.parser import (
@@ -92,6 +94,49 @@ class TestRecoverUnitFromCity:
             "dependent_sub_premise_number": "A",
         }
         _recover_unit_from_city(c)
+        assert c["locality"] == "SEATTLE"
+
+    @pytest.mark.parametrize(
+        ("city", "designator", "identifier", "rest"),
+        [
+            ("BLG A SEATTLE", "BLG", "A", "SEATTLE"),
+            ("STE 100 SEATTLE", "STE", "100", "SEATTLE"),
+            ("UNIT 4B NEW YORK", "UNIT", "4B", "NEW YORK"),
+        ],
+    )
+    async def test_bare_designator_with_identifier_extracted(
+        self, city: str, designator: str, identifier: str, rest: str
+    ) -> None:
+        """GH-285: a designator followed by an identifier-shaped token at the
+        head of the city is a unit — 'BLG A SEATTLE' must not stay the city."""
+        c: dict[str, str] = {"locality": city}
+        events: list[RecoveryEvent] = []
+        _recover_unit_from_city(c, events)
+        assert c["sub_premise_type"] == designator
+        assert c["sub_premise_number"] == identifier
+        assert c["locality"] == rest
+        assert [e.kind for e in events] == [RecoveryKind.UNIT_RECOVERED]
+
+    @pytest.mark.parametrize("city", ["KEY WEST", "KEY LARGO", "UNIT A", "LOT WEST HAVEN"])
+    async def test_designator_without_identifier_shape_untouched(self, city: str) -> None:
+        """GH-285: the identifier lift needs an identifier-shaped token (digit
+        or single letter) AND a city left over — real cities are left alone."""
+        c: dict[str, str] = {"locality": city}
+        _recover_unit_from_city(c)
+        assert c == {"locality": city}
+
+    async def test_designator_with_identifier_fills_dependent_slot(self) -> None:
+        """GH-285: an occupied primary slot routes the lifted unit to the
+        dependent slot rather than overwriting it."""
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "100",
+            "locality": "BLG A SEATTLE",
+        }
+        _recover_unit_from_city(c)
+        assert c["sub_premise_type"] == "STE"
+        assert c["dependent_sub_premise_type"] == "BLG"
+        assert c["dependent_sub_premise_number"] == "A"
         assert c["locality"] == "SEATTLE"
 
 
@@ -198,6 +243,190 @@ class TestDedupeSecondaryUnits:
         c: dict[str, str] = {"sub_premise_type": "STE", "sub_premise_number": "B"}
         recover_components(c)
         assert c == {"sub_premise_type": "STE", "sub_premise_number": "B"}
+
+
+# ---------------------------------------------------------------------------
+# _recover_unit_from_general_delivery (GH #285)
+# ---------------------------------------------------------------------------
+
+_STREET = {"premise_number": "123", "thoroughfare_name": "MAIN", "thoroughfare_trailing_type": "ST"}
+
+
+class TestRecoverUnitFromGeneralDelivery:
+    """usaddress tags some unit phrases as a USPS box (``USPSBoxType`` /
+    ``USPSBoxID``).  With a street present the box never renders, so a box
+    type that is a Pub 28 unit designator moves to a free unit slot."""
+
+    @pytest.mark.parametrize(
+        ("gd_type", "gd_id"),
+        [("SUITES", "100"), ("FLOORS", "2-3"), ("BLG", "A"), ("#", "5")],
+    )
+    def test_designator_moved_to_unit_slot(self, gd_type: str, gd_id: str) -> None:
+        c = {**_STREET, "general_delivery_type": gd_type, "general_delivery": gd_id}
+        events: list[RecoveryEvent] = []
+        _recover_unit_from_general_delivery(c, events)
+        assert c["sub_premise_type"] == gd_type
+        assert c["sub_premise_number"] == gd_id
+        assert "general_delivery_type" not in c
+        assert "general_delivery" not in c
+        assert [e.kind for e in events] == [RecoveryKind.UNIT_RECOVERED]
+        assert gd_type in events[0].warning
+
+    def test_moved_unit_keeps_source_position(self) -> None:
+        """The unit takes the box keys' place in the dict, so source order —
+        which decides line-2 slot order for same-level pairs — survives."""
+        c = {
+            **_STREET,
+            "general_delivery_type": "SUITES",
+            "general_delivery": "100",
+            "sub_premise_type": "APT",
+            "sub_premise_number": "4",
+            "locality": "SEATTLE",
+        }
+        _recover_unit_from_general_delivery(c)
+        assert list(c) == [
+            *_STREET,
+            "dependent_sub_premise_type",
+            "dependent_sub_premise_number",
+            "sub_premise_type",
+            "sub_premise_number",
+            "locality",
+        ]
+        assert c["sub_premise_type"] == "APT"
+        assert c["dependent_sub_premise_type"] == "SUITES"
+
+    def test_trailing_city_split_from_identifier(self) -> None:
+        """No ZIP/state: usaddress folds the city into the box ID
+        ('BLG' / 'A SEATTLE').  With no locality parsed, the identifier
+        keeps its first token and the rest becomes the city."""
+        c = {**_STREET, "general_delivery_type": "BLG", "general_delivery": "A SEATTLE"}
+        _recover_unit_from_general_delivery(c)
+        assert c["sub_premise_type"] == "BLG"
+        assert c["sub_premise_number"] == "A"
+        assert c["locality"] == "SEATTLE"
+
+    def test_multi_token_identifier_kept_when_locality_present(self) -> None:
+        c = {
+            **_STREET,
+            "general_delivery_type": "STE",
+            "general_delivery": "100 B",
+            "locality": "SEATTLE",
+        }
+        _recover_unit_from_general_delivery(c)
+        assert c["sub_premise_number"] == "100 B"
+        assert c["locality"] == "SEATTLE"
+
+    @pytest.mark.parametrize("gd_type", ["PO BOX", "BOX", "LOCKER", "PMB"])
+    def test_non_designator_box_type_left_alone(self, gd_type: str) -> None:
+        """A real box type (or an unknown word) is not a unit; the standardizer
+        warns about it instead."""
+        c = {**_STREET, "general_delivery_type": gd_type, "general_delivery": "7"}
+        before = dict(c)
+        assert recover_components(c) == []
+        assert c == before
+
+    def test_no_street_left_alone(self) -> None:
+        """Without a street the box renders as line 1 — nothing is dropped."""
+        c = {"general_delivery_type": "SUITES", "general_delivery": "100", "locality": "SEATTLE"}
+        before = dict(c)
+        _recover_unit_from_general_delivery(c)
+        assert c == before
+
+    def test_rural_route_group_left_alone(self) -> None:
+        c = {
+            **_STREET,
+            "general_delivery_group_type": "RR",
+            "general_delivery_group": "2",
+            "general_delivery_type": "BOX",
+            "general_delivery": "152",
+        }
+        before = dict(c)
+        _recover_unit_from_general_delivery(c)
+        assert c == before
+
+    def test_both_slots_full_left_alone(self) -> None:
+        c = {
+            **_STREET,
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "2",
+            "general_delivery_type": "FLOORS",
+            "general_delivery": "3",
+        }
+        before = dict(c)
+        _recover_unit_from_general_delivery(c)
+        assert c == before
+
+
+# ---------------------------------------------------------------------------
+# _recover_locality_from_trailing_addressee (GH #285)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverLocalityFromTrailingAddressee:
+    """Without a ZIP, usaddress can tag a whole post-street tail as
+    ``Recipient`` ('BLG A SEATTLE WA').  The standardizer never renders
+    ``addressee``, so city, state and unit were all lost."""
+
+    @pytest.mark.parametrize(
+        ("tail", "city", "state"),
+        [
+            ("BLG A SEATTLE WA", "BLG A SEATTLE", "WA"),
+            ("SPRINGFIELD ILLINOIS", "SPRINGFIELD", "ILLINOIS"),
+            ("BUFFALO NEW YORK", "BUFFALO", "NEW YORK"),
+            ("SAIPAN NORTHERN MARIANA ISLANDS", "SAIPAN", "NORTHERN MARIANA ISLANDS"),
+        ],
+    )
+    def test_city_and_state_recovered(self, tail: str, city: str, state: str) -> None:
+        c = {**_STREET, "addressee": tail}
+        events: list[RecoveryEvent] = []
+        _recover_locality_from_trailing_addressee(c, events)
+        assert "addressee" not in c
+        assert c["locality"] == city
+        assert c["administrative_area"] == state
+        assert [e.kind for e in events] == [RecoveryKind.LOCALITY_RECOVERED]
+
+    def test_full_recovery_lifts_unit_from_recovered_city(self) -> None:
+        c = {**_STREET, "addressee": "BLG A SEATTLE WA"}
+        events = recover_components(c)
+        assert c["sub_premise_type"] == "BLG"
+        assert c["sub_premise_number"] == "A"
+        assert c["locality"] == "SEATTLE"
+        assert c["administrative_area"] == "WA"
+        assert [e.kind for e in events] == [
+            RecoveryKind.LOCALITY_RECOVERED,
+            RecoveryKind.UNIT_RECOVERED,
+        ]
+
+    def test_leading_addressee_left_alone(self) -> None:
+        """A recipient before the street is a real recipient, not a tail."""
+        c = {"addressee": "JOHN SMITH WA", **_STREET}
+        before = dict(c)
+        _recover_locality_from_trailing_addressee(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        "extra",
+        [{"locality": "SEATTLE"}, {"administrative_area": "WA"}, {"postcode": "98101"}],
+    )
+    def test_left_alone_when_last_line_parsed(self, extra: dict[str, str]) -> None:
+        c = {**_STREET, "addressee": "BLG A SEATTLE WA", **extra}
+        before = dict(c)
+        _recover_locality_from_trailing_addressee(c)
+        assert c == before
+
+    @pytest.mark.parametrize("tail", ["ATTN JOHN SMITH", "WA"])
+    def test_left_alone_without_trailing_state_and_city(self, tail: str) -> None:
+        c = {**_STREET, "addressee": tail}
+        before = dict(c)
+        _recover_locality_from_trailing_addressee(c)
+        assert c == before
+
+    def test_no_street_left_alone(self) -> None:
+        c = {"addressee": "SEATTLE WA"}
+        _recover_locality_from_trailing_addressee(c)
+        assert c == {"addressee": "SEATTLE WA"}
 
 
 class TestRecoverIdentifierFragmentFromCity:
