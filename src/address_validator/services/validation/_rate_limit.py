@@ -395,8 +395,10 @@ class _FieldReader:
     ``AttributeError`` (a 500) or gave a wrong answer.  Each read returns the
     field when it has the expected type and its default when it is absent or
     ``null``; any other value raises ``ProviderTransientError`` via
-    :func:`_raise_for_unusable_body`.  The log names the field and its JSON type,
-    never the value: provider bodies carry the address.
+    :func:`_raise_for_unusable_body`.  A number must also be finite: Python's
+    json decodes ``NaN``/``Infinity``, which the response encoder rejects.  The
+    log names the field and its JSON type, never the value: provider bodies
+    carry the address.
     """
 
     def __init__(self, provider: str, logger: logging.Logger) -> None:
