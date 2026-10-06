@@ -52,7 +52,7 @@ fetch of the Appendix pages:
 | Table | Source | Result |
 |---|---|---|
 | `suffixes.py` | `pe.usps.com/text/pub28/28apc_002.htm` | All 189 primary entries match. Our file includes additional input aliases (common misspellings/variant spellings) that are not in Pub 28 — these are expected as input normalizers. |
-| `units.py` | `pe.usps.com/text/pub28/28apc_003.htm` | All 25 designators match. Pub 28 misspells "Hanger" (should be "Hangar") — our file uses the correct spelling; abbreviation `HNGR` is correct either way. We include `#`/`NUMBER`/`NUM`/`NO` aliases not in Pub 28 for input normalization, plus plural/misspelt input variants (`BLD`, `BLG`, `FLR`, `FLOORS`, `SUITES`, `STES`, `SUTE`, `UN`, `UNITS`; GH #286). |
+| `units.py` | `pe.usps.com/text/pub28/28apc_003.htm` | All 25 designators match. Pub 28 misspells "Hanger" (should be "Hangar") — our file uses the correct spelling; abbreviation `HNGR` is correct either way. We include `#`/`NUMBER`/`NUM`/`NO`/`BLD`/`UN` aliases not in Pub 28 for input normalization, plus plural/misspelt variants seen in prod (`BLG`, `FLR`, `FLOORS`, `SUITES`, `STES`, `SUTE`, `UNITS`; GH #286). |
 | `directionals.py` | Pub 28 Appendix C | N, S, E, W, NE, NW, SE, SW — complete set confirmed. |
 | `states.py` | Pub 28 Appendix D | All 50 states + DC + 7 territories (AS, GU, MH, MP, PW, PR, VI) present. Appendix D page was inaccessible for live comparison; content verified against known-stable data. |
 
