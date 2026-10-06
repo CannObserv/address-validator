@@ -4,6 +4,7 @@ import logging
 
 import pytest
 
+from address_validator.services.parser import parse_address
 from address_validator.services.standardizer import _get, _lookup, _std_zip, standardize
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.states import STATE_MAP
@@ -153,6 +154,51 @@ class TestStandardize:
         }
         result = standardize(comps)
         assert result.address_line_2 == "STE 300"
+
+    @pytest.mark.parametrize(
+        ("designator", "identifier", "line_2"),
+        [
+            ("UNITS", "3-4", "UNIT 3-4"),
+            ("SUITES", "100", "STE 100"),
+            ("STES", "100-102", "STE 100-102"),
+            ("SUTE", "5", "STE 5"),
+            ("FLOORS", "2-3", "FL 2-3"),
+            ("FLR", "2", "FL 2"),
+            ("BLG", "A", "BLDG A"),
+        ],
+    )
+    def test_plural_and_misspelt_designators_normalised(
+        self, designator: str, identifier: str, line_2: str
+    ) -> None:
+        """GH-286: a plural or misspelt designator gets its Pub 28 form; a
+        range identifier is kept whole, not cut to its first unit."""
+        comps = {
+            "premise_number": "123",
+            "thoroughfare_name": "MAIN",
+            "thoroughfare_trailing_type": "ST",
+            "sub_premise_type": designator,
+            "sub_premise_number": identifier,
+        }
+        result = standardize(comps)
+        assert result.address_line_2 == line_2
+        assert result.warnings == []
+
+    @pytest.mark.parametrize(
+        ("tail", "line_2"),
+        [
+            ("UNITS 3-4", "UNIT 3-4"),
+            ("STES 100-102", "STE 100-102"),
+            ("SUTE 5", "STE 5"),
+            ("FLR 2", "FL 2"),
+        ],
+    )
+    async def test_parsed_variant_designator_normalised(self, tail: str, line_2: str) -> None:
+        """GH-286: end to end, the variants usaddress tags as a unit reach
+        line 2 in Pub 28 form (they used to pass through unchanged)."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == line_2
 
     def test_same_level_units_render_in_source_order(self) -> None:
         """GH-170 CR: '#108 STE B' — neither unit is a container, so line 2

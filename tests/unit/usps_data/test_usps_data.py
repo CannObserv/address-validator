@@ -1,5 +1,7 @@
 """Unit tests for the USPS lookup tables in usps_data/."""
 
+import pytest
+
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
 from address_validator.usps_data.states import STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
@@ -70,3 +72,19 @@ class TestUnitMap:
 
     def test_canonical_form_maps_to_itself(self) -> None:
         assert UNIT_MAP["STE"] == "STE"
+
+    @pytest.mark.parametrize(
+        ("variant", "canonical"),
+        [
+            ("UNITS", "UNIT"),
+            ("SUITES", "STE"),
+            ("STES", "STE"),
+            ("SUTE", "STE"),
+            ("FLOORS", "FL"),
+            ("FLR", "FL"),
+            ("BLG", "BLDG"),
+        ],
+    )
+    def test_plural_and_misspelt_variants(self, variant: str, canonical: str) -> None:
+        """GH-286: variants seen in prod DPV 'D' rows map to their Pub 28 form."""
+        assert UNIT_MAP[variant] == canonical

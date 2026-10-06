@@ -56,6 +56,15 @@ class TestRecoverUnitFromCity:
         assert c["locality"] == "SPOKANE"
         assert "sub_premise_type" not in c
 
+    async def test_variant_designator_extracted(self) -> None:
+        """GH-286: a plural designator before a comma is a unit (via UNIT_MAP),
+        not a city prefix and not dropped as wayfinding."""
+        c: dict[str, str] = {"locality": "SUITES 100, SEATTLE"}
+        _recover_unit_from_city(c)
+        assert c["sub_premise_type"] == "SUITES"
+        assert c["sub_premise_number"] == "100"
+        assert c["locality"] == "SEATTLE"
+
     async def test_real_city_name_untouched(self) -> None:
         c: dict[str, str] = {"locality": "KEY WEST"}
         _recover_unit_from_city(c)
@@ -102,6 +111,63 @@ class TestDedupeSecondaryUnits:
         assert c.get("sub_premise_number", "").rstrip(",") == "B"
         assert "dependent_sub_premise_type" not in c
         assert "dependent_sub_premise_number" not in c
+
+    @pytest.mark.parametrize("dep_type", ["SUITE", "SUITES", "SUTE"])
+    async def test_variant_spelling_of_same_type_collapsed(self, dep_type: str) -> None:
+        """GH-286 CR: 'STE B, SUITES B' names one unit twice in two spellings;
+        types compare by their UNIT_MAP form, so it must not render 'STE B STE B'."""
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B",
+            "dependent_sub_premise_type": dep_type,
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["sub_premise_type"] == "STE"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+
+    @pytest.mark.parametrize("hash_word", ["NO", "NUM", "NUMBER"])
+    async def test_hash_alias_restated_by_named_unit_collapsed(self, hash_word: str) -> None:
+        """GH-286 CR: 'NO 1, UNIT 1' is the GH-170 '#1, UNIT 1' idiom — the
+        '#' aliases compare by UNIT_MAP form, so it must not render '# 1 UNIT 1'."""
+        c: dict[str, str] = {
+            "sub_premise_type": hash_word,
+            "sub_premise_number": "1",
+            "dependent_sub_premise_type": "UNIT",
+            "dependent_sub_premise_number": "1",
+        }
+        events = recover_components(c)
+        assert c["sub_premise_type"] == "UNIT"
+        assert c["sub_premise_number"] == "1"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+        assert [e.kind for e in events] == [RecoveryKind.DUPLICATE_UNIT_COLLAPSED]
+
+    @pytest.mark.parametrize("hash_word", ["#", "NO", "NUMBER"])
+    async def test_hash_alias_in_dependent_slot_collapsed(self, hash_word: str) -> None:
+        """GH-286 CR: the mirror of GH-170 — the '#' unit in the dependent slot,
+        the named unit primary ('NO 1 STE 1').  The named unit is kept."""
+        c: dict[str, str] = {
+            "dependent_sub_premise_type": hash_word,
+            "dependent_sub_premise_number": "1",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+        }
+        events = recover_components(c)
+        assert c == {"sub_premise_type": "STE", "sub_premise_number": "1"}
+        assert [e.warning for e in events] == ["Duplicate secondary unit collapsed into 'STE 1'"]
+
+    async def test_hash_alias_in_dependent_slot_distinct_id_kept(self) -> None:
+        """'NO 2 STE 1' names two units; both slots survive."""
+        c: dict[str, str] = {
+            "dependent_sub_premise_type": "NO",
+            "dependent_sub_premise_number": "2",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+        }
+        assert recover_components(c) == []
+        assert c["dependent_sub_premise_number"] == "2"
 
     async def test_same_type_different_id_kept(self) -> None:
         """Two real same-type suites (STE 1, STE 2) must NOT collapse —
@@ -362,6 +428,31 @@ class TestRepeatedLabelFallback:
         # The non-canonical designator is preserved, with a warning.
         assert any("Unrecognized unit designator preserved: 'SMP'" in w for w in result.warnings)
 
+    async def test_second_variant_designator_recognized(self) -> None:
+        """GH-286: a repeated designator in a UNIT_MAP variant spelling ('STES')
+        is a known designator — slotted with no 'Unrecognized' warning."""
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("MAIN", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("BLDG", "OccupancyType"),
+            ("2", "OccupancyIdentifier"),
+            ("STES", "OccupancyType"),
+            ("100-102,", "OccupancyIdentifier"),
+            ("SEATTLE,", "PlaceName"),
+            ("WA", "StateName"),
+            ("98101", "ZipCode"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = (
+                await parse_address("123 MAIN ST BLDG 2 STES 100-102, SEATTLE, WA 98101")
+            ).response
+        vals = result.components.values
+        assert vals.get("dependent_sub_premise_type") == "STES"
+        assert vals.get("dependent_sub_premise_number", "").rstrip(",") == "100-102"
+        assert not any("Unrecognized unit designator" in w for w in result.warnings)
+
     async def test_repeated_unit_type_non_alpha_not_slotted(self) -> None:
         """GH-129 guard: a repeated unit-type label whose token is NOT
         alphabetic (a stray number mis-tagged as OccupancyType) must not be
@@ -424,6 +515,22 @@ class TestRepeatedLabelFallback:
                 "STE",
                 "B",
                 "MEAD",
+            ),
+            # GH-286 CR: usaddress folds a '#' alias word into the identifier
+            # ('NO 1,'); it must compare equal to the named unit's '1'.
+            (
+                "19315 BOTHELL EVERETT HWY NO 1, UNIT 1 BOTHELL, WA 98012",
+                "UNIT",
+                "1",
+                "BOTHELL",
+            ),
+            # GH-286 CR: 'NO' tagged as a unit type lands in the dependent
+            # slot with the named unit primary — the mirror-image duplicate.
+            (
+                "123 MAIN ST NO 1 STE 1 SEATTLE, WA 98101",
+                "STE",
+                "1",
+                "SEATTLE",
             ),
         ],
     )
