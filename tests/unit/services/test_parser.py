@@ -459,6 +459,14 @@ class TestRecoverLocalityFromTrailingAddressee:
         _recover_locality_from_trailing_addressee(c)
         assert c == before
 
+    @pytest.mark.parametrize("tail", [", WA", "ATTN JOHN, , WA"])
+    def test_left_alone_when_no_city_before_state(self, tail: str) -> None:
+        """No city to recover → no recovery and no 'city recovered' warning."""
+        c = {**_STREET, "addressee": tail}
+        before = dict(c)
+        assert recover_components(c) == []
+        assert c == before
+
     def test_no_street_left_alone(self) -> None:
         c = {"addressee": "SEATTLE WA"}
         _recover_locality_from_trailing_addressee(c)

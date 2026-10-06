@@ -502,7 +502,7 @@ def _recover_locality_from_trailing_addressee(
 
     Fires only when the addressee follows a parsed street, no city, state or
     ZIP was parsed, and the addressee ends in a STATE_MAP entry with at least
-    one word before it.  The words before the state become the city, less
+    a city before it.  The words before the state become the city, less
     any leading comma segment that is not a unit (``"ATTN JOHN, SEATTLE WA"``
     keeps ``"ATTN JOHN"`` as the recipient); unit recovery from the city
     (:func:`_recover_unit_from_city`) runs after this.  A recipient before
@@ -525,6 +525,8 @@ def _recover_locality_from_trailing_addressee(
         state = " ".join(tokens[-n:])
         if state.upper().replace(".", "").strip(",;") in STATE_MAP:
             recipient, city = _split_recipient_from_city(" ".join(tokens[:-n]))
+            if not city:
+                return
             recovered = {"addressee": recipient} if recipient else {}
             recovered |= {"locality": city, "administrative_area": state}
             _splice(components, ("addressee",), recovered)
