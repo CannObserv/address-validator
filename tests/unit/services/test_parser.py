@@ -144,6 +144,31 @@ class TestDedupeSecondaryUnits:
         assert "dependent_sub_premise_number" not in c
         assert [e.kind for e in events] == [RecoveryKind.DUPLICATE_UNIT_COLLAPSED]
 
+    @pytest.mark.parametrize("hash_word", ["#", "NO", "NUMBER"])
+    async def test_hash_alias_in_dependent_slot_collapsed(self, hash_word: str) -> None:
+        """GH-286 CR: the mirror of GH-170 — the '#' unit in the dependent slot,
+        the named unit primary ('NO 1 STE 1').  The named unit is kept."""
+        c: dict[str, str] = {
+            "dependent_sub_premise_type": hash_word,
+            "dependent_sub_premise_number": "1",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+        }
+        events = recover_components(c)
+        assert c == {"sub_premise_type": "STE", "sub_premise_number": "1"}
+        assert [e.warning for e in events] == ["Duplicate secondary unit collapsed into 'STE 1'"]
+
+    async def test_hash_alias_in_dependent_slot_distinct_id_kept(self) -> None:
+        """'NO 2 STE 1' names two units; both slots survive."""
+        c: dict[str, str] = {
+            "dependent_sub_premise_type": "NO",
+            "dependent_sub_premise_number": "2",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1",
+        }
+        assert recover_components(c) == []
+        assert c["dependent_sub_premise_number"] == "2"
+
     async def test_same_type_different_id_kept(self) -> None:
         """Two real same-type suites (STE 1, STE 2) must NOT collapse —
         dropping one would silently merge two distinct units."""
@@ -498,6 +523,14 @@ class TestRepeatedLabelFallback:
                 "UNIT",
                 "1",
                 "BOTHELL",
+            ),
+            # GH-286 CR: 'NO' tagged as a unit type lands in the dependent
+            # slot with the named unit primary — the mirror-image duplicate.
+            (
+                "123 MAIN ST NO 1 STE 1 SEATTLE, WA 98101",
+                "STE",
+                "1",
+                "SEATTLE",
             ),
         ],
     )

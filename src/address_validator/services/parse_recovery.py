@@ -442,6 +442,30 @@ def _normalize_unit_identifier(value: str) -> str:
     return normalized
 
 
+def _record_duplicate_collapsed(
+    events: list[RecoveryEvent] | None,
+    kept_type: str,
+    kept_id: str,
+) -> None:
+    """Record a duplicate-unit collapse for the unit that was kept.
+
+    Input content is being dropped — signal it, especially on the clean parse
+    path where no "Ambiguous parse" warning exists.  Tokens are normalized, and
+    the designator uses its UNIT_MAP abbreviation so the warning matches the
+    standardized output ('suite' → 'STE').  No-op when *events* is ``None``.
+    """
+    if events is not None:
+        events.append(
+            RecoveryEvent(
+                kind=RecoveryKind.DUPLICATE_UNIT_COLLAPSED,
+                warning=warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
+                    designator=_normalize_unit_type(kept_type),
+                    identifier=_normalize_unit_value(kept_id),
+                ),
+            )
+        )
+
+
 def _dedupe_secondary_units(
     components: dict[str, str],
     events: list[RecoveryEvent] | None = None,
@@ -466,38 +490,38 @@ def _dedupe_secondary_units(
     (``"#1, UNIT 1"``).  The '#' identifiers land in the
     primary slot with no type; the named unit routes to the dependent slot.
     When the identifiers match, the named designator wins the primary slot and
-    the '#' phrase is dropped.  Distinct pairs (``"#108 STE B"``) differ in
+    the '#' phrase is dropped.  The mirror image — the '#' unit in the
+    dependent slot, the named unit primary (``"NO 1 STE 1"``, GH #286) — drops
+    the '#' phrase the same way.  Distinct pairs (``"#108 STE B"``) differ in
     identifier and keep both slots.
     """
     primary_type = components.get("sub_premise_type")
     dep_type = components.get("dependent_sub_premise_type")
 
+    # Identifiers compare with any '#' (or '#' alias word) dropped.
+    primary_id = _normalize_unit_identifier(components.get("sub_premise_number", ""))
+    dep_id = _normalize_unit_identifier(components.get("dependent_sub_premise_number", ""))
+    same_hashless_id = bool(primary_id) and primary_id == dep_id
+
     primary_unnamed = not primary_type or _normalize_unit_type(primary_type) == "#"
-    if primary_unnamed and dep_type:
-        primary_id = _normalize_unit_identifier(components.get("sub_premise_number", ""))
-        dep_id = _normalize_unit_identifier(components.get("dependent_sub_premise_number", ""))
-        if primary_id and primary_id == dep_id:
-            kept_id = components["dependent_sub_premise_number"]
-            components["sub_premise_type"] = dep_type
-            components["sub_premise_number"] = kept_id
-            components.pop("dependent_sub_premise_type", None)
-            components.pop("dependent_sub_premise_number", None)
-            # Input content is being dropped — signal it, especially on the
-            # clean parse path where no "Ambiguous parse" warning exists.
-            # Tokens are normalized, and the designator uses its UNIT_MAP
-            # abbreviation so the warning matches the standardized output
-            # ('suite' → 'STE').
-            if events is not None:
-                events.append(
-                    RecoveryEvent(
-                        kind=RecoveryKind.DUPLICATE_UNIT_COLLAPSED,
-                        warning=warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
-                            designator=_normalize_unit_type(dep_type),
-                            identifier=_normalize_unit_value(kept_id),
-                        ),
-                    )
-                )
-            return
+    if primary_unnamed and dep_type and same_hashless_id:
+        kept_id = components["dependent_sub_premise_number"]
+        components["sub_premise_type"] = dep_type
+        components["sub_premise_number"] = kept_id
+        components.pop("dependent_sub_premise_type", None)
+        components.pop("dependent_sub_premise_number", None)
+        _record_duplicate_collapsed(events, dep_type, kept_id)
+        return
+
+    # Mirror image (GH #286): the '#' unit sits in the dependent slot and the
+    # named unit is primary ("NO 1 STE 1" — usaddress tags 'NO' as a type).
+    # The named unit already holds the primary slot; drop the '#' phrase.
+    dep_unnamed = bool(dep_type) and _normalize_unit_type(dep_type) == "#"
+    if dep_unnamed and not primary_unnamed and same_hashless_id:
+        components.pop("dependent_sub_premise_type", None)
+        components.pop("dependent_sub_premise_number", None)
+        _record_duplicate_collapsed(events, primary_type, components["sub_premise_number"])
+        return
 
     # Nothing to fold when either slot lacks a type.
     if not primary_type or not dep_type:
