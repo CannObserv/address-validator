@@ -11,6 +11,7 @@ from address_validator.models import (
     ValidationResult,
 )
 from address_validator.services.validation.google_client import GoogleClient
+from address_validator.services.validation.secondary import provider_secondary
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class GoogleProvider:
             state=std.region,
             zip_code=std.postal_code,
             country=std.country,
-            secondary_address=(std.address_line_2 or "").strip() or None,
+            secondary_address=provider_secondary(std),
         )
 
         status = raw["status"]

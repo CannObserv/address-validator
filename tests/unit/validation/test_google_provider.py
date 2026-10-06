@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from address_validator.models import ComponentSet, StandardizeResponseV2
+from address_validator.services.standardizer import standardize
 from address_validator.services.validation.errors import ProviderTransientError
 from address_validator.services.validation.google_provider import GoogleProvider
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
@@ -259,6 +260,31 @@ class TestGoogleProvider:
         std = _make_std(address_line_1="9 BENNY DR", address_line_2="LOT B")
         await provider.validate(std)
         assert mock_client.validate_address.call_args.kwargs["secondary_address"] == "LOT B"
+
+    @pytest.mark.asyncio
+    async def test_multi_unit_secondary_narrowed_to_one_pub28_unit(
+        self, provider: GoogleProvider, mock_client: AsyncMock
+    ) -> None:
+        """GH #287: a chained SMP unit is not sent; the Google client gets STE J alone."""
+        mock_client.validate_address.return_value = CLIENT_RESULT_Y
+        std = standardize(
+            {
+                "premise_number": "123",
+                "thoroughfare_name": "MAIN",
+                "thoroughfare_trailing_type": "ST",
+                "dependent_sub_premise_type": "SMP",
+                "dependent_sub_premise_number": "2",
+                "sub_premise_type": "STE",
+                "sub_premise_number": "J",
+                "locality": "SEATTLE",
+                "administrative_area": "WA",
+                "postcode": "98101",
+            },
+            country="US",
+        )
+        assert std.address_line_2 == "SMP 2 STE J"
+        await provider.validate(std)
+        assert mock_client.validate_address.call_args.kwargs["secondary_address"] == "STE J"
 
     @pytest.mark.asyncio
     async def test_whitespace_secondary_unit_normalised_to_none(

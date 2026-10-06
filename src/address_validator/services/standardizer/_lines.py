@@ -7,6 +7,8 @@ paths so the line-1/line-2/last-line rules — including the two-space
 
 import re
 
+from address_validator.usps_data.units import CONTAINER_DESIGNATORS
+
 _ZIP5: int = 5  # digits in a USPS ZIP code
 _ZIP9: int = 9  # digits in a ZIP+4 code
 
@@ -61,14 +63,6 @@ def _get(components: dict[str, str], key: str) -> str:
     return val
 
 
-# Container designators (USPS Pub 28 secondary-unit hierarchy): these render
-# before the specific unit on line 2 regardless of source order.  Other
-# arguably-hierarchical Pub 28 designators (PIER, SLIP, STOP) were considered
-# and deliberately excluded — pairs like "PIER 5 SLIP 3" have no dominant
-# container convention, so they follow source order (GH #170 CR round 2).
-_CONTAINER_DESIGNATORS: frozenset[str] = frozenset({"BLDG", "FL"})
-
-
 def _sub_renders_first(components: dict[str, str], sub_type: str) -> bool:
     """Decide line-2 slot order: does the dependent (sub) unit render first?
 
@@ -79,7 +73,7 @@ def _sub_renders_first(components: dict[str, str], sub_type: str) -> bool:
     component input), and the slot whose keys appear first renders first
     (GH #170: ``"#108 STE B"`` must not invert to ``"STE B # 108"``).
     """
-    if sub_type in _CONTAINER_DESIGNATORS:
+    if sub_type in CONTAINER_DESIGNATORS:
         return True
     keys = list(components)
 

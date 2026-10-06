@@ -36,6 +36,16 @@ Google differs for none/blank: its docs define a missing `dpvConfirmation` as "n
 
 `unavailable` means no provider is configured (`VALIDATION_PROVIDER=none`); it is never a per-address outcome. An outage surfaces as HTTP 429, not as a status: a chain skips a provider that is rate-limited, over local quota, failing (5xx) or unreachable, and returns 429 when no provider answers and at least one failed that way. A single provider is used without a chain; the route maps its `ProviderRateLimitedError`, `ProviderAtCapacityError` and `ProviderTransientError` to the same 429, with that error's `retry_after_seconds` as `Retry-After` (GH #268).
 
+## Secondary unit sent to providers
+
+Both providers get one secondary unit, not the whole standardized `address_line_2` (`services/validation/secondary.py`, GH #287). USPS's `secondaryAddress` (and Google's CASS check) reads a single unit, so a multi-unit line 2 answered DPV `D` and was echoed back unmatched. The rule, for US Pub 28 input only:
+
+- a designator outside Pub 28 (`SMP`, kept on line 2 by #129) is not sent; `SMP 2` alone sends no secondary
+- a specific unit beats a container (`BLDG 1 STE 100` → `STE 100`)
+- among equals, the first unit on line 2 wins (`UNIT 3 STE 4` → `UNIT 3`, `# 5 # 6` → `# 5`)
+
+Standardize output is unchanged, so `PIPELINE_CODE_VERSION` is not bumped. The response carries a warning naming what was sent ([WARNINGS.md](WARNINGS.md)), and the cache `pattern_key` includes the narrowed unit so old answers to the full line are not reused; every other key is unchanged.
+
 ## Configuring providers
 
 Set `VALIDATION_PROVIDER` in `/etc/address-validator/.env`:

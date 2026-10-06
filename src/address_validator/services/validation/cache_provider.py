@@ -68,6 +68,10 @@ from address_validator.models import (
 )
 from address_validator.services.audit import set_audit_context
 from address_validator.services.validation.protocol import ValidationProvider
+from address_validator.services.validation.secondary import (
+    provider_secondary,
+    secondary_narrowed,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +86,19 @@ def _make_pattern_key(std: StandardizedAddress) -> str:
 
     Sorting the dict eliminates key-insertion-order non-determinism.
     Country is included to guard against cross-country collisions.
+
+    When providers are sent a narrower secondary than ``address_line_2``
+    (GH #287), that secondary joins the payload: answers cached for the full
+    multi-unit line (mostly DPV ``D``) are not reused.  Every other key is
+    unchanged, so the rest of the cache survives.
     """
-    payload = json.dumps(
-        {
-            "country": std.country,
-            "components": dict(sorted(std.components.values.items())),
-        },
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
+    key: dict[str, object] = {
+        "country": std.country,
+        "components": dict(sorted(std.components.values.items())),
+    }
+    if secondary_narrowed(std):
+        key["provider_secondary"] = provider_secondary(std)
+    payload = json.dumps(key, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
