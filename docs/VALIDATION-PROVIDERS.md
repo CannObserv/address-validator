@@ -43,6 +43,7 @@ Both providers get one secondary unit, not the whole standardized `address_line_
 - a designator outside Pub 28 (`SMP`, kept on line 2 by #129) is not sent; `SMP 2` alone sends no secondary
 - a specific unit beats a container (`BLDG 1 STE 100` → `STE 100`)
 - among equals, the first unit on line 2 wins (`UNIT 3 STE 4` → `UNIT 3`, `# 5 # 6` → `# 5`)
+- a unit number with no designator counts as `#` (`SMP 2 7` → `# 7`)
 
 Standardize output is unchanged, so `PIPELINE_CODE_VERSION` is not bumped. The response carries a warning naming what was sent ([WARNINGS.md](WARNINGS.md)), and the cache `pattern_key` includes the narrowed unit so old answers to the full line are not reused; every other key is unchanged.
 

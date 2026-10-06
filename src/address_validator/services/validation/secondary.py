@@ -22,23 +22,32 @@ from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIG
 _Unit = tuple[str, list[str]]  # designator, identifier tokens
 
 
-def _slot(values: dict[str, str], prefix: str) -> str:
-    parts = (
+_Slot = tuple[str, str]  # designator, identifier
+
+
+def _slot(values: dict[str, str], prefix: str) -> _Slot:
+    return (
         values.get(f"{prefix}sub_premise_type", ""),
         values.get(f"{prefix}sub_premise_number", ""),
     )
-    return " ".join(p for p in parts if p)
 
 
-def _split_units(slot: str) -> list[_Unit]:
+def _render(slot: _Slot) -> str:
+    """The slot as ``_assemble_lines`` renders it on line 2."""
+    return " ".join(p for p in slot if p)
+
+
+def _split_units(slot: _Slot) -> list[_Unit]:
     """Split one slot into units, breaking at an embedded ``#`` (``"# 5 # 6"``).
 
     usaddress tags a repeated ``#`` unit as one identifier (``"5 # 6"``).  Only
     ``#`` splits: other designator-like tokens are legitimate identifiers
-    (``"APT PH 2"``, ``"FL 2 REAR"``).
+    (``"APT PH 2"``, ``"FL 2 REAR"``).  An identifier with no designator takes
+    ``#`` per Pub 28 — the standardizer defaults only the occupancy slot.
     """
-    designator, *tokens = slot.split()
-    units: list[_Unit] = [(designator, [])]
+    designator, identifier = slot
+    tokens = identifier.split()
+    units: list[_Unit] = [(designator or "#", [])]
     for i, tok in enumerate(tokens):
         if tok == "#" and units[-1][1] and i + 1 < len(tokens):
             units.append(("#", []))
@@ -67,11 +76,11 @@ def provider_secondary(std: StandardizedAddress) -> str | None:
         return line2
 
     values = std.components.values
-    unit, dependent = _slot(values, ""), _slot(values, "dependent_")
-    slots = [s for s in (unit, dependent) if s]
-    if line2 == " ".join(slots):
+    slots = [s for s in (_slot(values, ""), _slot(values, "dependent_")) if any(s)]
+    rendered = [_render(s) for s in slots]
+    if line2 == " ".join(rendered):
         ordered = slots
-    elif line2 == " ".join(reversed(slots)):
+    elif line2 == " ".join(reversed(rendered)):
         ordered = slots[::-1]
     else:
         return line2

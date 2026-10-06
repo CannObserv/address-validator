@@ -69,6 +69,9 @@ class TestProviderSecondary:
             (_units(("#", "5, # 6")), "# 5, # 6", "# 5"),
             # a lone "," token (component input) leaves no empty identifier token
             (_units(("#", "5 , # 6")), "# 5 , # 6", "# 5"),
+            # a dependent identifier with no designator is a "#" unit (Pub 28)
+            (_units(("SMP", "2"), ("", "7")), "SMP 2 7", "# 7"),
+            (_units(("STE", "4"), ("", "5")), "STE 4 5", "STE 4"),
         ],
     )
     def test_multi_unit_line2_narrows_to_one_pub28_unit(
