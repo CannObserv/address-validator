@@ -127,6 +127,23 @@ class TestDedupeSecondaryUnits:
         assert "dependent_sub_premise_type" not in c
         assert "dependent_sub_premise_number" not in c
 
+    @pytest.mark.parametrize("hash_word", ["NO", "NUM", "NUMBER"])
+    async def test_hash_alias_restated_by_named_unit_collapsed(self, hash_word: str) -> None:
+        """GH-286 CR: 'NO 1, UNIT 1' is the GH-170 '#1, UNIT 1' idiom — the
+        '#' aliases compare by UNIT_MAP form, so it must not render '# 1 UNIT 1'."""
+        c: dict[str, str] = {
+            "sub_premise_type": hash_word,
+            "sub_premise_number": "1",
+            "dependent_sub_premise_type": "UNIT",
+            "dependent_sub_premise_number": "1",
+        }
+        events = recover_components(c)
+        assert c["sub_premise_type"] == "UNIT"
+        assert c["sub_premise_number"] == "1"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+        assert [e.kind for e in events] == [RecoveryKind.DUPLICATE_UNIT_COLLAPSED]
+
     async def test_same_type_different_id_kept(self) -> None:
         """Two real same-type suites (STE 1, STE 2) must NOT collapse —
         dropping one would silently merge two distinct units."""

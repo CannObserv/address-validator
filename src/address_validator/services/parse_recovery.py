@@ -452,8 +452,9 @@ def _dedupe_secondary_units(
     the dependent slot so only one unit survives.  Distinct second units
     (``"STE J, SMP 2"``) differ in type or id and are left untouched.
 
-    A second duplicate shape (GH #170): a bare ``'#'`` phrase restated by a
-    named designator (``"#1, UNIT 1"``).  The '#' identifiers land in the
+    A second duplicate shape (GH #170): a bare ``'#'`` phrase (or a UNIT_MAP
+    ``'#'`` alias such as ``"NO"``) restated by a named designator
+    (``"#1, UNIT 1"``).  The '#' identifiers land in the
     primary slot with no type; the named unit routes to the dependent slot.
     When the identifiers match, the named designator wins the primary slot and
     the '#' phrase is dropped.  Distinct pairs (``"#108 STE B"``) differ in
@@ -462,7 +463,7 @@ def _dedupe_secondary_units(
     primary_type = components.get("sub_premise_type")
     dep_type = components.get("dependent_sub_premise_type")
 
-    primary_unnamed = not primary_type or _normalize_unit_value(primary_type) == "#"
+    primary_unnamed = not primary_type or _normalize_unit_type(primary_type) == "#"
     if primary_unnamed and dep_type:
         primary_id = _normalize_unit_identifier(components.get("sub_premise_number", ""))
         dep_id = _normalize_unit_identifier(components.get("dependent_sub_premise_number", ""))
