@@ -301,6 +301,9 @@ class TestStandardize:
         assert result.city == city
         assert result.region == state
         assert any("Unit designator recovered" in w for w in result.warnings)
+        # Moved, not copied: the box fields are gone, so no "omitted" warning.
+        omitted = GENERAL_DELIVERY_DISCARDED.split("{")[0]
+        assert not any(w.startswith(omitted) for w in result.warnings)
 
     @pytest.mark.parametrize(
         ("box_type", "box_id", "dropped"),
