@@ -210,6 +210,29 @@ class TestV2ValidateProviderUnreachable:
         assert response.status_code == 200, response.text
         assert response.json()["validation"]["provider"] == "google"
 
+    def test_non_finite_coordinate_falls_back(self, client) -> None:
+        """GH #278 CR 1: Python's json decodes NaN; the mapped answer then failed
+        response serialization — a 500, not a fallback. A DPV ``Y`` answer, so
+        the chain returns it on sight rather than holding it."""
+        body = (
+            b'{"result": {"uspsData": {"dpvConfirmation": "Y", "standardizedAddress":'
+            b' {"firstAddressLine": "123 MAIN ST", "city": "SEATTLE", "state": "WA",'
+            b' "zipCode": "98101"}},'
+            b' "geocode": {"location": {"latitude": NaN, "longitude": -122.3}}}}'
+        )
+        google = AsyncMock()
+        google.validate = AsyncMock(return_value=self._GOOGLE_CONFIRMED)
+        google.supports_non_us = True
+        chain = ChainProvider(providers=[unusable_google(body), google])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, Seattle, WA 98101"},
+            )
+        assert response.status_code == 200, response.text
+        # The stub's ZIP+4, not the NaN answer's ZIP5: the fallback answered.
+        assert response.json()["postal_code"] == "98101-1234"
+
     def test_non_us_request_never_reaches_usps(self, client) -> None:
         """GH #260: under ``usps,google`` a CA request skips USPS. Were it asked,
         the refused call would mark the held Google answer unreachable."""
