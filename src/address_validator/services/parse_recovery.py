@@ -449,7 +449,10 @@ def _dedupe_secondary_units(
     end up identical and the address would standardize to ``"STE B STE B"``.
 
     When the dependent unit's normalized (type, id) equals the primary's, drop
-    the dependent slot so only one unit survives.  Distinct second units
+    the dependent slot so only one unit survives.  Types compare by their
+    UNIT_MAP form, so a restatement in another spelling (``"STE B, SUITES B"``
+    — GH #286) is the same duplicate; like a verbatim repeat it drops no
+    information and emits no warning.  Distinct second units
     (``"STE J, SMP 2"``) differ in type or id and are left untouched.
 
     A second duplicate shape (GH #170): a bare ``'#'`` phrase (or a UNIT_MAP
