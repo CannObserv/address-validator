@@ -305,6 +305,15 @@ class TestRecoverUnitFromGeneralDelivery:
         assert c["sub_premise_number"] == "A"
         assert c["locality"] == "SEATTLE"
 
+    def test_compound_identifier_not_split_into_city(self) -> None:
+        """'100 B' is one compound identifier, not identifier + city 'B':
+        the split needs a word after the identifier that is not itself
+        identifier-shaped."""
+        c = {**_STREET, "general_delivery_type": "STE", "general_delivery": "100 B"}
+        _recover_unit_from_general_delivery(c)
+        assert c["sub_premise_number"] == "100 B"
+        assert "locality" not in c
+
     def test_multi_token_identifier_kept_when_locality_present(self) -> None:
         c = {
             **_STREET,

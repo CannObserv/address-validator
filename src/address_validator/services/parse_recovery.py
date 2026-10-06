@@ -437,8 +437,8 @@ def _recover_unit_from_general_delivery(
 
     With no ZIP or state, usaddress can also fold the city into the box ID
     (``"BLG"`` / ``"A SEATTLE"``).  When no locality was parsed, an ID whose
-    first token is identifier-shaped keeps that token and the rest becomes
-    the city.
+    first token is identifier-shaped, and whose second is not, keeps that
+    first token and the rest becomes the city (``"100 B"`` stays whole).
     """
     if not _has_street(components):
         return
@@ -456,8 +456,14 @@ def _recover_unit_from_general_delivery(
     city = ""
     if not components.get("locality"):
         head, _, tail = identifier.partition(" ")
-        if tail.strip() and _looks_like_unit_identifier(head):
-            identifier, city = head, tail.strip()
+        tail = tail.strip()
+        # "100 B" is one compound identifier; only "A SEATTLE" splits.
+        if (
+            tail
+            and _looks_like_unit_identifier(head)
+            and not _looks_like_unit_identifier(tail.split()[0])
+        ):
+            identifier, city = head, tail
 
     moved = {type_key: box_type}
     if identifier:
