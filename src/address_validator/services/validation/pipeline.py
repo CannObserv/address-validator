@@ -30,8 +30,8 @@ from address_validator.services.parser import apply_parse_side_effects, parse_ad
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.null_provider import NullProvider
 from address_validator.services.validation.secondary import (
+    full_secondary,
     provider_secondary,
-    secondary_narrowed,
 )
 
 if TYPE_CHECKING:
@@ -130,18 +130,19 @@ async def run_us_pipeline(
         )
 
     provider = registry.get_provider()
-    if not isinstance(provider, NullProvider) and secondary_narrowed(std):
-        std = std.model_copy(update={"warnings": [*std.warnings, _secondary_warning(std)]})
+    sent, line2 = provider_secondary(std), full_secondary(std)
+    if not isinstance(provider, NullProvider) and sent != line2:
+        std = std.model_copy(
+            update={"warnings": [*std.warnings, _secondary_warning(sent, line2 or "")]}
+        )
     return std, raw_input, provider
 
 
-def _secondary_warning(std: StandardizedAddress) -> str:
+def _secondary_warning(sent: str | None, line2: str) -> str:
     """Say what of a multi-unit line 2 the provider was sent (GH #287)."""
-    unit = provider_secondary(std)
-    line2 = std.address_line_2.strip()
-    if unit is None:
+    if sent is None:
         return warning_catalogue.PROVIDER_SECONDARY_OMITTED.format(line2=line2)
-    return warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(unit=unit, line2=line2)
+    return warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(unit=sent, line2=line2)
 
 
 async def run_non_us_pipeline(

@@ -47,15 +47,24 @@ def _split_units(slot: str) -> list[_Unit]:
     return units
 
 
+def full_secondary(std: StandardizedAddress) -> str | None:
+    """The whole standardized ``address_line_2`` (stripped; blank → ``None``).
+
+    Compare :func:`provider_secondary` against it: a difference means the
+    provider was sent a narrower unit.
+    """
+    return (std.address_line_2 or "").strip() or None
+
+
 def provider_secondary(std: StandardizedAddress) -> str | None:
     """Return the secondary-unit text to send to a validation provider.
 
     Non-US or non-Pub-28 input, and any line 2 that is not exactly the
-    standardized unit slots, is sent verbatim (stripped; blank → ``None``).
+    standardized unit slots, is sent as :func:`full_secondary`.
     """
-    line2 = (std.address_line_2 or "").strip()
-    if not line2 or std.country != "US" or std.components.spec != USPS_PUB28_SPEC:
-        return line2 or None
+    line2 = full_secondary(std)
+    if line2 is None or std.country != "US" or std.components.spec != USPS_PUB28_SPEC:
+        return line2
 
     values = std.components.values
     unit, dependent = _slot(values, ""), _slot(values, "dependent_")
@@ -76,8 +85,3 @@ def provider_secondary(std: StandardizedAddress) -> str | None:
     specific = [u for u in recognised if u[0] not in CONTAINER_DESIGNATORS] or recognised
     designator, identifier = specific[0]
     return " ".join([designator, *identifier])
-
-
-def secondary_narrowed(std: StandardizedAddress) -> bool:
-    """True when providers are sent less than the full ``address_line_2``."""
-    return provider_secondary(std) != ((std.address_line_2 or "").strip() or None)

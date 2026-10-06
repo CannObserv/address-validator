@@ -69,8 +69,8 @@ from address_validator.models import (
 from address_validator.services.audit import set_audit_context
 from address_validator.services.validation.protocol import ValidationProvider
 from address_validator.services.validation.secondary import (
+    full_secondary,
     provider_secondary,
-    secondary_narrowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,8 +96,9 @@ def _make_pattern_key(std: StandardizedAddress) -> str:
         "country": std.country,
         "components": dict(sorted(std.components.values.items())),
     }
-    if secondary_narrowed(std):
-        key["provider_secondary"] = provider_secondary(std)
+    sent = provider_secondary(std)
+    if sent != full_secondary(std):
+        key["provider_secondary"] = sent
     payload = json.dumps(key, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 

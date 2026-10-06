@@ -5,8 +5,8 @@ import pytest
 from address_validator.models import ComponentSet, StandardizeResponseV2
 from address_validator.services.standardizer import standardize
 from address_validator.services.validation.secondary import (
+    full_secondary,
     provider_secondary,
-    secondary_narrowed,
 )
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -21,6 +21,10 @@ def _std(components: dict[str, str], country: str = "US") -> StandardizeResponse
         "postcode": "98101",
     }
     return standardize({**base, **components}, country=country)
+
+
+def secondary_narrowed(std: StandardizeResponseV2) -> bool:
+    return provider_secondary(std) != full_secondary(std)
 
 
 def _units(*slots: tuple[str, str]) -> dict[str, str]:
