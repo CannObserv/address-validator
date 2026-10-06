@@ -524,6 +524,20 @@ class TestGoogleClientValidateAddress:
         # The field name and JSON type only — never the value (address).
         assert "Main St" not in caplog.text
 
+    def test_unused_wrong_typed_field_still_maps(self) -> None:
+        """GH #278 CR 4: with no DPV code, standardizedAddress is unused, so its
+        shape must not reject a usable postalAddress answer."""
+        raw = {
+            "result": {
+                "verdict": {"validationGranularity": "PREMISE"},
+                "uspsData": {"standardizedAddress": []},
+                "address": {"postalAddress": {"addressLines": ["123 Main St"]}},
+            }
+        }
+        result = GoogleClient._map_response(raw)
+        assert result["address_line_1"] == "123 Main St"
+        assert result["cass_standardized"] is False
+
     @pytest.mark.asyncio
     @pytest.mark.parametrize("country", ["US", "CA"])
     @pytest.mark.parametrize("number", [b"NaN", b"Infinity", b"-Infinity"])

@@ -327,7 +327,6 @@ class GoogleClient:
         result = _read.obj(raw, "result")
         verdict = _read.obj(result, "verdict")
         usps = _read.obj(result, "uspsData")
-        std_addr = _read.obj(usps, "standardizedAddress")
         location = _read.obj(_read.obj(result, "geocode"), "location")
 
         lat = _read.number(location, "latitude")
@@ -353,7 +352,9 @@ class GoogleClient:
         dpv_present = dpv is not None
 
         if dpv_present:
-            # CASS-confirmed: USPS standardizedAddress is authoritative.
+            # CASS-confirmed: USPS standardizedAddress is authoritative. Read
+            # only here — a field the answer does not use costs no fallback.
+            std_addr = _read.obj(usps, "standardizedAddress")
             zip_code = _read.text(std_addr, "zipCode")
             zip_ext = _read.text(std_addr, "zipCodeExtension")
             postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
