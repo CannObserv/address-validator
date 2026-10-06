@@ -507,6 +507,10 @@ def _recover_locality_from_trailing_addressee(
     keeps ``"ATTN JOHN"`` as the recipient); unit recovery from the city
     (:func:`_recover_unit_from_city`) runs after this.  A recipient before
     the street is a real recipient and is left alone.
+
+    Limit: without commas a trailing recipient cannot be told from the city
+    (``"ATTN JOHN SEATTLE WA"`` → city ``"ATTN JOHN SEATTLE"``); the
+    recovery warning tells the client the city was inferred.
     """
     tail = components.get("addressee", "")
     if not tail or any(components.get(k) for k in _POST_STREET_KEYS):
