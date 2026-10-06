@@ -20,10 +20,8 @@ from address_validator.services.standardizer.us import split_designator
 from address_validator.usps_data.spec import USPS_PUB28_SPEC
 from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIGNATORS
 
-_Unit = tuple[str, list[str]]  # designator, identifier tokens
-
-
 _Slot = tuple[str, str]  # designator, identifier
+_Unit = tuple[str, list[str]]  # designator, identifier tokens
 
 
 def _slot(values: dict[str, str], prefix: str) -> _Slot:
