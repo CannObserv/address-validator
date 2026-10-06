@@ -16,6 +16,7 @@ from address_validator.services.parse_recovery import (
     _recover_locality_from_trailing_addressee,
     _recover_unit_from_city,
     _recover_unit_from_general_delivery,
+    _splice,
     recover_components,
 )
 from address_validator.services.parser import (
@@ -294,6 +295,13 @@ class TestRecoverUnitFromGeneralDelivery:
         ]
         assert c["sub_premise_type"] == "APT"
         assert c["dependent_sub_premise_type"] == "SUITES"
+
+    def test_splice_replaces_an_existing_empty_key(self) -> None:
+        """Callers treat an empty value as absent; a spliced-in key must win
+        over a stale empty one wherever it sat."""
+        c = {"general_delivery": "A SEATTLE", "locality": ""}
+        _splice(c, ("general_delivery",), {"locality": "SEATTLE"})
+        assert c == {"locality": "SEATTLE"}
 
     def test_trailing_city_split_from_identifier(self) -> None:
         """No ZIP/state: usaddress folds the city into the box ID

@@ -141,8 +141,10 @@ def _splice(
     """
     items = list(components.items())
     pos = next(i for i, (k, _) in enumerate(items) if k in old_keys)
-    before = [(k, v) for k, v in items[:pos] if k not in old_keys]
-    after = [(k, v) for k, v in items[pos:] if k not in old_keys]
+    # A stale (empty) copy of a new key would otherwise override it.
+    dropped = {*old_keys, *new_items}
+    before = [(k, v) for k, v in items[:pos] if k not in dropped]
+    after = [(k, v) for k, v in items[pos:] if k not in dropped]
     components.clear()
     components.update([*before, *new_items.items(), *after])
 
