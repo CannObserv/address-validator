@@ -105,7 +105,7 @@ _POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area"
 _STREET_KEY_PREFIXES: tuple[str, ...] = ("premise_number", "thoroughfare_")
 
 # The USPS box pair usaddress fills from USPSBoxType / USPSBoxID.
-_GENERAL_DELIVERY_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
+_BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
 
 # A token shaped like a unit identifier: one letter, or alphanumeric with a
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
@@ -472,7 +472,7 @@ def _recover_unit_from_general_delivery(
         moved[id_key] = identifier
     if city:
         moved["locality"] = city
-    _splice(components, _GENERAL_DELIVERY_KEYS, moved)
+    _splice(components, _BOX_KEYS, moved)
     _record_unit_recovered(events, box_type)
 
 
