@@ -491,6 +491,14 @@ class TestRepeatedLabelFallback:
                 "B",
                 "MEAD",
             ),
+            # GH-286 CR: usaddress folds a '#' alias word into the identifier
+            # ('NO 1,'); it must compare equal to the named unit's '1'.
+            (
+                "19315 BOTHELL EVERETT HWY NO 1, UNIT 1 BOTHELL, WA 98012",
+                "UNIT",
+                "1",
+                "BOTHELL",
+            ),
         ],
     )
     async def test_duplicate_hash_unit_collapsed_into_named_unit(

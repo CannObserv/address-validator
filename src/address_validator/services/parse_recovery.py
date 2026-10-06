@@ -432,8 +432,14 @@ def _normalize_unit_identifier(value: str) -> str:
 
     A bare ``"# 1"`` phrase and a named ``"UNIT 1"`` carry the same
     identifier; the pound sign is a designator stand-in, not identifier text.
+    usaddress may also fold a ``'#'`` alias word into the identifier
+    (``"NO 1,"``); a leading word that UNIT_MAP maps to ``'#'`` is dropped too.
     """
-    return _normalize_unit_value(value.replace("#", ""))
+    normalized = _normalize_unit_value(value.replace("#", ""))
+    first, _, rest = normalized.partition(" ")
+    if rest and UNIT_MAP.get(first) == "#":
+        return rest.strip()
+    return normalized
 
 
 def _dedupe_secondary_units(
