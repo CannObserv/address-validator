@@ -56,6 +56,15 @@ class TestRecoverUnitFromCity:
         assert c["locality"] == "SPOKANE"
         assert "sub_premise_type" not in c
 
+    async def test_variant_designator_extracted(self) -> None:
+        """GH-286: a plural designator before a comma is a unit (via UNIT_MAP),
+        not a city prefix and not dropped as wayfinding."""
+        c: dict[str, str] = {"locality": "SUITES 100, SEATTLE"}
+        _recover_unit_from_city(c)
+        assert c["sub_premise_type"] == "SUITES"
+        assert c["sub_premise_number"] == "100"
+        assert c["locality"] == "SEATTLE"
+
     async def test_real_city_name_untouched(self) -> None:
         c: dict[str, str] = {"locality": "KEY WEST"}
         _recover_unit_from_city(c)
@@ -376,6 +385,31 @@ class TestRepeatedLabelFallback:
         assert "WENATCHEE" in vals.get("locality", "")
         # The non-canonical designator is preserved, with a warning.
         assert any("Unrecognized unit designator preserved: 'SMP'" in w for w in result.warnings)
+
+    async def test_second_variant_designator_recognized(self) -> None:
+        """GH-286: a repeated designator in a UNIT_MAP variant spelling ('STES')
+        is a known designator — slotted with no 'Unrecognized' warning."""
+        fake_tokens = [
+            ("123", "AddressNumber"),
+            ("MAIN", "StreetName"),
+            ("ST", "StreetNamePostType"),
+            ("BLDG", "OccupancyType"),
+            ("2", "OccupancyIdentifier"),
+            ("STES", "OccupancyType"),
+            ("100-102,", "OccupancyIdentifier"),
+            ("SEATTLE,", "PlaceName"),
+            ("WA", "StateName"),
+            ("98101", "ZipCode"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            result = (
+                await parse_address("123 MAIN ST BLDG 2 STES 100-102, SEATTLE, WA 98101")
+            ).response
+        vals = result.components.values
+        assert vals.get("dependent_sub_premise_type") == "STES"
+        assert vals.get("dependent_sub_premise_number", "").rstrip(",") == "100-102"
+        assert not any("Unrecognized unit designator" in w for w in result.warnings)
 
     async def test_repeated_unit_type_non_alpha_not_slotted(self) -> None:
         """GH-129 guard: a repeated unit-type label whose token is NOT
