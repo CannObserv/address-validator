@@ -31,7 +31,7 @@ HTTP request
      │                              usps_provider.py  OAuth2 + quota guard; DPV → status
      │                              google_provider.py  ADC; lat/lng; DPV → status; non-US via _map_response_international
      │                              chain_provider.py   ordered fallback across providers
-     │                              _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers
+     │                              _rate_limit.py      QuotaGuard, QuotaWindow + retry helpers; 2xx body checks (_json_object, _FieldReader)
      └─ countries        →   services/country_format.py  i18naddress → CountryFormatResponseV2; label lookup tables
  └─ routers/deps.py            shared FastAPI dependency functions — get_registry() → ProviderRegistry; get_libpostal_client() → LibpostalClient | None
  └─ routers/admin/            admin dashboard (Jinja2 + HTMX, exe.dev auth)
