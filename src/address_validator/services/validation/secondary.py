@@ -42,7 +42,7 @@ def _split_units(slot: str) -> list[_Unit]:
     for i, tok in enumerate(tokens):
         if tok == "#" and units[-1][1] and i + 1 < len(tokens):
             units.append(("#", []))
-        else:
+        elif tok.strip(",;"):
             units[-1][1].append(tok.strip(",;"))
     return units
 

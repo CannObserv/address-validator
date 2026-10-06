@@ -63,6 +63,8 @@ class TestProviderSecondary:
             # "# 5 # 6" parses into one slot; the embedded "#" still splits it
             (_units(("#", "5 # 6")), "# 5 # 6", "# 5"),
             (_units(("#", "5, # 6")), "# 5, # 6", "# 5"),
+            # a lone "," token (component input) leaves no empty identifier token
+            (_units(("#", "5 , # 6")), "# 5 , # 6", "# 5"),
         ],
     )
     def test_multi_unit_line2_narrows_to_one_pub28_unit(
