@@ -103,6 +103,21 @@ class TestDedupeSecondaryUnits:
         assert "dependent_sub_premise_type" not in c
         assert "dependent_sub_premise_number" not in c
 
+    @pytest.mark.parametrize("dep_type", ["SUITE", "SUITES", "SUTE"])
+    async def test_variant_spelling_of_same_type_collapsed(self, dep_type: str) -> None:
+        """GH-286 CR: 'STE B, SUITES B' names one unit twice in two spellings;
+        types compare by their UNIT_MAP form, so it must not render 'STE B STE B'."""
+        c: dict[str, str] = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "B",
+            "dependent_sub_premise_type": dep_type,
+            "dependent_sub_premise_number": "B",
+        }
+        recover_components(c)
+        assert c["sub_premise_type"] == "STE"
+        assert "dependent_sub_premise_type" not in c
+        assert "dependent_sub_premise_number" not in c
+
     async def test_same_type_different_id_kept(self) -> None:
         """Two real same-type suites (STE 1, STE 2) must NOT collapse —
         dropping one would silently merge two distinct units."""

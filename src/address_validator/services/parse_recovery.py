@@ -417,6 +417,16 @@ def _normalize_unit_value(value: str) -> str:
     return value.upper().replace(".", "").strip(",;. ")
 
 
+def _normalize_unit_type(value: str) -> str:
+    """Normalize a unit designator to its UNIT_MAP abbreviation for comparison.
+
+    Variant spellings of one designator (``"SUITES"``, ``"SUTE"``, ``"STE"``)
+    compare equal; an unmapped designator compares by its normalized text.
+    """
+    designator = _normalize_unit_value(value)
+    return UNIT_MAP.get(designator, designator)
+
+
 def _normalize_unit_identifier(value: str) -> str:
     """Normalize an identifier for duplicate comparison, dropping any '#'.
 
@@ -468,12 +478,11 @@ def _dedupe_secondary_units(
             # abbreviation so the warning matches the standardized output
             # ('suite' → 'STE').
             if events is not None:
-                designator = _normalize_unit_value(dep_type)
                 events.append(
                     RecoveryEvent(
                         kind=RecoveryKind.DUPLICATE_UNIT_COLLAPSED,
                         warning=warning_catalogue.DUPLICATE_UNIT_COLLAPSED.format(
-                            designator=UNIT_MAP.get(designator, designator),
+                            designator=_normalize_unit_type(dep_type),
                             identifier=_normalize_unit_value(kept_id),
                         ),
                     )
@@ -484,7 +493,7 @@ def _dedupe_secondary_units(
     if not primary_type or not dep_type:
         return
 
-    same_type = _normalize_unit_value(primary_type) == _normalize_unit_value(dep_type)
+    same_type = _normalize_unit_type(primary_type) == _normalize_unit_type(dep_type)
     same_id = _normalize_unit_value(components.get("sub_premise_number", "")) == (
         _normalize_unit_value(components.get("dependent_sub_premise_number", ""))
     )
