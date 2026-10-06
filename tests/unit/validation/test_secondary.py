@@ -72,6 +72,10 @@ class TestProviderSecondary:
             # a dependent identifier with no designator is a "#" unit (Pub 28)
             (_units(("SMP", "2"), ("", "7")), "SMP 2 7", "# 7"),
             (_units(("STE", "4"), ("", "5")), "STE 4 5", "STE 4"),
+            # ...unless the identifier carries a folded designator (CR 8)
+            (_units(("SMP", "2"), ("", "STE 5")), "SMP 2 STE 5", "STE 5"),
+            (_units(("SMP", "2"), ("", "SUITE 5")), "SMP 2 SUITE 5", "STE 5"),
+            (_units(("SMP", "2"), ("", "#5")), "SMP 2 #5", "# 5"),
         ],
     )
     def test_multi_unit_line2_narrows_to_one_pub28_unit(

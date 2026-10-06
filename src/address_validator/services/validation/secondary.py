@@ -16,6 +16,7 @@ unit, so cached answers to the full line are not reused.
 """
 
 from address_validator.models import StandardizedAddress
+from address_validator.services.standardizer.us import split_designator
 from address_validator.usps_data.spec import USPS_PUB28_SPEC
 from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIGNATORS
 
@@ -42,12 +43,15 @@ def _split_units(slot: _Slot) -> list[_Unit]:
 
     usaddress tags a repeated ``#`` unit as one identifier (``"5 # 6"``).  Only
     ``#`` splits: other designator-like tokens are legitimate identifiers
-    (``"APT PH 2"``, ``"FL 2 REAR"``).  An identifier with no designator takes
-    ``#`` per Pub 28 — the standardizer defaults only the occupancy slot.
+    (``"APT PH 2"``, ``"FL 2 REAR"``).  An identifier with no designator gets
+    one as the standardizer gives the occupancy slot (``"STE 5"`` → ``STE``,
+    else ``#``); the dependent slot is left untyped there.
     """
     designator, identifier = slot
+    if not designator:
+        designator, identifier = split_designator(identifier)
     tokens = identifier.split()
-    units: list[_Unit] = [(designator or "#", [])]
+    units: list[_Unit] = [(designator, [])]
     for i, tok in enumerate(tokens):
         if tok == "#" and units[-1][1] and i + 1 < len(tokens):
             units.append(("#", []))

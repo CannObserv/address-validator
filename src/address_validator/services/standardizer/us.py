@@ -113,26 +113,33 @@ def _resolve_unit_slots(components: dict[str, str]) -> _UnitSlots:
         unit_type, unit_id = sub_type, sub_id
         sub_type = sub_id = ""
 
-    # Per USPS Pub 28, a secondary identifier without a recognized
-    # designator should use '#' as the designator.
     if unit_id and not unit_type:
-        # usaddress sometimes folds '#' into the identifier itself
-        # (e.g. "# 4B"); split it back out.
-        if unit_id.startswith("# "):
-            unit_id = unit_id[2:].strip()
-        elif unit_id.startswith("#"):
-            unit_id = unit_id[1:].strip()
-        # usaddress may also fold a designator word into the
-        # identifier (e.g. "NO. 16" → cleaned "NO 16").  If the
-        # leading word is a known designator, split it out.
-        parts = unit_id.split(None, 1)
-        if parts and parts[0] in UNIT_MAP:
-            unit_type = UNIT_MAP[parts[0]]
-            unit_id = parts[1] if len(parts) > 1 else ""
-        else:
-            unit_type = "#"
+        unit_type, unit_id = split_designator(unit_id)
 
     return unit_type, unit_id, sub_type, sub_id
+
+
+def split_designator(unit_id: str) -> tuple[str, str]:
+    """Give a cleaned identifier with no designator its Pub 28 designator.
+
+    Per USPS Pub 28, a secondary identifier without a recognized designator
+    uses ``#``.  Returns ``(designator, identifier)``.  Also used by
+    ``services.validation.secondary`` for the dependent slot, which
+    ``_resolve_unit_slots`` leaves untyped (GH #287).
+    """
+    # usaddress sometimes folds '#' into the identifier itself
+    # (e.g. "# 4B"); split it back out.
+    if unit_id.startswith("# "):
+        unit_id = unit_id[2:].strip()
+    elif unit_id.startswith("#"):
+        unit_id = unit_id[1:].strip()
+    # usaddress may also fold a designator word into the
+    # identifier (e.g. "NO. 16" → cleaned "NO 16").  If the
+    # leading word is a known designator, split it out.
+    parts = unit_id.split(None, 1)
+    if parts and parts[0] in UNIT_MAP:
+        return UNIT_MAP[parts[0]], parts[1] if len(parts) > 1 else ""
+    return "#", unit_id
 
 
 # Group (rural route) before box, matching the "RR 2 BOX 152" reading order.
