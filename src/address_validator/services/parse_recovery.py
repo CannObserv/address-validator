@@ -468,6 +468,19 @@ def _recover_unit_from_general_delivery(
     _record_unit_recovered(events, box_type)
 
 
+def _split_recipient_from_city(text: str) -> tuple[str, str]:
+    """Split comma segments ahead of the city into ``(recipient, city)``.
+
+    The city is the last comma segment.  A leading segment that starts with a
+    unit designator stays ahead of it, for :func:`_recover_unit_from_city` to
+    lift; any other leading segment (``"ATTN JOHN"``) is the recipient.
+    """
+    *leading, city = (seg.strip() for seg in text.strip().rstrip(",;").split(","))
+    units = [seg for seg in leading if seg and _try_extract_designator(seg)]
+    recipient = [seg for seg in leading if seg and not _try_extract_designator(seg)]
+    return ", ".join(recipient), ", ".join([*units, city])
+
+
 def _recover_locality_from_trailing_addressee(
     components: dict[str, str],
     events: list[RecoveryEvent] | None = None,
@@ -481,9 +494,11 @@ def _recover_locality_from_trailing_addressee(
 
     Fires only when the addressee follows a parsed street, no city, state or
     ZIP was parsed, and the addressee ends in a STATE_MAP entry with at least
-    one word before it.  The words before the state become the city; unit
-    recovery from the city (:func:`_recover_unit_from_city`) runs after this.
-    A recipient before the street is a real recipient and is left alone.
+    one word before it.  The words before the state become the city, less
+    any leading comma segment that is not a unit (``"ATTN JOHN, SEATTLE WA"``
+    keeps ``"ATTN JOHN"`` as the recipient); unit recovery from the city
+    (:func:`_recover_unit_from_city`) runs after this.  A recipient before
+    the street is a real recipient and is left alone.
     """
     tail = components.get("addressee", "")
     if not tail or any(components.get(k) for k in _POST_STREET_KEYS):
@@ -497,8 +512,10 @@ def _recover_locality_from_trailing_addressee(
     for n in range(min(_MAX_STATE_WORDS, len(tokens) - 1), 0, -1):
         state = " ".join(tokens[-n:])
         if state.upper().replace(".", "").strip(",;") in STATE_MAP:
-            city = " ".join(tokens[:-n])
-            _splice(components, ("addressee",), {"locality": city, "administrative_area": state})
+            recipient, city = _split_recipient_from_city(" ".join(tokens[:-n]))
+            recovered = {"addressee": recipient} if recipient else {}
+            recovered |= {"locality": city, "administrative_area": state}
+            _splice(components, ("addressee",), recovered)
             if events is not None:
                 events.append(
                     RecoveryEvent(

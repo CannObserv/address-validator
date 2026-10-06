@@ -399,6 +399,25 @@ class TestRecoverLocalityFromTrailingAddressee:
             RecoveryKind.UNIT_RECOVERED,
         ]
 
+    def test_comma_separated_recipient_kept_out_of_city(self) -> None:
+        """The city is the last comma segment; a leading non-designator segment
+        is a recipient and stays in addressee, not in the city."""
+        c = {**_STREET, "addressee": "ATTN JOHN, SEATTLE WA"}
+        recover_components(c)
+        assert c["addressee"] == "ATTN JOHN"
+        assert c["locality"] == "SEATTLE"
+        assert c["administrative_area"] == "WA"
+
+    def test_comma_separated_designator_segment_lifted(self) -> None:
+        """A leading segment that is a unit stays ahead of the city so city
+        recovery lifts it; a recipient segment beside it stays in addressee."""
+        c = {**_STREET, "addressee": "ATTN JOHN, STE 5, SEATTLE WA"}
+        recover_components(c)
+        assert c["addressee"] == "ATTN JOHN"
+        assert c["sub_premise_type"] == "STE"
+        assert c["sub_premise_number"] == "5"
+        assert c["locality"] == "SEATTLE"
+
     def test_leading_addressee_left_alone(self) -> None:
         """A recipient before the street is a real recipient, not a tail."""
         c = {"addressee": "JOHN SMITH WA", **_STREET}
