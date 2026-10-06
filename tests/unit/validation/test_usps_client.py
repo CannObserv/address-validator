@@ -400,6 +400,53 @@ class TestUSPSClient:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
+        ("body", "logged"),
+        [
+            (b'{"address": []}', "address: list"),
+            (b'{"address": "123 Main St"}', "address: str"),
+            (b'{"additionalInfo": "123 Main St"}', "additionalInfo: str"),
+            (b'{"address": {"streetAddress": ["123 Main St"]}}', "streetAddress: list"),
+            (b'{"address": {"city": {"name": "Main St"}}}', "city: dict"),
+            (b'{"address": {"ZIPCode": 62701}}', "ZIPCode: int"),
+            (b'{"address": {"ZIPPlus4": 1234}}', "ZIPPlus4: int"),
+            (b'{"additionalInfo": {"DPVConfirmation": ["Y"]}}', "DPVConfirmation: list"),
+            (b'{"additionalInfo": {"vacant": true}}', "vacant: bool"),
+        ],
+    )
+    async def test_wrong_typed_field_raises_transient_error(
+        self, body: bytes, logged: str, client: USPSClient, mock_http: AsyncMock, caplog
+    ) -> None:
+        """GH #278: a field the mapper reads with the wrong JSON type maps to
+        ProviderTransientError — an object's ``.get`` raised AttributeError (a
+        500), and a wrong-typed scalar failed response validation."""
+        mock_http.post.return_value = ok_response(TOKEN_BODY)
+        mock_http.get.return_value = ok_response(body)
+
+        with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
+            await client.validate_address("123 Main St", "Springfield", "IL")
+        assert exc_info.value.provider == "usps"
+        assert exc_info.value.retry_after_seconds > 0
+        assert any(f"wrong-typed field ({logged})" in r.getMessage() for r in caplog.records), (
+            caplog.text
+        )
+        # The field name and JSON type only — never the value (address).
+        assert "Main St" not in caplog.text
+
+    def test_null_fields_read_as_absent(self) -> None:
+        """GH #278: JSON null is an absent field, not a wrong-typed one."""
+        result = USPSClient._map_response(
+            {
+                "address": {"streetAddress": None, "ZIPCode": "62701", "ZIPPlus4": None},
+                "additionalInfo": None,
+            }
+        )
+        assert result["address_line_1"] == ""
+        assert result["postal_code"] == "62701"
+        assert result["dpv_match_code"] is None
+        assert USPSClient._map_response({"address": None})["postal_code"] == ""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
         "body",
         [
             UNUSABLE_BODY,

@@ -31,6 +31,7 @@ from address_validator.services.validation._rate_limit import (
     _RETRY_MAX,
     _TRANSIENT_DEFAULT_RETRY_AFTER_S,
     QuotaGuard,
+    _FieldReader,
     _json_object,
     _parse_retry_after,
     _raise_for_request_error,
@@ -43,6 +44,9 @@ from address_validator.services.validation.errors import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Typed field reads for the response mappers (GH #278).
+_read = _FieldReader("google", logger)
 
 _VALIDATE_URL = "https://addressvalidation.googleapis.com/v1:validateAddress"
 
@@ -57,9 +61,9 @@ def _verdict_to_status(verdict: dict[str, Any]) -> str:
     ``addressComplete`` verdict (that is ``undetermined``, GH #262), so for US
     input it yields only ``invalid`` / ``not_found``.
     """
-    if verdict.get("addressComplete"):
+    if _read.flag(verdict, "addressComplete"):
         return "confirmed"
-    if verdict.get("validationGranularity", "") not in _NON_GRANULAR:
+    if _read.text(verdict, "validationGranularity") not in _NON_GRANULAR:
         return "invalid"
     return "not_found"
 
@@ -76,13 +80,13 @@ class _PostalFields(NamedTuple):
 
 def _read_postal_address(postal_addr: dict[str, Any]) -> _PostalFields:
     """Extract address/city/region/postal fields from a Google postalAddress."""
-    address_lines = postal_addr.get("addressLines", [])
+    address_lines = _read.text_list(postal_addr, "addressLines")
     return _PostalFields(
         address_line_1=address_lines[0] if len(address_lines) > 0 else "",
         address_line_2=address_lines[1] if len(address_lines) > 1 else "",
-        city=postal_addr.get("locality", ""),
-        region=postal_addr.get("administrativeArea", ""),
-        postal_code=postal_addr.get("postalCode", ""),
+        city=_read.text(postal_addr, "locality"),
+        region=_read.text(postal_addr, "administrativeArea"),
+        postal_code=_read.text(postal_addr, "postalCode"),
     )
 
 
@@ -229,8 +233,9 @@ class GoogleClient:
             ProviderTransientError: on HTTP 5xx, any other unexpected
                 non-2xx response, a failed request (connect error, timeout,
                 undecodable body) on the API call, a 2xx body that is not a
-                JSON object (GH #271), or a transient credential-refresh
-                failure (see ``_get_auth_headers``).
+                JSON object (GH #271) or has a field of the wrong JSON type
+                (GH #278), or a transient credential-refresh failure (see
+                ``_get_auth_headers``).
         """
         # Fold the secondary-unit line into the street line so Google receives
         # the full delivery point (e.g. "9 BENNY DR LOT B"). Omitting it drops
@@ -314,16 +319,18 @@ class GoogleClient:
         On the non-CASS path the ZIP+4 extension is dropped: Google echoes the
         input's extension (``-0000``, the ZIP's last four digits) and nothing
         verified it (GH #263).
-        """
-        result = raw.get("result", {})
-        verdict = result.get("verdict", {})
-        usps = result.get("uspsData", {})
-        std_addr = usps.get("standardizedAddress", {})
-        geocode = result.get("geocode", {})
-        location = geocode.get("location", {})
 
-        lat = location.get("latitude")
-        lng = location.get("longitude")
+        Raises :class:`~services.validation.errors.ProviderTransientError` for a
+        field of the wrong JSON type (GH #278); an absent or ``null`` field
+        reads as empty.
+        """
+        result = _read.obj(raw, "result")
+        verdict = _read.obj(result, "verdict")
+        usps = _read.obj(result, "uspsData")
+        location = _read.obj(_read.obj(result, "geocode"), "location")
+
+        lat = _read.number(location, "latitude")
+        lng = _read.number(location, "longitude")
 
         if usps.get("errorMessage"):
             # Documented as populated "when USPS processing is suspended because
@@ -340,19 +347,21 @@ class GoogleClient:
                 cass_processed,
             )
 
-        dpv = (usps.get("dpvConfirmation") or "").strip() or None
+        dpv = _read.text(usps, "dpvConfirmation").strip() or None
         # Captured before an unknown code is dropped: the fields still come from CASS.
         dpv_present = dpv is not None
 
         if dpv_present:
-            # CASS-confirmed: USPS standardizedAddress is authoritative.
-            zip_code = std_addr.get("zipCode", "")
-            zip_ext = std_addr.get("zipCodeExtension", "") or ""
+            # CASS-confirmed: USPS standardizedAddress is authoritative. Read
+            # only here — a field the answer does not use costs no fallback.
+            std_addr = _read.obj(usps, "standardizedAddress")
+            zip_code = _read.text(std_addr, "zipCode")
+            zip_ext = _read.text(std_addr, "zipCodeExtension")
             postal_code = f"{zip_code}-{zip_ext}" if zip_ext else zip_code
-            address_line_1 = std_addr.get("firstAddressLine", "")
-            address_line_2 = std_addr.get("secondAddressLine", "")
-            city = std_addr.get("city", "")
-            region = std_addr.get("state", "")
+            address_line_1 = _read.text(std_addr, "firstAddressLine")
+            address_line_2 = _read.text(std_addr, "secondAddressLine")
+            city = _read.text(std_addr, "city")
+            region = _read.text(std_addr, "state")
             status = _DPV_TO_STATUS.get(dpv, UNDETERMINED)
             if dpv not in _DPV_TO_STATUS:
                 # Unknown code: drop it — ValidationResult.dpv_match_code is a Literal.
@@ -360,7 +369,7 @@ class GoogleClient:
                 dpv = None
         else:
             # No CASS DPV — read Google's postalAddress + verdict instead.
-            postal_addr = result.get("address", {}).get("postalAddress", {})
+            postal_addr = _read.obj(_read.obj(result, "address"), "postalAddress")
             fields = _read_postal_address_with_unit(postal_addr, secondary_address)
             address_line_1 = fields.address_line_1
             address_line_2 = fields.address_line_2
@@ -374,8 +383,8 @@ class GoogleClient:
             # verdicts (invalid / not_found) are kept.
             status = (
                 _verdict_to_status(verdict)
-                if (postal_addr or verdict.get("validationGranularity"))
-                and not verdict.get("addressComplete")
+                if (postal_addr or _read.text(verdict, "validationGranularity"))
+                and not _read.flag(verdict, "addressComplete")
                 else UNDETERMINED
             )
 
@@ -387,12 +396,12 @@ class GoogleClient:
             "city": city,
             "region": region,
             "postal_code": postal_code,
-            "vacant": usps.get("dpvVacant") or None,
+            "vacant": _read.text(usps, "dpvVacant") or None,
             "latitude": lat,
             "longitude": lng,
-            "has_inferred_components": verdict.get("hasInferredComponents", False),
-            "has_replaced_components": verdict.get("hasReplacedComponents", False),
-            "has_unconfirmed_components": verdict.get("hasUnconfirmedComponents", False),
+            "has_inferred_components": _read.flag(verdict, "hasInferredComponents"),
+            "has_replaced_components": _read.flag(verdict, "hasReplacedComponents"),
+            "has_unconfirmed_components": _read.flag(verdict, "hasUnconfirmedComponents"),
             "cass_standardized": dpv_present,
         }
 
@@ -405,11 +414,15 @@ class GoogleClient:
         Like the US non-CASS path, the unit line is folded into the request's
         single ``addressLines[0]`` (#126); split it back into ``address_line_2``
         when Google echoes it folded (GH #127).
+
+        Raises :class:`~services.validation.errors.ProviderTransientError` for a
+        field of the wrong JSON type (GH #278); an absent or ``null`` field
+        reads as empty.
         """
-        result = raw.get("result", {})
-        verdict = result.get("verdict", {})
-        postal_addr = result.get("address", {}).get("postalAddress", {})
-        location = result.get("geocode", {}).get("location", {})
+        result = _read.obj(raw, "result")
+        verdict = _read.obj(result, "verdict")
+        postal_addr = _read.obj(_read.obj(result, "address"), "postalAddress")
+        location = _read.obj(_read.obj(result, "geocode"), "location")
 
         fields = _read_postal_address_with_unit(postal_addr, secondary_address)
 
@@ -422,10 +435,10 @@ class GoogleClient:
             "region": fields.region,
             "postal_code": fields.postal_code,
             "vacant": None,
-            "latitude": location.get("latitude"),
-            "longitude": location.get("longitude"),
-            "has_inferred_components": verdict.get("hasInferredComponents", False),
-            "has_replaced_components": verdict.get("hasReplacedComponents", False),
-            "has_unconfirmed_components": verdict.get("hasUnconfirmedComponents", False),
+            "latitude": _read.number(location, "latitude"),
+            "longitude": _read.number(location, "longitude"),
+            "has_inferred_components": _read.flag(verdict, "hasInferredComponents"),
+            "has_replaced_components": _read.flag(verdict, "hasReplacedComponents"),
+            "has_unconfirmed_components": _read.flag(verdict, "hasUnconfirmedComponents"),
             "cass_standardized": False,
         }
