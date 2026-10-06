@@ -1116,6 +1116,38 @@ class TestCandidateCollection:
         if any("Unit designator recovered" in w for w in outcome.response.warnings):
             assert outcome.candidate_data is not None
 
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "123 MAIN ST SUITES 100, SEATTLE, WA 98101",  # unit tagged as a USPS box
+            "123 MAIN ST BLG A SEATTLE WA",  # unit/city/state tagged as recipient
+        ],
+    )
+    async def test_gh285_recovery_returns_candidate_data(self, raw: str) -> None:
+        """GH-285: the tag itself is the defect, so each recovery marks the
+        input for CRF labelling."""
+        outcome = await parse_address(raw)
+        assert outcome.candidate_data is not None
+        assert outcome.candidate_data["failure_type"] == "post_parse_recovery"
+        assert outcome.candidate_data["raw_address"] == raw
+
+    async def test_locality_recovery_alone_returns_candidate_data(self) -> None:
+        """LOCALITY_RECOVERED is a candidate kind in its own right, not only
+        via the unit recovery that usually follows it."""
+        tagged = {
+            "AddressNumber": "123",
+            "StreetName": "MAIN",
+            "StreetNamePostType": "ST",
+            "Recipient": "SEATTLE WA",
+        }
+        with mock.patch(
+            "address_validator.services.parser.usaddress.tag",
+            return_value=(tagged, "Street Address"),
+        ):
+            outcome = await parse_address("123 MAIN ST SEATTLE WA")
+        assert outcome.response.components.values["locality"] == "SEATTLE"
+        assert outcome.candidate_data is not None
+
     async def test_clean_parse_no_candidate_data(self) -> None:
         """Normal successful parse returns no candidate data and writes nothing."""
         outcome = await parse_address("123 Main St, Springfield, IL 62701")
