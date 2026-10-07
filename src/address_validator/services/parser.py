@@ -234,7 +234,7 @@ def _parse(raw: str, country: str) -> ParseOutcome:
     cleaned = re.sub(r"\([^)]*\)", "", raw)
     # Strip any remaining unmatched parentheses (e.g. "123 Main) St").
     cleaned = cleaned.replace("(", "").replace(")", "")
-    cleaned = _join_spaced_hyphens(re.sub(r"\s+", " ", cleaned).strip())
+    cleaned = _join_spaced_hyphens(re.sub(r"\s{2,}", " ", cleaned).strip())
     for match in paren_matches:
         inner = match[1:-1].strip()
         if inner:
