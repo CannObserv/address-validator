@@ -226,6 +226,13 @@ class TestStandardize:
         result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
         assert result.address_line_1 == "100-102 MAIN ST"
 
+    async def test_spaced_hyphen_beside_directional_left_alone(self) -> None:
+        """GH-289 CR 1: a grid address ('1234 S - 500 E') keeps its directional
+        apart from the number instead of fusing to 'S-500'."""
+        parsed = (await parse_address("1234 S - 500 E, SALT LAKE CITY, UT 84106")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "1234 S 500 E"
+
     @pytest.mark.parametrize(
         "tail",
         ["STE 100 2ND FLOOR", "STE 100, 2ND FLOOR", "2ND FLOOR STE 100", "STE 100 2ND FLR"],

@@ -171,12 +171,19 @@ async def parse_address(
 _SPACED_HYPHEN_RE = re.compile(r"(?<!\S)(\S+) [-\u2013] (?=(\S+))")
 
 
+# Single-letter directionals: "1234 S - 500 E" is a grid address, not "S-500".
+_DIRECTIONAL_LETTERS = frozenset("NSEW")
+
+
 def _joinable(segment: str) -> bool:
     """An identifier-like side of a dash: has a digit, or is one letter.
 
-    ``"SMP - 2"`` stays split, so the chained-unit designator survives (#129).
+    ``"SMP - 2"`` stays split, so the chained-unit designator survives (#129);
+    so does a lone directional letter.
     """
-    return segment.isalnum() and (len(segment) == 1 or any(c.isdigit() for c in segment))
+    if not segment.isalnum() or segment.upper() in _DIRECTIONAL_LETTERS:
+        return False
+    return len(segment) == 1 or any(c.isdigit() for c in segment)
 
 
 def _join_spaced_hyphens(text: str) -> str:
