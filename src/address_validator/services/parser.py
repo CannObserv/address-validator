@@ -15,6 +15,7 @@ from address_validator.services.libpostal_client import (
     LibpostalUnavailableError,
 )
 from address_validator.services.parse_recovery import (
+    ORDINAL_RE,
     RecoveryKind,
     collect_ambiguous_components,
     recover_components,
@@ -179,9 +180,12 @@ def _joinable(segment: str) -> bool:
     """An identifier-like side of a dash: has a digit, or is one letter.
 
     ``"SMP - 2"`` stays split, so the chained-unit designator survives (#129);
-    so does a lone directional letter.
+    so does a lone directional letter, and an ordinal (``"100 - 2ND FLOOR"``
+    leaves ``2ND`` free to pair with its floor).
     """
     if not segment.isalnum() or segment.upper() in _DIRECTIONAL_LETTERS:
+        return False
+    if ORDINAL_RE.fullmatch(segment.upper()):
         return False
     return len(segment) == 1 or any(c.isdigit() for c in segment)
 

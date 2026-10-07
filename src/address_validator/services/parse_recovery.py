@@ -111,8 +111,8 @@ _BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
 _UNIT_IDENTIFIER_RE = re.compile(r"#?(?:[A-Z]|[A-Z0-9-]*\d[A-Z0-9-]*)")
 
-# A floor ordinal written before its designator ("2ND FLOOR").
-_ORDINAL_RE = re.compile(r"\d+(?:ST|ND|RD|TH)")
+# An ordinal ("2ND"): a floor written before its designator ("2ND FLOOR").
+ORDINAL_RE = re.compile(r"\d+(?:ST|ND|RD|TH)")
 
 # Longest state name in STATE_MAP, in words ("NORTHERN MARIANA ISLANDS").
 _MAX_STATE_WORDS: int = 3
@@ -214,7 +214,7 @@ def _floor_ordinals_after_designator(
         if (
             tag_names.get(id_label, id_label) in _UNIT_TYPE_TO_ID.values()
             and tag_names.get(type_label, type_label) in _UNIT_TYPE_KEYS
-            and _ORDINAL_RE.fullmatch(ordinal.upper().strip(",;"))
+            and ORDINAL_RE.fullmatch(ordinal.upper().strip(",;"))
             and UNIT_MAP.get(floor.upper().replace(".", "").strip(",;")) == "FL"
         ):
             trailing = floor[len(floor.rstrip(",;")) :]

@@ -235,7 +235,13 @@ class TestStandardize:
 
     @pytest.mark.parametrize(
         "tail",
-        ["STE 100 2ND FLOOR", "STE 100, 2ND FLOOR", "2ND FLOOR STE 100", "STE 100 2ND FLR"],
+        [
+            "STE 100 2ND FLOOR",
+            "STE 100, 2ND FLOOR",
+            "2ND FLOOR STE 100",
+            "STE 100 2ND FLR",
+            "STE 100 - 2ND FLOOR",  # CR 2: the ordinal is not dash-joined
+        ],
     )
     async def test_ordinal_floor_beside_another_unit(self, tail: str) -> None:
         """GH-289: '<ordinal> FLOOR' next to another unit hits the ambiguous
