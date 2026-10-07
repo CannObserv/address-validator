@@ -210,6 +210,7 @@ class TestStandardize:
             ("STE 100 \u2013 102", "STE 100-102"),  # en dash
             ("STE 100\u2013102", "STE 100-102"),  # CR 3: unspaced en dash
             ("# 2 - 3", "# 2-3"),
+            ("STE 1 - 2 - 3", "STE 1-2-3"),  # CR 4: a chain joins in one pass
         ],
     )
     async def test_spaced_hyphen_kept_in_identifier(self, tail: str, line_2: str) -> None:

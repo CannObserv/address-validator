@@ -207,11 +207,9 @@ def _join_spaced_hyphens(text: str) -> str:
         right_side = right.split("-", 1)[0].rstrip(",;")
         return f"{left}-" if _joinable(left_side) and _joinable(right_side) else m.group(0)
 
-    text = _INNER_EN_DASH_RE.sub("-", text)
-    previous = None
-    while previous != text:
-        previous, text = text, _SPACED_HYPHEN_RE.sub(join, text)
-    return text
+    # One pass joins a chain ("1 - 2 - 3"): the lookahead leaves each right
+    # side unconsumed, so it can start the next match.
+    return _SPACED_HYPHEN_RE.sub(join, _INNER_EN_DASH_RE.sub("-", text))
 
 
 def _parse(raw: str, country: str) -> ParseOutcome:
