@@ -532,6 +532,17 @@ class TestParseAddress:
         assert "(" not in str(result.components.values)
         assert ")" not in str(result.components.values)
 
+    async def test_single_newline_reaches_usaddress(self) -> None:
+        """GH-289 CR 8: usaddress keeps a trailing newline on a token as a
+        line-break signal, so whitespace cleanup collapses only runs."""
+        raw = "123 Main St\nApt 4\nSeattle, WA 98101"
+        with mock.patch(
+            "address_validator.services.parser.usaddress.tag",
+            wraps=usaddress.tag,
+        ) as tag:
+            await parse_address(raw)
+        assert tag.call_args.args[0] == raw
+
     async def test_ca_no_libpostal_client_raises_unavailable(self) -> None:
         with pytest.raises(LibpostalUnavailableError, match="No libpostal client configured"):
             await parse_address("350 rue des Lilas, Quebec QC", country="CA", libpostal_client=None)

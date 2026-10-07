@@ -311,6 +311,20 @@ class TestRunUsPipelineSecondaryWarning:
         assert warning_catalogue.PROVIDER_SECONDARY_OMITTED.format(line2="SMP 2") in std.warnings
 
     @pytest.mark.asyncio
+    async def test_unit_range_narrowed_warns(self) -> None:
+        """GH #289: a spaced range keeps its hyphen on line 2; providers get its first unit."""
+        registry, _ = _make_registry()
+        req = ValidateRequest(address="123 Main St STE 100 - 102, Seattle, WA 98101", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_2 == "STE 100-102"
+        assert (
+            warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(
+                unit="STE 100", line2="STE 100-102"
+            )
+            in std.warnings
+        )
+
+    @pytest.mark.asyncio
     async def test_single_unit_does_not_warn(self) -> None:
         registry, _ = _make_registry()
         req = ValidateRequest(address="123 Main St, STE J, Seattle, WA 98101", country="US")

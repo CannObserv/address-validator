@@ -297,6 +297,10 @@ pyproject.toml                 # Project metadata, dependencies, tool config
   (e.g. `NO. 16` → `# 16`)
 - Both occupancy and subaddress designators preserved when present
 - Dual address numbers joined with hyphen (`1804 & 1810` → `1804-1810`)
+- Spaced dashes between identifiers rejoined (`STE 100 - 102` → `STE 100-102`;
+  not beside a word, lone directional or ordinal); en dashes become `-`
+- A floor ordinal beside another unit gets its own unit
+  (`STE 100 2ND FLOOR` → line 2 `FL 2ND STE 100`)
 - Periods removed from all components
 - ZIP codes normalized to 5-digit or 5+4 format
 - Unit designators mis-tagged as city by the parser are recovered

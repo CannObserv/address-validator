@@ -201,6 +201,60 @@ class TestStandardize:
         assert result.address_line_1 == "123 MAIN ST"
         assert result.address_line_2 == line_2
 
+    @pytest.mark.parametrize(
+        ("tail", "line_2"),
+        [
+            ("STE 100 - 102", "STE 100-102"),
+            ("UNIT 5 - 6", "UNIT 5-6"),
+            ("APT 4 - B", "APT 4-B"),
+            ("STE 100 \u2013 102", "STE 100-102"),  # en dash
+            ("STE 100\u2013102", "STE 100-102"),  # CR 3: unspaced en dash
+            ("# 2 - 3", "# 2-3"),
+            ("STE 1 - 2 - 3", "STE 1-2-3"),  # CR 4: a chain joins in one pass
+        ],
+    )
+    async def test_spaced_hyphen_kept_in_identifier(self, tail: str, line_2: str) -> None:
+        """GH-289: usaddress drops a lone '-' token, so '100 - 102' read as two
+        numbers ('STE 100 102').  It is rejoined before parsing."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == line_2
+
+    async def test_spaced_hyphen_address_number_range(self) -> None:
+        """GH-289: a spaced address-number range no longer leaks into the
+        street name ('100 102 MAIN ST')."""
+        parsed = (await parse_address("100 - 102 MAIN ST, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "100-102 MAIN ST"
+
+    async def test_spaced_hyphen_beside_directional_left_alone(self) -> None:
+        """GH-289 CR 1: a grid address ('1234 S - 500 E') keeps its directional
+        apart from the number instead of fusing to 'S-500'."""
+        parsed = (await parse_address("1234 S - 500 E, SALT LAKE CITY, UT 84106")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "1234 S 500 E"
+
+    @pytest.mark.parametrize(
+        "tail",
+        [
+            "STE 100 2ND FLOOR",
+            "STE 100, 2ND FLOOR",
+            "2ND FLOOR STE 100",
+            "STE 100 2ND FLR",
+            "STE 100 - 2ND FLOOR",  # CR 2: the ordinal is not dash-joined
+        ],
+    )
+    async def test_ordinal_floor_beside_another_unit(self, tail: str) -> None:
+        """GH-289: '<ordinal> FLOOR' next to another unit hits the ambiguous
+        path, which fused the ordinal into the suite ('FL STE 100 2ND').  The
+        floor gets its own slot and renders first as a container."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == "FL 2ND STE 100"
+        assert result.city == "SEATTLE"
+
     def test_same_level_units_render_in_source_order(self) -> None:
         """GH-170 CR: '#108 STE B' — neither unit is a container, so line 2
         preserves source order (insertion order of the component keys)

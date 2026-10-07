@@ -146,3 +146,52 @@ class TestProviderSecondary:
         )
         assert provider_secondary(std) == "SMP 2 STE J"
         assert not secondary_narrowed(std)
+
+
+class TestRangesAndLists:
+    """GH #289: a range or list of identifiers sends providers its first unit."""
+
+    @pytest.mark.parametrize(
+        ("components", "line2", "sent"),
+        [
+            # numeric range: same width, ascending
+            (_units(("STE", "100-102")), "STE 100-102", "STE 100"),
+            (_units(("#", "2-3")), "# 2-3", "# 2"),
+            (_units(("BLDG", "1-2")), "BLDG 1-2", "BLDG 1"),
+            # comma list (with or without spaces), lone "," token
+            (_units(("STE", "100, 101")), "STE 100, 101", "STE 100"),
+            (_units(("STE", "1, 2, 3")), "STE 1, 2, 3", "STE 1"),
+            (_units(("STE", "100 , 101")), "STE 100 , 101", "STE 100"),
+            # a range heading a list
+            (_units(("STE", "100-102, 105")), "STE 100-102, 105", "STE 100"),
+            # space-separated numbers
+            (_units(("UNIT", "5 6")), "UNIT 5 6", "UNIT 5"),
+            # composes with #287: SMP dropped, then the range narrowed
+            (_units(("STE", "100-102"), ("SMP", "2")), "STE 100-102 SMP 2", "STE 100"),
+            (_units(("#", "5-6 # 7")), "# 5-6 # 7", "# 5"),
+        ],
+    )
+    def test_range_or_list_narrows_to_first_unit(
+        self, components: dict[str, str], line2: str, sent: str
+    ) -> None:
+        std = _std(components)
+        assert std.address_line_2 == line2
+        assert provider_secondary(std) == sent
+        assert secondary_narrowed(std)
+
+    @pytest.mark.parametrize(
+        "identifier",
+        [
+            "A-1",  # hyphenated alphanumeric identifier
+            "1-A",
+            "9-1",  # descending: not a range
+            "2-2",
+            "2-100",  # different widths: floor-suite style identifier
+            "4 B",  # space-separated, not all numeric
+            "100-102-104",  # not a two-sided range
+        ],
+    )
+    def test_identifier_that_is_not_a_range_or_list_sent_unchanged(self, identifier: str) -> None:
+        std = _std(_units(("STE", identifier)))
+        assert provider_secondary(std) == std.address_line_2
+        assert not secondary_narrowed(std)

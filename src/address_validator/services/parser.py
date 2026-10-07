@@ -15,6 +15,7 @@ from address_validator.services.libpostal_client import (
     LibpostalUnavailableError,
 )
 from address_validator.services.parse_recovery import (
+    ORDINAL_RE,
     RecoveryKind,
     collect_ambiguous_components,
     recover_components,
@@ -167,6 +168,50 @@ async def parse_address(
     return _parse(raw, country)
 
 
+# A lone dash between identifier-like tokens ("100 - 102", "4 - B").
+_SPACED_HYPHEN_RE = re.compile(r"(?<!\S)(\S+) [-\u2013] (?=(\S+))")
+
+# An en dash inside a token ("100\u2013102"), normalised to ASCII "-".
+_INNER_EN_DASH_RE = re.compile(r"(?<=\w)\u2013(?=\w)")
+
+
+# Single-letter directionals: "1234 S - 500 E" is a grid address, not "S-500".
+_DIRECTIONAL_LETTERS = frozenset("NSEW")
+
+
+def _joinable(segment: str) -> bool:
+    """An identifier-like side of a dash: has a digit, or is one letter.
+
+    ``"SMP - 2"`` stays split, so the chained-unit designator survives (#129);
+    so does a lone directional letter, and an ordinal (``"100 - 2ND FLOOR"``
+    leaves ``2ND`` free to pair with its floor).
+    """
+    if not segment.isalnum() or segment.upper() in _DIRECTIONAL_LETTERS:
+        return False
+    if ORDINAL_RE.fullmatch(segment.upper()):
+        return False
+    return len(segment) == 1 or any(c.isdigit() for c in segment)
+
+
+def _join_spaced_hyphens(text: str) -> str:
+    """Rejoin ``"100 - 102"`` as ``"100-102"`` (GH #289).
+
+    usaddress drops a dash token surrounded by spaces, so a spaced range read
+    as two numbers (``"STE 100 102"``, ``"100 102 MAIN ST"``).  An en dash
+    inside a token becomes ``"-"`` too, so both spellings standardize alike.
+    """
+
+    def join(m: re.Match[str]) -> str:
+        left, right = m.group(1), m.group(2)
+        left_side = left.rsplit("-", 1)[-1].lstrip("#")
+        right_side = right.split("-", 1)[0].rstrip(",;")
+        return f"{left}-" if _joinable(left_side) and _joinable(right_side) else m.group(0)
+
+    # One pass joins a chain ("1 - 2 - 3"): the lookahead leaves each right
+    # side unconsumed, so it can start the next match.
+    return _SPACED_HYPHEN_RE.sub(join, _INNER_EN_DASH_RE.sub("-", text))
+
+
 def _parse(raw: str, country: str) -> ParseOutcome:
     """Parse *raw* address string into labelled components.
 
@@ -189,7 +234,7 @@ def _parse(raw: str, country: str) -> ParseOutcome:
     cleaned = re.sub(r"\([^)]*\)", "", raw)
     # Strip any remaining unmatched parentheses (e.g. "123 Main) St").
     cleaned = cleaned.replace("(", "").replace(")", "")
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    cleaned = _join_spaced_hyphens(re.sub(r"\s{2,}", " ", cleaned).strip())
     for match in paren_matches:
         inner = match[1:-1].strip()
         if inner:

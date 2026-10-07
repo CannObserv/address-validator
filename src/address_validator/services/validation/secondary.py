@@ -9,11 +9,15 @@ line answers DPV ``D`` and is echoed back unmatched.
 
 Providers are sent **one** Pub 28 unit instead: designators outside Pub 28
 (``SMP``) are dropped, a specific unit beats a container (``BLDG``/``FL``),
-and among equals the first unit on line 2 wins.  The standardized line 2 is
-unchanged — this only narrows the provider request, so it needs no
-``PIPELINE_CODE_VERSION`` bump.  ``_make_pattern_key`` includes the narrowed
-unit, so cached answers to the full line are not reused.
+and among equals the first unit on line 2 wins.  A unit whose identifier is a
+range or list (``"STE 100-102"``, ``"STE 100, 101"``; GH #289) is sent as its
+first identifier.  The standardized line 2 is unchanged — this only narrows
+the provider request, so it needs no ``PIPELINE_CODE_VERSION`` bump.
+``_make_pattern_key`` includes the narrowed unit, so cached answers to the full
+line are not reused.
 """
+
+import re
 
 from address_validator.models import StandardizedAddress
 from address_validator.services.standardizer.us import split_designator
@@ -21,7 +25,11 @@ from address_validator.usps_data.spec import USPS_PUB28_SPEC
 from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIGNATORS
 
 _Slot = tuple[str, str]  # designator, identifier
-_Unit = tuple[str, list[str]]  # designator, identifier tokens
+_Unit = tuple[str, list[str]]  # designator, identifier tokens (punctuation kept)
+
+# A two-sided numeric range ("100-102").  Only same-width ascending pairs count:
+# "2-100" (floor-suite), "9-1" and "A-1" are read as single identifiers.
+_RANGE_RE = re.compile(r"(\d+)-(\d+)")
 
 
 def _slot(values: dict[str, str], prefix: str) -> _Slot:
@@ -54,8 +62,31 @@ def _split_units(slot: _Slot) -> list[_Unit]:
         if tok == "#" and units[-1][1] and i + 1 < len(tokens):
             units.append(("#", []))
         elif tok.strip(",;"):
-            units[-1][1].append(tok.strip(",;"))
+            units[-1][1].append(tok)
+        elif units[-1][1]:  # a lone "," still separates list items
+            units[-1][1][-1] += tok
     return units
+
+
+def _first_identifier(tokens: list[str]) -> list[str]:
+    """Narrow a range or list of identifiers to its first one (GH #289).
+
+    USPS reads one unit, so ``"100, 101"``, ``"5 6"`` (all numeric) and
+    ``"100-102"`` (see ``_RANGE_RE``) send ``"100"``/``"5"``.  Anything else —
+    ``"PH 2"``, ``"2 REAR"``, ``"A-1"`` — is one identifier, returned as is.
+    """
+    clean = [t.strip(",;") for t in tokens]
+    first = clean
+    if any(t[-1] in ",;" for t in tokens[:-1]):
+        end = next(i for i, t in enumerate(tokens) if t[-1] in ",;")
+        first = clean[: end + 1]
+    elif len(clean) > 1 and all(t.isdigit() for t in clean):
+        first = clean[:1]
+    if len(first) == 1 and (m := _RANGE_RE.fullmatch(first[0])):
+        low, high = m.groups()
+        if len(low) == len(high) and int(low) < int(high):
+            first = [low]
+    return first
 
 
 def full_secondary(std: StandardizedAddress) -> str | None:
@@ -91,8 +122,9 @@ def provider_secondary(std: StandardizedAddress) -> str | None:
     recognised = [u for u in units if u[0] in PUB28_DESIGNATORS]
     if not recognised:
         return None
-    if len(units) == 1:
-        return line2
     specific = [u for u in recognised if u[0] not in CONTAINER_DESIGNATORS] or recognised
-    designator, identifier = specific[0]
+    designator, tokens = specific[0]
+    identifier = _first_identifier(tokens)
+    if len(units) == 1 and identifier == [t.strip(",;") for t in tokens]:
+        return line2
     return " ".join([designator, *identifier])
