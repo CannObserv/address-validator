@@ -28,6 +28,11 @@ from address_validator.services.component_profiles import translate_components_t
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import apply_parse_side_effects, parse_address
 from address_validator.services.standardizer import standardize
+from address_validator.services.validation.null_provider import NullProvider
+from address_validator.services.validation.secondary import (
+    full_secondary,
+    provider_secondary,
+)
 
 if TYPE_CHECKING:
     from address_validator.models import ValidateRequest
@@ -125,7 +130,19 @@ async def run_us_pipeline(
         )
 
     provider = registry.get_provider()
+    sent, line2 = provider_secondary(std), full_secondary(std)
+    if not isinstance(provider, NullProvider) and sent != line2:
+        std = std.model_copy(
+            update={"warnings": [*std.warnings, _secondary_warning(sent, line2 or "")]}
+        )
     return std, raw_input, provider
+
+
+def _secondary_warning(sent: str | None, line2: str) -> str:
+    """Say what of a multi-unit line 2 the provider was sent (GH #287)."""
+    if sent is None:
+        return warning_catalogue.PROVIDER_SECONDARY_OMITTED.format(line2=line2)
+    return warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(unit=sent, line2=line2)
 
 
 async def run_non_us_pipeline(

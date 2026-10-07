@@ -698,3 +698,36 @@ class TestV2ValidateUndetermined:
             "dpv_match_code": "Y",
             "provider": "usps",
         }
+
+
+class TestV2ValidateMultiUnitSecondary:
+    """GH #287: a multi-unit line 2 reaches the provider client as one Pub 28 unit,
+    through a real USPSProvider + ChainProvider, and the response says so."""
+
+    def test_chained_smp_unit_narrowed_and_warned(self, client) -> None:
+        usps_client = AsyncMock(spec=USPSClient)
+        usps_client.validate_address = AsyncMock(
+            return_value={
+                "dpv_match_code": "Y",
+                "address_line_1": "123 MAIN ST",
+                "address_line_2": "STE J",
+                "city": "SEATTLE",
+                "region": "WA",
+                "postal_code": "98101-1234",
+                "vacant": "N",
+            }
+        )
+        chain = ChainProvider(providers=[USPSProvider(client=usps_client)])
+        with _mock_registry_with(chain):
+            response = client.post(
+                "/api/v2/validate",
+                json={"address": "123 Main St, SMP 2, STE J, Seattle, WA 98101"},
+            )
+        assert response.status_code == 200, response.text
+        assert usps_client.validate_address.call_args.kwargs["secondary_address"] == "STE J"
+        body = response.json()
+        assert body["validation"]["status"] == "confirmed"
+        assert (
+            warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(unit="STE J", line2="SMP 2 STE J")
+            in body["warnings"]
+        )

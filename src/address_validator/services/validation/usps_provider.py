@@ -11,6 +11,7 @@ from address_validator.models import (
     ValidationResult,
 )
 from address_validator.services.validation._helpers import _DPV_TO_STATUS, _warn_unknown_dpv
+from address_validator.services.validation.secondary import provider_secondary
 from address_validator.services.validation.usps_client import USPSClient
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 
@@ -48,7 +49,7 @@ class USPSProvider:
             city=std.city,
             state=std.region,
             zip_code=std.postal_code,
-            secondary_address=(std.address_line_2 or "").strip() or None,
+            secondary_address=provider_secondary(std),
         )
 
         # Map known DPV codes. A 200 with no DPV code (USPS sends a blank

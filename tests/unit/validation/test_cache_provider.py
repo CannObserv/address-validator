@@ -1,5 +1,7 @@
 """Unit tests for CachingProvider."""
 
+import hashlib
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -23,6 +25,7 @@ from address_validator.services.audit import (
     get_audit_raw_input,
     reset_audit_context,
 )
+from address_validator.services.standardizer import standardize
 from address_validator.services.validation.cache_provider import (
     CachingProvider,
     _lookup,
@@ -675,6 +678,43 @@ class TestKeyHelpers:
         std1 = _make_std(street_name="MAIN")
         std2 = _make_std(street_name="ELM")
         assert _make_pattern_key(std1) != _make_pattern_key(std2)
+
+    @staticmethod
+    def _pre_287_pattern_key(std: StandardizeResponseV2) -> str:
+        payload = json.dumps(
+            {"country": std.country, "components": dict(sorted(std.components.values.items()))},
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()
+
+    @pytest.mark.parametrize(
+        "units",
+        [
+            {},
+            {"sub_premise_type": "STE", "sub_premise_number": "J"},
+            {"sub_premise_type": "APT", "sub_premise_number": "PH 2"},
+        ],
+    )
+    def test_pattern_key_unchanged_when_secondary_not_narrowed(self, units: dict[str, str]) -> None:
+        """GH #287 must not orphan cache entries whose line 2 is sent whole."""
+        std = standardize({**_make_std().components.values, **units}, country="US")
+        assert _make_pattern_key(std) == self._pre_287_pattern_key(std)
+
+    def test_pattern_key_changes_when_secondary_narrowed(self) -> None:
+        """A multi-unit line 2 gets a new key, so its old D answer is not reused (GH #287)."""
+        std = standardize(
+            {
+                **_make_std().components.values,
+                "sub_premise_type": "STE",
+                "sub_premise_number": "110",
+                "dependent_sub_premise_type": "SMP",
+                "dependent_sub_premise_number": "2",
+            },
+            country="US",
+        )
+        assert std.address_line_2 == "STE 110 SMP 2"
+        assert _make_pattern_key(std) != self._pre_287_pattern_key(std)
 
     def test_different_address_fields_different_canonical_key(self) -> None:
         resp1 = _make_confirmed_response()

@@ -45,6 +45,13 @@ GENERAL_DELIVERY_DISCARDED = (
     "PO Box / general delivery omitted from standardized address "
     "because a street address is present: '{text}'"
 )
+PROVIDER_SECONDARY_NARROWED = (
+    "Only unit '{unit}' of address line 2 '{line2}' was sent for validation; "
+    "providers check a single USPS Pub 28 unit"
+)
+PROVIDER_SECONDARY_OMITTED = (
+    "Address line 2 '{line2}' was not sent for validation: it has no USPS Pub 28 unit designator"
+)
 
 # Authoritative list of every catalogued response warning. The drift test
 # checks this against docs/WARNINGS.md in both directions, so a new warning is
@@ -66,4 +73,6 @@ CATALOGUE: tuple[str, ...] = (
     PROVIDER_UNCONFIRMED,
     PROVIDER_REJECTED_MALFORMED,
     PROVIDER_FALLBACK_UNREACHABLE,
+    PROVIDER_SECONDARY_NARROWED,
+    PROVIDER_SECONDARY_OMITTED,
 )

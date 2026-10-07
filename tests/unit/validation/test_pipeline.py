@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from address_validator.core import warnings as warning_catalogue
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
@@ -16,6 +17,7 @@ from address_validator.models import (
 )
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parser import ParseOutcome
+from address_validator.services.validation.null_provider import NullProvider
 from address_validator.services.validation.pipeline import (
     build_non_us_std,
     run_non_us_pipeline,
@@ -285,3 +287,41 @@ class TestRunUsPipeline:
         std, _, _ = await run_us_pipeline(req, registry)
         assert std.address_line_1 == "123 MAIN ST"
         assert not any("parseable street" in w.lower() for w in std.warnings)
+
+
+class TestRunUsPipelineSecondaryWarning:
+    """GH #287: say what of a multi-unit line 2 the provider was sent."""
+
+    @pytest.mark.asyncio
+    async def test_narrowed_secondary_warns(self) -> None:
+        registry, _ = _make_registry()
+        req = ValidateRequest(address="123 Main St, SMP 2, STE J, Seattle, WA 98101", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert std.address_line_2 == "SMP 2 STE J"
+        assert (
+            warning_catalogue.PROVIDER_SECONDARY_NARROWED.format(unit="STE J", line2="SMP 2 STE J")
+            in std.warnings
+        )
+
+    @pytest.mark.asyncio
+    async def test_omitted_secondary_warns(self) -> None:
+        registry, _ = _make_registry()
+        req = ValidateRequest(address="123 Main St, SMP 2, Seattle, WA 98101", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert warning_catalogue.PROVIDER_SECONDARY_OMITTED.format(line2="SMP 2") in std.warnings
+
+    @pytest.mark.asyncio
+    async def test_single_unit_does_not_warn(self) -> None:
+        registry, _ = _make_registry()
+        req = ValidateRequest(address="123 Main St, STE J, Seattle, WA 98101", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert not any("sent for validation" in w for w in std.warnings)
+
+    @pytest.mark.asyncio
+    async def test_no_warning_without_a_provider(self) -> None:
+        """NullProvider validates nothing, so nothing was narrowed for it."""
+        registry = MagicMock()
+        registry.get_provider.return_value = NullProvider()
+        req = ValidateRequest(address="123 Main St, SMP 2, STE J, Seattle, WA 98101", country="US")
+        std, _, _ = await run_us_pipeline(req, registry)
+        assert not any("sent for validation" in w for w in std.warnings)
