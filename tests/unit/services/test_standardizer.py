@@ -208,6 +208,7 @@ class TestStandardize:
             ("UNIT 5 - 6", "UNIT 5-6"),
             ("APT 4 - B", "APT 4-B"),
             ("STE 100 \u2013 102", "STE 100-102"),  # en dash
+            ("STE 100\u2013102", "STE 100-102"),  # CR 3: unspaced en dash
             ("# 2 - 3", "# 2-3"),
         ],
     )

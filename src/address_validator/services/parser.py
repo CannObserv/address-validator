@@ -171,6 +171,9 @@ async def parse_address(
 # A lone dash between identifier-like tokens ("100 - 102", "4 - B").
 _SPACED_HYPHEN_RE = re.compile(r"(?<!\S)(\S+) [-\u2013] (?=(\S+))")
 
+# An en dash inside a token ("100\u2013102"), normalised to ASCII "-".
+_INNER_EN_DASH_RE = re.compile(r"(?<=\w)\u2013(?=\w)")
+
 
 # Single-letter directionals: "1234 S - 500 E" is a grid address, not "S-500".
 _DIRECTIONAL_LETTERS = frozenset("NSEW")
@@ -194,7 +197,8 @@ def _join_spaced_hyphens(text: str) -> str:
     """Rejoin ``"100 - 102"`` as ``"100-102"`` (GH #289).
 
     usaddress drops a dash token surrounded by spaces, so a spaced range read
-    as two numbers (``"STE 100 102"``, ``"100 102 MAIN ST"``).
+    as two numbers (``"STE 100 102"``, ``"100 102 MAIN ST"``).  An en dash
+    inside a token becomes ``"-"`` too, so both spellings standardize alike.
     """
 
     def join(m: re.Match[str]) -> str:
@@ -203,6 +207,7 @@ def _join_spaced_hyphens(text: str) -> str:
         right_side = right.split("-", 1)[0].rstrip(",;")
         return f"{left}-" if _joinable(left_side) and _joinable(right_side) else m.group(0)
 
+    text = _INNER_EN_DASH_RE.sub("-", text)
     previous = None
     while previous != text:
         previous, text = text, _SPACED_HYPHEN_RE.sub(join, text)
