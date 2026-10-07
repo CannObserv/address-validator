@@ -167,6 +167,37 @@ async def parse_address(
     return _parse(raw, country)
 
 
+# A lone dash between identifier-like tokens ("100 - 102", "4 - B").
+_SPACED_HYPHEN_RE = re.compile(r"(?<!\S)(\S+) [-\u2013] (?=(\S+))")
+
+
+def _joinable(segment: str) -> bool:
+    """An identifier-like side of a dash: has a digit, or is one letter.
+
+    ``"SMP - 2"`` stays split, so the chained-unit designator survives (#129).
+    """
+    return segment.isalnum() and (len(segment) == 1 or any(c.isdigit() for c in segment))
+
+
+def _join_spaced_hyphens(text: str) -> str:
+    """Rejoin ``"100 - 102"`` as ``"100-102"`` (GH #289).
+
+    usaddress drops a dash token surrounded by spaces, so a spaced range read
+    as two numbers (``"STE 100 102"``, ``"100 102 MAIN ST"``).
+    """
+
+    def join(m: re.Match[str]) -> str:
+        left, right = m.group(1), m.group(2)
+        left_side = left.rsplit("-", 1)[-1].lstrip("#")
+        right_side = right.split("-", 1)[0].rstrip(",;")
+        return f"{left}-" if _joinable(left_side) and _joinable(right_side) else m.group(0)
+
+    previous = None
+    while previous != text:
+        previous, text = text, _SPACED_HYPHEN_RE.sub(join, text)
+    return text
+
+
 def _parse(raw: str, country: str) -> ParseOutcome:
     """Parse *raw* address string into labelled components.
 
@@ -189,7 +220,7 @@ def _parse(raw: str, country: str) -> ParseOutcome:
     cleaned = re.sub(r"\([^)]*\)", "", raw)
     # Strip any remaining unmatched parentheses (e.g. "123 Main) St").
     cleaned = cleaned.replace("(", "").replace(")", "")
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    cleaned = _join_spaced_hyphens(re.sub(r"\s+", " ", cleaned).strip())
     for match in paren_matches:
         inner = match[1:-1].strip()
         if inner:

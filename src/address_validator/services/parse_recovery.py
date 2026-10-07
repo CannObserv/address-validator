@@ -111,6 +111,9 @@ _BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
 _UNIT_IDENTIFIER_RE = re.compile(r"#?(?:[A-Z]|[A-Z0-9-]*\d[A-Z0-9-]*)")
 
+# A floor ordinal written before its designator ("2ND FLOOR").
+_ORDINAL_RE = re.compile(r"\d+(?:ST|ND|RD|TH)")
+
 # Longest state name in STATE_MAP, in words ("NORTHERN MARIANA ISLANDS").
 _MAX_STATE_WORDS: int = 3
 
@@ -194,6 +197,32 @@ def _emit_token(
     return None
 
 
+def _floor_ordinals_after_designator(
+    parsed_string: list[tuple[str, str]],
+    tag_names: dict[str, str],
+) -> list[tuple[str, str]]:
+    """Swap ``"2ND FLOOR"`` to ``"FLOOR 2ND"`` so the floor is its own unit (GH #289).
+
+    Beside another unit (``"STE 100 2ND FLOOR"``) the ordinal concatenates onto
+    the suite's identifier (``"100 2ND"``) and ``FLOOR`` is left with none.
+    Designator-first order routes the pair to its own slot.  Trailing
+    punctuation stays at the end of the pair.
+    """
+    tokens = list(parsed_string)
+    for i in range(len(tokens) - 1):
+        (ordinal, id_label), (floor, type_label) = tokens[i], tokens[i + 1]
+        if (
+            tag_names.get(id_label, id_label) in _UNIT_TYPE_TO_ID.values()
+            and tag_names.get(type_label, type_label) in _UNIT_TYPE_KEYS
+            and _ORDINAL_RE.fullmatch(ordinal.upper().strip(",;"))
+            and UNIT_MAP.get(floor.upper().replace(".", "").strip(",;")) == "FL"
+        ):
+            trailing = floor[len(floor.rstrip(",;")) :]
+            tokens[i] = (floor.rstrip(",;"), type_label)
+            tokens[i + 1] = (ordinal.rstrip(",;") + trailing, id_label)
+    return tokens
+
+
 def collect_ambiguous_components(
     parsed_string: list[tuple[str, str]],
     warnings: list[str],
@@ -221,7 +250,11 @@ def collect_ambiguous_components(
       preserved" warning.  Subsequent mislabelled tokens (``AddressNumber``,
       ``StreetName``, …) are redirected into that slot's identifier until a
       city/state/zip token appears.
+
+    A floor ordinal before its designator (``"2ND FLOOR"``) is first swapped
+    behind it; see :func:`_floor_ordinals_after_designator`.
     """
+    parsed_string = _floor_ordinals_after_designator(parsed_string, tag_names)
     component_values: dict[str, str] = {}
     prev_key: str | None = None
     separator_before: bool = False

@@ -44,8 +44,9 @@ Both providers get one secondary unit, not the whole standardized `address_line_
 - a specific unit beats a container (`BLDG 1 STE 100` → `STE 100`)
 - among equals, the first unit on line 2 wins (`UNIT 3 STE 4` → `UNIT 3`, `# 5 # 6` → `# 5`)
 - a unit number with no designator gets one as the standardizer's occupancy slot does: a leading designator word is split out (`SMP 2 SUITE 5` → `STE 5`), else `#` (`SMP 2 7` → `# 7`)
+- a range or list of identifiers sends its first (GH #289): a comma list (`STE 100, 101` → `STE 100`), space-separated numbers (`UNIT 5 6` → `UNIT 5`), or a numeric range whose sides are the same width and ascend (`STE 100-102` → `STE 100`). Other hyphenated ids are one identifier and sent whole (`STE A-1`, `STE 2-100`, `STE 9-1`) — a heuristic; a real `2-3` unit is sent as `# 2`
 
-Standardize output is unchanged, so `PIPELINE_CODE_VERSION` is not bumped. The response carries a warning naming what was sent ([WARNINGS.md](WARNINGS.md)), and the cache `pattern_key` includes the narrowed unit so old answers to the full line are not reused; every other key is unchanged.
+This narrowing leaves standardize output unchanged. The response carries a warning naming what was sent ([WARNINGS.md](WARNINGS.md)), and the cache `pattern_key` includes the narrowed unit so old answers to the full line are not reused; every other key is unchanged.
 
 ## Configuring providers
 
