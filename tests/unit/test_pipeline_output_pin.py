@@ -33,7 +33,7 @@ from address_validator.services.standardizer import standardize
 # ---------------------------------------------------------------------------
 
 _PINNED_CODE_VERSION = 10
-_PINNED_CORPUS_HASH = "8158ada63ebd69f74c1077691f580fd0a973a6728c5dce7e4d71beeba1b14b62"
+_PINNED_CORPUS_HASH = "a76d74c7b77433fde7e5f9422784a8b54ede6a505d072afb5d42f297e5b52def"
 
 # Fixed corpus — exercises the pipeline surfaces most likely to change output:
 # cleanup regexes, directional/type abbreviation, secondary units, PO Box / rural
@@ -75,6 +75,7 @@ _CORPUS = [
     "PSC 1234 BOX 5678, APO, AE 09001",
     "CMR 450 BOX 123, APO, AE 09001",
     "UNIT 2050 BOX 4190, APO, AP 96278",
+    "JOHN SMITH, GENERAL DELIVERY, SEATTLE, WA 98101",
 ]
 
 

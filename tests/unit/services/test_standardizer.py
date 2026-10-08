@@ -418,6 +418,13 @@ class TestStandardize:
             ("GENERAL DELIVERY, SEATTLE, WA 98101", "GENERAL DELIVERY", "SEATTLE", "WA"),
             ("GENERAL DELIVERY SEATTLE WA 98101", "GENERAL DELIVERY", "SEATTLE", "WA"),
             ("general delivery seattle wa", "GENERAL DELIVERY", "SEATTLE", "WA"),
+            (
+                "JOHN SMITH, GENERAL DELIVERY, SEATTLE, WA 98101",
+                "GENERAL DELIVERY",
+                "SEATTLE",
+                "WA",
+            ),
+            ("GENERAL DELIVERY JOHN SMITH, SEATTLE, WA 98101", "GENERAL DELIVERY", "SEATTLE", "WA"),
         ],
     )
     async def test_delivery_line_without_street_rendered_whole(

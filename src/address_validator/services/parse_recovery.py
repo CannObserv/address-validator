@@ -119,9 +119,11 @@ _MILITARY_GROUP_TYPES: frozenset[str] = frozenset({"PSC", "CMR"})
 # UNIT is also a civilian designator.
 _MILITARY_STATES: frozenset[str] = frozenset({"AA", "AE", "AP"})
 
-# The Pub 28 general-delivery line, and any recipient text after it.
+# The Pub 28 general-delivery line, with any recipient text before or after it.
 _GENERAL_DELIVERY = "GENERAL DELIVERY"
-_GENERAL_DELIVERY_RE = re.compile(r"\s*GENERAL\s+DELIVERY\b[\s,;]*(.*)", re.IGNORECASE | re.DOTALL)
+_GENERAL_DELIVERY_RE = re.compile(
+    r"(?P<before>.*?)\bGENERAL\s+DELIVERY\b(?P<after>.*)", re.IGNORECASE | re.DOTALL
+)
 
 # A token shaped like a unit identifier: one letter, or alphanumeric with a
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
@@ -651,15 +653,19 @@ def _recover_general_delivery_from_name(
     """Move a ``GENERAL DELIVERY`` tagged as a landmark or recipient to the box.
 
     usaddress tags the literal phrase as ``LandmarkName`` (with a comma after
-    it) or ``Recipient`` (without one).  The standardizer renders neither, so
-    line 1 came out empty and validation took the no-street path (GH #293).
+    it) or ``Recipient`` (without one), together with any name beside it
+    (``"JOHN SMITH, GENERAL DELIVERY"``).  The standardizer renders neither,
+    so line 1 came out empty and validation took the no-street path (GH #293).
     With no street, box or route parsed, the phrase becomes
-    ``general_delivery_type``, which renders as line 1.
+    ``general_delivery_type``, which renders as line 1; text before or after
+    it stays in the field it came from.
 
     With no ZIP, usaddress can tag the whole input as recipient
-    (``"GENERAL DELIVERY SEATTLE WA"``).  A recipient tail after the phrase
-    is split into city and state as :func:`_recover_locality_from_trailing_addressee`
-    does; a tail that does not end in a state is left alone.
+    (``"GENERAL DELIVERY SEATTLE WA"``).  When no city, state or ZIP was
+    parsed, text after the phrase is split into city and state as
+    :func:`_recover_locality_from_trailing_addressee` does; text that does not
+    end in a state (``"GENERAL DELIVERY SEATTLE"``) could be the city or a
+    name, so the field is left alone.
     """
     if _has_street(components) or any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
         return
@@ -667,16 +673,17 @@ def _recover_general_delivery_from_name(
         match = _GENERAL_DELIVERY_RE.fullmatch(components.get(key, ""))
         if match is None:
             continue
-        recovered = {"general_delivery_type": _GENERAL_DELIVERY}
-        tail = match.group(1).strip()
+        before = match["before"].strip(" ,;")
+        after = match["after"].strip(" ,;")
         last_line = None
-        if tail:
-            if key != "addressee" or any(components.get(k) for k in _POST_STREET_KEYS):
-                return
-            last_line = _split_trailing_state(tail)
+        if after and key == "addressee" and not any(components.get(k) for k in _POST_STREET_KEYS):
+            last_line = _split_trailing_state(after)
             if last_line is None:
                 return
-            recovered |= last_line
+            after = last_line.pop("addressee", "")
+        rest = ", ".join(p for p in (before, after) if p)
+        recovered = {key: rest} if rest else {}
+        recovered |= {"general_delivery_type": _GENERAL_DELIVERY, **(last_line or {})}
         _splice(components, (key,), recovered)
         _record_delivery_line_recovered(events, _GENERAL_DELIVERY)
         if last_line is not None:

@@ -519,11 +519,36 @@ class TestRecoverGeneralDeliveryFromName:
         assert recover_components(c) == []
         assert c == {"addressee": "GENERAL DELIVERY SEATTLE"}
 
-    def test_tail_left_alone_when_last_line_parsed(self) -> None:
-        c = {"addressee": "GENERAL DELIVERY JOHN SMITH", **_LAST_LINE}
-        before = dict(c)
-        assert recover_components(c) == []
-        assert c == before
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "JOHN SMITH, GENERAL DELIVERY",
+            "JOHN SMITH GENERAL DELIVERY",
+            "GENERAL DELIVERY JOHN SMITH",
+            "GENERAL DELIVERY, JOHN SMITH,",
+        ],
+    )
+    def test_recipient_beside_phrase_kept(self, text: str) -> None:
+        """GH-293 CR 1: a name line beside the phrase stays the recipient; with
+        the last line parsed, text after the phrase can't be the city."""
+        c = {"addressee": text, **_LAST_LINE}
+        events = recover_components(c)
+        assert c == {
+            "addressee": "JOHN SMITH",
+            "general_delivery_type": "GENERAL DELIVERY",
+            **_LAST_LINE,
+        }
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+
+    def test_recipient_before_phrase_with_city_and_state_tail(self) -> None:
+        c = {"addressee": "JOHN SMITH GENERAL DELIVERY SEATTLE WA"}
+        recover_components(c)
+        assert c == {
+            "addressee": "JOHN SMITH",
+            "general_delivery_type": "GENERAL DELIVERY",
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
 
     @pytest.mark.parametrize(
         "extra",
