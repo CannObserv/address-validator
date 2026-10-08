@@ -292,8 +292,9 @@ pyproject.toml                 # Project metadata, dependencies, tool config
 - State names converted to two-letter abbreviations, including the Armed
   Forces "states" (`ARMED FORCES EUROPE` → `AE`; city stays `APO`/`FPO`/`DPO`)
 - Route and box types abbreviated (`RURAL ROUTE`/`RFD` → `RR`,
-  `STAR ROUTE`/`HCR` → `HC`, `POST OFFICE BOX`/`POB`/`DRAWER` → `PO BOX`;
-  Pub 28 §24, §25, §28)
+  `STAR ROUTE`/`HCR` → `HC`, `POST OFFICE BOX`/`POB`/`LOCKBOX` → `PO BOX`;
+  Pub 28 §24, §25, §28); `CALLER`, `FIRM CALLER`, `BIN` and `DRAWER` convert
+  only when tagged as a box (component input)
 - Secondary unit designators abbreviated (Suite → STE, Apartment → APT,
   Building/Bldg/Bld → BLDG, etc.)
 - Unit identifiers without a designator default to `#`
