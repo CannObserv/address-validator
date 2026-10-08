@@ -280,6 +280,15 @@ class TestStandardize:
         assert f"Unit list item recovered from mis-tagged field: '{item}'" in result.warnings
         assert not any("omitted" in w or "Unrecognized" in w for w in result.warnings)
 
+    async def test_unit_list_tagged_as_second_unit_without_zip(self) -> None:
+        """GH-297: with no ZIP, usaddress tags 'AND' as a second unit's type on
+        the clean path; the item still joins the unit and the city survives."""
+        parsed = (await parse_address("123 MAIN ST STE 100 AND 101 SEATTLE WA")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_2 == "STE 100 & 101"
+        assert result.city == "SEATTLE"
+        assert "Unit list item recovered from mis-tagged field: '101'" in result.warnings
+
     @pytest.mark.parametrize(
         ("tail", "line_2"),
         [
