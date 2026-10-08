@@ -289,7 +289,11 @@ pyproject.toml                 # Project metadata, dependencies, tool config
 - Trailing commas, semicolons, and stray punctuation stripped
 - Street suffixes abbreviated (USPS Pub 28 Appendix C)
 - Directionals abbreviated (N, S, E, W, NE, NW, SE, SW)
-- State names converted to two-letter abbreviations
+- State names converted to two-letter abbreviations, including the Armed
+  Forces "states" (`ARMED FORCES EUROPE` → `AE`; city stays `APO`/`FPO`/`DPO`)
+- Route and box types abbreviated (`RURAL ROUTE`/`RFD` → `RR`,
+  `STAR ROUTE`/`HCR` → `HC`, `POST OFFICE BOX`/`POB`/`DRAWER` → `PO BOX`;
+  Pub 28 §24, §25, §28)
 - Secondary unit designators abbreviated (Suite → STE, Apartment → APT,
   Building/Bldg/Bld → BLDG, etc.)
 - Unit identifiers without a designator default to `#`

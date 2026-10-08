@@ -118,4 +118,19 @@ STATE_MAP: dict[str, str] = {
     "PR": "PR",
     "VIRGIN ISLANDS": "VI",
     "VI": "VI",
+    "FEDERATED STATES OF MICRONESIA": "FM",
+    "FM": "FM",
+    # Armed Forces (APO/FPO/DPO).  AE serves "Europe, the Middle East, and
+    # Canada" (Pub 28 Appendix B); each region named there maps to AE.
+    "ARMED FORCES AMERICAS": "AA",
+    "AA": "AA",
+    "ARMED FORCES EUROPE": "AE",
+    "ARMED FORCES MIDDLE EAST": "AE",
+    "ARMED FORCES CANADA": "AE",
+    "AE": "AE",
+    "ARMED FORCES PACIFIC": "AP",
+    "AP": "AP",
 }
+
+# The Armed Forces "states" above.
+MILITARY_STATES: frozenset[str] = frozenset({"AA", "AE", "AP"})

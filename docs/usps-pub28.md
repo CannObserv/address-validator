@@ -54,7 +54,8 @@ fetch of the Appendix pages:
 | `suffixes.py` | `pe.usps.com/text/pub28/28apc_002.htm` | All 189 primary entries match. Our file includes additional input aliases (common misspellings/variant spellings) that are not in Pub 28 — these are expected as input normalizers. |
 | `units.py` | `pe.usps.com/text/pub28/28apc_003.htm` | All 25 designators match. Pub 28 misspells "Hanger" (should be "Hangar") — our file uses the correct spelling; abbreviation `HNGR` is correct either way. We include `#`/`NUMBER`/`NUM`/`NO`/`BLD`/`UN` aliases not in Pub 28 for input normalization, plus plural/misspelt variants seen in prod (`BLG`, `FLR`, `FLOORS`, `SUITES`, `STES`, `SUTE`, `UNITS`; GH #286). |
 | `directionals.py` | Pub 28 Appendix C | N, S, E, W, NE, NW, SE, SW — complete set confirmed. |
-| `states.py` | Pub 28 Appendix D | All 50 states + DC + 7 territories (AS, GU, MH, MP, PW, PR, VI) present. Appendix D page was inaccessible for live comparison; content verified against known-stable data. |
+| `states.py` | Pub 28 Appendix B (`pe.usps.com/text/pub28/28apb.htm`) | All 50 states + DC + 8 territories / freely associated states (AS, FM, GU, MH, MP, PW, PR, VI) + 3 Armed Forces "states" (AA, AE, AP). FM and AA/AE/AP were added 2026-10-08 after a live fetch of Appendix B (GH #299); AE's spelled-out aliases (`ARMED FORCES EUROPE` / `MIDDLE EAST` / `CANADA`) follow Appendix B's "Europe, the Middle East, and Canada". |
+| `routes.py` | Pub 28 §241, §244, §251, §253, §281, §283 (`28c2_021`, `_024`, `_027`, `_029`, `_036`, `_038`) | Added 2026-10-08 (GH #298) from a live fetch. Pub 28 forms: `RR` (not RURAL; RFD and RD → RR), `HC` (not HIGHWAY CONTRACT, ROUTE or STAR ROUTE), `PO BOX` (CALLER, FIRM CALLER, BIN, LOCKBOX, DRAWER → PO BOX). Input aliases not in Pub 28 (`RURAL RT`, `HCR`, `POB`, `P O BOX` …) normalize as in `units.py`. A bare `BOX` is not mapped: it is also a route box. |
 
 **Conclusion:** `usps_data/` tables are consistent with the October 2024 edition.
 No missing or incorrect abbreviations found.
@@ -118,8 +119,9 @@ The USPS API also returns:
 |---|---|---|
 | §232 | Dual/range addresses | `services/parser.py` |
 | §354 | Parentheses not valid in standardized addresses | `services/parser.py`, `services/standardizer/` |
-| Appendix B | Street suffix abbreviations | `usps_data/suffixes.py` |
-| Appendix C | Secondary unit designators | `usps_data/units.py` |
-| Appendix D | State abbreviations | `usps_data/states.py` |
+| Appendix C1 | Street suffix abbreviations | `usps_data/suffixes.py` |
+| Appendix C2 | Secondary unit designators | `usps_data/units.py` |
+| Appendix B | State abbreviations | `usps_data/states.py` |
+| §24, §25, §28 | Rural route, highway contract, PO Box formats | `usps_data/routes.py` |
 | Appendix E/F | Directional abbreviations | `usps_data/directionals.py` |
 | Appendix H | Designators that never require an identifier | `services/parser.py` (`_NO_ID_DESIGNATORS`) |

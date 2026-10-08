@@ -3,7 +3,8 @@
 import pytest
 
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
-from address_validator.usps_data.states import STATE_MAP
+from address_validator.usps_data.routes import BOX_TYPE_MAP, ROUTE_GROUP_TYPE_MAP
+from address_validator.usps_data.states import MILITARY_STATES, STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
 from address_validator.usps_data.units import UNIT_MAP
 
@@ -58,6 +59,81 @@ class TestStateMap:
 
     def test_all_values_are_two_chars(self) -> None:
         assert all(len(v) == 2 for v in STATE_MAP.values())
+
+    @pytest.mark.parametrize(
+        ("name", "abbreviation"),
+        [
+            ("ARMED FORCES AMERICAS", "AA"),
+            ("ARMED FORCES EUROPE", "AE"),
+            ("ARMED FORCES MIDDLE EAST", "AE"),
+            ("ARMED FORCES CANADA", "AE"),
+            ("ARMED FORCES PACIFIC", "AP"),
+            ("AA", "AA"),
+            ("AE", "AE"),
+            ("AP", "AP"),
+            ("FEDERATED STATES OF MICRONESIA", "FM"),
+            ("FM", "FM"),
+        ],
+    )
+    def test_pub28_appendix_b_military_and_freely_associated(
+        self, name: str, abbreviation: str
+    ) -> None:
+        """GH-299: Appendix B's Armed Forces 'states' and FM are in the table."""
+        assert STATE_MAP[name] == abbreviation
+
+    def test_military_states_are_state_map_abbreviations(self) -> None:
+        assert {"AA", "AE", "AP"} == MILITARY_STATES
+        assert set(STATE_MAP.values()) >= MILITARY_STATES
+
+
+class TestRouteGroupTypeMap:
+    @pytest.mark.parametrize(
+        ("variant", "canonical"),
+        [
+            ("RR", "RR"),
+            ("RURAL ROUTE", "RR"),
+            ("RFD", "RR"),
+            ("RD", "RR"),
+            ("RURAL FREE DELIVERY", "RR"),
+            ("HC", "HC"),
+            ("HIGHWAY CONTRACT", "HC"),
+            ("HCR", "HC"),
+            ("STAR ROUTE", "HC"),
+        ],
+    )
+    def test_route_group_variants(self, variant: str, canonical: str) -> None:
+        """GH-298: Pub 28 241/244 (RR) and 251/253 (HC)."""
+        assert ROUTE_GROUP_TYPE_MAP[variant] == canonical
+
+    @pytest.mark.parametrize("military", ["PSC", "CMR", "UNIT"])
+    def test_military_groups_absent(self, military: str) -> None:
+        """Military route designators are already Pub 28 forms; never remapped."""
+        assert military not in ROUTE_GROUP_TYPE_MAP
+
+
+class TestBoxTypeMap:
+    @pytest.mark.parametrize(
+        "variant",
+        [
+            "PO BOX",
+            "POST OFFICE BOX",
+            "P O BOX",
+            "POB",
+            "CALLER",
+            "FIRM CALLER",
+            "BIN",
+            "LOCKBOX",
+            "DRAWER",
+        ],
+    )
+    def test_po_box_variants(self, variant: str) -> None:
+        """GH-298: Pub 28 281/283 — every PO Box designation outputs PO BOX."""
+        assert BOX_TYPE_MAP[variant] == "PO BOX"
+
+    @pytest.mark.parametrize("other", ["BOX", "PMB", "GENERAL DELIVERY"])
+    def test_non_po_box_types_absent(self, other: str) -> None:
+        """'BOX' is also the rural route box; a PMB is not a PO Box."""
+        assert other not in BOX_TYPE_MAP
 
 
 class TestUnitMap:
