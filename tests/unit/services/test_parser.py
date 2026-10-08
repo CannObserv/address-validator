@@ -19,7 +19,9 @@ from address_validator.services.parse_recovery import (
     _recover_route_from_unit_slot,
     _recover_unit_from_city,
     _recover_unit_from_general_delivery,
+    _recover_unit_list_item,
     _splice,
+    _split_hash_phrase,
     recover_components,
 )
 from address_validator.services.parser import (
@@ -249,11 +251,165 @@ class TestDedupeSecondaryUnits:
         assert c == {"sub_premise_type": "STE", "sub_premise_number": "B"}
 
 
+_STREET = {"premise_number": "123", "thoroughfare_name": "MAIN", "thoroughfare_trailing_type": "ST"}
+
+
+# ---------------------------------------------------------------------------
+# _split_hash_phrase (GH #290)
+# ---------------------------------------------------------------------------
+
+
+class TestSplitHashPhrase:
+    """A '#' phrase usaddress folds into a named unit's identifier."""
+
+    @pytest.mark.parametrize("identifier", ["NO 5", "# 5", "NUMBER 5", "NO. 5"])
+    def test_leading_hash_word_dropped(self, identifier: str) -> None:
+        c = {"sub_premise_type": "STE", "sub_premise_number": identifier}
+        assert _split_hash_phrase(c) is None
+        assert c == {"sub_premise_type": "STE", "sub_premise_number": "5"}
+
+    @pytest.mark.parametrize("identifier", ["1 # 1", "1 NO 1", "1, NO 1", "1 # 1,"])
+    def test_restated_identifier_collapsed(self, identifier: str) -> None:
+        c = {"sub_premise_type": "APT", "sub_premise_number": identifier, "locality": "X"}
+        events: list[RecoveryEvent] = []
+        _split_hash_phrase(c, events)
+        assert c == {"sub_premise_type": "APT", "sub_premise_number": "1", "locality": "X"}
+        assert [e.warning for e in events] == ["Duplicate secondary unit collapsed into 'APT 1'"]
+
+    def test_distinct_identifier_routed_after_source_slot(self) -> None:
+        c = {"sub_premise_type": "STE", "sub_premise_number": "1 NO 2", "locality": "X"}
+        events: list[RecoveryEvent] = []
+        _split_hash_phrase(c, events)
+        assert list(c.items()) == [
+            ("sub_premise_type", "STE"),
+            ("sub_premise_number", "1"),
+            ("dependent_sub_premise_type", "NO"),
+            ("dependent_sub_premise_number", "2"),
+            ("locality", "X"),
+        ]
+        assert events == []
+
+    def test_distinct_identifier_kept_when_no_slot_free(self) -> None:
+        c = {
+            "sub_premise_type": "STE",
+            "sub_premise_number": "1 # 2",
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "A",
+        }
+        before = dict(c)
+        _split_hash_phrase(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        "c",
+        [
+            {"sub_premise_number": "# 5 # 6"},  # no designator: the standardizer's job
+            {"sub_premise_type": "#", "sub_premise_number": "5 # 6"},
+            {"sub_premise_type": "STE", "sub_premise_number": "5 NO"},  # nothing after
+            {"sub_premise_type": "STE", "sub_premise_number": "NO"},
+            {"sub_premise_type": "STE", "sub_premise_number": "5 NO SMOKING"},
+            {"sub_premise_type": "APT", "sub_premise_number": "PH 2"},
+        ],
+    )
+    def test_left_alone(self, c: dict[str, str]) -> None:
+        before = dict(c)
+        _split_hash_phrase(c)
+        assert c == before
+
+    def test_dependent_slot_split(self) -> None:
+        c = {"dependent_sub_premise_type": "BLDG", "dependent_sub_premise_number": "NO 3"}
+        _split_hash_phrase(c)
+        assert c == {"dependent_sub_premise_type": "BLDG", "dependent_sub_premise_number": "3"}
+
+
+# ---------------------------------------------------------------------------
+# _recover_unit_list_item (GH #288, #297)
+# ---------------------------------------------------------------------------
+
+_UNIT = {"sub_premise_type": "STE", "sub_premise_number": "100"}
+_CITY = {"locality": "SEATTLE", "administrative_area": "WA"}
+
+
+class TestRecoverUnitListItem:
+    """A list item after a unit, tagged as an intersection, box or second unit."""
+
+    @pytest.mark.parametrize(
+        "item_fields",
+        [
+            {"intersection_separator": "&", "second_thoroughfare_name": "101,"},
+            {"intersection_separator": "AND", "second_thoroughfare_name": "101"},
+            {"general_delivery_type": "AND", "general_delivery": "101"},
+            {"general_delivery_type": "&", "general_delivery": "101"},
+            {"dependent_sub_premise_type": "AND", "dependent_sub_premise_number": "101"},
+        ],
+    )
+    def test_item_folded_into_unit(self, item_fields: dict[str, str]) -> None:
+        c = {**_STREET, **_UNIT, **item_fields, **_CITY}
+        events: list[RecoveryEvent] = []
+        _recover_unit_list_item(c, events)
+        assert c == {
+            **_STREET,
+            "sub_premise_type": "STE",
+            "sub_premise_number": "100 & 101",
+            **_CITY,
+        }
+        assert [e.kind for e in events] == [RecoveryKind.UNIT_RECOVERED]
+        assert [e.warning for e in events] == [
+            "Unit list item recovered from mis-tagged field: '101'"
+        ]
+
+    def test_folds_into_the_unit_before_it(self) -> None:
+        c = {
+            **_STREET,
+            "dependent_sub_premise_type": "BLDG",
+            "dependent_sub_premise_number": "1",
+            **_UNIT,
+            "intersection_separator": "&",
+            "second_thoroughfare_name": "B",
+        }
+        _recover_unit_list_item(c)
+        assert c["sub_premise_number"] == "100 & B"
+        assert c["dependent_sub_premise_number"] == "1"
+
+    @pytest.mark.parametrize(
+        "c",
+        [
+            # no unit before the separator: a real intersection
+            {**_STREET, "intersection_separator": "&", "second_thoroughfare_name": "101"},
+            # a street after the unit, not a bare identifier
+            {
+                **_STREET,
+                **_UNIT,
+                "intersection_separator": "&",
+                "second_thoroughfare_name": "6TH",
+                "second_thoroughfare_trailing_type": "AVE",
+            },
+            {**_STREET, **_UNIT, "intersection_separator": "&", "second_thoroughfare_name": "OAK"},
+            {**_STREET, **_UNIT, "intersection_separator": "AT", "second_thoroughfare_name": "1"},
+            # a real box beside the unit
+            {**_STREET, **_UNIT, "general_delivery_type": "PO BOX", "general_delivery": "5"},
+            {**_STREET, **_UNIT, "general_delivery_type": "AND", "general_delivery": "1 2"},
+            {
+                **_STREET,
+                **_UNIT,
+                "general_delivery_group_type": "RR",
+                "general_delivery_group": "2",
+                "general_delivery_type": "AND",
+                "general_delivery": "5",
+            },
+            # not adjacent: the separator does not follow the unit
+            {**_UNIT, **_STREET, "intersection_separator": "&", "second_thoroughfare_name": "1"},
+        ],
+    )
+    def test_left_alone(self, c: dict[str, str]) -> None:
+        before = dict(c)
+        assert recover_components(c) == []
+        assert c == before
+
+
 # ---------------------------------------------------------------------------
 # _recover_unit_from_general_delivery (GH #285)
 # ---------------------------------------------------------------------------
-
-_STREET = {"premise_number": "123", "thoroughfare_name": "MAIN", "thoroughfare_trailing_type": "ST"}
 
 
 class TestRecoverUnitFromGeneralDelivery:
@@ -1362,6 +1518,8 @@ class TestCandidateCollection:
         [
             "123 MAIN ST SUITES 100, SEATTLE, WA 98101",  # unit tagged as a USPS box
             "123 MAIN ST BLG A SEATTLE WA",  # unit/city/state tagged as recipient
+            "123 MAIN ST STE 100 & 101, SEATTLE, WA 98101",  # GH-288: list item as a street
+            "123 MAIN ST STE 100 AND 101, SEATTLE, WA 98101",  # GH-297: list item as a box
         ],
     )
     async def test_gh285_recovery_returns_candidate_data(self, raw: str) -> None:

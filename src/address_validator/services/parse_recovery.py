@@ -132,6 +132,17 @@ _UNIT_IDENTIFIER_RE = re.compile(r"#?(?:[A-Z]|[A-Z0-9-]*\d[A-Z0-9-]*)")
 # An ordinal ("2ND"): a floor written before its designator ("2ND FLOOR").
 ORDINAL_RE = re.compile(r"\d+(?:ST|ND|RD|TH)")
 
+# Words that join a list of unit identifiers ("STE 100 & 101", "AND 101").
+_LIST_JOINERS: frozenset[str] = frozenset({"&", "AND"})
+
+# Where usaddress puts "& 101" / "AND 101" after a unit: (joiner key, item
+# key, prefix of the sibling keys that must be empty for it to be a list item).
+_LIST_ITEM_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("intersection_separator", "second_thoroughfare_name", "second_"),
+    ("general_delivery_type", "general_delivery", "general_delivery_group"),
+    ("dependent_sub_premise_type", "dependent_sub_premise_number", "dependent_"),
+)
+
 # Longest state name in STATE_MAP, in words ("NORTHERN MARIANA ISLANDS").
 _MAX_STATE_WORDS: int = 3
 
@@ -355,7 +366,9 @@ def collect_ambiguous_components(
                 if slot:
                     component_values[slot[0]] = token
                     redirect_id_key = slot[1]
-                    if not known_designator:
+                    # "AND" joins a unit list ("UNIT 1 AND 2"), not an unknown
+                    # designator; _recover_unit_list_item folds it back.
+                    if not known_designator and cleaned_unit_token not in _LIST_JOINERS:
                         warnings.append(
                             warning_catalogue.UNRECOGNIZED_UNIT_DESIGNATOR.format(
                                 designator=cleaned_unit_token
@@ -562,6 +575,50 @@ def _recover_unit_from_general_delivery(
         moved["locality"] = city
     _splice(components, _BOX_KEYS, moved)
     _record_unit_recovered(events, box_type)
+
+
+def _recover_unit_list_item(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Fold the second identifier of a ``&``/``AND`` unit list back into the unit.
+
+    usaddress tags ``"STE 100 & 101"`` as an intersection (second street
+    ``101``, rendered on line 1), ``"STE 100 AND 101"`` as a USPS box (dropped
+    beside a street), and ``"UNIT 1 AND 2"`` as a second unit whose designator
+    is ``AND`` (GH #288, #297).  When the joiner and a single
+    identifier-shaped item directly follow a unit identifier, and nothing else
+    was tagged on that field family, the item joins the unit as
+    ``"100 & 101"``.  A street after the separator (``"APT 5 & 6TH AVE"``) and
+    an intersection with no unit before it stay as they are.
+    """
+    for joiner_key, item_key, sibling_prefix in _LIST_ITEM_FIELDS:
+        keys = list(components)
+        if joiner_key not in keys:
+            continue
+        at = keys.index(joiner_key)
+        if at == 0 or keys[at - 1] not in _UNIT_TYPE_TO_ID.values():
+            continue
+        if keys[at + 1 : at + 2] != [item_key]:
+            continue
+        if _normalize_unit_value(components[joiner_key]) not in _LIST_JOINERS:
+            continue
+        item = components[item_key].strip(",; ")
+        if not _looks_like_unit_identifier(item):
+            continue
+        family = (joiner_key, item_key)
+        if any(k.startswith(sibling_prefix) and components[k] for k in keys if k not in family):
+            continue
+        id_key = keys[at - 1]
+        components[id_key] = f"{components[id_key].rstrip(',; ')} & {item}"
+        del components[joiner_key], components[item_key]
+        if events is not None:
+            events.append(
+                RecoveryEvent(
+                    kind=RecoveryKind.UNIT_RECOVERED,
+                    warning=warning_catalogue.UNIT_LIST_ITEM_RECOVERED.format(item=item),
+                )
+            )
 
 
 def _split_recipient_from_city(text: str) -> tuple[str, str]:
@@ -835,6 +892,63 @@ def _record_duplicate_collapsed(
         )
 
 
+def _is_hash_word(token: str) -> bool:
+    """``'#'`` or a word UNIT_MAP maps to it (``NO``/``NUM``/``NUMBER``)."""
+    return UNIT_MAP.get(_normalize_unit_value(token)) == "#"
+
+
+def _split_hash_phrase(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Split a ``'#'`` phrase usaddress folded into a named unit's identifier.
+
+    After a named designator, usaddress tags a ``'#'`` phrase (or a ``'#'``
+    alias word) as part of that unit's identifier (GH #290):
+
+    - leading (``"STE NO 5"``, ``"APT #4"`` → ``"NO 5"`` / ``"# 4"``): the word
+      stands in for a designator the unit already has, and is dropped
+      (Pub 28: ``"STE 5"``);
+    - interior (``"STE 1 #1"``, ``"UNIT 1, NO 1"`` → ``"1 # 1"`` /
+      ``"1, NO 1"``): the same identifier is the unit stated twice, collapsed
+      with the duplicate-unit warning as ``"#1 STE 1"`` already is (#170,
+      #286); a different one (``"STE 1 #2"``) is a second unit, moved to the
+      free unit slot right after its source, or left in place when none is free.
+
+    The ``'#'`` word must be followed by an identifier-shaped token
+    (``"STE 5 NO"`` is left alone).  A slot with no designator, or a ``'#'``
+    one, is the standardizer's (``split_designator``).
+    """
+    for type_key, id_key in _UNIT_SLOT_PAIRS:
+        designator = _normalize_unit_type(components.get(type_key, ""))
+        if not designator or designator == "#":
+            continue
+        tokens = components.get(id_key, "").split()
+        if len(tokens) > 1 and _is_hash_word(tokens[0]) and _looks_like_unit_identifier(tokens[1]):
+            tokens = tokens[1:]
+            components[id_key] = " ".join(tokens)
+        at = next(
+            (
+                i
+                for i in range(1, len(tokens) - 1)
+                if _is_hash_word(tokens[i]) and _looks_like_unit_identifier(tokens[i + 1])
+            ),
+            None,
+        )
+        if at is None:
+            continue
+        head = " ".join(tokens[:at]).rstrip(",;")
+        tail = " ".join(tokens[at + 1 :])
+        if _normalize_unit_identifier(head) == _normalize_unit_identifier(tail):
+            components[id_key] = head
+            _record_duplicate_collapsed(events, components[type_key], head)
+            continue
+        slot = _next_free_unit_slot(components)
+        if slot is not None:
+            moved = {id_key: head, slot[0]: tokens[at], slot[1]: tail}
+            _splice(components, (id_key,), moved)
+
+
 def _dedupe_secondary_units(
     components: dict[str, str],
     events: list[RecoveryEvent] | None = None,
@@ -912,12 +1026,14 @@ def recover_components(
     """Run all post-parse recovery heuristics over *component_values* in place.
 
     Mutates *component_values*: splits a recipient tagged after the street
-    back into city and state, moves a unit tagged as a USPS box onto an
-    occupancy slot, restores a street-less delivery line (``GENERAL
-    DELIVERY``, a military route group) tagged elsewhere to the box fields,
-    moves a unit tagged as part of the city onto an occupancy slot, repairs a
-    stray single-letter identifier fragment at the city head, then collapses
-    an identical-duplicate secondary unit into a single slot.
+    back into city and state, folds a ``&``/``AND`` unit list item tagged as
+    an intersection, box or second unit back into its unit, moves a unit
+    tagged as a USPS box onto an occupancy slot, restores a street-less
+    delivery line (``GENERAL DELIVERY``, a military route group) tagged
+    elsewhere to the box fields, moves a unit tagged as part of the city onto
+    an occupancy slot, repairs a stray single-letter identifier fragment at
+    the city head, splits a ``'#'`` phrase out of a named unit's identifier,
+    then collapses an identical-duplicate secondary unit into a single slot.
 
     Returns the list of :class:`RecoveryEvent` that fired, in order.  When
     *warnings* is supplied, each event's warning text is appended to it — the
@@ -929,11 +1045,13 @@ def recover_components(
     """
     events: list[RecoveryEvent] = []
     _recover_locality_from_trailing_addressee(component_values, events)
+    _recover_unit_list_item(component_values, events)
     _recover_unit_from_general_delivery(component_values, events)
     _recover_general_delivery_from_name(component_values, events)
     _recover_route_from_unit_slot(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
+    _split_hash_phrase(component_values, events)
     _dedupe_secondary_units(component_values, events)
     if warnings is not None:
         warnings.extend(e.warning for e in events)

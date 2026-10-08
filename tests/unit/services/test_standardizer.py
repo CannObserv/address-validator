@@ -255,6 +255,102 @@ class TestStandardize:
         assert result.address_line_2 == "FL 2ND STE 100"
         assert result.city == "SEATTLE"
 
+    @pytest.mark.parametrize(
+        ("tail", "line_2", "item"),
+        [
+            ("SUITE 100 & 200", "STE 100 & 200", "200"),  # '&' tagged as an intersection
+            ("STE 100 & 101", "STE 100 & 101", "101"),
+            ("STE 100 &101", "STE 100 & 101", "101"),
+            ("BLDG 1 STE 100 & 101", "BLDG 1 STE 100 & 101", "101"),
+            ("STE 100 AND 101", "STE 100 & 101", "101"),  # 'AND' tagged as a USPS box
+            ("UNIT 1 AND 2", "UNIT 1 & 2", "2"),  # 'AND' tagged as a unit type
+            ("# 5 AND 6", "# 5 & 6", "6"),
+        ],
+    )
+    async def test_unit_list_joined_by_ampersand_or_and_kept_on_line2(
+        self, tail: str, line_2: str, item: str
+    ) -> None:
+        """GH-288/297: the second identifier of '<unit> & <id>' / '<unit> AND
+        <id>' was moved to line 1 as an intersection street, or dropped as a PO
+        box.  It stays in the unit, and the recovery is reported."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == "123 MAIN ST"
+        assert result.address_line_2 == line_2
+        assert f"Unit list item recovered from mis-tagged field: '{item}'" in result.warnings
+        assert not any("omitted" in w or "Unrecognized" in w for w in result.warnings)
+
+    @pytest.mark.parametrize(
+        ("tail", "line_2"),
+        [
+            ("UNIT 1 & 2", "UNIT 1 & 2"),  # usaddress keeps '&' in the identifier
+            ("STE 100 & STE 101", "STE 100 & STE 101"),
+        ],
+    )
+    async def test_unit_list_already_on_line2_unchanged(self, tail: str, line_2: str) -> None:
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_2 == line_2
+        assert not any("Unit list item" in w for w in result.warnings)
+
+    @pytest.mark.parametrize(
+        ("raw", "line_1", "line_2"),
+        [
+            ("123 MAIN ST & 101, SEATTLE, WA 98101", "123 MAIN ST & 101", ""),  # no unit
+            ("123 MAIN ST APT 5 & 6TH AVE, SEATTLE, WA 98101", "123 MAIN ST & 6TH AVE", "APT 5"),
+            ("MAIN ST & 5TH AVE, SEATTLE, WA 98101", "MAIN ST & 5TH AVE", ""),
+        ],
+    )
+    async def test_intersection_without_unit_list_left_alone(
+        self, raw: str, line_1: str, line_2: str
+    ) -> None:
+        """GH-288: only a bare identifier right after a unit is a list item."""
+        parsed = (await parse_address(raw)).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == line_1
+        assert result.address_line_2 == line_2
+
+    @pytest.mark.parametrize(
+        "tail",
+        ["STE 1 #1", "STE 1 # 1", "APT 1 NO 1", "UNIT 1, NO 1", "STE 1 NUMBER 1"],
+    )
+    async def test_trailing_hash_phrase_restating_unit_collapsed(self, tail: str) -> None:
+        """GH-290: a '#' phrase after a named unit with the same identifier is
+        the unit stated twice, as '#1 STE 1' already collapses."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        designator = result.components.values["sub_premise_type"]
+        assert result.address_line_2 == f"{designator} 1"
+        assert f"Duplicate secondary unit collapsed into '{designator} 1'" in result.warnings
+
+    @pytest.mark.parametrize(
+        ("tail", "line_2"),
+        [
+            ("STE NO 5", "STE 5"),
+            ("STE NUMBER 5", "STE 5"),
+            ("STE #5", "STE 5"),
+            ("APT # 4B", "APT 4B"),
+        ],
+    )
+    async def test_hash_word_after_designator_dropped(self, tail: str, line_2: str) -> None:
+        """GH-290: '#' (or 'NO') after a designator stands in for one; the
+        Pub 28 form is the designator and identifier alone."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_2 == line_2
+        assert result.warnings == []
+
+    @pytest.mark.parametrize(
+        ("tail", "line_2"),
+        [("STE 1 #2", "STE 1 # 2"), ("APT 1 NO 2", "APT 1 # 2")],
+    )
+    async def test_trailing_hash_phrase_distinct_unit_kept(self, tail: str, line_2: str) -> None:
+        """GH-290: a different identifier is a second unit, in its own slot."""
+        parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_2 == line_2
+        assert result.components.values["dependent_sub_premise_number"] == "2"
+
     def test_same_level_units_render_in_source_order(self) -> None:
         """GH-170 CR: '#108 STE B' — neither unit is a container, so line 2
         preserves source order (insertion order of the component keys)

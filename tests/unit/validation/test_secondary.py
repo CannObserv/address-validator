@@ -169,6 +169,15 @@ class TestRangesAndLists:
             # composes with #287: SMP dropped, then the range narrowed
             (_units(("STE", "100-102"), ("SMP", "2")), "STE 100-102 SMP 2", "STE 100"),
             (_units(("#", "5-6 # 7")), "# 5-6 # 7", "# 5"),
+            # GH #297: '&' / 'AND' join a list like ','
+            (_units(("UNIT", "1 & 2")), "UNIT 1 & 2", "UNIT 1"),
+            (_units(("#", "5 & 6")), "# 5 & 6", "# 5"),
+            (_units(("STE", "A & B")), "STE A & B", "STE A"),
+            (_units(("STE", "100 AND 101")), "STE 100 AND 101", "STE 100"),
+            (_units(("STE", "100 & 101 & 102")), "STE 100 & 101 & 102", "STE 100"),
+            (_units(("STE", "100-102 & 105")), "STE 100-102 & 105", "STE 100"),
+            # a bare '&' left on the first of two units is not identifier text
+            (_units(("STE", "100 &"), ("STE", "101")), "STE 100 & STE 101", "STE 100"),
         ],
     )
     def test_range_or_list_narrows_to_first_unit(
@@ -189,6 +198,7 @@ class TestRangesAndLists:
             "2-100",  # different widths: floor-suite style identifier
             "4 B",  # space-separated, not all numeric
             "100-102-104",  # not a two-sided range
+            "C&F 1",  # '&' inside a token is identifier text (GH #297)
         ],
     )
     def test_identifier_that_is_not_a_range_or_list_sent_unchanged(self, identifier: str) -> None:
