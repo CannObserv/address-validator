@@ -12,6 +12,15 @@ from address_validator.usps_data.units import CONTAINER_DESIGNATORS
 _ZIP5: int = 5  # digits in a USPS ZIP code
 _ZIP9: int = 9  # digits in a ZIP+4 code
 
+# Street-less delivery line, in reading order: route group (rural route,
+# highway contract, military PSC/CMR/UNIT) before box — "RR 2 BOX 152".
+_GENERAL_DELIVERY_KEYS: tuple[str, ...] = (
+    "general_delivery_group_type",
+    "general_delivery_group",
+    "general_delivery_type",
+    "general_delivery",
+)
+
 
 def _lookup(value: str, table: dict[str, str]) -> str:
     """Return the USPS abbreviation for *value*, or *value* unchanged.
@@ -123,7 +132,8 @@ def _assemble_lines(
 
     Returns ``(line1, line2, last_line)``:
 
-    - **line1** — street number + street name, or PO box.
+    - **line1** — street number + street name; with no street, the route
+      group and box (``"RR 2 BOX 152"``, ``"PO BOX 42"``, ``"GENERAL DELIVERY"``).
     - **line2** — secondary-unit designators.  *sub_first* controls slot
       order: ``True`` (default) renders the dependent slot first — correct
       when it holds a larger container (USPS Pub 28: ``"BLDG C STE 120"``);
@@ -145,11 +155,8 @@ def _assemble_lines(
         line1 = " ".join([*number_parts, *first_street, "&", *second_street])
     elif first_street or number_parts:
         line1 = " ".join([*number_parts, *first_street])
-    elif std.get("general_delivery_type") or std.get("general_delivery"):
-        gd_parts = (std.get("general_delivery_type", ""), std.get("general_delivery", ""))
-        line1 = " ".join(p for p in gd_parts if p)
     else:
-        line1 = ""
+        line1 = " ".join(std[k] for k in _GENERAL_DELIVERY_KEYS if std.get(k))
 
     # --- address line 2 ---
     # Slot order per *sub_first* (container-first by default; source order

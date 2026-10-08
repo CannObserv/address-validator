@@ -381,6 +381,57 @@ class TestStandardize:
         assert result.address_line_2 == ""
         assert result.warnings == [GENERAL_DELIVERY_DISCARDED.format(text=dropped)]
 
+    @pytest.mark.parametrize(
+        ("comps", "line_1"),
+        [
+            (
+                {
+                    "general_delivery_group_type": "RR",
+                    "general_delivery_group": "2",
+                    "general_delivery_type": "BOX",
+                    "general_delivery": "152",
+                },
+                "RR 2 BOX 152",
+            ),
+            # usaddress tags 'RR 2,' with no box as group type + box ID.
+            ({"general_delivery_group_type": "RR", "general_delivery": "2,"}, "RR 2"),
+            ({"general_delivery_type": "GENERAL DELIVERY"}, "GENERAL DELIVERY"),
+        ],
+    )
+    def test_route_group_rendered_on_line_1(self, comps: dict[str, str], line_1: str) -> None:
+        """GH-292: the rural route / highway contract group is part of the
+        delivery line ('RR 2 BOX 152'), not dropped."""
+        result = standardize(comps)
+        assert result.address_line_1 == line_1
+        assert result.warnings == []
+
+    @pytest.mark.parametrize(
+        ("raw", "line_1", "city", "state"),
+        [
+            ("RR 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152", "GLENNALLEN", "AK"),
+            ("HC 1 BOX 5, SEATTLE, WA 98101", "HC 1 BOX 5", "SEATTLE", "WA"),
+            ("HC 68 BOX 23A, MAGDALENA, NM 87825", "HC 68 BOX 23A", "MAGDALENA", "NM"),
+            ("PSC 1234 BOX 5678, APO, AE 09001", "PSC 1234 BOX 5678", "APO", "AE"),
+            ("PSC 802 BOX 74 APO AE 09499", "PSC 802 BOX 74", "APO", "AE"),
+            ("CMR 450 BOX 123, APO, AE 09001", "CMR 450 BOX 123", "APO", "AE"),
+            ("UNIT 2050 BOX 4190, APO, AP 96278", "UNIT 2050 BOX 4190", "APO", "AP"),
+            ("GENERAL DELIVERY, SEATTLE, WA 98101", "GENERAL DELIVERY", "SEATTLE", "WA"),
+            ("GENERAL DELIVERY SEATTLE WA 98101", "GENERAL DELIVERY", "SEATTLE", "WA"),
+            ("general delivery seattle wa", "GENERAL DELIVERY", "SEATTLE", "WA"),
+        ],
+    )
+    async def test_delivery_line_without_street_rendered_whole(
+        self, raw: str, line_1: str, city: str, state: str
+    ) -> None:
+        """GH-292/293: rural route, highway contract, military and general
+        delivery lines render whole on line 1 (Pub 28), with nothing on line 2."""
+        parsed = (await parse_address(raw)).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == line_1
+        assert result.address_line_2 == ""
+        assert result.city == city
+        assert result.region == state
+
     def test_general_delivery_without_street_does_not_warn(self) -> None:
         comps = {"general_delivery_type": "PO BOX", "general_delivery": "42"}
         assert standardize(comps).warnings == []

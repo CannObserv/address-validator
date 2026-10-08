@@ -32,8 +32,8 @@ from address_validator.services.standardizer import standardize
 # Pins — update together with PIPELINE_CODE_VERSION (see module docstring)
 # ---------------------------------------------------------------------------
 
-_PINNED_CODE_VERSION = 9
-_PINNED_CORPUS_HASH = "eb222d51e4d41731a3c2183b5c18cf522e92c2f3469493f2c2d65756d0a1a864"
+_PINNED_CODE_VERSION = 10
+_PINNED_CORPUS_HASH = "8158ada63ebd69f74c1077691f580fd0a973a6728c5dce7e4d71beeba1b14b62"
 
 # Fixed corpus — exercises the pipeline surfaces most likely to change output:
 # cleanup regexes, directional/type abbreviation, secondary units, PO Box / rural
@@ -69,6 +69,12 @@ _CORPUS = [
     "123 MAIN ST STE 100 - 102, SEATTLE, WA 98101",
     "100 - 102 MAIN ST, SEATTLE, WA 98101",
     "123 MAIN ST STE 100 2ND FLOOR, SEATTLE, WA 98101",
+    "GENERAL DELIVERY, SEATTLE, WA 98101",
+    "GENERAL DELIVERY SEATTLE WA 98101",
+    "HC 1 BOX 5, SEATTLE, WA 98101",
+    "PSC 1234 BOX 5678, APO, AE 09001",
+    "CMR 450 BOX 123, APO, AE 09001",
+    "UNIT 2050 BOX 4190, APO, AP 96278",
 ]
 
 

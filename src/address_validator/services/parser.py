@@ -62,6 +62,7 @@ _CANDIDATE_RECOVERY_KINDS = frozenset(
         RecoveryKind.UNIT_RECOVERED,
         RecoveryKind.FRAGMENT_RECOVERED,
         RecoveryKind.LOCALITY_RECOVERED,
+        RecoveryKind.DELIVERY_LINE_RECOVERED,
     }
 )
 
