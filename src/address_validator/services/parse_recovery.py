@@ -312,7 +312,9 @@ def collect_ambiguous_components(
       that usaddress itself tagged as a unit type — GH #129), it is routed
       to the next free slot instead of being concatenated.  A routed token
       that is not in ``UNIT_MAP`` adds an "Unrecognized unit designator
-      preserved" warning.  Subsequent mislabelled tokens (``AddressNumber``,
+      preserved" warning, except a list joiner (``AND`` in ``"UNIT 1 AND
+      2"``), which :func:`_recover_unit_list_item` folds back into the unit
+      before it (GH #297).  Subsequent mislabelled tokens (``AddressNumber``,
       ``StreetName``, …) are redirected into that slot's identifier until a
       city/state/zip token appears.
 
