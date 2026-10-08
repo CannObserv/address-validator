@@ -262,7 +262,7 @@ src/address_validator/
   db/
     engine.py                  # AsyncEngine singleton + Alembic migration runner
     tables.py                  # SQLAlchemy Core Table definitions
-  usps_data/                   # Pub 28 lookup tables (suffixes, directionals, states, units)
+  usps_data/                   # Pub 28 lookup tables (suffixes, directionals, states, units, routes)
   canada_post_data/            # Canada Post lookup tables (provinces, suffixes, directionals)
 alembic/                       # Database migrations
 docs/                          # Architecture docs, USPS/ISO research, design plans
