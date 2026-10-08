@@ -843,6 +843,25 @@ class TestRepeatedLabelFallback:
         assert values["general_delivery_type"] == "BOX"
         assert values["general_delivery"].strip(",") in {"74", "123"}
 
+    async def test_military_box_left_alone_when_route_group_tagged(self) -> None:
+        """A route group usaddress already tagged is never overwritten."""
+        fake_tokens = [
+            ("RR", "USPSBoxGroupType"),
+            ("2", "USPSBoxGroupID"),
+            ("PSC", "USPSBoxType"),
+            ("5", "USPSBoxID"),
+            ("BOX", "USPSBoxType"),
+            ("6", "USPSBoxID"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            response = (await parse_address("RR 2 PSC 5 BOX 6")).response
+        values = response.components.values
+        assert values["general_delivery_group_type"] == "RR"
+        assert values["general_delivery_group"] == "2"
+        assert values["general_delivery_type"] == "PSC BOX"
+        assert not any(w.startswith("Delivery address line") for w in response.warnings)
+
     async def test_repeated_po_box_not_made_a_route_group(self) -> None:
         fake_tokens = [("PO BOX", "USPSBoxType"), ("5", "USPSBoxID")] * 2
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
