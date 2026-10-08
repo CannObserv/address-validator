@@ -81,9 +81,10 @@ class TestStateMap:
         """GH-299: Appendix B's Armed Forces 'states' and FM are in the table."""
         assert STATE_MAP[name] == abbreviation
 
-    def test_military_states_are_state_map_abbreviations(self) -> None:
-        assert {"AA", "AE", "AP"} == MILITARY_STATES
-        assert set(STATE_MAP.values()) >= MILITARY_STATES
+    def test_military_states_are_the_armed_forces_abbreviations(self) -> None:
+        """MILITARY_STATES is exactly what the Armed Forces names map to."""
+        armed_forces = {v for k, v in STATE_MAP.items() if k.startswith("ARMED FORCES ")}
+        assert {"AA", "AE", "AP"} == armed_forces == MILITARY_STATES
 
 
 class TestRouteGroupTypeMap:
