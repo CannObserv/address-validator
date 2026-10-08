@@ -311,17 +311,24 @@ class TestStandardize:
         assert result.address_line_2 == line_2
 
     @pytest.mark.parametrize(
-        "tail",
-        ["STE 1 #1", "STE 1 # 1", "APT 1 NO 1", "UNIT 1, NO 1", "STE 1 NUMBER 1"],
+        ("tail", "line_2"),
+        [
+            ("STE 1 #1", "STE 1"),
+            ("STE 1 # 1", "STE 1"),
+            ("APT 1 NO 1", "APT 1"),
+            ("UNIT 1, NO 1", "UNIT 1"),
+            ("SUITE 1 NUMBER 1", "STE 1"),
+        ],
     )
-    async def test_trailing_hash_phrase_restating_unit_collapsed(self, tail: str) -> None:
+    async def test_trailing_hash_phrase_restating_unit_collapsed(
+        self, tail: str, line_2: str
+    ) -> None:
         """GH-290: a '#' phrase after a named unit with the same identifier is
         the unit stated twice, as '#1 STE 1' already collapses."""
         parsed = (await parse_address(f"123 MAIN ST {tail}, SEATTLE, WA 98101")).response
         result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
-        designator = result.components.values["sub_premise_type"]
-        assert result.address_line_2 == f"{designator} 1"
-        assert f"Duplicate secondary unit collapsed into '{designator} 1'" in result.warnings
+        assert result.address_line_2 == line_2
+        assert f"Duplicate secondary unit collapsed into '{line_2}'" in result.warnings
 
     @pytest.mark.parametrize(
         ("tail", "line_2"),
