@@ -40,6 +40,7 @@ class RecoveryKind(StrEnum):
     FRAGMENT_RECOVERED = "fragment_recovered"
     LOCALITY_RECOVERED = "locality_recovered"
     DUPLICATE_UNIT_COLLAPSED = "duplicate_unit_collapsed"
+    DELIVERY_LINE_RECOVERED = "delivery_line_recovered"
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,23 @@ _STREET_KEY_PREFIXES: tuple[str, ...] = ("premise_number", "thoroughfare_")
 
 # The USPS box pair usaddress fills from USPSBoxType / USPSBoxID.
 _BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
+
+# The route group pair usaddress fills from USPSBoxGroupType / USPSBoxGroupID
+# ("RR 2" in "RR 2 BOX 152"; "PSC 1234" in "PSC 1234 BOX 5678").
+_GROUP_KEYS: tuple[str, str] = ("general_delivery_group_type", "general_delivery_group")
+
+# Military route designators: always a route group, never a unit (GH #292).
+_MILITARY_GROUP_TYPES: frozenset[str] = frozenset({"PSC", "CMR"})
+
+# Military "states".  'UNIT 2050 BOX 4190' is a route group only beside one:
+# UNIT is also a civilian designator.
+_MILITARY_STATES: frozenset[str] = frozenset({"AA", "AE", "AP"})
+
+# The Pub 28 general-delivery line, with any recipient text before or after it.
+_GENERAL_DELIVERY = "GENERAL DELIVERY"
+_GENERAL_DELIVERY_RE = re.compile(
+    r"(?P<before>.*?)\bGENERAL\s+DELIVERY\b(?P<after>.*)", re.IGNORECASE | re.DOTALL
+)
 
 # A token shaped like a unit identifier: one letter, or alphanumeric with a
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
@@ -223,6 +241,40 @@ def _floor_ordinals_after_designator(
     return tokens
 
 
+def _military_box_as_route_group(
+    parsed_string: list[tuple[str, str]],
+    tag_names: dict[str, str],
+    warnings: list[str],
+) -> list[tuple[str, str]]:
+    """Relabel a leading ``PSC``/``CMR`` box phrase as the route group (GH #292).
+
+    usaddress tags ``PSC 802 BOX 74`` as two ``USPSBoxType`` phrases, which
+    would concatenate into ``"PSC BOX"`` / ``"802 74"``.  When a second box
+    type follows and no route group was tagged, the first phrase and its IDs
+    become ``USPSBoxGroupType`` / ``USPSBoxGroupID``, and a recovered
+    delivery-line warning naming the route (``"PSC 802"``) is appended to
+    *warnings*, as the unit-slot recovery emits for the same address.
+    """
+    tokens = list(parsed_string)
+    keys = [tag_names.get(label, label) for _, label in tokens]
+    if "general_delivery_type" not in keys or "general_delivery_group_type" in keys:
+        return tokens
+    first = keys.index("general_delivery_type")
+    second_box = "general_delivery_type" in keys[first + 1 :]
+    if not second_box or _normalize_unit_value(tokens[first][0]) not in _MILITARY_GROUP_TYPES:
+        return tokens
+    tokens[first] = (tokens[first][0], "USPSBoxGroupType")
+    route = [tokens[first][0]]
+    for i in range(first + 1, len(tokens)):
+        if keys[i] != "general_delivery":
+            break
+        tokens[i] = (tokens[i][0], "USPSBoxGroupID")
+        route.append(tokens[i][0])
+    route_text = " ".join(t.strip(",;") for t in route)
+    warnings.append(warning_catalogue.DELIVERY_LINE_RECOVERED.format(text=route_text))
+    return tokens
+
+
 def collect_ambiguous_components(
     parsed_string: list[tuple[str, str]],
     warnings: list[str],
@@ -252,9 +304,12 @@ def collect_ambiguous_components(
       city/state/zip token appears.
 
     A floor ordinal before its designator (``"2ND FLOOR"``) is first swapped
-    behind it; see :func:`_floor_ordinals_after_designator`.
+    behind it; see :func:`_floor_ordinals_after_designator`.  A military
+    route tagged as a second box (``"PSC 802 BOX 74"``) is relabelled as the
+    route group; see :func:`_military_box_as_route_group`.
     """
     parsed_string = _floor_ordinals_after_designator(parsed_string, tag_names)
+    parsed_string = _military_box_as_route_group(parsed_string, tag_names, warnings)
     component_values: dict[str, str] = {}
     prev_key: str | None = None
     separator_before: bool = False
@@ -552,6 +607,20 @@ def _recover_locality_from_trailing_addressee(
     if not any(_is_street_key(k) and components[k] for k in keys[: keys.index("addressee")]):
         return
 
+    recovered = _split_trailing_state(tail)
+    if recovered is None:
+        return
+    _splice(components, ("addressee",), recovered)
+    _record_locality_recovered(events)
+
+
+def _split_trailing_state(tail: str) -> dict[str, str] | None:
+    """Split a recipient tail ending in a state into last-line fields.
+
+    Returns ``addressee`` (only when a recipient segment is left),
+    ``locality`` and ``administrative_area``, or ``None`` when the tail does
+    not end in a STATE_MAP entry with a city before it.
+    """
     tokens = tail.split()
     # Longest state name first, so "NEW YORK" wins over "YORK".
     for n in range(min(_MAX_STATE_WORDS, len(tokens) - 1), 0, -1):
@@ -559,17 +628,104 @@ def _recover_locality_from_trailing_addressee(
         if state.upper().replace(".", "").strip(",;") in STATE_MAP:
             recipient, city = _split_recipient_from_city(" ".join(tokens[:-n]))
             if not city:
-                return
+                return None
             recovered = {"addressee": recipient} if recipient else {}
-            recovered |= {"locality": city, "administrative_area": state}
-            _splice(components, ("addressee",), recovered)
-            if events is not None:
-                events.append(
-                    RecoveryEvent(
-                        kind=RecoveryKind.LOCALITY_RECOVERED,
-                        warning=warning_catalogue.LOCALITY_FROM_RECIPIENT,
-                    )
-                )
+            return recovered | {"locality": city, "administrative_area": state}
+    return None
+
+
+def _record_locality_recovered(events: list[RecoveryEvent] | None) -> None:
+    if events is not None:
+        events.append(
+            RecoveryEvent(
+                kind=RecoveryKind.LOCALITY_RECOVERED,
+                warning=warning_catalogue.LOCALITY_FROM_RECIPIENT,
+            )
+        )
+
+
+def _record_delivery_line_recovered(events: list[RecoveryEvent] | None, text: str) -> None:
+    if events is not None:
+        events.append(
+            RecoveryEvent(
+                kind=RecoveryKind.DELIVERY_LINE_RECOVERED,
+                warning=warning_catalogue.DELIVERY_LINE_RECOVERED.format(text=text),
+            )
+        )
+
+
+def _recover_general_delivery_from_name(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Move a ``GENERAL DELIVERY`` tagged as a landmark or recipient to the box.
+
+    usaddress tags the literal phrase as ``LandmarkName`` (with a comma after
+    it) or ``Recipient`` (without one), together with any name beside it
+    (``"JOHN SMITH, GENERAL DELIVERY"``).  The standardizer renders neither,
+    so line 1 came out empty and validation took the no-street path (GH #293).
+    With no street, box or route parsed, the phrase becomes
+    ``general_delivery_type``, which renders as line 1; text before or after
+    it stays in the field it came from.
+
+    With no ZIP, usaddress can tag the whole input as recipient
+    (``"GENERAL DELIVERY SEATTLE WA"``).  When no city, state or ZIP was
+    parsed, text after the phrase is split into city and state as
+    :func:`_recover_locality_from_trailing_addressee` does; text that does not
+    end in a state (``"GENERAL DELIVERY SEATTLE"``) could be the city or a
+    name, so the field is left alone.
+    """
+    if _has_street(components) or any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
+        return
+    for key in ("landmark", "addressee"):
+        match = _GENERAL_DELIVERY_RE.fullmatch(components.get(key, ""))
+        if match is None:
+            continue
+        before = match["before"].strip(" ,;")
+        after = match["after"].strip(" ,;")
+        last_line = None
+        if after and key == "addressee" and not any(components.get(k) for k in _POST_STREET_KEYS):
+            last_line = _split_trailing_state(after)
+            if last_line is None:
+                return
+            after = last_line.pop("addressee", "")
+        rest = ", ".join(p for p in (before, after) if p)
+        recovered = {key: rest} if rest else {}
+        recovered |= {"general_delivery_type": _GENERAL_DELIVERY, **(last_line or {})}
+        _splice(components, (key,), recovered)
+        _record_delivery_line_recovered(events, _GENERAL_DELIVERY)
+        if last_line is not None:
+            _record_locality_recovered(events)
+        return
+
+
+def _recover_route_from_unit_slot(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Move a military route group tagged as a unit onto the route group pair.
+
+    usaddress tags ``PSC 1234`` in ``PSC 1234 BOX 5678`` as a subaddress (and
+    ``UNIT 2050`` as an occupancy), so line 2 got the route and line 1 only
+    the box.  Pub 28 puts both on line 1 (GH #292).  Fires only with no
+    street, a box, and no route group already parsed; ``PSC``/``CMR`` always
+    qualify, ``UNIT`` only beside a military state (``AA``/``AE``/``AP``).
+    """
+    if _has_street(components) or any(components.get(k) for k in _GROUP_KEYS):
+        return
+    if not any(components.get(k) for k in _BOX_KEYS):
+        return
+    state = _normalize_unit_value(components.get("administrative_area", ""))
+    for type_key, id_key in _UNIT_SLOT_PAIRS:
+        designator = _normalize_unit_type(components.get(type_key, ""))
+        if designator in _MILITARY_GROUP_TYPES or (
+            designator == "UNIT" and state in _MILITARY_STATES
+        ):
+            group = {"general_delivery_group_type": components[type_key]}
+            if components.get(id_key):
+                group["general_delivery_group"] = components[id_key]
+            _splice(components, (type_key, id_key), group)
+            _record_delivery_line_recovered(events, " ".join(group.values()))
             return
 
 
@@ -756,10 +912,12 @@ def recover_components(
     """Run all post-parse recovery heuristics over *component_values* in place.
 
     Mutates *component_values*: splits a recipient tagged after the street
-    back into city and state, moves a unit tagged as a USPS box or as part of
-    the city onto occupancy slots, repairs a stray single-letter identifier
-    fragment at the city head, then collapses an identical-duplicate secondary
-    unit into a single slot.
+    back into city and state, moves a unit tagged as a USPS box onto an
+    occupancy slot, restores a street-less delivery line (``GENERAL
+    DELIVERY``, a military route group) tagged elsewhere to the box fields,
+    moves a unit tagged as part of the city onto an occupancy slot, repairs a
+    stray single-letter identifier fragment at the city head, then collapses
+    an identical-duplicate secondary unit into a single slot.
 
     Returns the list of :class:`RecoveryEvent` that fired, in order.  When
     *warnings* is supplied, each event's warning text is appended to it — the
@@ -772,6 +930,8 @@ def recover_components(
     events: list[RecoveryEvent] = []
     _recover_locality_from_trailing_addressee(component_values, events)
     _recover_unit_from_general_delivery(component_values, events)
+    _recover_general_delivery_from_name(component_values, events)
+    _recover_route_from_unit_slot(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
     _dedupe_secondary_units(component_values, events)

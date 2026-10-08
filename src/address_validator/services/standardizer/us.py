@@ -8,6 +8,7 @@ from address_validator.models import (  # alias can't be used as constructor
     StandardizeResponseV2,
 )
 from address_validator.services.standardizer._lines import (
+    _GENERAL_DELIVERY_KEYS,
     _assemble_lines,
     _get,
     _lookup,
@@ -142,20 +143,11 @@ def split_designator(unit_id: str) -> tuple[str, str]:
     return "#", unit_id
 
 
-# Group (rural route) before box, matching the "RR 2 BOX 152" reading order.
-_GENERAL_DELIVERY_KEYS: tuple[str, ...] = (
-    "general_delivery_group_type",
-    "general_delivery_group",
-    "general_delivery_type",
-    "general_delivery",
-)
-
-
 def _warn_general_delivery_beside_street(std: dict[str, str], warnings: list[str]) -> None:
     """Warn when a PO Box / general-delivery value will be left off the lines.
 
-    ``_assemble_lines`` renders general delivery only when there is no street,
-    and never on line 2.  Parse recovery moves a box that is really a unit
+    ``_assemble_lines`` renders the route group and box only when there is no
+    street, and never on line 2.  Parse recovery moves a box that is really a unit
     (``SUITES 100``) onto a unit slot first; anything still here beside a
     street (``PO BOX 5``, ``LOCKER 7``, direct component input) is kept in
     ``components`` but omitted from the address — say so (GH #285).

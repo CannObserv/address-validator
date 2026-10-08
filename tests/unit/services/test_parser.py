@@ -7,13 +7,16 @@ from unittest.mock import AsyncMock
 import pytest
 import usaddress
 
+from address_validator.core.warnings import DELIVERY_LINE_RECOVERED
 from address_validator.services.audit import get_audit_parse_type, reset_audit_context
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parse_recovery import (
     RecoveryEvent,
     RecoveryKind,
+    _recover_general_delivery_from_name,
     _recover_identifier_fragment_from_city,
     _recover_locality_from_trailing_addressee,
+    _recover_route_from_unit_slot,
     _recover_unit_from_city,
     _recover_unit_from_general_delivery,
     _splice,
@@ -473,6 +476,179 @@ class TestRecoverLocalityFromTrailingAddressee:
         assert c == {"addressee": "SEATTLE WA"}
 
 
+# ---------------------------------------------------------------------------
+# _recover_general_delivery_from_name (GH #293)
+# ---------------------------------------------------------------------------
+
+_LAST_LINE = {"locality": "SEATTLE", "administrative_area": "WA", "postcode": "98101"}
+
+
+class TestRecoverGeneralDeliveryFromName:
+    """usaddress tags a literal ``GENERAL DELIVERY`` as ``LandmarkName`` (with
+    a comma) or ``Recipient`` (without).  The standardizer renders neither, so
+    line 1 came out empty."""
+
+    @pytest.mark.parametrize("key", ["landmark", "addressee"])
+    @pytest.mark.parametrize("text", ["GENERAL DELIVERY", "general delivery,", "General  Delivery"])
+    def test_moved_to_general_delivery_type(self, key: str, text: str) -> None:
+        c = {key: text, **_LAST_LINE}
+        events: list[RecoveryEvent] = []
+        _recover_general_delivery_from_name(c, events)
+        assert c == {"general_delivery_type": "GENERAL DELIVERY", **_LAST_LINE}
+        assert next(iter(c)) == "general_delivery_type"
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert "GENERAL DELIVERY" in events[0].warning
+
+    def test_city_and_state_split_from_recipient_tail(self) -> None:
+        """No ZIP: usaddress tags the whole input as recipient."""
+        c = {"addressee": "GENERAL DELIVERY SEATTLE WA"}
+        events = recover_components(c)
+        assert c == {
+            "general_delivery_type": "GENERAL DELIVERY",
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
+        assert [e.kind for e in events] == [
+            RecoveryKind.DELIVERY_LINE_RECOVERED,
+            RecoveryKind.LOCALITY_RECOVERED,
+        ]
+
+    def test_tail_without_state_left_alone(self) -> None:
+        """'GENERAL DELIVERY SEATTLE': no state, so the tail can't be told
+        from a recipient name — nothing is guessed."""
+        c = {"addressee": "GENERAL DELIVERY SEATTLE"}
+        assert recover_components(c) == []
+        assert c == {"addressee": "GENERAL DELIVERY SEATTLE"}
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "JOHN SMITH, GENERAL DELIVERY",
+            "JOHN SMITH GENERAL DELIVERY",
+            "GENERAL DELIVERY JOHN SMITH",
+            "GENERAL DELIVERY, JOHN SMITH,",
+        ],
+    )
+    def test_recipient_beside_phrase_kept(self, text: str) -> None:
+        """GH-293 CR 1: a name line beside the phrase stays the recipient; with
+        the last line parsed, text after the phrase can't be the city."""
+        c = {"addressee": text, **_LAST_LINE}
+        events = recover_components(c)
+        assert c == {
+            "addressee": "JOHN SMITH",
+            "general_delivery_type": "GENERAL DELIVERY",
+            **_LAST_LINE,
+        }
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+
+    def test_recipient_before_phrase_with_city_and_state_tail(self) -> None:
+        c = {"addressee": "JOHN SMITH GENERAL DELIVERY SEATTLE WA"}
+        recover_components(c)
+        assert c == {
+            "addressee": "JOHN SMITH",
+            "general_delivery_type": "GENERAL DELIVERY",
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
+
+    @pytest.mark.parametrize(
+        "extra",
+        [_STREET, {"general_delivery_type": "PO BOX", "general_delivery": "5"}],
+    )
+    def test_left_alone_beside_street_or_box(self, extra: dict[str, str]) -> None:
+        c = {"landmark": "GENERAL DELIVERY", **extra, **_LAST_LINE}
+        before = dict(c)
+        _recover_general_delivery_from_name(c)
+        assert c == before
+
+    @pytest.mark.parametrize("text", ["THE GROVE", "GENERAL HOSPITAL", "DELIVERY DEPT"])
+    def test_other_names_left_alone(self, text: str) -> None:
+        c = {"landmark": text, **_LAST_LINE}
+        before = dict(c)
+        _recover_general_delivery_from_name(c)
+        assert c == before
+
+
+# ---------------------------------------------------------------------------
+# _recover_route_from_unit_slot (GH #292)
+# ---------------------------------------------------------------------------
+
+_BOX = {"general_delivery_type": "BOX", "general_delivery": "5678"}
+_APO = {"locality": "APO", "administrative_area": "AE", "postcode": "09001"}
+
+
+class TestRecoverRouteFromUnitSlot:
+    """usaddress tags the military route group (``PSC 1234``, ``UNIT 2050``)
+    as a unit, so line 2 got the route and line 1 only the box.  Pub 28 puts
+    both on line 1: ``PSC 1234 BOX 5678``."""
+
+    @pytest.mark.parametrize(
+        ("type_key", "id_key"),
+        [
+            ("sub_premise_type", "sub_premise_number"),
+            ("dependent_sub_premise_type", "dependent_sub_premise_number"),
+        ],
+    )
+    @pytest.mark.parametrize("designator", ["PSC", "CMR", "psc"])
+    def test_military_unit_moved_to_route_group(
+        self, type_key: str, id_key: str, designator: str
+    ) -> None:
+        c = {type_key: designator, id_key: "1234", **_BOX, **_APO}
+        events: list[RecoveryEvent] = []
+        _recover_route_from_unit_slot(c, events)
+        assert c == {
+            "general_delivery_group_type": designator,
+            "general_delivery_group": "1234",
+            **_BOX,
+            **_APO,
+        }
+        assert list(c)[:2] == ["general_delivery_group_type", "general_delivery_group"]
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert f"{designator} 1234" in events[0].warning
+
+    @pytest.mark.parametrize("state", ["AA", "AE", "AP", "ap"])
+    def test_unit_moved_with_military_state(self, state: str) -> None:
+        c = {"sub_premise_type": "UNIT", "sub_premise_number": "2050", **_BOX}
+        c |= {"locality": "APO", "administrative_area": state}
+        _recover_route_from_unit_slot(c)
+        assert c["general_delivery_group_type"] == "UNIT"
+        assert c["general_delivery_group"] == "2050"
+        assert "sub_premise_type" not in c
+
+    def test_unit_left_alone_without_military_state(self) -> None:
+        """'UNIT' is also a civilian designator; only a military last line
+        makes it a route group."""
+        c = {"sub_premise_type": "UNIT", "sub_premise_number": "5", **_BOX, **_LAST_LINE}
+        before = dict(c)
+        assert recover_components(c) == []
+        assert c == before
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            _STREET,
+            {"general_delivery_group_type": "RR", "general_delivery_group": "2"},
+        ],
+    )
+    def test_left_alone_beside_street_or_group(self, extra: dict[str, str]) -> None:
+        c = {**extra, "sub_premise_type": "PSC", "sub_premise_number": "1234", **_BOX, **_APO}
+        before = dict(c)
+        _recover_route_from_unit_slot(c)
+        assert c == before
+
+    def test_left_alone_without_box(self) -> None:
+        c = {"sub_premise_type": "PSC", "sub_premise_number": "1234", **_APO}
+        before = dict(c)
+        _recover_route_from_unit_slot(c)
+        assert c == before
+
+    def test_civilian_unit_left_alone(self) -> None:
+        c = {"sub_premise_type": "STE", "sub_premise_number": "5", **_BOX, **_APO}
+        before = dict(c)
+        _recover_route_from_unit_slot(c)
+        assert c == before
+
+
 class TestRecoverIdentifierFragmentFromCity:
     async def test_stray_letter_moved_to_identifier(self) -> None:
         c: dict[str, str] = {"locality": "K WALLA WALLA", "sub_premise_number": "120"}
@@ -646,6 +822,52 @@ class TestRepeatedLabelFallback:
         result = (await parse_address("123 Main St Rear 456 Oak Ave")).response
         if result.type == "Ambiguous":
             assert len(result.warnings) > 0
+
+    @pytest.mark.parametrize(
+        ("raw", "group_type", "group"),
+        [
+            ("PSC 802 BOX 74, APO, AE 09499", "PSC", "802"),
+            ("CMR 450, BOX 123, APO AE 09001", "CMR", "450"),
+        ],
+    )
+    async def test_military_box_type_repeat_becomes_route_group(
+        self, raw: str, group_type: str, group: str
+    ) -> None:
+        """GH-292: usaddress tags PSC/CMR and BOX both as USPSBoxType; the
+        first box phrase is the military route group, not more box text."""
+        response = (await parse_address(raw)).response
+        values = response.components.values
+        assert DELIVERY_LINE_RECOVERED.format(text=f"{group_type} {group}") in response.warnings
+        assert values["general_delivery_group_type"] == group_type
+        assert values["general_delivery_group"].strip(",") == group
+        assert values["general_delivery_type"] == "BOX"
+        assert values["general_delivery"].strip(",") in {"74", "123"}
+
+    async def test_military_box_left_alone_when_route_group_tagged(self) -> None:
+        """A route group usaddress already tagged is never overwritten."""
+        fake_tokens = [
+            ("RR", "USPSBoxGroupType"),
+            ("2", "USPSBoxGroupID"),
+            ("PSC", "USPSBoxType"),
+            ("5", "USPSBoxID"),
+            ("BOX", "USPSBoxType"),
+            ("6", "USPSBoxID"),
+        ]
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            response = (await parse_address("RR 2 PSC 5 BOX 6")).response
+        values = response.components.values
+        assert values["general_delivery_group_type"] == "RR"
+        assert values["general_delivery_group"] == "2"
+        assert values["general_delivery_type"] == "PSC BOX"
+        assert not any(w.startswith("Delivery address line") for w in response.warnings)
+
+    async def test_repeated_po_box_not_made_a_route_group(self) -> None:
+        fake_tokens = [("PO BOX", "USPSBoxType"), ("5", "USPSBoxID")] * 2
+        exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
+        with mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc):
+            values = (await parse_address("PO BOX 5 PO BOX 5")).response.components.values
+        assert "general_delivery_group_type" not in values
 
     async def test_multi_unit_designator_slotted_not_concatenated(self) -> None:
         """GH-72: BLDG 201 ROOM 104 T should populate both unit slots,
@@ -1149,6 +1371,21 @@ class TestCandidateCollection:
         assert outcome.candidate_data is not None
         assert outcome.candidate_data["failure_type"] == "post_parse_recovery"
         assert outcome.candidate_data["raw_address"] == raw
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "GENERAL DELIVERY, SEATTLE, WA 98101",  # tagged as landmark
+            "GENERAL DELIVERY SEATTLE WA 98101",  # tagged as recipient
+            "PSC 1234 BOX 5678, APO, AE 09001",  # route tagged as a unit
+        ],
+    )
+    async def test_delivery_line_recovery_returns_candidate_data(self, raw: str) -> None:
+        """GH-292/293: the delivery line was mis-tagged, so the input is
+        marked for CRF labelling."""
+        outcome = await parse_address(raw)
+        assert outcome.candidate_data is not None
+        assert outcome.candidate_data["failure_type"] == "post_parse_recovery"
 
     async def test_locality_recovery_alone_returns_candidate_data(self) -> None:
         """LOCALITY_RECOVERED is a candidate kind in its own right, not only
