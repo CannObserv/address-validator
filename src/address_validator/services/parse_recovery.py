@@ -244,13 +244,16 @@ def _floor_ordinals_after_designator(
 def _military_box_as_route_group(
     parsed_string: list[tuple[str, str]],
     tag_names: dict[str, str],
+    warnings: list[str],
 ) -> list[tuple[str, str]]:
     """Relabel a leading ``PSC``/``CMR`` box phrase as the route group (GH #292).
 
     usaddress tags ``PSC 802 BOX 74`` as two ``USPSBoxType`` phrases, which
     would concatenate into ``"PSC BOX"`` / ``"802 74"``.  When a second box
     type follows and no route group was tagged, the first phrase and its IDs
-    become ``USPSBoxGroupType`` / ``USPSBoxGroupID``.
+    become ``USPSBoxGroupType`` / ``USPSBoxGroupID``, and a recovered
+    delivery-line warning naming the route (``"PSC 802"``) is appended to
+    *warnings*, as the unit-slot recovery emits for the same address.
     """
     tokens = list(parsed_string)
     keys = [tag_names.get(label, label) for _, label in tokens]
@@ -260,10 +263,14 @@ def _military_box_as_route_group(
     if _normalize_unit_value(tokens[first][0]) not in _MILITARY_GROUP_TYPES:
         return tokens
     tokens[first] = (tokens[first][0], "USPSBoxGroupType")
+    route = [tokens[first][0]]
     for i in range(first + 1, len(tokens)):
         if keys[i] != "general_delivery":
             break
         tokens[i] = (tokens[i][0], "USPSBoxGroupID")
+        route.append(tokens[i][0])
+    route_text = " ".join(t.strip(",;") for t in route)
+    warnings.append(warning_catalogue.DELIVERY_LINE_RECOVERED.format(text=route_text))
     return tokens
 
 
@@ -301,7 +308,7 @@ def collect_ambiguous_components(
     route group; see :func:`_military_box_as_route_group`.
     """
     parsed_string = _floor_ordinals_after_designator(parsed_string, tag_names)
-    parsed_string = _military_box_as_route_group(parsed_string, tag_names)
+    parsed_string = _military_box_as_route_group(parsed_string, tag_names, warnings)
     component_values: dict[str, str] = {}
     prev_key: str | None = None
     separator_before: bool = False

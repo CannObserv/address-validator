@@ -33,7 +33,7 @@ from address_validator.services.standardizer import standardize
 # ---------------------------------------------------------------------------
 
 _PINNED_CODE_VERSION = 10
-_PINNED_CORPUS_HASH = "a76d74c7b77433fde7e5f9422784a8b54ede6a505d072afb5d42f297e5b52def"
+_PINNED_CORPUS_HASH = "c1f14a567b316a4def56d64f0ba5965af5b862ceebf852e0463b2d7e6d32cec8"
 
 # Fixed corpus — exercises the pipeline surfaces most likely to change output:
 # cleanup regexes, directional/type abbreviation, secondary units, PO Box / rural

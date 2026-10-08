@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 import usaddress
 
+from address_validator.core.warnings import DELIVERY_LINE_RECOVERED
 from address_validator.services.audit import get_audit_parse_type, reset_audit_context
 from address_validator.services.libpostal_client import LibpostalUnavailableError
 from address_validator.services.parse_recovery import (
@@ -834,7 +835,9 @@ class TestRepeatedLabelFallback:
     ) -> None:
         """GH-292: usaddress tags PSC/CMR and BOX both as USPSBoxType; the
         first box phrase is the military route group, not more box text."""
-        values = (await parse_address(raw)).response.components.values
+        response = (await parse_address(raw)).response
+        values = response.components.values
+        assert DELIVERY_LINE_RECOVERED.format(text=f"{group_type} {group}") in response.warnings
         assert values["general_delivery_group_type"] == group_type
         assert values["general_delivery_group"].strip(",") == group
         assert values["general_delivery_type"] == "BOX"
