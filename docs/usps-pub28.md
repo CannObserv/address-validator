@@ -12,6 +12,9 @@ The `usps_data/` lookup tables (suffixes, directionals, states, unit
 designators) were generated from LLM training-data knowledge of USPS
 Publication 28 during the initial service implementation on 2026-02-20.
 No specific edition of the publication was consulted or cited at the time.
+Later additions (`routes.py`; the FM and Armed Forces rows of `states.py`)
+were taken from a live fetch of the October 2024 edition — see
+[Table verification](#table-verification-conducted-2026-04-09).
 
 ### Edition research (conducted 2026-03-03)
 
