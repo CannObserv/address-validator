@@ -133,7 +133,9 @@ _UNIT_IDENTIFIER_RE = re.compile(r"#?(?:[A-Z]|[A-Z0-9-]*\d[A-Z0-9-]*)")
 ORDINAL_RE = re.compile(r"\d+(?:ST|ND|RD|TH)")
 
 # Words that join a list of unit identifiers ("STE 100 & 101", "AND 101").
-_LIST_JOINERS: frozenset[str] = frozenset({"&", "AND"})
+# Also the list separators of provider narrowing (validation/secondary.py), so
+# a list kept on line 2 is always one providers can split (GH #297).
+LIST_JOINERS: frozenset[str] = frozenset({"&", "AND"})
 
 # Where usaddress puts "& 101" / "AND 101" after a unit: (joiner key, item
 # key, prefix of the sibling keys that must be empty for it to be a list item).
@@ -368,7 +370,7 @@ def collect_ambiguous_components(
                     redirect_id_key = slot[1]
                     # "AND" joins a unit list ("UNIT 1 AND 2"), not an unknown
                     # designator; _recover_unit_list_item folds it back.
-                    if not known_designator and cleaned_unit_token not in _LIST_JOINERS:
+                    if not known_designator and cleaned_unit_token not in LIST_JOINERS:
                         warnings.append(
                             warning_catalogue.UNRECOGNIZED_UNIT_DESIGNATOR.format(
                                 designator=cleaned_unit_token
@@ -601,7 +603,7 @@ def _recover_unit_list_item(
             continue
         if keys[at + 1 : at + 2] != [item_key]:
             continue
-        if _normalize_unit_value(components[joiner_key]) not in _LIST_JOINERS:
+        if _normalize_unit_value(components[joiner_key]) not in LIST_JOINERS:
             continue
         item = components[item_key].strip(",; ")
         if not _looks_like_unit_identifier(item):

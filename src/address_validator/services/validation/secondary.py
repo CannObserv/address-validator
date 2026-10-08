@@ -20,6 +20,7 @@ unit, so cached answers to the full line are not reused.
 import re
 
 from address_validator.models import StandardizedAddress
+from address_validator.services.parse_recovery import LIST_JOINERS
 from address_validator.services.standardizer.us import split_designator
 from address_validator.usps_data.spec import USPS_PUB28_SPEC
 from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIGNATORS
@@ -30,9 +31,6 @@ _Unit = tuple[str, list[str]]  # designator, identifier tokens (punctuation kept
 # A two-sided numeric range ("100-102").  Only same-width ascending pairs count:
 # "2-100" (floor-suite), "9-1" and "A-1" are read as single identifiers.
 _RANGE_RE = re.compile(r"(\d+)-(\d+)")
-
-# Whole tokens that join a list of identifiers like "," does (GH #297).
-_LIST_JOINERS = frozenset({"&", "AND"})
 
 
 def _slot(values: dict[str, str], prefix: str) -> _Slot:
@@ -81,7 +79,7 @@ def _first_identifier(tokens: list[str]) -> list[str]:
     ``"C&F 1"`` — is one identifier, returned as is.
     """
     clean = [t.strip(",;") for t in tokens]
-    joiner = next((i for i, t in enumerate(clean) if i and t.upper() in _LIST_JOINERS), None)
+    joiner = next((i for i, t in enumerate(clean) if i and t.upper() in LIST_JOINERS), None)
     if joiner is not None:
         tokens, clean = tokens[:joiner], clean[:joiner]
     first = clean
