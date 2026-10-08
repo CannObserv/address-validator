@@ -257,10 +257,11 @@ def _military_box_as_route_group(
     """
     tokens = list(parsed_string)
     keys = [tag_names.get(label, label) for _, label in tokens]
-    if keys.count("general_delivery_type") < 2 or "general_delivery_group_type" in keys:  # noqa: PLR2004
+    if "general_delivery_type" not in keys or "general_delivery_group_type" in keys:
         return tokens
     first = keys.index("general_delivery_type")
-    if _normalize_unit_value(tokens[first][0]) not in _MILITARY_GROUP_TYPES:
+    second_box = "general_delivery_type" in keys[first + 1 :]
+    if not second_box or _normalize_unit_value(tokens[first][0]) not in _MILITARY_GROUP_TYPES:
         return tokens
     tokens[first] = (tokens[first][0], "USPSBoxGroupType")
     route = [tokens[first][0]]
