@@ -23,7 +23,7 @@ from enum import StrEnum
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
-from address_validator.usps_data.states import STATE_MAP
+from address_validator.usps_data.states import MILITARY_STATES, STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
 from address_validator.usps_data.units import UNIT_MAP
 
@@ -115,10 +115,6 @@ _GROUP_KEYS: tuple[str, str] = ("general_delivery_group_type", "general_delivery
 # Military route designators: always a route group, never a unit (GH #292).
 _MILITARY_GROUP_TYPES: frozenset[str] = frozenset({"PSC", "CMR"})
 
-# Military "states".  'UNIT 2050 BOX 4190' is a route group only beside one:
-# UNIT is also a civilian designator.
-_MILITARY_STATES: frozenset[str] = frozenset({"AA", "AE", "AP"})
-
 # The Pub 28 general-delivery line, with any recipient text before or after it.
 _GENERAL_DELIVERY = "GENERAL DELIVERY"
 _GENERAL_DELIVERY_RE = re.compile(
@@ -145,8 +141,8 @@ _LIST_ITEM_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("dependent_sub_premise_type", "dependent_sub_premise_number", "dependent_"),
 )
 
-# Longest state name in STATE_MAP, in words ("NORTHERN MARIANA ISLANDS").
-_MAX_STATE_WORDS: int = 3
+# Longest state name in STATE_MAP, in words ("FEDERATED STATES OF MICRONESIA").
+_MAX_STATE_WORDS: int = max(len(name.split()) for name in STATE_MAP)
 
 
 def _is_street_key(key: str) -> bool:
@@ -770,17 +766,20 @@ def _recover_route_from_unit_slot(
     ``UNIT 2050`` as an occupancy), so line 2 got the route and line 1 only
     the box.  Pub 28 puts both on line 1 (GH #292).  Fires only with no
     street, a box, and no route group already parsed; ``PSC``/``CMR`` always
-    qualify, ``UNIT`` only beside a military state (``AA``/``AE``/``AP``).
+    qualify, ``UNIT`` only beside a military state (``AE`` or ``ARMED FORCES
+    EUROPE``; GH #299).
     """
     if _has_street(components) or any(components.get(k) for k in _GROUP_KEYS):
         return
     if not any(components.get(k) for k in _BOX_KEYS):
         return
-    state = _normalize_unit_value(components.get("administrative_area", ""))
+    # 'UNIT 2050 BOX 4190' is a route group only beside a military state:
+    # UNIT is also a civilian designator.
+    state = STATE_MAP.get(_normalize_unit_value(components.get("administrative_area", "")))
     for type_key, id_key in _UNIT_SLOT_PAIRS:
         designator = _normalize_unit_type(components.get(type_key, ""))
         if designator in _MILITARY_GROUP_TYPES or (
-            designator == "UNIT" and state in _MILITARY_STATES
+            designator == "UNIT" and state in MILITARY_STATES
         ):
             group = {"general_delivery_group_type": components[type_key]}
             if components.get(id_key):

@@ -762,7 +762,9 @@ class TestRecoverRouteFromUnitSlot:
         assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
         assert f"{designator} 1234" in events[0].warning
 
-    @pytest.mark.parametrize("state", ["AA", "AE", "AP", "ap"])
+    @pytest.mark.parametrize(
+        "state", ["AA", "AE", "AP", "ap", "ARMED FORCES PACIFIC", "Armed Forces Europe"]
+    )
     def test_unit_moved_with_military_state(self, state: str) -> None:
         c = {"sub_premise_type": "UNIT", "sub_premise_number": "2050", **_BOX}
         c |= {"locality": "APO", "administrative_area": state}

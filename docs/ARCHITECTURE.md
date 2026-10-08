@@ -82,7 +82,7 @@ services/country_format.py  maps i18naddress ValidationRules → CountryFormatRe
 services/audit.py   audit ContextVars + write_audit_row (fail-open DB insert)
 services/training_candidates.py  training ContextVars + write_training_candidate (fail-open DB insert); records endpoint/provider/api_version/failure_reason denormalised onto each row
 services/training_batches.py    batch lifecycle — ALLOWED_TRANSITIONS state machine + CRUD (create_batch, transition_status, advance_step, assign_candidates, unassign_candidates, get_batch_id_by_slug, record_upstream_pr); admin routes AND scripts/model/*.py call through this for all status transitions
-usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units)
+usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units, routes)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord; attached to the stdout handler (not a logger) so propagated records carry it
 core/logging.py     build_json_formatter() (single source of truth for the JSON schema) + build_stdout_handler() + configure_logging()

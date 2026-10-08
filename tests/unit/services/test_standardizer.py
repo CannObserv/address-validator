@@ -551,6 +551,81 @@ class TestStandardize:
         assert result.city == city
         assert result.region == state
 
+    @pytest.mark.parametrize(
+        ("raw", "line_1"),
+        [
+            ("RURAL ROUTE 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152"),
+            ("RURAL RT 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152"),
+            ("RFD 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152"),
+            ("STAR ROUTE 2 BOX 5, ELY, NV 89301", "HC 2 BOX 5"),
+            ("HIGHWAY CONTRACT 2 BOX 5, ELY, NV 89301", "HC 2 BOX 5"),
+            ("HCR 2 BOX 5, ELY, NV 89301", "HC 2 BOX 5"),
+            ("POST OFFICE BOX 42, SEATTLE, WA 98101", "PO BOX 42"),
+            ("P O BOX 42, SEATTLE, WA 98101", "PO BOX 42"),
+            ("POB 42, SEATTLE, WA 98101", "PO BOX 42"),
+            ("LOCKBOX 42, SEATTLE, WA 98101", "PO BOX 42"),
+            # Already Pub 28 forms: unchanged.
+            ("BOX 42, SEATTLE, WA 98101", "BOX 42"),
+            ("RR 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152"),
+        ],
+    )
+    async def test_route_group_and_box_type_abbreviated(self, raw: str, line_1: str) -> None:
+        """GH-298: Pub 28 241/244 (RR), 251/253 (HC), 281/283 (PO BOX)."""
+        parsed = (await parse_address(raw)).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == line_1
+        assert result.warnings == []
+
+    @pytest.mark.parametrize("box_type", ["DRAWER", "CALLER", "FIRM CALLER", "BIN"])
+    def test_po_box_designation_from_components(self, box_type: str) -> None:
+        """GH-298: Pub 28 283 — usaddress does not tag these as a box, but
+        component input can."""
+        comps = {"general_delivery_type": box_type, "general_delivery": "42"}
+        result = standardize(comps)
+        assert result.address_line_1 == "PO BOX 42"
+        assert result.components.values["general_delivery_type"] == "PO BOX"
+
+    def test_box_type_beside_route_group_not_made_po_box(self) -> None:
+        """A box on a rural / highway contract route is the route's box, not
+        a Post Office Box — only the group type is abbreviated."""
+        comps = {
+            "general_delivery_group_type": "STAR ROUTE",
+            "general_delivery_group": "2",
+            "general_delivery_type": "DRAWER",
+            "general_delivery": "5",
+        }
+        assert standardize(comps).address_line_1 == "HC 2 DRAWER 5"
+
+    @pytest.mark.parametrize(
+        ("raw", "line_1", "city", "state"),
+        [
+            (
+                "PSC 1234 BOX 5678, APO, ARMED FORCES EUROPE 09001",
+                "PSC 1234 BOX 5678",
+                "APO",
+                "AE",
+            ),
+            ("PSC 1234 BOX 5678, FPO, AP 96278", "PSC 1234 BOX 5678", "FPO", "AP"),
+            ("UNIT 8400 BOX 2000, DPO, AA 34001", "UNIT 8400 BOX 2000", "DPO", "AA"),
+            ("PSC 1234 BOX 5678 APO AE", "PSC 1234 BOX 5678", "APO", "AE"),
+            ("GENERAL DELIVERY APO AE", "GENERAL DELIVERY", "APO", "AE"),
+            (
+                "GENERAL DELIVERY APO ARMED FORCES PACIFIC",
+                "GENERAL DELIVERY",
+                "APO",
+                "AP",
+            ),
+        ],
+    )
+    async def test_military_last_line(self, raw: str, line_1: str, city: str, state: str) -> None:
+        """GH-299: APO/FPO/DPO stay the city; the Armed Forces 'state' is
+        abbreviated and found as a trailing state when there is no ZIP."""
+        parsed = (await parse_address(raw)).response
+        result = standardize(parsed.components.values, upstream_warnings=parsed.warnings)
+        assert result.address_line_1 == line_1
+        assert result.city == city
+        assert result.region == state
+
     def test_general_delivery_without_street_does_not_warn(self) -> None:
         comps = {"general_delivery_type": "PO BOX", "general_delivery": "42"}
         assert standardize(comps).warnings == []

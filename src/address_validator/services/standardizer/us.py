@@ -17,6 +17,7 @@ from address_validator.services.standardizer._lines import (
     _sub_renders_first,
 )
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
+from address_validator.usps_data.routes import BOX_TYPE_MAP, ROUTE_GROUP_TYPE_MAP
 from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VERSION
 from address_validator.usps_data.states import STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
@@ -143,6 +144,20 @@ def split_designator(unit_id: str) -> tuple[str, str]:
     return "#", unit_id
 
 
+def _standardize_route_and_box_types(std: dict[str, str]) -> None:
+    """Abbreviate the route group and box types to their Pub 28 forms.
+
+    ``RURAL ROUTE`` / ``RFD`` → ``RR``, ``STAR ROUTE`` → ``HC``, ``POST OFFICE
+    BOX`` / ``DRAWER`` → ``PO BOX`` (GH #298).  A box type beside a route group
+    is the route's box, not a Post Office Box, so it is left as typed.
+    """
+    group_type = std.get("general_delivery_group_type")
+    if group_type:
+        std["general_delivery_group_type"] = _lookup(group_type, ROUTE_GROUP_TYPE_MAP)
+    elif std.get("general_delivery_type"):
+        std["general_delivery_type"] = _lookup(std["general_delivery_type"], BOX_TYPE_MAP)
+
+
 def _warn_general_delivery_beside_street(std: dict[str, str], warnings: list[str]) -> None:
     """Warn when a PO Box / general-delivery value will be left off the lines.
 
@@ -217,6 +232,7 @@ def standardize_us(
         v = _get(components, gd_key)
         if v:
             std[gd_key] = v
+    _standardize_route_and_box_types(std)
     _warn_general_delivery_beside_street(std, warnings)
 
     # --- assemble output lines ---
