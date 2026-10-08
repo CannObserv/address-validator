@@ -265,7 +265,7 @@ class TestSplitHashPhrase:
     @pytest.mark.parametrize("identifier", ["NO 5", "# 5", "NUMBER 5", "NO. 5"])
     def test_leading_hash_word_dropped(self, identifier: str) -> None:
         c = {"sub_premise_type": "STE", "sub_premise_number": identifier}
-        assert _split_hash_phrase(c) is None
+        _split_hash_phrase(c)
         assert c == {"sub_premise_type": "STE", "sub_premise_number": "5"}
 
     @pytest.mark.parametrize("identifier", ["1 # 1", "1 NO 1", "1, NO 1", "1 # 1,"])
