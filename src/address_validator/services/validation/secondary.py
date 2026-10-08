@@ -10,16 +10,17 @@ line answers DPV ``D`` and is echoed back unmatched.
 Providers are sent **one** Pub 28 unit instead: designators outside Pub 28
 (``SMP``) are dropped, a specific unit beats a container (``BLDG``/``FL``),
 and among equals the first unit on line 2 wins.  A unit whose identifier is a
-range or list (``"STE 100-102"``, ``"STE 100, 101"``; GH #289) is sent as its
-first identifier.  The standardized line 2 is unchanged — this only narrows
-the provider request, so it needs no ``PIPELINE_CODE_VERSION`` bump.
-``_make_pattern_key`` includes the narrowed unit, so cached answers to the full
-line are not reused.
+range or list (``"STE 100-102"``, ``"STE 100, 101"``; GH #289; ``"STE 100 &
+101"``; GH #297) is sent as its first identifier.  The standardized line 2 is
+unchanged — this only narrows the provider request, so it needs no
+``PIPELINE_CODE_VERSION`` bump.  ``_make_pattern_key`` includes the narrowed
+unit, so cached answers to the full line are not reused.
 """
 
 import re
 
 from address_validator.models import StandardizedAddress
+from address_validator.services.parse_recovery import LIST_JOINERS
 from address_validator.services.standardizer.us import split_designator
 from address_validator.usps_data.spec import USPS_PUB28_SPEC
 from address_validator.usps_data.units import CONTAINER_DESIGNATORS, PUB28_DESIGNATORS
@@ -71,11 +72,16 @@ def _split_units(slot: _Slot) -> list[_Unit]:
 def _first_identifier(tokens: list[str]) -> list[str]:
     """Narrow a range or list of identifiers to its first one (GH #289).
 
-    USPS reads one unit, so ``"100, 101"``, ``"5 6"`` (all numeric) and
-    ``"100-102"`` (see ``_RANGE_RE``) send ``"100"``/``"5"``.  Anything else —
-    ``"PH 2"``, ``"2 REAR"``, ``"A-1"`` — is one identifier, returned as is.
+    USPS reads one unit, so ``"100, 101"``, ``"100 & 101"``, ``"100 AND
+    101"``, ``"5 6"`` (all numeric) and ``"100-102"`` (see ``_RANGE_RE``) send
+    ``"100"``/``"5"``; a bare trailing ``"&"`` (``"100 &"`` in ``"STE 100 & STE
+    101"``) is dropped.  Anything else — ``"PH 2"``, ``"2 REAR"``, ``"A-1"``,
+    ``"C&F 1"`` — is one identifier, returned as is.
     """
     clean = [t.strip(",;") for t in tokens]
+    joiner = next((i for i, t in enumerate(clean) if i and t.upper() in LIST_JOINERS), None)
+    if joiner is not None:
+        tokens, clean = tokens[:joiner], clean[:joiner]
     first = clean
     if any(t[-1] in ",;" for t in tokens[:-1]):
         end = next(i for i, t in enumerate(tokens) if t[-1] in ",;")

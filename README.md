@@ -301,6 +301,10 @@ pyproject.toml                 # Project metadata, dependencies, tool config
   not beside a word, lone directional or ordinal); en dashes become `-`
 - A floor ordinal beside another unit gets its own unit
   (`STE 100 2ND FLOOR` → line 2 `FL 2ND STE 100`)
+- A unit list joined with `&` or `AND` stays on line 2
+  (`STE 100 & 101`, `STE 100 AND 101` → `STE 100 & 101`), not an intersection or PO Box
+- A `#` (or `NO`) after a named designator is dropped (`APT #4` → `APT 4`);
+  a `#` phrase restating the unit collapses (`STE 1 #1` → `STE 1`)
 - Periods removed from all components
 - ZIP codes normalized to 5-digit or 5+4 format
 - Unit designators mis-tagged as city by the parser are recovered

@@ -39,6 +39,7 @@ PARENTHESIZED_REMOVED = "Parenthesized text removed: '{text}'"
 REPEATED_NUMBERS_RANGE = "Ambiguous parse: repeated address numbers joined as range '{range}'"
 UNIT_RECOVERED_FROM_FIELD = "Unit designator recovered from mis-tagged field: '{designator}'"
 DELIVERY_LINE_RECOVERED = "Delivery address line recovered from mis-tagged field: '{text}'"
+UNIT_LIST_ITEM_RECOVERED = "Unit list item recovered from mis-tagged field: '{item}'"
 UNRECOGNIZED_UNIT_DESIGNATOR = "Unrecognized unit designator preserved: '{designator}'"
 DUPLICATE_UNIT_COLLAPSED = "Duplicate secondary unit collapsed into '{designator} {identifier}'"
 UNRECOGNIZED_REGION = "Unrecognized province/territory: '{region}'"
@@ -65,6 +66,7 @@ CATALOGUE: tuple[str, ...] = (
     UNIT_FRAGMENT_FROM_CITY,
     LOCALITY_FROM_RECIPIENT,
     DELIVERY_LINE_RECOVERED,
+    UNIT_LIST_ITEM_RECOVERED,
     UNRECOGNIZED_UNIT_DESIGNATOR,
     DUPLICATE_UNIT_COLLAPSED,
     NO_PARSEABLE_STREET,
