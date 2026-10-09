@@ -125,7 +125,7 @@ HOME=$fake JOURNAL_STREAM=$out_stream "$SCRIPT" >"$OUT" 2>"$ERR" || true
 check "redirected stderr: inherited JOURNAL_STREAM adds no prefix" /bin/grep -qx "disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
 
 HOME=$fake "$SCRIPT" --dry-run >"$OUT" 2>"$ERR" || true
-check "terminal: warning has no prefix" /bin/grep -qx "disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
+check "no JOURNAL_STREAM: warning has no prefix" /bin/grep -qx "disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
 
 # docker-prune-check.sh: a fake df reports the root filesystem at 90%
 mkdir -p "$sandbox/bin"
@@ -141,7 +141,7 @@ PATH="$sandbox/bin:$PATH" JOURNAL_STREAM=$err_stream \
 check "docker-prune-check exits 0" test "$rc" -eq 0
 check "docker-prune-check: warning carries <4> priority prefix" /bin/grep -qx "<4>DISK WARNING: / at 90% after Docker prune" "$ERR"
 PATH="$sandbox/bin:$PATH" bash "$sandbox/repo/infra/docker-prune-check.sh" >"$OUT" 2>"$ERR" || true
-check "docker-prune-check: terminal warning has no prefix" /bin/grep -qx "DISK WARNING: / at 90% after Docker prune" "$ERR"
+check "docker-prune-check: no JOURNAL_STREAM, no prefix" /bin/grep -qx "DISK WARNING: / at 90% after Docker prune" "$ERR"
 
 echo
 if ((FAILS > 0)); then
