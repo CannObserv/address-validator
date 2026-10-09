@@ -765,43 +765,51 @@ def _is_box_designation(words: list[str]) -> bool:
     return bool(words) and _normalize_unit_value(" ".join(words)) in BOX_TYPE_MAP
 
 
-def _split_box_segment(segment: str) -> tuple[str, str, list[str]] | None:
-    """Split ``"<designation> <id> <rest…>"`` into ``(designation, id, rest)``.
+def _split_box_segment(
+    segment: str, *, anywhere: bool = False
+) -> tuple[str, str, str, list[str]] | None:
+    """Split ``"<before…> <designation> <id> <rest…>"`` into its four parts.
 
-    The designation is the longest BOX_TYPE_MAP entry the segment starts
-    with, the ID one identifier-shaped token.  ``None`` when *segment* does
-    not start that way (``"THE BIN"``, ``"CALLER JOHN"``, ``"BINGHAM 42"``).
+    The designation is the longest BOX_TYPE_MAP entry at the match, the ID
+    one identifier-shaped token.  It must start *segment* unless *anywhere*
+    is set.  ``None`` when there is no match (``"THE BIN"``, ``"CALLER
+    JOHN"``, ``"BINGHAM 42"``).
     """
     words = segment.split()
-    for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - 1), 0, -1):
-        if _is_box_designation(words[:n]) and _looks_like_unit_identifier(words[n]):
-            return " ".join(words[:n]), words[n].strip(",;"), words[n + 1 :]
+    for at in range(len(words) if anywhere else 1):
+        for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - at - 1), 0, -1):
+            end = at + n
+            if _is_box_designation(words[at:end]) and _looks_like_unit_identifier(words[end]):
+                before = " ".join(words[:at])
+                return before, " ".join(words[at:end]), words[end].strip(",;"), words[end + 1 :]
     return None
 
 
 def _po_box_from_name(components: dict[str, str], events: list[RecoveryEvent] | None) -> bool:
     """Move a ``<designation> <id>`` comma segment of a name field to the box.
 
-    Segments before or after it stay in the field.  Only a recipient may
-    carry text after the ID, and only with no last line parsed: it must end
-    in a state and is split into city and state (``"FIRM CALLER 42 SEATTLE
-    WA"``).
+    Segments before or after it stay in the field.  A recipient with no last
+    line parsed is the whole input (no ZIP): words before the designation
+    stay the recipient (``"JOHN SMITH DRAWER 42 …"``), and text after the ID
+    must end in a state and is split into city and state (``"FIRM CALLER 42
+    SEATTLE WA"``).  No other field may carry text after the ID.
     """
     for key in ("landmark", "premise_name", "addressee"):
+        whole_input = key == "addressee" and not any(components.get(k) for k in _POST_STREET_KEYS)
         segments = [seg.strip() for seg in components.get(key, "").split(",")]
         for at, segment in enumerate(segments):
-            split = _split_box_segment(segment)
+            split = _split_box_segment(segment, anywhere=whole_input)
             if split is None:
                 continue
-            box_type, box_id, after = split
+            before, box_type, box_id, after = split
             last_line = None
             if after:
-                if key != "addressee" or any(components.get(k) for k in _POST_STREET_KEYS):
+                if not whole_input:
                     return False
                 last_line = _split_trailing_state(" ".join(after))
                 if last_line is None:
                     return False
-            rest = [s for s in (*segments[:at], *segments[at + 1 :]) if s]
+            rest = [s for s in (*segments[:at], before, *segments[at + 1 :]) if s]
             if last_line is not None and last_line.get("addressee"):
                 rest.append(last_line.pop("addressee"))
             recovered = {key: ", ".join(rest)} if rest else {}

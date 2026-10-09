@@ -866,6 +866,21 @@ class TestRecoverPoBoxDesignation:
         ]
 
     @pytest.mark.parametrize(
+        "text", ["JOHN SMITH DRAWER 42 SEATTLE WA", "JOHN SMITH, DRAWER 42 SEATTLE WA"]
+    )
+    def test_recipient_before_box_with_city_and_state_tail(self, text: str) -> None:
+        """GH-302 CR 2: with no last line parsed, a name before the
+        designation stays the recipient, as beside GENERAL DELIVERY."""
+        c = {"addressee": text}
+        recover_components(c)
+        assert c == {
+            "addressee": "JOHN SMITH",
+            **self._box("DRAWER", "42"),
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
+
+    @pytest.mark.parametrize(
         ("key", "text"),
         [
             ("addressee", "CALLER 42 SEATTLE"),  # no state: city or name?
