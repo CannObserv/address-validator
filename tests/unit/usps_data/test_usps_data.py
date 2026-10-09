@@ -125,7 +125,8 @@ class TestBoxTypeMap:
             "BIN",
             "LOCKBOX",
             "DRAWER",
-            # GH-304: prefixed / two-word input variants usaddress tags as a box.
+            # GH-304: prefixed / two-word input variants; usaddress splits some
+            # across fields, rejoined by _recover_split_box_designation.
             "PO DRAWER",
             "P O DRAWER",
             "POST OFFICE DRAWER",
