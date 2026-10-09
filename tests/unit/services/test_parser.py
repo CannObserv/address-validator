@@ -881,8 +881,30 @@ class TestRecoverPoBoxDesignation:
         }
 
     @pytest.mark.parametrize(
+        ("text", "recipient"),
+        [
+            ("ACME CORP, DRAWER 42, SEATTLE WA", "ACME CORP"),
+            ("DRAWER 42, SEATTLE WA", ""),
+            ("DRAWER 42 ACME CORP, SEATTLE WA", "ACME CORP"),
+        ],
+    )
+    def test_comma_tail_split_into_city_and_state(self, text: str, recipient: str) -> None:
+        """GH-302 CR 6: with no last line parsed, segments after the box are
+        the city and state, not more recipient text."""
+        c = {"addressee": text}
+        events = recover_components(c)
+        assert c == {
+            **({"addressee": recipient} if recipient else {}),
+            **self._box("DRAWER", "42"),
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
+        assert RecoveryKind.LOCALITY_RECOVERED in [e.kind for e in events]
+
+    @pytest.mark.parametrize(
         "c",
         [
+            {"addressee": "DRAWER 42, ACME CORP"},  # no state after the box
             {"addressee": "CALLER 42 SEATTLE"},  # no state: city or name?
             {"landmark": "DRAWER 42 SEATTLE WA"},  # only a recipient tail is split
             {"addressee": "DRAWER 42 SEATTLE WA 98101", **_LAST_LINE},  # last line parsed

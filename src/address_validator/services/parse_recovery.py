@@ -802,14 +802,20 @@ def _po_box_from_name(components: dict[str, str], events: list[RecoveryEvent] | 
             if split is None:
                 continue
             before, box_type, box_id, after = split
+            later = segments[at + 1 :]
             last_line = None
-            if after:
-                if not whole_input:
-                    return False
-                last_line = _split_trailing_state(" ".join(after))
-                if last_line is None:
-                    return False
-            rest = [s for s in (*segments[:at], before, *segments[at + 1 :]) if s]
+            if whole_input:
+                # Everything after the ID, later segments included, is the
+                # last line ("DRAWER 42, SEATTLE WA").
+                tail = ", ".join(p for p in (" ".join(after), *later) if p)
+                if tail:
+                    last_line = _split_trailing_state(tail)
+                    if last_line is None:
+                        return False
+                    later = [last_line.pop("addressee", "")]
+            elif after:
+                return False
+            rest = [s for s in (*segments[:at], before, *later) if s]
             recovered = {key: ", ".join(rest)} if rest else {}
             recovered |= {"general_delivery_type": box_type, "general_delivery": box_id}
             _splice(components, (key,), recovered | (last_line or {}))
