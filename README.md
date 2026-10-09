@@ -293,8 +293,8 @@ pyproject.toml                 # Project metadata, dependencies, tool config
   Forces "states" (`ARMED FORCES EUROPE` → `AE`; city stays `APO`/`FPO`/`DPO`)
 - Route and box types abbreviated (`RURAL ROUTE`/`RFD` → `RR`,
   `STAR ROUTE`/`HCR` → `HC`, `POST OFFICE BOX`/`POB`/`LOCKBOX` → `PO BOX`;
-  Pub 28 §24, §25, §28); `CALLER`, `FIRM CALLER`, `BIN` and `DRAWER` convert
-  only when tagged as a box (component input)
+  Pub 28 §24, §25, §28); `CALLER`, `FIRM CALLER`, `BIN` and `DRAWER` too,
+  including free text usaddress tags as a name or unit (`DRAWER 42` → `PO BOX 42`)
 - Secondary unit designators abbreviated (Suite → STE, Apartment → APT,
   Building/Bldg/Bld → BLDG, etc.)
 - Unit identifiers without a designator default to `#`
