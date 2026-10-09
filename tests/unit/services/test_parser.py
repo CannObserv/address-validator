@@ -1258,6 +1258,20 @@ class TestRecoverNameFromBoxType:
                 },
                 "LOCKBOX 42",
             ),
+            # A recipient tagged after the box follows the name (source order).
+            (
+                {
+                    "general_delivery_type": "ACME PO BOX",
+                    "general_delivery": "42",
+                    "addressee": "ATTN BILLING",
+                },
+                {
+                    "addressee": "ACME, ATTN BILLING",
+                    "general_delivery_type": "PO BOX",
+                    "general_delivery": "42",
+                },
+                "PO BOX 42",
+            ),
             # No ID parsed: the name still moves.
             (
                 {"general_delivery_type": "ACME PO BOX"},

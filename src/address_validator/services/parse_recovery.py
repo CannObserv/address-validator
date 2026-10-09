@@ -1000,7 +1000,13 @@ def _recover_name_from_box_type(
     for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - 1), 0, -1):
         if _is_box_designation(words[-n:]):
             box_type = " ".join(words[-n:])
-            names = (components.get("addressee", ""), " ".join(words[:-n]))
+            names = [components.get("addressee", ""), " ".join(words[:-n])]
+            # Keep source order: a recipient tagged after the box follows the name.
+            keys = list(components)
+            if "addressee" in keys and keys.index("addressee") > keys.index(
+                "general_delivery_type"
+            ):
+                names.reverse()
             recipient = ", ".join(p for p in (name.strip(" ,;") for name in names) if p)
             recovered = {"addressee": recipient} if recipient else {}
             recovered["general_delivery_type"] = box_type
