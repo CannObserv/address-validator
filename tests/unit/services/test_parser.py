@@ -1333,6 +1333,8 @@ class TestRecoverNameFromBoxType:
             ("SMITH CALLER BOX 42, SEATTLE, WA 98101", "SMITH", "CALLER BOX 42"),
             ("ACME, LOCK BOX 42, SEATTLE, WA 98101", "ACME", "LOCK BOX 42"),
             ("ACME LOCK BOX 42", "ACME", "LOCK BOX 42"),
+            # A recipient tagged after the box follows the name (source order).
+            ("ACME PO BOX 42 ATTN BILLING, SEATTLE, WA 98101", "ACME, ATTN BILLING", "PO BOX 42"),
             # The name is already the recipient: nothing to recover.
             ("ACME CORP LOCK BOX 42, SEATTLE, WA 98101", "ACME CORP", None),
         ],
