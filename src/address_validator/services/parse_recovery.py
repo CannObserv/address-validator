@@ -786,13 +786,14 @@ def _split_box_segment(
 
 
 def _po_box_from_name(components: dict[str, str], events: list[RecoveryEvent] | None) -> bool:
-    """Move a ``<designation> <id>`` comma segment of a name field to the box.
+    """Move ``<designation> <id>`` from a name field to the box.
 
-    Segments before or after it stay in the field.  A recipient with no last
-    line parsed is the whole input (no ZIP): words before the designation
-    stay the recipient (``"JOHN SMITH DRAWER 42 …"``), and text after the ID
-    must end in a state and is split into city and state (``"FIRM CALLER 42
-    SEATTLE WA"``).  No other field may carry text after the ID.
+    Normally the pair is a whole comma segment; segments before or after it
+    stay in the field.  A recipient with no last line parsed is the whole
+    input (no ZIP): the pair may follow a name (``"JOHN SMITH DRAWER 42 …"``),
+    which stays the recipient, and everything after the ID, later segments
+    included, must end in a state and is split into city and state
+    (``"FIRM CALLER 42 SEATTLE WA"``, ``"DRAWER 42, SEATTLE WA"``).
     """
     for key in ("landmark", "premise_name", "addressee"):
         whole_input = key == "addressee" and not any(components.get(k) for k in _POST_STREET_KEYS)
@@ -876,8 +877,9 @@ def _recover_po_box_designation(
     standardizer renders no name and puts a unit on line 2, so line 1 came out
     empty (GH #302).  With no street name, box or route group parsed:
 
-    - a name-field comma segment ``<designation> <id>`` moves to the box
-      (:func:`_po_box_from_name`);
+    - ``<designation> <id>`` in a name field moves to the box; with no ZIP
+      the whole input is the recipient, and the name before and the city
+      and state after are split out too (:func:`_po_box_from_name`);
     - with no street number either, a unit with a box designator moves to the
       box (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
       beside a street (``"123 MAIN ST BIN 4"``) it stays a unit;
