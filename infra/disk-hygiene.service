@@ -9,4 +9,6 @@ Nice=10
 IOSchedulingClass=idle
 Environment=HOME=/home/exedev
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Stream lines are tagged with the script name by default; keep `journalctl -t disk-hygiene`
+SyslogIdentifier=disk-hygiene
 ExecStart=/home/exedev/address-validator/infra/disk-hygiene.sh

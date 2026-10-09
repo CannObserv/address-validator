@@ -348,9 +348,11 @@ journalctl -u 'unit-failure@*' -p warning         # dispatches that did not deli
 ```
 
 Only WARNING+ lines leave the host. That filter is the PII guard; see
-`docs/LOGGING.md`. Shell `logger` / `systemd-cat` lines lose their unit
-attribution in journald, so disk-hygiene and docker-prune warnings are missing
-from the tail (#246).
+`docs/LOGGING.md`. The tail is selected by the run's invocation ID, so a
+warning must be written on the unit's own stdout/stderr stream. A `logger` or
+`systemd-cat` line is sent by a short-lived child; once it has exited, journald
+records it with no unit or invocation ID and the tail never sees it. The shell
+timer scripts warn through `infra/journal-warn.sh` instead (#246).
 
 **Notifier config** — in `/etc/address-validator/.env`:
 
@@ -403,13 +405,13 @@ checkout first. Without `notifier-client` in its `.venv`, the import fails
 before any fail-open code runs, and the `-` prefix hides it: failures go
 journal-only, silently. Then `sudo infra/install-units.sh unit-failure@.service`.
 
-Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
+Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune (`SyslogIdentifier=docker-prune` tags the whole unit):
 
 ```bash
 journalctl -t docker-prune -p warning
 ```
 
-Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d, uv/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`, aged >30min). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Sandbox test rig: `bash tests/shell/disk-hygiene-test.sh`. Warnings (≥75% root-FS usage, unremovable paths, unreadable lru.json) go to the journal at real warning priority, matching docker-prune:
+Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d, uv/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`, aged >30min). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Sandbox test rig: `bash tests/shell/disk-hygiene-test.sh`. Warnings (≥75% root-FS usage, unremovable paths, unreadable lru.json) go to the journal at real warning priority, matching docker-prune. Both scripts write them to stderr with an sd-daemon `<4>` prefix through `infra/journal-warn.sh`, only when stderr is the journal, so a terminal run prints them plain:
 
 ```bash
 journalctl -u disk-hygiene -p info      # full run log
