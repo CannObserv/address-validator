@@ -322,7 +322,8 @@ pyproject.toml                 # Project metadata, dependencies, tool config
   (`123 MAIN ST BLG A SEATTLE WA` → `BLDG A`, `SEATTLE`, `WA`)
 - With no street, line 1 carries the route and box whole
   (`RR 2 BOX 152`, `HC 1 BOX 5`, `PSC 1234 BOX 5678`, `GENERAL DELIVERY`);
-  a military route or `GENERAL DELIVERY` tagged elsewhere is recovered
+  a military route, `GENERAL DELIVERY` or a PO Box designation
+  (`DRAWER 42` → `PO BOX 42`) tagged elsewhere is recovered
 - Non-address wayfinding words (e.g. `YARD`) dropped from city
 - Line 2 ordering: larger container (BLDG) before specific unit (STE)
 - Intersections formatted as `STREET1 & STREET2`

@@ -16,6 +16,7 @@ from address_validator.services.parse_recovery import (
     _recover_general_delivery_from_name,
     _recover_identifier_fragment_from_city,
     _recover_locality_from_trailing_addressee,
+    _recover_po_box_designation,
     _recover_route_from_unit_slot,
     _recover_unit_from_city,
     _recover_unit_from_general_delivery,
@@ -28,6 +29,7 @@ from address_validator.services.parser import (
     apply_parse_side_effects,
     parse_address,
 )
+from address_validator.services.standardizer import standardize
 from address_validator.services.training_candidates import (
     get_candidate_data,
     reset_candidate_data,
@@ -805,6 +807,183 @@ class TestRecoverRouteFromUnitSlot:
         before = dict(c)
         _recover_route_from_unit_slot(c)
         assert c == before
+
+
+# ---------------------------------------------------------------------------
+# _recover_po_box_designation (GH #302)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverPoBoxDesignation:
+    """usaddress tags a Pub 28 §283 box designation (``DRAWER``, ``CALLER``,
+    ``FIRM CALLER``, ``BIN``) as a landmark, building name, recipient or unit,
+    so line 1 came out empty or the box landed on line 2."""
+
+    @staticmethod
+    def _box(box_type: str, box_id: str) -> dict[str, str]:
+        return {"general_delivery_type": box_type, "general_delivery": box_id}
+
+    @pytest.mark.parametrize("key", ["landmark", "premise_name", "addressee"])
+    @pytest.mark.parametrize(
+        ("text", "box_type", "box_id"),
+        [
+            ("DRAWER 42", "DRAWER", "42"),
+            ("CALLER 42,", "CALLER", "42"),
+            ("FIRM CALLER 5000", "FIRM CALLER", "5000"),
+            ("Lockbox 42-A", "Lockbox", "42-A"),
+            ("BIN A", "BIN", "A"),
+        ],
+    )
+    def test_name_field_moved_to_box(self, key: str, text: str, box_type: str, box_id: str) -> None:
+        c = {key: text, **_LAST_LINE}
+        events: list[RecoveryEvent] = []
+        _recover_po_box_designation(c, events)
+        assert c == {**self._box(box_type, box_id), **_LAST_LINE}
+        assert next(iter(c)) == "general_delivery_type"
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert DELIVERY_LINE_RECOVERED.format(text=f"{box_type} {box_id}") == events[0].warning
+
+    @pytest.mark.parametrize(
+        "text", ["ACME CORP, DRAWER 42", "DRAWER 42, ACME CORP", "ACME CORP, DRAWER 42,"]
+    )
+    def test_name_beside_box_kept(self, text: str) -> None:
+        c = {"landmark": text, **_LAST_LINE}
+        _recover_po_box_designation(c)
+        assert c == {"landmark": "ACME CORP", **self._box("DRAWER", "42"), **_LAST_LINE}
+
+    def test_city_and_state_split_from_recipient_tail(self) -> None:
+        """No ZIP: usaddress tags the whole input as recipient."""
+        c = {"addressee": "FIRM CALLER 42 SEATTLE WA"}
+        events = recover_components(c)
+        assert c == {
+            **self._box("FIRM CALLER", "42"),
+            "locality": "SEATTLE",
+            "administrative_area": "WA",
+        }
+        assert [e.kind for e in events] == [
+            RecoveryKind.DELIVERY_LINE_RECOVERED,
+            RecoveryKind.LOCALITY_RECOVERED,
+        ]
+
+    @pytest.mark.parametrize(
+        ("key", "text"),
+        [
+            ("addressee", "CALLER 42 SEATTLE"),  # no state: city or name?
+            ("landmark", "DRAWER 42 SEATTLE WA"),  # only a recipient tail is split
+            ("addressee", "DRAWER 42 SEATTLE WA 98101"),  # last line already parsed
+        ],
+    )
+    def test_text_after_box_left_alone(self, key: str, text: str) -> None:
+        c = {key: text}
+        if text.endswith("98101"):
+            c |= _LAST_LINE
+        before = dict(c)
+        _recover_po_box_designation(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        ("type_key", "id_key"),
+        [
+            ("sub_premise_type", "sub_premise_number"),
+            ("dependent_sub_premise_type", "dependent_sub_premise_number"),
+        ],
+    )
+    @pytest.mark.parametrize("designator", ["DRAWER", "CALLER", "BIN", "bin"])
+    def test_unit_slot_moved_to_box(self, type_key: str, id_key: str, designator: str) -> None:
+        c = {type_key: designator, id_key: "42,", **_LAST_LINE}
+        events: list[RecoveryEvent] = []
+        _recover_po_box_designation(c, events)
+        assert c == {**self._box(designator, "42"), **_LAST_LINE}
+        assert next(iter(c)) == "general_delivery_type"
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+
+    def test_unit_slot_box_beside_real_unit(self) -> None:
+        """'DRAWER 42 STE 5': the box goes to line 1, the suite stays."""
+        c = {
+            "dependent_sub_premise_type": "DRAWER",
+            "dependent_sub_premise_number": "42",
+            "sub_premise_type": "STE",
+            "sub_premise_number": "5",
+            **_LAST_LINE,
+        }
+        _recover_po_box_designation(c)
+        assert c == {
+            **self._box("DRAWER", "42"),
+            "sub_premise_type": "STE",
+            "sub_premise_number": "5",
+            **_LAST_LINE,
+        }
+
+    @pytest.mark.parametrize(
+        ("addressee", "rest", "box_type"),
+        [
+            ("FIRM CALLER", {}, "FIRM CALLER"),
+            ("ACME CORP, FIRM CALLER", {"addressee": "ACME CORP"}, "FIRM CALLER"),
+            ("ACME CORP DRAWER", {"addressee": "ACME CORP"}, "DRAWER"),
+        ],
+    )
+    def test_box_number_tagged_as_house_number(
+        self, addressee: str, rest: dict[str, str], box_type: str
+    ) -> None:
+        """usaddress tags the box ID as a street number and the designation
+        as the recipient's last words; no street name was parsed."""
+        c = {"addressee": addressee, "premise_number": "2000", **_LAST_LINE}
+        events: list[RecoveryEvent] = []
+        _recover_po_box_designation(c, events)
+        assert c == {**rest, **self._box(box_type, "2000"), **_LAST_LINE}
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+
+    @pytest.mark.parametrize(
+        "c",
+        [
+            # A street: the unit is a real unit, the name a real name.
+            {**_STREET, "dependent_sub_premise_type": "BIN", "dependent_sub_premise_number": "4"},
+            {**_STREET, "landmark": "DRAWER 42"},
+            {"addressee": "ACME DRAWER", **_STREET},
+            # A box or route group already parsed.
+            {"landmark": "DRAWER 42", "general_delivery_type": "PO BOX", "general_delivery": "5"},
+            {"sub_premise_type": "BIN", "sub_premise_number": "4", **_BOX},
+            {"landmark": "CALLER 42", "general_delivery_group_type": "RR"},
+            # Not '<designation> <id>'.
+            {"landmark": "DRAWER"},
+            {"landmark": "THE BIN"},
+            {"landmark": "JOHN DRAWER 42"},
+            {"landmark": "CALLER JOHN"},
+            {"premise_name": "BINGHAM 42"},
+            {"sub_premise_type": "BIN"},
+            {"sub_premise_type": "STE", "sub_premise_number": "42"},
+            {"addressee": "ACME CORP", "premise_number": "2000"},
+            {"addressee": "FIRM CALLER", "premise_number": "2000", "premise_number_suffix": "A"},
+        ],
+    )
+    def test_left_alone(self, c: dict[str, str]) -> None:
+        c |= _LAST_LINE
+        before = dict(c)
+        _recover_po_box_designation(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        ("raw", "line1", "line2"),
+        [
+            ("DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
+            ("CALLER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
+            ("FIRM CALLER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
+            ("BIN 42, SEATTLE, WA 98101", "PO BOX 42", ""),
+            ("DRAWER 4200, PORTLAND, OR 97201", "PO BOX 4200", ""),
+            ("FIRM CALLER 5000, SEATTLE, WA 98101", "PO BOX 5000", ""),
+            ("FIRM CALLER 2000 AUSTIN TX 78701", "PO BOX 2000", ""),
+            ("ACME CORP, DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
+            ("DRAWER 42 STE 5, SEATTLE, WA 98101", "PO BOX 42", "STE 5"),
+            ("123 MAIN ST BIN 4, SEATTLE, WA 98101", "123 MAIN ST", "BIN 4"),
+        ],
+    )
+    async def test_end_to_end(self, raw: str, line1: str, line2: str) -> None:
+        """GH-302 acceptance: parse → standardize renders the box on line 1."""
+        response = (await parse_address(raw)).response
+        result = standardize(response.components.values, "US")
+        assert (result.address_line_1, result.address_line_2) == (line1, line2)
+        if line1.startswith("PO BOX"):
+            assert any(w.startswith("Delivery address line recovered") for w in response.warnings)
 
 
 class TestRecoverIdentifierFragmentFromCity:
