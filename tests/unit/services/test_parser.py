@@ -1299,8 +1299,11 @@ class TestRecoverNameFromBoxType:
             {"general_delivery_type": "FIRM CALLER BOX", "general_delivery": "42"},
             {"general_delivery_type": "ACME BOX", "general_delivery": "42"},
             {"general_delivery_type": "ACME", "general_delivery": "42"},
-            # Starts with a designation: the first words are not a name.
+            # Words before the designation hold one: not a name.
             {"general_delivery_type": "DRAWER LOCK BOX", "general_delivery": "42"},
+            # A repeated box merged by the ambiguous-parse path.
+            {"general_delivery_type": "ACME PO BOX PO BOX", "general_delivery": "42 43"},
+            {"general_delivery_type": "ACME PO BOX ACME PO BOX", "general_delivery": "42 43"},
             # A street or route group: the box is not the delivery line.
             {**_STREET, "general_delivery_type": "ACME PO BOX", "general_delivery": "42"},
             {

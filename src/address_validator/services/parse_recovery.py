@@ -768,6 +768,15 @@ def _is_box_designation(words: list[str]) -> bool:
     return bool(words) and _normalize_unit_value(" ".join(words)) in BOX_TYPE_MAP
 
 
+def _holds_box_designation(words: list[str]) -> bool:
+    """True when a BOX_TYPE_MAP designation appears anywhere in *words*."""
+    return any(
+        _is_box_designation(words[at : at + n])
+        for at in range(len(words))
+        for n in range(1, _MAX_BOX_DESIGNATION_WORDS + 1)
+    )
+
+
 def _split_box_segment(
     segment: str, *, anywhere: bool = False
 ) -> tuple[str, str, str, list[str]] | None:
@@ -988,17 +997,19 @@ def _recover_name_from_box_type(
     and line 1 kept the name (GH #307).  With no street or route group
     parsed, a box type that is not a designation but ends in one keeps the
     longest designation it ends in; the words before it join the recipient.
-    A box type that starts with a designation (``"DRAWER LOCK BOX"``) is left
-    alone: its first words are not a name.
+    Words before it that hold a designation are not a name (``"DRAWER LOCK
+    BOX"``, or ``"ACME PO BOX PO BOX"`` merged from a repeated box), so the
+    box type is left alone.
     """
     if _has_street(components) or any(components.get(k) for k in _GROUP_KEYS):
         return
     words = components.get("general_delivery_type", "").strip(" ,;").split()
-    # Already a designation, or starts with one.
-    if any(_is_box_designation(words[:n]) for n in range(1, len(words) + 1)):
+    if _is_box_designation(words):
         return
     for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - 1), 0, -1):
         if _is_box_designation(words[-n:]):
+            if _holds_box_designation(words[:-n]):
+                return
             box_type = " ".join(words[-n:])
             names = [components.get("addressee", ""), " ".join(words[:-n])]
             # Keep source order: a recipient tagged after the box follows the name.
