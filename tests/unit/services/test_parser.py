@@ -16,6 +16,7 @@ from address_validator.services.parse_recovery import (
     _recover_general_delivery_from_name,
     _recover_identifier_fragment_from_city,
     _recover_locality_from_trailing_addressee,
+    _recover_name_from_box_type,
     _recover_po_box_designation,
     _recover_route_from_unit_slot,
     _recover_split_box_designation,
@@ -1195,6 +1196,153 @@ class TestRecoverSplitBoxDesignation:
     async def test_end_to_end(self, raw: str, recovered: str | None) -> None:
         """GH-304 acceptance: parse → standardize renders PO BOX on line 1."""
         response = (await parse_address(raw)).response
+        result = standardize(response.components.values, "US")
+        assert (result.address_line_1, result.address_line_2) == ("PO BOX 42", "")
+        prefix = DELIVERY_LINE_RECOVERED.partition("{")[0]
+        delivery_warnings = [w for w in response.warnings if w.startswith(prefix)]
+        expected = [DELIVERY_LINE_RECOVERED.format(text=recovered)] if recovered else []
+        assert delivery_warnings == expected
+
+
+# ---------------------------------------------------------------------------
+# _recover_name_from_box_type (GH #307)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverNameFromBoxType:
+    """usaddress folds a recipient name before the designation into the box
+    type (``ACME LOCK BOX``), so the type missed BOX_TYPE_MAP and line 1 kept
+    the name."""
+
+    @pytest.mark.parametrize(
+        ("c", "expected", "recovered"),
+        [
+            (
+                {"general_delivery_type": "ACME LOCK BOX", "general_delivery": "42"},
+                {
+                    "addressee": "ACME",
+                    "general_delivery_type": "LOCK BOX",
+                    "general_delivery": "42",
+                },
+                "LOCK BOX 42",
+            ),
+            (
+                {"general_delivery_type": "ACME POST OFFICE BOX", "general_delivery": "42,"},
+                {
+                    "addressee": "ACME",
+                    "general_delivery_type": "POST OFFICE BOX",
+                    "general_delivery": "42,",
+                },
+                "POST OFFICE BOX 42",
+            ),
+            (
+                {"general_delivery_type": "ACME, P.O. BOX", "general_delivery": "42"},
+                {
+                    "addressee": "ACME",
+                    "general_delivery_type": "P.O. BOX",
+                    "general_delivery": "42",
+                },
+                "P.O. BOX 42",
+            ),
+            # A recipient already parsed keeps its place; the name joins it.
+            (
+                {
+                    "addressee": "ATTN BILLING",
+                    "general_delivery_type": "ACME LOCKBOX",
+                    "general_delivery": "42",
+                },
+                {
+                    "addressee": "ATTN BILLING, ACME",
+                    "general_delivery_type": "LOCKBOX",
+                    "general_delivery": "42",
+                },
+                "LOCKBOX 42",
+            ),
+            # A recipient tagged after the box follows the name (source order).
+            (
+                {
+                    "general_delivery_type": "ACME PO BOX",
+                    "general_delivery": "42",
+                    "addressee": "ATTN BILLING",
+                },
+                {
+                    "addressee": "ACME, ATTN BILLING",
+                    "general_delivery_type": "PO BOX",
+                    "general_delivery": "42",
+                },
+                "PO BOX 42",
+            ),
+            # No ID parsed: the name still moves.
+            (
+                {"general_delivery_type": "ACME PO BOX"},
+                {"addressee": "ACME", "general_delivery_type": "PO BOX"},
+                "PO BOX",
+            ),
+        ],
+    )
+    def test_name_moved_to_recipient(
+        self, c: dict[str, str], expected: dict[str, str], recovered: str
+    ) -> None:
+        c |= _LAST_LINE
+        events: list[RecoveryEvent] = []
+        _recover_name_from_box_type(c, events)
+        assert c == {**expected, **_LAST_LINE}
+        assert list(c) == [*expected, *_LAST_LINE]
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert DELIVERY_LINE_RECOVERED.format(text=recovered) == events[0].warning
+
+    @pytest.mark.parametrize(
+        "c",
+        [
+            # Already a designation, or no designation to keep (bare BOX).
+            {"general_delivery_type": "PO BOX", "general_delivery": "42"},
+            {"general_delivery_type": "FIRM CALLER BOX", "general_delivery": "42"},
+            {"general_delivery_type": "ACME BOX", "general_delivery": "42"},
+            {"general_delivery_type": "ACME", "general_delivery": "42"},
+            # Words before the designation hold one: not a name.
+            {"general_delivery_type": "DRAWER LOCK BOX", "general_delivery": "42"},
+            # A repeated box merged by the ambiguous-parse path.
+            {"general_delivery_type": "ACME PO BOX PO BOX", "general_delivery": "42 43"},
+            {"general_delivery_type": "ACME PO BOX ACME PO BOX", "general_delivery": "42 43"},
+            # A street or route group: the box is not the delivery line.
+            {**_STREET, "general_delivery_type": "ACME PO BOX", "general_delivery": "42"},
+            {
+                "general_delivery_group_type": "RR",
+                "general_delivery_group": "2",
+                "general_delivery_type": "ACME PO BOX",
+                "general_delivery": "42",
+            },
+            {},
+        ],
+    )
+    def test_left_alone(self, c: dict[str, str]) -> None:
+        c |= _LAST_LINE
+        before = dict(c)
+        _recover_name_from_box_type(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        ("raw", "recipient", "recovered"),
+        [
+            ("ACME LOCK BOX 42, SEATTLE, WA 98101", "ACME", "LOCK BOX 42"),
+            ("ACME LOCKBOX 42, SEATTLE, WA 98101", "ACME", "LOCKBOX 42"),
+            ("ACME PO BOX 42, SEATTLE, WA 98101", "ACME", "PO BOX 42"),
+            ("ACME P O BOX 42, SEATTLE, WA 98101", "ACME", "P O BOX 42"),
+            ("ACME POST OFFICE BOX 42, SEATTLE, WA 98101", "ACME", "POST OFFICE BOX 42"),
+            ("ACME PO DRAWER 42, SEATTLE, WA 98101", "ACME", "PO DRAWER 42"),
+            ("SMITH CALLER BOX 42, SEATTLE, WA 98101", "SMITH", "CALLER BOX 42"),
+            ("ACME, LOCK BOX 42, SEATTLE, WA 98101", "ACME", "LOCK BOX 42"),
+            ("ACME LOCK BOX 42", "ACME", "LOCK BOX 42"),
+            # A recipient tagged after the box follows the name (source order).
+            ("ACME PO BOX 42 ATTN BILLING, SEATTLE, WA 98101", "ACME, ATTN BILLING", "PO BOX 42"),
+            # The name is already the recipient: nothing to recover.
+            ("ACME CORP LOCK BOX 42, SEATTLE, WA 98101", "ACME CORP", None),
+        ],
+    )
+    async def test_end_to_end(self, raw: str, recipient: str, recovered: str | None) -> None:
+        """GH-307 acceptance: parse → standardize renders PO BOX on line 1."""
+        response = (await parse_address(raw)).response
+        assert response.components.values["addressee"] == recipient
         result = standardize(response.components.values, "US")
         assert (result.address_line_1, result.address_line_2) == ("PO BOX 42", "")
         prefix = DELIVERY_LINE_RECOVERED.partition("{")[0]

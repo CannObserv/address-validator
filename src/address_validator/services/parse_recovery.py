@@ -768,6 +768,15 @@ def _is_box_designation(words: list[str]) -> bool:
     return bool(words) and _normalize_unit_value(" ".join(words)) in BOX_TYPE_MAP
 
 
+def _holds_box_designation(words: list[str]) -> bool:
+    """True when a BOX_TYPE_MAP designation appears anywhere in *words*."""
+    return any(
+        _is_box_designation(words[at : at + n])
+        for at in range(len(words))
+        for n in range(1, _MAX_BOX_DESIGNATION_WORDS + 1)
+    )
+
+
 def _split_box_segment(
     segment: str, *, anywhere: bool = False
 ) -> tuple[str, str, str, list[str]] | None:
@@ -975,6 +984,47 @@ def _recover_split_box_designation(
         _splice(components, old_keys, recovered)
         _record_delivery_line_recovered(events, f"{designation} {new_id}")
         return
+
+
+def _recover_name_from_box_type(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Move a recipient name usaddress folded into the box type to the recipient.
+
+    usaddress tags a name before the designation as part of the box type
+    (``"ACME LOCK BOX"``, ``"ACME PO BOX"``), so BOX_TYPE_MAP never matched it
+    and line 1 kept the name (GH #307).  With no street or route group
+    parsed, a box type that is not a designation but ends in one keeps the
+    longest designation it ends in; the words before it join the recipient.
+    Words before it that hold a designation are not a name (``"DRAWER LOCK
+    BOX"``, or ``"ACME PO BOX PO BOX"`` merged from a repeated box), so the
+    box type is left alone.
+    """
+    if _has_street(components) or any(components.get(k) for k in _GROUP_KEYS):
+        return
+    words = components.get("general_delivery_type", "").strip(" ,;").split()
+    if _is_box_designation(words):
+        return
+    for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - 1), 0, -1):
+        if _is_box_designation(words[-n:]):
+            if _holds_box_designation(words[:-n]):
+                return
+            box_type = " ".join(words[-n:])
+            names = [components.get("addressee", ""), " ".join(words[:-n])]
+            # Keep source order: a recipient tagged after the box follows the name.
+            keys = list(components)
+            if "addressee" in keys and keys.index("addressee") > keys.index(
+                "general_delivery_type"
+            ):
+                names.reverse()
+            recipient = ", ".join(p for p in (name.strip(" ,;") for name in names) if p)
+            recovered = {"addressee": recipient} if recipient else {}
+            recovered["general_delivery_type"] = box_type
+            _splice(components, ("addressee", "general_delivery_type"), recovered)
+            box_id = components.get("general_delivery", "").strip(" ,;")
+            _record_delivery_line_recovered(events, f"{box_type} {box_id}".strip())
+            return
 
 
 def _recover_route_from_unit_slot(
@@ -1255,7 +1305,8 @@ def recover_components(
     tagged as a USPS box onto an occupancy slot, restores a street-less
     delivery line (``GENERAL DELIVERY``, a PO Box designation such as
     ``DRAWER 42``, a military route group) tagged elsewhere to the box
-    fields, rejoins a PO Box designation split across fields, moves a unit
+    fields, rejoins a PO Box designation split across fields, moves a
+    recipient name folded into the box type to the recipient, moves a unit
     tagged as part of the city onto an occupancy slot, repairs a stray
     single-letter identifier fragment at the city head, splits a ``'#'``
     phrase out of a named unit's identifier, then collapses an
@@ -1276,6 +1327,7 @@ def recover_components(
     _recover_general_delivery_from_name(component_values, events)
     _recover_po_box_designation(component_values, events)
     _recover_split_box_designation(component_values, events)
+    _recover_name_from_box_type(component_values, events)
     _recover_route_from_unit_slot(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
