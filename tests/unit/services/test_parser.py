@@ -997,27 +997,31 @@ class TestRecoverPoBoxDesignation:
         assert c == before
 
     @pytest.mark.parametrize(
-        ("raw", "line1", "line2"),
+        ("raw", "line1", "line2", "recovered"),
         [
-            ("DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
-            ("CALLER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
-            ("FIRM CALLER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
-            ("BIN 42, SEATTLE, WA 98101", "PO BOX 42", ""),
-            ("DRAWER 4200, PORTLAND, OR 97201", "PO BOX 4200", ""),
-            ("FIRM CALLER 5000, SEATTLE, WA 98101", "PO BOX 5000", ""),
-            ("FIRM CALLER 2000 AUSTIN TX 78701", "PO BOX 2000", ""),
-            ("ACME CORP, DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", ""),
-            ("DRAWER 42 STE 5, SEATTLE, WA 98101", "PO BOX 42", "STE 5"),
-            ("123 MAIN ST BIN 4, SEATTLE, WA 98101", "123 MAIN ST", "BIN 4"),
+            ("DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", "", "DRAWER 42"),
+            ("CALLER 42, SEATTLE, WA 98101", "PO BOX 42", "", "CALLER 42"),
+            ("FIRM CALLER 42, SEATTLE, WA 98101", "PO BOX 42", "", "FIRM CALLER 42"),
+            ("BIN 42, SEATTLE, WA 98101", "PO BOX 42", "", "BIN 42"),
+            ("DRAWER 4200, PORTLAND, OR 97201", "PO BOX 4200", "", "DRAWER 4200"),
+            ("FIRM CALLER 5000, SEATTLE, WA 98101", "PO BOX 5000", "", "FIRM CALLER 5000"),
+            ("FIRM CALLER 2000 AUSTIN TX 78701", "PO BOX 2000", "", "FIRM CALLER 2000"),
+            ("ACME CORP, DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", "", "DRAWER 42"),
+            ("DRAWER 42 STE 5, SEATTLE, WA 98101", "PO BOX 42", "STE 5", "DRAWER 42"),
+            ("123 MAIN ST BIN 4, SEATTLE, WA 98101", "123 MAIN ST", "BIN 4", None),
         ],
     )
-    async def test_end_to_end(self, raw: str, line1: str, line2: str) -> None:
+    async def test_end_to_end(
+        self, raw: str, line1: str, line2: str, recovered: str | None
+    ) -> None:
         """GH-302 acceptance: parse → standardize renders the box on line 1."""
         response = (await parse_address(raw)).response
         result = standardize(response.components.values, "US")
         assert (result.address_line_1, result.address_line_2) == (line1, line2)
-        if line1.startswith("PO BOX"):
-            assert any(w.startswith("Delivery address line recovered") for w in response.warnings)
+        prefix = DELIVERY_LINE_RECOVERED.partition("{")[0]
+        delivery_warnings = [w for w in response.warnings if w.startswith(prefix)]
+        expected = [DELIVERY_LINE_RECOVERED.format(text=recovered)] if recovered else []
+        assert delivery_warnings == expected
 
 
 class TestRecoverIdentifierFragmentFromCity:
