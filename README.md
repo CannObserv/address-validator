@@ -324,7 +324,8 @@ pyproject.toml                 # Project metadata, dependencies, tool config
   (`RR 2 BOX 152`, `HC 1 BOX 5`, `PSC 1234 BOX 5678`, `GENERAL DELIVERY`);
   a military route, `GENERAL DELIVERY` or a PO Box designation
   (`DRAWER 42` → `PO BOX 42`) tagged elsewhere, even as the street name,
-  or split across fields (`P O DRAWER 42`) is recovered
+  or split across fields (`P O DRAWER 42`) is recovered; a name folded
+  into the box type (`ACME LOCK BOX 42`) moves to the recipient
 - Non-address wayfinding words (e.g. `YARD`) dropped from city
 - Line 2 ordering: larger container (BLDG) before specific unit (STE)
 - Intersections formatted as `STREET1 & STREET2`
