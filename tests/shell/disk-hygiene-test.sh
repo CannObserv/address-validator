@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Self-checking sandbox tests for infra/disk-hygiene.sh.
+# Self-checking sandbox tests for infra/disk-hygiene.sh, plus the journal
+# warning shape it shares with infra/docker-prune-check.sh (infra/journal-warn.sh).
 #
 # Runs the hygiene script against a throwaway $HOME and a throwaway git repo,
 # so nothing outside the sandbox is read or deleted (npm/uv resolve their
 # caches from $HOME; the worktree sweep resolves the repo from the script's
-# own location). warn() calls do emit real journal lines tagged disk-hygiene.
+# own location). Warnings go to stderr only; nothing reaches the journal.
 #
 # Usage: bash tests/shell/disk-hygiene-test.sh
 
@@ -25,6 +26,8 @@ check() {
 # Hook-safe: under a git hook (pre-commit), exported GIT_* vars would point
 # sandbox git calls at the outer repo and recursively fire its hooks
 unset "${!GIT_@}" 2>/dev/null || true
+# Run from a systemd unit, the rig would inherit its parent's journal stream
+unset JOURNAL_STREAM
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 sandbox="$(cd "$(mktemp -d)" && pwd -P)"
@@ -38,11 +41,12 @@ trap cleanup EXIT
 # inside a scratch repo keeps `git worktree prune` and the orphan sweep
 # away from the real repo
 mkdir -p "$sandbox/repo/infra"
-cp "$repo_root/infra/disk-hygiene.sh" "$sandbox/repo/infra/"
+cp "$repo_root/infra/"{disk-hygiene.sh,journal-warn.sh,docker-prune-check.sh} "$sandbox/repo/infra/"
 git -C "$sandbox/repo" init -q
 git -C "$sandbox/repo" -c user.name=test -c user.email=test@test commit -q --no-verify --allow-empty -m init
 SCRIPT="$sandbox/repo/infra/disk-hygiene.sh"
 OUT="$sandbox/out.log"
+ERR="$sandbox/err.log"
 
 # Per-run-unique server names: the hygiene script pgrep-matches
 # "cli/servers/<name>/" against ALL process cmdlines, so a concurrent
@@ -104,6 +108,40 @@ check "servers untouched under corrupt lru.json" test -d "$servers/Stable-${uniq
 echo '[]' >"$servers/lru.json"
 HOME=$fake "$SCRIPT" >"$OUT" 2>&1 || true
 check "empty lru.json warns and skips" /bin/grep -q "skipping server-build prune" "$OUT"
+
+# --- journal shape (#246): warnings on the unit's stderr stream, <4> only there ---
+# Under systemd, JOURNAL_STREAM names stderr's <dev>:<inode>; a file stands in
+lacks() { ! /bin/grep -q "$1" "$2"; }
+: >"$OUT"
+: >"$ERR"
+out_stream=$(stat -L -c '%d:%i' "$OUT")
+err_stream=$(stat -L -c '%d:%i' "$ERR")
+HOME=$fake JOURNAL_STREAM=$err_stream "$SCRIPT" >"$OUT" 2>"$ERR" || true
+check "journal: warning carries <4> priority prefix" /bin/grep -qx "<4>disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
+check "journal: warning is not duplicated on stdout" lacks WARNING "$OUT"
+check "journal: info lines carry no prefix" lacks "^<" "$OUT"
+
+HOME=$fake JOURNAL_STREAM=$out_stream "$SCRIPT" >"$OUT" 2>"$ERR" || true
+check "redirected stderr: inherited JOURNAL_STREAM adds no prefix" /bin/grep -qx "disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
+
+HOME=$fake "$SCRIPT" --dry-run >"$OUT" 2>"$ERR" || true
+check "no JOURNAL_STREAM: warning has no prefix" /bin/grep -qx "disk-hygiene: WARNING: could not read keep-list.*" "$ERR"
+
+# docker-prune-check.sh: a fake df reports the root filesystem at 90%
+mkdir -p "$sandbox/bin"
+cat >"$sandbox/bin/df" <<'EOF'
+#!/bin/sh
+echo 'Use%'
+echo ' 90%'
+EOF
+chmod +x "$sandbox/bin/df"
+rc=0
+PATH="$sandbox/bin:$PATH" JOURNAL_STREAM=$err_stream \
+  bash "$sandbox/repo/infra/docker-prune-check.sh" >"$OUT" 2>"$ERR" || rc=$?
+check "docker-prune-check exits 0" test "$rc" -eq 0
+check "docker-prune-check: warning carries <4> priority prefix" /bin/grep -qx "<4>DISK WARNING: / at 90% after Docker prune" "$ERR"
+PATH="$sandbox/bin:$PATH" bash "$sandbox/repo/infra/docker-prune-check.sh" >"$OUT" 2>"$ERR" || true
+check "docker-prune-check: no JOURNAL_STREAM, no prefix" /bin/grep -qx "DISK WARNING: / at 90% after Docker prune" "$ERR"
 
 echo
 if ((FAILS > 0)); then

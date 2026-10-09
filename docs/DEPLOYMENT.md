@@ -348,9 +348,8 @@ journalctl -u 'unit-failure@*' -p warning         # dispatches that did not deli
 ```
 
 Only WARNING+ lines leave the host. That filter is the PII guard; see
-`docs/LOGGING.md`. Shell `logger` / `systemd-cat` lines lose their unit
-attribution in journald, so disk-hygiene and docker-prune warnings are missing
-from the tail (#246).
+`docs/LOGGING.md`. The tail is scoped to the run's invocation ID, which
+`logger` / `systemd-cat` lines lack; shell scripts warn via `infra/journal-warn.sh` (#246).
 
 **Notifier config** — in `/etc/address-validator/.env`:
 

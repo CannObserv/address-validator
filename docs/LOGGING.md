@@ -29,7 +29,7 @@ The filter is attached to the **stdout handler**, not to a logger — a logger-l
 
 The ID is also echoed to callers as the `X-Request-ID` response header.
 
-Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message` lines rather than JSON, since they run outside a request context. The systemd-run infra scripts (`sweep_cache.py`, `archive_audit.py`, `notify_unit_failure.py`) configure logging through `infra/journal_logging.py`: when stderr is the journal, each record's first line carries its sd-daemon `<N>` priority. Without it, journald files every line at info and `journalctl -p warning` misses real errors. Continuation lines (tracebacks, psycopg `DETAIL:`) stay at info. That keeps them out of the WARNING+ journal tail that `notify_unit_failure.py` sends to notifier (#232).
+Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message` lines rather than JSON, since they run outside a request context. The systemd-run infra scripts (`sweep_cache.py`, `archive_audit.py`, `notify_unit_failure.py`) configure logging through `infra/journal_logging.py`: when stderr is the journal, each record's first line carries its sd-daemon `<N>` priority. Without it, journald files every line at info and `journalctl -p warning` misses real errors. Continuation lines (tracebacks, psycopg `DETAIL:`) stay at info. That keeps them out of the WARNING+ journal tail that `notify_unit_failure.py` sends to notifier (#232). The shell timer scripts (`disk-hygiene.sh`, `docker-prune-check.sh`) do the same through `infra/journal-warn.sh`: a warning is one stderr line with a `<4>` prefix. Not `logger` or `systemd-cat`: their lines lose the unit's invocation ID, so the tail never includes them (#246).
 
 ## Event table
 

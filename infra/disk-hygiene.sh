@@ -25,13 +25,14 @@ NPX_MAX_AGE_DAYS=30
 SERVER_KEEP_COUNT=2
 WORKTREE_MIN_AGE_MIN=30
 
+# shellcheck source=infra/journal-warn.sh
+source "${REPO}/infra/journal-warn.sh"
+
 log() { echo "disk-hygiene: $*"; }
 
-warn() {
-  log "WARNING: $*"
-  # Real journal warning priority so `journalctl -p warning` and alerting see it
-  logger -p user.warning -t disk-hygiene "$*" 2>/dev/null || true
-}
+# Real journal warning priority, on the unit's own stream so the failure
+# dispatch's per-run WARNING+ tail includes it (#246)
+warn() { journal_warn "disk-hygiene: WARNING: $*"; }
 
 remove_path() {
   local path=$1 size
