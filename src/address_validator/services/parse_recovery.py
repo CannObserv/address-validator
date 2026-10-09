@@ -106,6 +106,9 @@ _POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area"
 # Key prefixes that make up the primary street line (number + street name).
 _STREET_KEY_PREFIXES: tuple[str, ...] = ("premise_number", "thoroughfare_")
 
+# Key prefixes of an intersection's separator and second street.
+_INTERSECTION_KEY_PREFIXES: tuple[str, ...] = ("intersection_separator", "second_")
+
 # The USPS box pair usaddress fills from USPSBoxType / USPSBoxID.
 _BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
 
@@ -914,15 +917,18 @@ def _recover_po_box_designation(
       (``"FIRM CALLER"`` / ``"2000"``) moves with the number to the box
       (:func:`_po_box_from_recipient_number`);
     - a street name ending in ``<designation> <id>``, with no other street
-      field, moves to the box (:func:`_po_box_from_street_name`; GH #305).
-      A street number or type is the guard against a real street.
+      field and no intersection, moves to the box
+      (:func:`_po_box_from_street_name`; GH #305).  A street number, type or
+      second street is the guard against a real street.
     """
     if any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
         return
     street_keys = {k for k, v in components.items() if _is_street_key(k) and v}
     if street_keys == {"premise_number"}:
         _po_box_from_recipient_number(components, events)
-    elif street_keys == {"thoroughfare_name"}:
+    elif street_keys == {"thoroughfare_name"} and not any(
+        k.startswith(_INTERSECTION_KEY_PREFIXES) and v for k, v in components.items()
+    ):
         _po_box_from_street_name(components, events)
     elif not street_keys:
         _po_box_from_name(components, events) or _po_box_from_unit_slot(components, events)

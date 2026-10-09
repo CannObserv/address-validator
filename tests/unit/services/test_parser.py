@@ -1033,6 +1033,13 @@ class TestRecoverPoBoxDesignation:
                 "general_delivery_type": "PO BOX",
                 "general_delivery": "5",
             },
+            # GH-305 CR 1: the first street of an intersection.
+            {
+                "thoroughfare_name": "DRAWER 42",
+                "intersection_separator": "&",
+                "second_thoroughfare_name": "MAIN",
+                "second_thoroughfare_trailing_type": "ST",
+            },
         ],
     )
     def test_left_alone(self, c: dict[str, str]) -> None:
@@ -1057,6 +1064,7 @@ class TestRecoverPoBoxDesignation:
             # GH-305: tagged as the street name.
             ("FIRM CALLER 42, SEATTLE WA", "PO BOX 42", "", "FIRM CALLER 42"),
             ("JOHN SMITH CALLER 42, SEATTLE, WA 98101", "PO BOX 42", "", "CALLER 42"),
+            ("DRAWER 42 & MAIN ST, SEATTLE WA", "DRAWER 42 & MAIN ST", "", None),
         ],
     )
     async def test_end_to_end(
