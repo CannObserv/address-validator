@@ -881,17 +881,14 @@ class TestRecoverPoBoxDesignation:
         }
 
     @pytest.mark.parametrize(
-        ("key", "text"),
+        "c",
         [
-            ("addressee", "CALLER 42 SEATTLE"),  # no state: city or name?
-            ("landmark", "DRAWER 42 SEATTLE WA"),  # only a recipient tail is split
-            ("addressee", "DRAWER 42 SEATTLE WA 98101"),  # last line already parsed
+            {"addressee": "CALLER 42 SEATTLE"},  # no state: city or name?
+            {"landmark": "DRAWER 42 SEATTLE WA"},  # only a recipient tail is split
+            {"addressee": "DRAWER 42 SEATTLE WA 98101", **_LAST_LINE},  # last line parsed
         ],
     )
-    def test_text_after_box_left_alone(self, key: str, text: str) -> None:
-        c = {key: text}
-        if text.endswith("98101"):
-            c |= _LAST_LINE
+    def test_text_after_box_left_alone(self, c: dict[str, str]) -> None:
         before = dict(c)
         _recover_po_box_designation(c)
         assert c == before
