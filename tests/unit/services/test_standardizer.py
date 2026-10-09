@@ -564,6 +564,11 @@ class TestStandardize:
             ("P O BOX 42, SEATTLE, WA 98101", "PO BOX 42"),
             ("POB 42, SEATTLE, WA 98101", "PO BOX 42"),
             ("LOCKBOX 42, SEATTLE, WA 98101", "PO BOX 42"),
+            # GH-304: prefixed designations usaddress tags as a box.
+            ("P.O. DRAWER 42, SEATTLE, WA 98101", "PO BOX 42"),
+            ("PO DRAWER 42 SEATTLE WA 98101", "PO BOX 42"),
+            ("CALLER BOX 42, SEATTLE, WA 98101", "PO BOX 42"),
+            ("LOCK BOX 42, SEATTLE, WA 98101", "PO BOX 42"),
             # Already Pub 28 forms: unchanged.
             ("BOX 42, SEATTLE, WA 98101", "BOX 42"),
             ("RR 2 BOX 152, GLENNALLEN, AK 99588", "RR 2 BOX 152"),

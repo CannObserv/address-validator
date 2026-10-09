@@ -45,4 +45,11 @@ BOX_TYPE_MAP: dict[str, str] = {
     "BIN": "PO BOX",
     "LOCKBOX": "PO BOX",
     "DRAWER": "PO BOX",
+    # 283 input variants: a prefixed or two-word designation (GH #304).
+    "PO DRAWER": "PO BOX",
+    "P O DRAWER": "PO BOX",
+    "POST OFFICE DRAWER": "PO BOX",
+    "CALLER BOX": "PO BOX",
+    "FIRM CALLER BOX": "PO BOX",
+    "LOCK BOX": "PO BOX",
 }

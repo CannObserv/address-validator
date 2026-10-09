@@ -18,6 +18,7 @@ from address_validator.services.parse_recovery import (
     _recover_locality_from_trailing_addressee,
     _recover_po_box_designation,
     _recover_route_from_unit_slot,
+    _recover_split_box_designation,
     _recover_unit_from_city,
     _recover_unit_from_general_delivery,
     _recover_unit_list_item,
@@ -968,6 +969,38 @@ class TestRecoverPoBoxDesignation:
         assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
 
     @pytest.mark.parametrize(
+        ("name", "rest", "box_type"),
+        [
+            ("FIRM CALLER 42", {}, "FIRM CALLER"),
+            ("FIRM CALLER 42,", {}, "FIRM CALLER"),
+            ("JOHN SMITH CALLER 42", {"addressee": "JOHN SMITH"}, "CALLER"),
+            ("ACME CORP POST OFFICE DRAWER 42", {"addressee": "ACME CORP"}, "POST OFFICE DRAWER"),
+        ],
+    )
+    def test_street_name_ending_in_box_moved_to_box(
+        self, name: str, rest: dict[str, str], box_type: str
+    ) -> None:
+        """GH-305: usaddress tags the delivery line, and any name before it,
+        as the street name; no street number or other street field was parsed."""
+        c = {"thoroughfare_name": name, **_LAST_LINE}
+        events: list[RecoveryEvent] = []
+        _recover_po_box_designation(c, events)
+        assert c == {**rest, **self._box(box_type, "42"), **_LAST_LINE}
+        assert next(iter(c)) == next(iter(rest), "general_delivery_type")
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert DELIVERY_LINE_RECOVERED.format(text=f"{box_type} 42") == events[0].warning
+
+    def test_street_name_box_name_joins_recipient(self) -> None:
+        """GH-305: a name before the designation joins a recipient already parsed."""
+        c = {"addressee": "ATTN BILLING", "thoroughfare_name": "ACME CORP DRAWER 42", **_LAST_LINE}
+        _recover_po_box_designation(c)
+        assert c == {
+            "addressee": "ATTN BILLING, ACME CORP",
+            **self._box("DRAWER", "42"),
+            **_LAST_LINE,
+        }
+
+    @pytest.mark.parametrize(
         "c",
         [
             # A street: the unit is a real unit, the name a real name.
@@ -988,6 +1021,18 @@ class TestRecoverPoBoxDesignation:
             {"sub_premise_type": "STE", "sub_premise_number": "42"},
             {"addressee": "ACME CORP", "premise_number": "2000"},
             {"addressee": "FIRM CALLER", "premise_number": "2000", "premise_number_suffix": "A"},
+            # GH-305: a street name that is a street, or does not end in a box.
+            {"premise_number": "123", "thoroughfare_name": "FIRM CALLER 42"},
+            {"thoroughfare_name": "CALLER 42", "thoroughfare_trailing_type": "RD"},
+            {"thoroughfare_pre_direction": "N", "thoroughfare_name": "BIN 4"},
+            {"thoroughfare_name": "DRAWER 42 WEST"},
+            {"thoroughfare_name": "BINGHAM 42"},
+            {"thoroughfare_name": "JOHN CALLER"},
+            {
+                "thoroughfare_name": "CALLER 42",
+                "general_delivery_type": "PO BOX",
+                "general_delivery": "5",
+            },
         ],
     )
     def test_left_alone(self, c: dict[str, str]) -> None:
@@ -1009,6 +1054,9 @@ class TestRecoverPoBoxDesignation:
             ("ACME CORP, DRAWER 42, SEATTLE, WA 98101", "PO BOX 42", "", "DRAWER 42"),
             ("DRAWER 42 STE 5, SEATTLE, WA 98101", "PO BOX 42", "STE 5", "DRAWER 42"),
             ("123 MAIN ST BIN 4, SEATTLE, WA 98101", "123 MAIN ST", "BIN 4", None),
+            # GH-305: tagged as the street name.
+            ("FIRM CALLER 42, SEATTLE WA", "PO BOX 42", "", "FIRM CALLER 42"),
+            ("JOHN SMITH CALLER 42, SEATTLE, WA 98101", "PO BOX 42", "", "CALLER 42"),
         ],
     )
     async def test_end_to_end(
@@ -1018,6 +1066,129 @@ class TestRecoverPoBoxDesignation:
         response = (await parse_address(raw)).response
         result = standardize(response.components.values, "US")
         assert (result.address_line_1, result.address_line_2) == (line1, line2)
+        prefix = DELIVERY_LINE_RECOVERED.partition("{")[0]
+        delivery_warnings = [w for w in response.warnings if w.startswith(prefix)]
+        expected = [DELIVERY_LINE_RECOVERED.format(text=recovered)] if recovered else []
+        assert delivery_warnings == expected
+
+
+# ---------------------------------------------------------------------------
+# _recover_split_box_designation (GH #304)
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverSplitBoxDesignation:
+    """usaddress splits a multi-word PO Box designation across fields: its
+    head as the box type and the rest into the ID (``P`` / ``O DRAWER 42``),
+    or its head into the recipient (``FIRM CALLER`` / ``BOX``), so the
+    designation never reached BOX_TYPE_MAP whole."""
+
+    @pytest.mark.parametrize(
+        ("c", "expected", "recovered"),
+        [
+            (
+                {"general_delivery_type": "P", "general_delivery": "O DRAWER 42"},
+                {"general_delivery_type": "P O DRAWER", "general_delivery": "42"},
+                "P O DRAWER 42",
+            ),
+            (
+                {"general_delivery_type": "POST OFFICE", "general_delivery": "DRAWER 42,"},
+                {"general_delivery_type": "POST OFFICE DRAWER", "general_delivery": "42"},
+                "POST OFFICE DRAWER 42",
+            ),
+            (
+                {
+                    "addressee": "FIRM CALLER",
+                    "general_delivery_type": "BOX",
+                    "general_delivery": "42",
+                },
+                {"general_delivery_type": "FIRM CALLER BOX", "general_delivery": "42"},
+                "FIRM CALLER BOX 42",
+            ),
+            (
+                {
+                    "addressee": "JOHN SMITH CALLER",
+                    "general_delivery_type": "BOX",
+                    "general_delivery": "42",
+                },
+                {
+                    "addressee": "JOHN SMITH",
+                    "general_delivery_type": "CALLER BOX",
+                    "general_delivery": "42",
+                },
+                "CALLER BOX 42",
+            ),
+            (
+                {
+                    "addressee": "ACME CORP, CALLER",
+                    "general_delivery_type": "BOX",
+                    "general_delivery": "42",
+                },
+                {
+                    "addressee": "ACME CORP",
+                    "general_delivery_type": "CALLER BOX",
+                    "general_delivery": "42",
+                },
+                "CALLER BOX 42",
+            ),
+        ],
+    )
+    def test_designation_rejoined(
+        self, c: dict[str, str], expected: dict[str, str], recovered: str
+    ) -> None:
+        c |= _LAST_LINE
+        events: list[RecoveryEvent] = []
+        _recover_split_box_designation(c, events)
+        assert c == {**expected, **_LAST_LINE}
+        assert list(c) == [*expected, *_LAST_LINE]
+        assert [e.kind for e in events] == [RecoveryKind.DELIVERY_LINE_RECOVERED]
+        assert DELIVERY_LINE_RECOVERED.format(text=recovered) == events[0].warning
+
+    @pytest.mark.parametrize(
+        "c",
+        [
+            # Already whole, or no longer designation to rejoin.
+            {"general_delivery_type": "PO BOX", "general_delivery": "42"},
+            {"general_delivery_type": "BOX", "general_delivery": "42"},
+            {"general_delivery_type": "PO BOX", "general_delivery": "42 DRAWER 5"},
+            {"addressee": "JOHN SMITH", "general_delivery_type": "BOX", "general_delivery": "42"},
+            # No identifier after the designation, or text after it.
+            {"general_delivery_type": "P", "general_delivery": "O DRAWER"},
+            {"general_delivery_type": "P", "general_delivery": "O DRAWER 42 WEST"},
+            # The recipient follows the box: not the designation's head.
+            {"general_delivery_type": "BOX", "general_delivery": "42", "addressee": "FIRM CALLER"},
+            # A street or route group: the box is not the delivery line.
+            {**_STREET, "general_delivery_type": "P", "general_delivery": "O DRAWER 42"},
+            {
+                "general_delivery_group_type": "RR",
+                "general_delivery_group": "2",
+                "general_delivery_type": "P",
+                "general_delivery": "O DRAWER 42",
+            },
+        ],
+    )
+    def test_left_alone(self, c: dict[str, str]) -> None:
+        c |= _LAST_LINE
+        before = dict(c)
+        _recover_split_box_designation(c)
+        assert c == before
+
+    @pytest.mark.parametrize(
+        ("raw", "recovered"),
+        [
+            ("P O DRAWER 42, SEATTLE, WA 98101", "P O DRAWER 42"),
+            ("POST OFFICE DRAWER 42, SEATTLE, WA 98101", "POST OFFICE DRAWER 42"),
+            ("FIRM CALLER BOX 42 SEATTLE WA 98101", "FIRM CALLER BOX 42"),
+            ("JOHN SMITH CALLER BOX 42, SEATTLE, WA 98101", "CALLER BOX 42"),
+            ("P.O. DRAWER 42, SEATTLE, WA 98101", None),
+            ("CALLER BOX 42, SEATTLE, WA 98101", None),
+        ],
+    )
+    async def test_end_to_end(self, raw: str, recovered: str | None) -> None:
+        """GH-304 acceptance: parse → standardize renders PO BOX on line 1."""
+        response = (await parse_address(raw)).response
+        result = standardize(response.components.values, "US")
+        assert (result.address_line_1, result.address_line_2) == ("PO BOX 42", "")
         prefix = DELIVERY_LINE_RECOVERED.partition("{")[0]
         delivery_warnings = [w for w in response.warnings if w.startswith(prefix)]
         expected = [DELIVERY_LINE_RECOVERED.format(text=recovered)] if recovered else []

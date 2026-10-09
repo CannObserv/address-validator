@@ -125,6 +125,13 @@ class TestBoxTypeMap:
             "BIN",
             "LOCKBOX",
             "DRAWER",
+            # GH-304: prefixed / two-word input variants usaddress tags as a box.
+            "PO DRAWER",
+            "P O DRAWER",
+            "POST OFFICE DRAWER",
+            "CALLER BOX",
+            "FIRM CALLER BOX",
+            "LOCK BOX",
         ],
     )
     def test_po_box_variants(self, variant: str) -> None:
