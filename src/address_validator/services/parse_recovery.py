@@ -810,8 +810,6 @@ def _po_box_from_name(components: dict[str, str], events: list[RecoveryEvent] | 
                 if last_line is None:
                     return False
             rest = [s for s in (*segments[:at], before, *segments[at + 1 :]) if s]
-            if last_line is not None and last_line.get("addressee"):
-                rest.append(last_line.pop("addressee"))
             recovered = {key: ", ".join(rest)} if rest else {}
             recovered |= {"general_delivery_type": box_type, "general_delivery": box_id}
             _splice(components, (key,), recovered | (last_line or {}))
