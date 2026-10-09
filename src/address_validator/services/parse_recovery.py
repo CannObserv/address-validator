@@ -106,6 +106,9 @@ _POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area"
 # Key prefixes that make up the primary street line (number + street name).
 _STREET_KEY_PREFIXES: tuple[str, ...] = ("premise_number", "thoroughfare_")
 
+# Key prefixes of an intersection's separator and second street.
+_INTERSECTION_KEY_PREFIXES: tuple[str, ...] = ("intersection_separator", "second_")
+
 # The USPS box pair usaddress fills from USPSBoxType / USPSBoxID.
 _BOX_KEYS: tuple[str, str] = ("general_delivery_type", "general_delivery")
 
@@ -865,6 +868,33 @@ def _po_box_from_recipient_number(
     return False
 
 
+def _po_box_from_street_name(
+    components: dict[str, str], events: list[RecoveryEvent] | None
+) -> bool:
+    """Move ``<designation> <id>`` ending a lone street name to the box.
+
+    With a comma after the box ID and no ZIP, or a name before the
+    designation, usaddress tags the delivery line as the street name
+    (``"FIRM CALLER 42, SEATTLE WA"``, ``"JOHN SMITH CALLER 42, …"``; GH
+    #305).  The words before the designation join the recipient.
+    """
+    words = components["thoroughfare_name"].split()
+    if not words or not _looks_like_unit_identifier(words[-1]):
+        return False
+    for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - 1), 0, -1):
+        if _is_box_designation(words[-n - 1 : -1]):
+            box_type = " ".join(words[-n - 1 : -1])
+            box_id = words[-1].strip(",;")
+            names = (components.get("addressee", ""), " ".join(words[: -n - 1]))
+            recipient = ", ".join(p for p in (name.strip(" ,;") for name in names) if p)
+            recovered = {"addressee": recipient} if recipient else {}
+            recovered |= {"general_delivery_type": box_type, "general_delivery": box_id}
+            _splice(components, ("addressee", "thoroughfare_name"), recovered)
+            _record_delivery_line_recovered(events, f"{box_type} {box_id}")
+            return True
+    return False
+
+
 def _recover_po_box_designation(
     components: dict[str, str],
     events: list[RecoveryEvent] | None = None,
@@ -875,25 +905,76 @@ def _recover_po_box_designation(
     §283; BOX_TYPE_MAP maps them to ``PO BOX``) as a landmark or building
     name (``"DRAWER 42,"``), a recipient, or a unit (``"BIN 42"``).  The
     standardizer renders no name and puts a unit on line 2, so line 1 came out
-    empty (GH #302).  With no street name, box or route group parsed:
+    empty (GH #302).  With no box or route group parsed:
 
-    - ``<designation> <id>`` in a name field moves to the box; with no ZIP
-      the whole input is the recipient, and the name before and the city
-      and state after are split out too (:func:`_po_box_from_name`);
-    - with no street number either, a unit with a box designator moves to the
-      box (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
+    - with no street either, ``<designation> <id>`` in a name field moves to
+      the box; with no ZIP the whole input is the recipient, and the name
+      before and the city and state after are split out too
+      (:func:`_po_box_from_name`);
+    - with no street either, a unit with a box designator moves to the box
+      (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
       beside a street (``"123 MAIN ST BIN 4"``) it stays a unit;
-    - a recipient ending in a designation beside a bare street number
+    - with only a street number, a recipient ending in a designation
       (``"FIRM CALLER"`` / ``"2000"``) moves with the number to the box
-      (:func:`_po_box_from_recipient_number`).
+      (:func:`_po_box_from_recipient_number`);
+    - with only a street name and no intersection, a name ending in
+      ``<designation> <id>`` moves to the box (:func:`_po_box_from_street_name`;
+      GH #305).  A street number, type or second street is the guard against
+      a real street.
     """
     if any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
         return
     street_keys = {k for k, v in components.items() if _is_street_key(k) and v}
     if street_keys == {"premise_number"}:
         _po_box_from_recipient_number(components, events)
+    elif street_keys == {"thoroughfare_name"} and not any(
+        k.startswith(_INTERSECTION_KEY_PREFIXES) and v for k, v in components.items()
+    ):
+        _po_box_from_street_name(components, events)
     elif not street_keys:
         _po_box_from_name(components, events) or _po_box_from_unit_slot(components, events)
+
+
+def _recover_split_box_designation(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Rejoin a multi-word PO Box designation usaddress split across fields.
+
+    usaddress tags the head of the designation as the box type and the rest
+    as the ID (``"P"`` / ``"O DRAWER 42"``, ``"POST OFFICE"`` / ``"DRAWER
+    42"``), or the head as the last words of the recipient before the box
+    (``"FIRM CALLER"`` / ``"BOX"``), so BOX_TYPE_MAP never saw it whole and
+    line 1 kept it as typed (GH #304).  With no street or route group parsed,
+    the longest BOX_TYPE_MAP designation spanning the split becomes the box
+    type; one identifier must follow it, with nothing after.
+    """
+    if _has_street(components) or any(components.get(k) for k in _GROUP_KEYS):
+        return
+    box_type = components.get("general_delivery_type", "").strip(" ,;")
+    box_id = components.get("general_delivery", "").strip(" ,;")
+    if not box_type or not box_id:
+        return
+    keys = list(components)
+    at = keys.index("general_delivery_type")
+    before_box = keys[at - 1] if at else None
+    head = components["addressee"].rstrip(" ,;").split() if before_box == "addressee" else []
+    type_words = len(box_type.split())
+    for n in range(min(_MAX_BOX_DESIGNATION_WORDS - 1, len(head)), -1, -1):
+        split = _split_box_segment(" ".join([*head[len(head) - n :], box_type, box_id]))
+        if split is None:
+            continue
+        _, designation, new_id, after = split
+        words = len(designation.split())
+        if after or words <= type_words or words < n + type_words:
+            continue
+        recipient = " ".join(head[: len(head) - n]).strip(" ,;")
+        recovered = {"addressee": recipient} if recipient else {}
+        recovered |= {"general_delivery_type": designation, "general_delivery": new_id}
+        old_keys = ("addressee", *_BOX_KEYS) if n else _BOX_KEYS
+        _splice(components, old_keys, recovered)
+        _record_delivery_line_recovered(events, f"{designation} {new_id}")
+        return
 
 
 def _recover_route_from_unit_slot(
@@ -1174,10 +1255,11 @@ def recover_components(
     tagged as a USPS box onto an occupancy slot, restores a street-less
     delivery line (``GENERAL DELIVERY``, a PO Box designation such as
     ``DRAWER 42``, a military route group) tagged elsewhere to the box
-    fields, moves a unit tagged as part of the city onto an occupancy slot,
-    repairs a stray single-letter identifier fragment at the city head,
-    splits a ``'#'`` phrase out of a named unit's identifier, then collapses
-    an identical-duplicate secondary unit into a single slot.
+    fields, rejoins a PO Box designation split across fields, moves a unit
+    tagged as part of the city onto an occupancy slot, repairs a stray
+    single-letter identifier fragment at the city head, splits a ``'#'``
+    phrase out of a named unit's identifier, then collapses an
+    identical-duplicate secondary unit into a single slot.
 
     Returns the list of :class:`RecoveryEvent` that fired, in order.  When
     *warnings* is supplied, each event's warning text is appended to it — the
@@ -1193,6 +1275,7 @@ def recover_components(
     _recover_unit_from_general_delivery(component_values, events)
     _recover_general_delivery_from_name(component_values, events)
     _recover_po_box_designation(component_values, events)
+    _recover_split_box_designation(component_values, events)
     _recover_route_from_unit_slot(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
