@@ -23,6 +23,7 @@ from enum import StrEnum
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.usps_data.directionals import DIRECTIONAL_MAP
+from address_validator.usps_data.routes import BOX_TYPE_MAP
 from address_validator.usps_data.states import MILITARY_STATES, STATE_MAP
 from address_validator.usps_data.suffixes import SUFFIX_MAP
 from address_validator.usps_data.units import UNIT_MAP
@@ -120,6 +121,9 @@ _GENERAL_DELIVERY = "GENERAL DELIVERY"
 _GENERAL_DELIVERY_RE = re.compile(
     r"(?P<before>.*?)\bGENERAL\s+DELIVERY\b(?P<after>.*)", re.IGNORECASE | re.DOTALL
 )
+
+# Longest PO Box designation in BOX_TYPE_MAP, in words ("POST OFFICE BOX").
+_MAX_BOX_DESIGNATION_WORDS: int = max(len(name.split()) for name in BOX_TYPE_MAP)
 
 # A token shaped like a unit identifier: one letter, or alphanumeric with a
 # digit ("100", "4B", "2-3", "#5").  Words like "WEST" in "KEY WEST" fail.
@@ -756,6 +760,142 @@ def _recover_general_delivery_from_name(
         return
 
 
+def _is_box_designation(words: list[str]) -> bool:
+    """True when *words* spell a BOX_TYPE_MAP designation (``FIRM CALLER``)."""
+    return bool(words) and _normalize_unit_value(" ".join(words)) in BOX_TYPE_MAP
+
+
+def _split_box_segment(
+    segment: str, *, anywhere: bool = False
+) -> tuple[str, str, str, list[str]] | None:
+    """Split ``"<before…> <designation> <id> <rest…>"`` into its four parts.
+
+    The designation is the longest BOX_TYPE_MAP entry at the match, the ID
+    one identifier-shaped token.  It must start *segment* unless *anywhere*
+    is set.  ``None`` when there is no match (``"THE BIN"``, ``"CALLER
+    JOHN"``, ``"BINGHAM 42"``).
+    """
+    words = segment.split()
+    for at in range(len(words) if anywhere else 1):
+        for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words) - at - 1), 0, -1):
+            end = at + n
+            if _is_box_designation(words[at:end]) and _looks_like_unit_identifier(words[end]):
+                before = " ".join(words[:at])
+                return before, " ".join(words[at:end]), words[end].strip(",;"), words[end + 1 :]
+    return None
+
+
+def _po_box_from_name(components: dict[str, str], events: list[RecoveryEvent] | None) -> bool:
+    """Move ``<designation> <id>`` from a name field to the box.
+
+    Normally the pair is a whole comma segment; segments before or after it
+    stay in the field.  A recipient with no last line parsed is the whole
+    input (no ZIP): the pair may follow a name (``"JOHN SMITH DRAWER 42 …"``),
+    which stays the recipient, and everything after the ID, later segments
+    included, must end in a state and is split into city and state
+    (``"FIRM CALLER 42 SEATTLE WA"``, ``"DRAWER 42, SEATTLE WA"``).
+    """
+    for key in ("landmark", "premise_name", "addressee"):
+        whole_input = key == "addressee" and not any(components.get(k) for k in _POST_STREET_KEYS)
+        segments = [seg.strip() for seg in components.get(key, "").split(",")]
+        for at, segment in enumerate(segments):
+            split = _split_box_segment(segment, anywhere=whole_input)
+            if split is None:
+                continue
+            before, box_type, box_id, after = split
+            later = segments[at + 1 :]
+            last_line = None
+            if whole_input:
+                # Everything after the ID, later segments included, is the
+                # last line ("DRAWER 42, SEATTLE WA").
+                tail = ", ".join(p for p in (" ".join(after), *later) if p)
+                if tail:
+                    last_line = _split_trailing_state(tail)
+                    if last_line is None:
+                        return False
+                    later = [last_line.pop("addressee", "")]
+            elif after:
+                return False
+            rest = [s for s in (*segments[:at], before, *later) if s]
+            recovered = {key: ", ".join(rest)} if rest else {}
+            recovered |= {"general_delivery_type": box_type, "general_delivery": box_id}
+            _splice(components, (key,), recovered | (last_line or {}))
+            _record_delivery_line_recovered(events, f"{box_type} {box_id}")
+            if last_line is not None:
+                _record_locality_recovered(events)
+            return True
+    return False
+
+
+def _po_box_from_unit_slot(components: dict[str, str], events: list[RecoveryEvent] | None) -> bool:
+    """Move a unit whose designator is a box designation to the box."""
+    for type_key, id_key in _UNIT_SLOT_PAIRS:
+        box_type = components.get(type_key, "").strip(",; ")
+        box_id = components.get(id_key, "").strip(",; ")
+        if _is_box_designation(box_type.split()) and _looks_like_unit_identifier(box_id):
+            box = {"general_delivery_type": box_type, "general_delivery": box_id}
+            _splice(components, (type_key, id_key), box)
+            _record_delivery_line_recovered(events, f"{box_type} {box_id}")
+            return True
+    return False
+
+
+def _po_box_from_recipient_number(
+    components: dict[str, str], events: list[RecoveryEvent] | None
+) -> bool:
+    """Move a recipient ending in a box designation, plus the number, to the box.
+
+    usaddress splits ``"FIRM CALLER 2000"`` (no comma after it) into a
+    recipient and a street number; with no street name the number is the
+    box ID.  The words before the designation stay the recipient.
+    """
+    box_id = components.get("premise_number", "")
+    words = components.get("addressee", "").rstrip(" ,;").split()
+    if not _looks_like_unit_identifier(box_id):
+        return False
+    for n in range(min(_MAX_BOX_DESIGNATION_WORDS, len(words)), 0, -1):
+        if _is_box_designation(words[-n:]):
+            box_type = " ".join(words[-n:])
+            recipient = " ".join(words[:-n]).strip(" ,;")
+            recovered = {"addressee": recipient} if recipient else {}
+            recovered |= {"general_delivery_type": box_type, "general_delivery": box_id}
+            _splice(components, ("addressee", "premise_number"), recovered)
+            _record_delivery_line_recovered(events, f"{box_type} {box_id}")
+            return True
+    return False
+
+
+def _recover_po_box_designation(
+    components: dict[str, str],
+    events: list[RecoveryEvent] | None = None,
+) -> None:
+    """Move a Pub 28 PO Box designation tagged outside the box fields to the box.
+
+    usaddress tags ``DRAWER``, ``CALLER``, ``FIRM CALLER`` and ``BIN`` (Pub 28
+    §283; BOX_TYPE_MAP maps them to ``PO BOX``) as a landmark or building
+    name (``"DRAWER 42,"``), a recipient, or a unit (``"BIN 42"``).  The
+    standardizer renders no name and puts a unit on line 2, so line 1 came out
+    empty (GH #302).  With no street name, box or route group parsed:
+
+    - ``<designation> <id>`` in a name field moves to the box; with no ZIP
+      the whole input is the recipient, and the name before and the city
+      and state after are split out too (:func:`_po_box_from_name`);
+    - with no street number either, a unit with a box designator moves to the
+      box (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
+      beside a street (``"123 MAIN ST BIN 4"``) it stays a unit;
+    - a recipient ending in a designation beside a bare street number
+      (``"FIRM CALLER"`` / ``"2000"``) moves with the number to the box
+      (:func:`_po_box_from_recipient_number`).
+    """
+    if any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
+        return
+    street_keys = {k for k, v in components.items() if _is_street_key(k) and v}
+    if street_keys == {"premise_number"}:
+        _po_box_from_recipient_number(components, events)
+    elif not street_keys:
+        _po_box_from_name(components, events) or _po_box_from_unit_slot(components, events)
+
+
 def _recover_route_from_unit_slot(
     components: dict[str, str],
     events: list[RecoveryEvent] | None = None,
@@ -1032,11 +1172,12 @@ def recover_components(
     back into city and state, folds a ``&``/``AND`` unit list item tagged as
     an intersection, box or second unit back into its unit, moves a unit
     tagged as a USPS box onto an occupancy slot, restores a street-less
-    delivery line (``GENERAL DELIVERY``, a military route group) tagged
-    elsewhere to the box fields, moves a unit tagged as part of the city onto
-    an occupancy slot, repairs a stray single-letter identifier fragment at
-    the city head, splits a ``'#'`` phrase out of a named unit's identifier,
-    then collapses an identical-duplicate secondary unit into a single slot.
+    delivery line (``GENERAL DELIVERY``, a PO Box designation such as
+    ``DRAWER 42``, a military route group) tagged elsewhere to the box
+    fields, moves a unit tagged as part of the city onto an occupancy slot,
+    repairs a stray single-letter identifier fragment at the city head,
+    splits a ``'#'`` phrase out of a named unit's identifier, then collapses
+    an identical-duplicate secondary unit into a single slot.
 
     Returns the list of :class:`RecoveryEvent` that fired, in order.  When
     *warnings* is supplied, each event's warning text is appended to it — the
@@ -1051,6 +1192,7 @@ def recover_components(
     _recover_unit_list_item(component_values, events)
     _recover_unit_from_general_delivery(component_values, events)
     _recover_general_delivery_from_name(component_values, events)
+    _recover_po_box_designation(component_values, events)
     _recover_route_from_unit_slot(component_values, events)
     _recover_unit_from_city(component_values, events)
     _recover_identifier_fragment_from_city(component_values, events)
