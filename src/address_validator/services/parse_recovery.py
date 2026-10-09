@@ -905,21 +905,22 @@ def _recover_po_box_designation(
     §283; BOX_TYPE_MAP maps them to ``PO BOX``) as a landmark or building
     name (``"DRAWER 42,"``), a recipient, or a unit (``"BIN 42"``).  The
     standardizer renders no name and puts a unit on line 2, so line 1 came out
-    empty (GH #302).  With no street name, box or route group parsed:
+    empty (GH #302).  With no box or route group parsed:
 
-    - ``<designation> <id>`` in a name field moves to the box; with no ZIP
-      the whole input is the recipient, and the name before and the city
-      and state after are split out too (:func:`_po_box_from_name`);
-    - with no street number either, a unit with a box designator moves to the
-      box (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
+    - with no street either, ``<designation> <id>`` in a name field moves to
+      the box; with no ZIP the whole input is the recipient, and the name
+      before and the city and state after are split out too
+      (:func:`_po_box_from_name`);
+    - with no street either, a unit with a box designator moves to the box
+      (:func:`_po_box_from_unit_slot`).  ``BIN`` is also a unit word, so
       beside a street (``"123 MAIN ST BIN 4"``) it stays a unit;
-    - a recipient ending in a designation beside a bare street number
+    - with only a street number, a recipient ending in a designation
       (``"FIRM CALLER"`` / ``"2000"``) moves with the number to the box
       (:func:`_po_box_from_recipient_number`);
-    - a street name ending in ``<designation> <id>``, with no other street
-      field and no intersection, moves to the box
-      (:func:`_po_box_from_street_name`; GH #305).  A street number, type or
-      second street is the guard against a real street.
+    - with only a street name and no intersection, a name ending in
+      ``<designation> <id>`` moves to the box (:func:`_po_box_from_street_name`;
+      GH #305).  A street number, type or second street is the guard against
+      a real street.
     """
     if any(components.get(k) for k in (*_BOX_KEYS, *_GROUP_KEYS)):
         return
