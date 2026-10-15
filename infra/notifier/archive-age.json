@@ -1,0 +1,25 @@
+{
+  "name": "address-validator-archive-age",
+  "title_template": "[address-validator] audit_log holds rows past retention on {{ host }}",
+  "body_template": "The oldest audit_log row on {{ host }} is from {{ oldest }}, {{ age_days }} days ago. AUDIT_RETENTION_DAYS is {{ retention_days }}, plus {{ grace_days }} grace day(s), so audit-archive should already have archived and deleted it. Rows past retention still carry raw_input (address PII).\n\naudit-archive has probably stopped running; a failed run would have alerted on its own.\n\nInspect on the host:\nsystemctl list-timers audit-archive.timer\njournalctl -u audit-archive -n 50\ninfra/install-units.sh --check",
+  "variables_schema": {
+    "type": "object",
+    "required": ["host", "oldest", "age_days", "retention_days", "grace_days"],
+    "properties": {
+      "host": {"type": "string"},
+      "oldest": {"type": "string"},
+      "age_days": {"type": "string"},
+      "retention_days": {"type": "string"},
+      "grace_days": {"type": "string"}
+    },
+    "additionalProperties": true
+  },
+  "sample_variables": {
+    "host": "address-validator",
+    "oldest": "2026-07-14 00:00 UTC",
+    "age_days": "93",
+    "retention_days": "90",
+    "grace_days": "1"
+  },
+  "tags": ["address-validator", "archive-age"]
+}

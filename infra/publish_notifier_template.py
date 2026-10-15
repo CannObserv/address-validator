@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Create or update the unit-failure template in notifier (#232).
+"""Create or update a stored notifier template (#232, #249).
 
-The wording lives here, in ``infra/notifier/unit-failure.json``; notifier stores
-a copy under this tenant. Run once to create it, then again after editing the
+The wording lives here, in ``infra/notifier/<name>.json``; notifier stores a
+copy under this tenant. Run once to create it, then again after editing the
 JSON to push the change:
 
-    .venv/bin/python infra/publish_notifier_template.py            # create or update
-    .venv/bin/python infra/publish_notifier_template.py --dry-run  # render sample only
+    .venv/bin/python infra/publish_notifier_template.py                        # unit-failure
+    .venv/bin/python infra/publish_notifier_template.py --template archive-age
+    .venv/bin/python infra/publish_notifier_template.py --dry-run              # render sample only
 
 Reads only ``NOTIFIER_*`` keys from ``--env-file`` (default
 ``/etc/address-validator/.env``) so the production DSN never enters the process
-environment. With ``NOTIFIER_UNIT_FAILURE_TEMPLATE_ID`` set it PATCHes that
+environment. With the template's ID variable set (``TEMPLATES``) it PATCHes that
 template; without it, it creates one and prints the ULID to put in that variable.
 """
 
@@ -25,7 +26,13 @@ from typing import Any
 
 from notifier_client import NotifierClient
 
-TEMPLATE = Path(__file__).resolve().parent / "notifier" / "unit-failure.json"
+NOTIFIER_DIR = Path(__file__).resolve().parent / "notifier"
+# Template name → the env var holding its stored ULID, read by its sender.
+TEMPLATES = {
+    "unit-failure": "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID",
+    "archive-age": "NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID",
+}
+TEMPLATE = NOTIFIER_DIR / "unit-failure.json"
 DEFAULT_ENV_FILE = Path("/etc/address-validator/.env")
 EXPECTED_ENVIRONMENT = "production"
 
@@ -41,7 +48,13 @@ def read_notifier_env(path: Path) -> dict[str, str]:
     return env
 
 
-async def publish(env: dict[str, str], template: dict[str, Any], *, dry_run: bool) -> str:
+async def publish(
+    env: dict[str, str],
+    template: dict[str, Any],
+    *,
+    dry_run: bool,
+    id_var: str = TEMPLATES["unit-failure"],
+) -> str:
     async with NotifierClient(base_url=env["NOTIFIER_URL"], api_key=env["NOTIFIER_API_KEY"]) as c:
         environment = (await c.health()).get("environment")
         if environment != EXPECTED_ENVIRONMENT:
@@ -59,19 +72,20 @@ async def publish(env: dict[str, str], template: dict[str, Any], *, dry_run: boo
             return "(dry run)"
         fields = {k: template[k] for k in ("name", "title_template", "body_template")}
         fields |= {k: template[k] for k in ("variables_schema", "sample_variables", "tags")}
-        template_id = env.get("NOTIFIER_UNIT_FAILURE_TEMPLATE_ID", "").strip()
+        template_id = env.get(id_var, "").strip()
         if template_id:
             out = await c.templates.update(template_id, **fields)
             print(f"updated template {out.id}")
         else:
             out = await c.templates.create(**fields)
-            print(f"created template {out.id}; set NOTIFIER_UNIT_FAILURE_TEMPLATE_ID={out.id}")
+            print(f"created template {out.id}; set {id_var}={out.id}")
         return out.id
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
+    parser.add_argument("--template", choices=sorted(TEMPLATES), default="unit-failure")
     parser.add_argument("--dry-run", action="store_true", help="render the sample; write nothing")
     args = parser.parse_args()
     env = read_notifier_env(args.env_file)
@@ -79,7 +93,8 @@ def main() -> int:
     if missing:
         print(f"{args.env_file}: missing {', '.join(missing)}", file=sys.stderr)
         return 1
-    asyncio.run(publish(env, json.loads(TEMPLATE.read_text()), dry_run=args.dry_run))
+    template = json.loads((NOTIFIER_DIR / f"{args.template}.json").read_text())
+    asyncio.run(publish(env, template, dry_run=args.dry_run, id_var=TEMPLATES[args.template]))
     return 0
 
 

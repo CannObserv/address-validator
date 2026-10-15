@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy as sa
+from audit_retention import compute_cutoff, retention_days
 from google.cloud import storage as gcs
 from journal_logging import configure_logging
 from sqlalchemy import func, select, text
@@ -85,17 +86,6 @@ ARCHIVE_SCHEMA = pa.schema(
         ("parse_type", pa.string()),
     ]
 )
-
-
-def compute_cutoff(now: datetime, retention_days: int) -> datetime:
-    """Return the UTC midnight ``retention_days`` before ``now``.
-
-    Rows strictly before it are expired. Flooring to midnight keeps each
-    archived day whole within one run (#228).
-    """
-    return (now.astimezone(UTC) - timedelta(days=retention_days)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
 
 
 def _build_aggregate_select() -> sa.Select:
@@ -164,15 +154,14 @@ def _get_config() -> tuple[str, int, str | None, str]:
     if not dsn:
         logger.error("VALIDATION_CACHE_DSN not set")
         sys.exit(1)
-    raw_retention = os.environ.get("AUDIT_RETENTION_DAYS", "90")
     try:
-        retention_days = int(raw_retention)
-    except ValueError:
-        logger.error("AUDIT_RETENTION_DAYS must be an integer, got %r", raw_retention)
+        retention = retention_days(os.environ)
+    except ValueError as exc:
+        logger.error("%s", exc)
         sys.exit(1)
     bucket = os.environ.get("AUDIT_ARCHIVE_BUCKET", "").strip() or None
     prefix = os.environ.get("AUDIT_ARCHIVE_PREFIX", "audit/").strip()
-    return dsn, retention_days, bucket, prefix
+    return dsn, retention, bucket, prefix
 
 
 def _check_upload_config(bucket: str | None, *, skip_upload: bool) -> None:
