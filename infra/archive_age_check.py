@@ -17,6 +17,10 @@ Exit status:
     1  the check could not run (config, database), or a breach reached no
        channel, so ``unit-failure@`` reports the run and its WARNING lines
 
+The key is ``archive-age:<UTC date>``. Notifier records a dispatch under it even
+when every channel fails, so a same-day re-run replays that ``failed`` result,
+delivers nothing and exits 1 again; the next UTC day gets a fresh key.
+
 Usage:
     PYTHONPATH=src .venv/bin/python infra/archive_age_check.py
 
@@ -87,7 +91,10 @@ class AgeReport:
 
     @property
     def idempotency_key(self) -> str:
-        """One dispatch per UTC day: a re-run replays the day's dispatch, sends nothing."""
+        """One dispatch per UTC day: a re-run replays the day's dispatch, sends nothing.
+
+        That includes a ``failed`` one; see the module docstring.
+        """
         return f"archive-age:{self.now.astimezone(UTC).date().isoformat()}"
 
 
