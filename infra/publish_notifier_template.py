@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from notifier_client import NotifierClient
+from notifier_dispatch import EXPECTED_ENVIRONMENT
 
 NOTIFIER_DIR = Path(__file__).resolve().parent / "notifier"
 # Template name → the env var holding its stored ULID, read by its sender.
@@ -34,7 +35,6 @@ TEMPLATES = {
 }
 TEMPLATE = NOTIFIER_DIR / "unit-failure.json"
 DEFAULT_ENV_FILE = Path("/etc/address-validator/.env")
-EXPECTED_ENVIRONMENT = "production"
 
 
 def read_notifier_env(path: Path) -> dict[str, str]:
@@ -58,7 +58,9 @@ async def publish(
     async with NotifierClient(base_url=env["NOTIFIER_URL"], api_key=env["NOTIFIER_API_KEY"]) as c:
         environment = (await c.health()).get("environment")
         if environment != EXPECTED_ENVIRONMENT:
-            raise SystemExit(f"notifier reports environment={environment}, expected production")
+            raise SystemExit(
+                f"notifier reports environment={environment}, expected {EXPECTED_ENVIRONMENT}"
+            )
         preview = await c.preview(
             title_template=template["title_template"],
             body_template=template["body_template"],
