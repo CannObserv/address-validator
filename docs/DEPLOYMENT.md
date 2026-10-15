@@ -306,30 +306,12 @@ sudo infra/install-units.sh cache-sweep.service cache-sweep.timer \
 sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
   && sudo systemctl enable --now disk-hygiene.timer
 
-# Audit-log archive-age check (daily 06:00 UTC, alerts only)
+# Archive-age check (daily 06:00 UTC): alerts if audit-archive stops running (#249)
 sudo infra/install-units.sh archive-age-check.service archive-age-check.timer \
   && sudo systemctl enable --now archive-age-check.timer
 ```
 
-**Archive-age check (#249).** `audit-archive` failing alerts through its
-`OnFailure=` hook; `audit-archive` *not running* (timer disabled, unit removed,
-a path moved as in #109) fails nothing, and rows past retention, `raw_input`
-PII included, pile up silently. `infra/archive_age_check.py` reads only
-`min(audit_log.timestamp)` daily at 06:00 UTC, three hours after the archiver.
-It alerts when that row is older than the archiver's own cutoff
-(`infra/audit_retention.py`, same `AUDIT_RETENTION_DAYS`) plus one grace day: a
-single missed run stays quiet, the second consecutive one alerts. A breach logs
-a WARNING and dispatches the `archive-age` template once per UTC day
-(`idempotency_key` `archive-age:<date>`). With the notifier config unset or
-incomplete it is journal only and exits 0. A breach that reaches no channel
-(notifier unreachable, non-production, every channel failed) exits 1, so
-`unit-failure@` adds its crit line. **Known limit:** the check itself not
-running alerts nothing; that is silence detection, waiting on notifier's
-`co-status` (notifier#83).
-
-```bash
-journalctl -u archive-age-check -p info   # oldest row, threshold, "no breach"
-```
+Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
 
 **Failures are reported to the journal and pushed through notifier.** Every
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
@@ -383,15 +365,14 @@ Only WARNING+ lines leave the host. That filter is the PII guard; see
 | `NOTIFIER_API_KEY` | `address-validator` tenant key, `nk_…` — pasted by the operator, never through an agent |
 | `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | `01M3R970XBXWBKD31Y4EGPMAQE` (printed by `publish_notifier_template.py`) |
 | `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | `01M3QRP1BCJW3KFB04FX4V8EQ8,01M3QRP1BDAXK27G60EJQEVEZD` (`address-validator-slack`, `-mailgun`; tenant `01M3QQMHYVVQWAS2SZ7NE66D2N`, CannObserv/notifier#95) |
-| `NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID` | set after the first `publish_notifier_template.py --template archive-age` (#249); the archive-age check shares the channels above |
+| `NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID` | printed by `publish_notifier_template.py --template archive-age` (#249) |
 
 **Network.** Notifier is reachable only over the `cannobserv.org.github`
 tailnet (`http://notifier:9000`). Node, ACL, DNS takeover, and the join/rejoin
 recipe: [TAILNET.md](TAILNET.md). The handler refuses to dispatch unless `/health` reports
 `"environment": "production"`.
 
-**Templates.** The wording lives in `infra/notifier/unit-failure.json` and
-`infra/notifier/archive-age.json`.
+**Templates.** The wording lives in `infra/notifier/<name>.json`.
 Notifier stores a copy under this tenant, and template lookup is tenant-scoped.
 The publisher reads only the `NOTIFIER_*` keys from the env file, so the
 production DSN never enters its environment. It previews the sample through
@@ -400,8 +381,8 @@ notifier, then creates the template (or PATCHes it when
 
 ```bash
 .venv/bin/python infra/publish_notifier_template.py --dry-run   # preview only
-.venv/bin/python infra/publish_notifier_template.py             # create / update unit-failure
-.venv/bin/python infra/publish_notifier_template.py --template archive-age   # NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID
+.venv/bin/python infra/publish_notifier_template.py             # create / update
+.venv/bin/python infra/publish_notifier_template.py --template archive-age
 ```
 
 **Smoke tests.** The end-to-end check is a throwaway unit that fails. It takes
