@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 from typing import ClassVar
 
+import archive_age_check as aac
 import notify_unit_failure as nuf
 import publish_notifier_template as ptpl
 import pytest
@@ -194,3 +195,11 @@ def test_main_archive_age_creates_and_names_its_variable(tmp_path, monkeypatch, 
     ((action, fields),) = _written(FakeClient.instances[0])
     assert (action, fields["name"]) == ("create", "address-validator-archive-age")
     assert "set NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID=01NEWTEMPLATE" in capsys.readouterr().out
+
+
+def test_template_id_vars_match_their_senders():
+    """The publisher names the variable to set; the sender must read that one (CR 2)."""
+    assert ptpl.TEMPLATES == {
+        "unit-failure": nuf.TEMPLATE_VAR,
+        "archive-age": aac.TEMPLATE_VAR,
+    }
