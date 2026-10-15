@@ -11,7 +11,7 @@ import notify_unit_failure as nuf
 import publish_notifier_template as ptpl
 import pytest
 
-TEMPLATE = json.loads(ptpl.TEMPLATE.read_text())
+TEMPLATE = json.loads((ptpl.NOTIFIER_DIR / "unit-failure.json").read_text())
 ENV = {"NOTIFIER_URL": "http://notifier.test:9000", "NOTIFIER_API_KEY": "nk_test"}
 
 

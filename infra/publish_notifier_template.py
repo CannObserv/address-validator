@@ -33,7 +33,6 @@ TEMPLATES = {
     "unit-failure": "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID",
     "archive-age": "NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID",
 }
-TEMPLATE = NOTIFIER_DIR / "unit-failure.json"
 DEFAULT_ENV_FILE = Path("/etc/address-validator/.env")
 
 
