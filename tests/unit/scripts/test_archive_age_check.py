@@ -315,3 +315,9 @@ def test_retention_default_is_the_archivers():
     assert audit_retention.retention_days({}) == 90
     assert archive_audit.retention_days is audit_retention.retention_days
     assert archive_audit.compute_cutoff is aac.compute_cutoff
+
+
+def test_unit_runs_after_the_archiver():
+    """Persistent timers catching up at boot must not race (CR 1)."""
+    unit = (Path(aac.__file__).parent / "archive-age-check.service").read_text()
+    assert "After=audit-archive.service" in unit.splitlines()

@@ -1,6 +1,9 @@
 [Unit]
 Description=Alert when audit_log holds rows past AUDIT_RETENTION_DAYS
 After=network.target postgresql.service
+# Both timers are Persistent=true: after downtime spanning 03:00 and 06:00 they
+# fire together at boot, and the check must read the archiver's result, not race it.
+After=audit-archive.service
 OnFailure=unit-failure@%n.service
 
 [Service]
