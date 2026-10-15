@@ -312,8 +312,8 @@ def test_run_budget_fits_inside_unit_timeout():
 
 def test_retention_default_is_the_archivers():
     """One default for both: the check must not alert on a window the archiver never used."""
-    assert audit_retention.retention_days({}) == 90
-    assert archive_audit.retention_days is audit_retention.retention_days
+    assert audit_retention.parse_retention_days({}) == 90
+    assert archive_audit.parse_retention_days is audit_retention.parse_retention_days
     assert archive_audit.compute_cutoff is aac.compute_cutoff
 
 

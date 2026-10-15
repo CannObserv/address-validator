@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy as sa
-from audit_retention import compute_cutoff, retention_days
+from audit_retention import compute_cutoff, parse_retention_days
 from google.cloud import storage as gcs
 from journal_logging import configure_logging
 from sqlalchemy import func, select, text
@@ -155,7 +155,7 @@ def _get_config() -> tuple[str, int, str | None, str]:
         logger.error("VALIDATION_CACHE_DSN not set")
         sys.exit(1)
     try:
-        retention = retention_days(os.environ)
+        retention = parse_retention_days(os.environ)
     except ValueError as exc:
         logger.error("%s", exc)
         sys.exit(1)

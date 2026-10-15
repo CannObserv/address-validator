@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 DEFAULT_RETENTION_DAYS = 90
 
 
-def retention_days(env: Mapping[str, str]) -> int:
+def parse_retention_days(env: Mapping[str, str]) -> int:
     """``AUDIT_RETENTION_DAYS`` as an int; raises ValueError naming the bad value."""
     raw = env.get("AUDIT_RETENTION_DAYS", str(DEFAULT_RETENTION_DAYS))
     try:

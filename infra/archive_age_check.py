@@ -41,7 +41,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
-from audit_retention import compute_cutoff, retention_days
+from audit_retention import compute_cutoff, parse_retention_days
 from journal_logging import configure_logging
 from notifier_client import NotifierClient, NotifierError
 from notifier_dispatch import ConfigError, dispatch, load_config
@@ -175,7 +175,7 @@ async def run(
         logger.error("VALIDATION_CACHE_DSN not set")
         return 1
     try:
-        retention = retention_days(env)
+        retention = parse_retention_days(env)
     except ValueError as exc:
         logger.error("%s", exc)
         return 1
