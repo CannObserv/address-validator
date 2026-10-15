@@ -193,11 +193,19 @@ async def run(
         return 1
 
     report = AgeReport(oldest=oldest, now=now or datetime.now(UTC), retention_days=retention)
+    if oldest is None:
+        logger.info(
+            "audit_log is empty; threshold %s (AUDIT_RETENTION_DAYS=%d + %d grace); no breach",
+            _fmt(report.threshold),
+            retention,
+            GRACE_DAYS,
+        )
+        return 0
     if not report.breached:
         logger.info(
             "oldest audit_log row: %s (%d days old); threshold %s "
             "(AUDIT_RETENTION_DAYS=%d + %d grace); no breach",
-            _fmt(oldest) if oldest else "none, table empty",
+            _fmt(oldest),
             report.age_days,
             _fmt(report.threshold),
             retention,

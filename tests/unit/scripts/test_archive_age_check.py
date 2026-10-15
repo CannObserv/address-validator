@@ -191,6 +191,8 @@ async def test_empty_audit_log_is_no_breach(db: AsyncEngine, caplog):
         code = await aac.run({**DB_ENV, **NOTIFIER_ENV}, now=NOW, client_factory=_no_client)
     assert code == 0
     assert "no breach" in caplog.text
+    assert "audit_log is empty" in caplog.text
+    assert "days old" not in caplog.text
 
 
 async def test_breach_with_notifier_unset_is_journal_only(db: AsyncEngine, caplog):
