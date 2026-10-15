@@ -33,6 +33,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/subagent-driven-development` | Executing an implementation plan | Run independent plan steps via concurrent agents |
 | `/orchestrating-issue-backlog` | Issue triage/batch execution | Prioritize backlog, design parallel-safe execution plan |
 | `/using-mayfly-chat` | "mayfly", "open a channel", "join the channel", "chat with <repo>", "agent chat", or a relayed channel URL | Live agent-to-agent exchange over an encrypted, ephemeral [Mayfly Chat](https://mayfly.chat) channel; outcomes land on issues before goodbye. The URL is read, write and delete access: **never commit it** — not in an issue, commit, doc or plan. This repo has no structural test for it, so run the leak check in the skill's `references/security.md` before committing anything a session produced. Needs Node.js 18+ |
+| `/coordinating-epics` | "coordinate the epic", "check-in", "I finished #N", "next issue" | Serial, operator-paced epic burn-down: verifies each child from evidence, hands off the next with a brief. Every epic body edit goes through `scripts/epic-edit.sh` (baseline-guarded, compare-and-swap, lint, read-back); each check-in starts with `scripts/scan.sh` (read-only). This clone has no `origin/HEAD`, so pass `scan.sh --ref origin/main` — without it the commit cursor is skipped with only a warning (exit 0). Adopted for [#272](https://github.com/CannObserv/address-validator/issues/272) by its coordinator thread only ([#312](https://github.com/CannObserv/address-validator/issues/312)). Needs `gh` + python3 3.9+ |
 | `/schedule` | Recurring or one-time future task | Create background agents on a cron schedule |
 | `/loop` | Recurring interval task in session | Run a prompt or command on a repeating interval |
 
@@ -48,6 +49,12 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 | `/managing-skills` | Add/update external skill repos | git submodule + symlink pattern for skills-vendor/ |
 | `/init-socraticode` | Re-audit the SocratiCode install; after a SocratiCode upgrade | Idempotent audit re-run — re-validates the manifest, re-measures graph yield, repairs hooks and the policy block. Detail: [SOCRATICODE.md](SOCRATICODE.md) |
 | `/curating-context` | "curate context", "trim AGENTS.md"; weekly maintenance | Curates AGENTS.md + its doc tree against the token budget (`.skills/context-budget`, 6,000). Its `context-budget-guard.sh` PostToolUse hook warns on every edit that pushes the file over |
+
+## Host operations skills
+
+| Skill | Trigger | Purpose |
+|---|---|---|
+| `/patching-hosts` | "patch the host", "OS updates", "security updates", "needrestart" | Probes pending OS/package updates by class against the posture `.skills/patching-hosts` declares, then a gated, held-step apply with a recovery point, a detached reboot chain and post-boot checks. The knob and the first monthly run are [#311](https://github.com/CannObserv/address-validator/issues/311); until the knob lands the probe treats this host as report-only. Every step needs the owner's approval |
 
 ## Project-specific skills
 
