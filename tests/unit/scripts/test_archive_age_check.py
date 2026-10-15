@@ -321,3 +321,14 @@ def test_unit_runs_after_the_archiver():
     """Persistent timers catching up at boot must not race (CR 1)."""
     unit = (Path(aac.__file__).parent / "archive-age-check.service").read_text()
     assert "After=audit-archive.service" in unit.splitlines()
+
+
+@pytest.mark.parametrize("raw", ["-1", "-90"])
+def test_negative_retention_is_rejected(raw):
+    """A future cutoff would archive and delete today's rows too (CR 5)."""
+    with pytest.raises(ValueError, match="non-negative"):
+        audit_retention.parse_retention_days({"AUDIT_RETENTION_DAYS": raw})
+
+
+def test_zero_retention_is_allowed():
+    assert audit_retention.parse_retention_days({"AUDIT_RETENTION_DAYS": "0"}) == 0

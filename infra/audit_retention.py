@@ -16,12 +16,19 @@ DEFAULT_RETENTION_DAYS = 90
 
 
 def parse_retention_days(env: Mapping[str, str]) -> int:
-    """``AUDIT_RETENTION_DAYS`` as an int; raises ValueError naming the bad value."""
+    """``AUDIT_RETENTION_DAYS`` as an int; raises ValueError naming the bad value.
+
+    Negative is rejected: its cutoff lies in the future, so the archiver would
+    delete every row, today's included, and the age check would alert daily.
+    """
     raw = env.get("AUDIT_RETENTION_DAYS", str(DEFAULT_RETENTION_DAYS))
     try:
-        return int(raw)
+        days = int(raw)
     except ValueError:
         raise ValueError(f"AUDIT_RETENTION_DAYS must be an integer, got {raw!r}") from None
+    if days < 0:
+        raise ValueError(f"AUDIT_RETENTION_DAYS must be non-negative, got {raw!r}")
+    return days
 
 
 def compute_cutoff(now: datetime, retention_days: int) -> datetime:
