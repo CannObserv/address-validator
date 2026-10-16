@@ -12,7 +12,7 @@ User=exedev
 WorkingDirectory=/home/exedev/address-validator
 EnvironmentFile=/etc/address-validator/.env
 Environment=PYTHONPATH=/home/exedev/address-validator/src
-ExecStart=/home/exedev/address-validator/.venv/bin/python infra/archive_age_check.py
+ExecStart=/home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/archive_age_check.py
 # A hung run would block the next day's start without failing anything (#249).
 # The script bounds the notifier at RUN_BUDGET_SECONDS; this covers the DB too.
 TimeoutStartSec=180

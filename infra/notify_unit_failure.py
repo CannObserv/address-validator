@@ -16,7 +16,7 @@ Env vars (``/etc/address-validator/.env``):
     NOTIFIER_UNIT_FAILURE_CHANNEL_IDS   comma-separated channel ULIDs
 
 Set by systemd (>= 251) for an ``OnFailure=`` handler; absent on a manual
-``systemctl start unit-failure@<unit>.service``:
+run of ``unit-failure@<unit>.service``:
     MONITOR_SERVICE_RESULT, MONITOR_EXIT_CODE, MONITOR_EXIT_STATUS, MONITOR_INVOCATION_ID
 """
 
