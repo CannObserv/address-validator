@@ -64,9 +64,13 @@ POLL_S = 0.25
 # spare.
 CHECK_BUDGET_S = 45
 
+# core/validation_status.py's, which the knob command can't import (no
+# PYTHONPATH); tests/unit/scripts/test_patching_recovery_check.py pins the two.
+UNAVAILABLE = "unavailable"
+
 # Rows are matched by request ID; the time bound lets idx_audit_ts do the work.
 _AUDIT_ROWS = text(
-    "SELECT request_id, cache_hit FROM audit_log"
+    "SELECT request_id, cache_hit, validation_status FROM audit_log"
     " WHERE timestamp >= now() - interval '10 minutes' AND request_id IN :ids"
 ).bindparams(bindparam("ids", expanding=True))
 
@@ -145,8 +149,9 @@ async def _validate_twice(client: httpx.AsyncClient, api_key: str) -> list[str] 
 
 async def _audit_rows(
     engine: AsyncEngine, request_ids: list[str], audit_wait_s: float, poll_s: float
-) -> dict[str, bool | None] | str:
-    """``{request_id: cache_hit}`` for the rows that landed, or the failed step.
+) -> dict[str, tuple[bool | None, str | None]] | str:
+    """``{request_id: (cache_hit, validation_status)}`` for the rows that
+    landed, or the failed step.
 
     The audit middleware writes through a background queue, after the response.
     """
@@ -155,7 +160,7 @@ async def _audit_rows(
         try:
             async with engine.connect() as conn:
                 result = await conn.execute(_AUDIT_ROWS, {"ids": request_ids})
-                rows = dict(result.tuples().all())
+                rows = {rid: (hit, verdict) for rid, hit, verdict in result.tuples()}
         except Exception:  # a read failure is "not recovered", never a crash
             return "audit_log unreadable"
         if len(rows) == len(request_ids) or time.monotonic() >= deadline:
@@ -181,10 +186,19 @@ async def check(
     rows = await _audit_rows(engine, request_ids, audit_wait_s, poll_s)
     if isinstance(rows, str):
         return rows
+    return _verdict(rows, request_ids, audit_wait_s)
+
+
+def _verdict(
+    rows: dict[str, tuple[bool | None, str | None]], request_ids: list[str], audit_wait_s: float
+) -> str | None:
+    """Both rows landed, and the repeat was a cache hit; else what went wrong."""
     landed = sum(rid in rows for rid in request_ids)
     if landed < len(request_ids):
         return f"audit_log rows missing ({landed} of {len(request_ids)} after {audit_wait_s:g}s)"
-    if rows[request_ids[1]] is not True:
+    if rows[request_ids[1]][0] is not True:
+        if rows[request_ids[0]][1] == UNAVAILABLE:
+            return "first validate was unavailable (providers), so nothing was cached"
         return "repeat was not a cache hit"
     return None
 

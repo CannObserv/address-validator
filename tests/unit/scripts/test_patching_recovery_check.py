@@ -18,6 +18,7 @@ import patching_recovery_check as prc
 import pytest
 from sqlalchemy import text
 
+from address_validator.core import validation_status
 from tests.conftest import TEST_CACHE_DSN
 
 if TYPE_CHECKING:
@@ -28,9 +29,17 @@ if TYPE_CHECKING:
 API_KEY = "test-key-not-a-secret"
 
 
-def _app(engine: AsyncEngine | None, *, statuses=(200, 200), hits=(False, True), seen=None):
+def _app(
+    engine: AsyncEngine | None,
+    *,
+    statuses=(200, 200),
+    hits=(False, True),
+    verdicts=("confirmed", "confirmed"),
+    seen=None,
+):
     """A fake app: answers with ``statuses``; writes an audit row per request
-    with ``cache_hit`` from ``hits`` when ``engine`` is given."""
+    with ``cache_hit`` from ``hits`` and ``validation_status`` from
+    ``verdicts`` when ``engine`` is given."""
     ids = itertools.count(1)
     calls = itertools.count()
 
@@ -44,10 +53,15 @@ def _app(engine: AsyncEngine | None, *, statuses=(200, 200), hits=(False, True),
                 await conn.execute(
                     text(
                         "INSERT INTO audit_log (timestamp, request_id, client_ip, method,"
-                        " endpoint, status_code, cache_hit) VALUES (now(), :rid, '127.0.0.1',"
-                        " 'POST', '/api/v2/validate', :code, :hit)"
+                        " endpoint, status_code, cache_hit, validation_status) VALUES (now(),"
+                        " :rid, '127.0.0.1', 'POST', '/api/v2/validate', :code, :hit, :verdict)"
                     ),
-                    {"rid": request_id, "code": statuses[n], "hit": hits[n]},
+                    {
+                        "rid": request_id,
+                        "code": statuses[n],
+                        "hit": hits[n],
+                        "verdict": verdicts[n],
+                    },
                 )
         return httpx.Response(statuses[n], json={}, headers={"x-request-id": request_id})
 
@@ -71,6 +85,15 @@ async def test_repeat_that_misses_the_cache_is_not_recovered(db: AsyncEngine):
     reason = await _check(db, _app(db, hits=(False, False)))
     assert reason is not None
     assert "cache hit" in reason
+
+
+async def test_an_unavailable_first_answer_is_named_not_blamed_on_the_cache(db: AsyncEngine):
+    """Both providers down or out of quota on the first call after the TTL:
+    ``unavailable`` is never cached, so the repeat misses for that reason."""
+    reason = await _check(
+        db, _app(db, hits=(False, False), verdicts=("unavailable", "unavailable"))
+    )
+    assert reason == "first validate was unavailable (providers), so nothing was cached"
 
 
 async def test_missing_audit_rows_are_not_recovered(db: AsyncEngine):
@@ -222,3 +245,7 @@ async def test_an_unusable_dsn_is_one_config_line(tmp_path: Path, capsys):
     out = capsys.readouterr()
     assert out.out == "not recovered: config: VALIDATION_CACHE_DSN unusable (ValueError)\n"
     assert "s3cret" not in out.out + out.err
+
+
+def test_the_unavailable_literal_is_the_catalogues():
+    assert prc.UNAVAILABLE == validation_status.UNAVAILABLE
