@@ -105,7 +105,9 @@ async def test_postgres_down_sends_no_request():
         reason = await _check(engine, _app(None, seen=seen))
     finally:
         await engine.dispose()
-    assert reason == "postgres not accepting connections"
+    assert reason is not None
+    assert reason.startswith("postgres not accepting connections (")
+    assert str(port) not in reason, "the DSN never reaches the output"
     assert seen == []
 
 

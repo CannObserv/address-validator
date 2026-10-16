@@ -109,13 +109,16 @@ def make_engine(dsn: str) -> AsyncEngine:
     )
 
 
-async def _postgres_ready(engine: AsyncEngine) -> bool:
+async def _postgres_unready(engine: AsyncEngine) -> str | None:
+    """``None`` when Postgres answers, else why not. The class name only:
+    ``str(exc)`` can carry the DSN. A bad password reads differently from an
+    outage, so a misconfiguration isn't waited out as a restart."""
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-    except Exception:  # any failure to connect is "not ready"
-        return False
-    return True
+    except Exception as exc:  # any failure to connect is "not ready"
+        return f"postgres not accepting connections ({type(exc).__name__})"
+    return None
 
 
 async def _validate_twice(client: httpx.AsyncClient, api_key: str) -> list[str] | str:
@@ -168,8 +171,9 @@ async def check(
     poll_s: float = POLL_S,
 ) -> str | None:
     """``None`` when the database path has recovered, else the failed step."""
-    if not await _postgres_ready(engine):
-        return "postgres not accepting connections"
+    unready = await _postgres_unready(engine)
+    if unready is not None:
+        return unready
     request_ids = await _validate_twice(client, api_key)
     if isinstance(request_ids, str):
         return request_ids
