@@ -1,0 +1,22 @@
+# Third-party apt origins, scoped to the packages each was added for (#311).
+# patching-hosts policy.md "Two lanes": a followed origin's Package: * pin sits
+# below 500 so Ubuntu's version stays for every other name it serves, and each
+# package it was added for gets a pin above 500. Install: docs/DEPLOYMENT.md.
+
+# NodeSource: nodejs for the admin JS toolchain (npm run test:js / lint:js).
+Package: *
+Pin: origin deb.nodesource.com
+Pin-Priority: 100
+
+Package: nodejs
+Pin: origin deb.nodesource.com
+Pin-Priority: 600
+
+# Tailscale: the tailnet hop to notifier (docs/TAILNET.md).
+Package: *
+Pin: origin pkgs.tailscale.com
+Pin-Priority: 100
+
+Package: tailscale tailscale-archive-keyring
+Pin: origin pkgs.tailscale.com
+Pin-Priority: 600
