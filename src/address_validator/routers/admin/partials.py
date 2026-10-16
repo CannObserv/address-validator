@@ -35,6 +35,7 @@ async def candidates_badge(
     since = datetime.now(UTC) - timedelta(days=DEFAULT_LOOKBACK_DAYS)
     count = await get_new_candidate_count(ctx.engine, since=since)
     return templates.TemplateResponse(
+        request,
         "admin/_partials/candidates_badge.html",
-        {"request": request, "count": count},
+        {"count": count},
     )

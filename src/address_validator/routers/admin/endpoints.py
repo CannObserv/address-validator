@@ -45,14 +45,15 @@ async def endpoint_detail(
     # HTMX partial — return just the rows (skip for boosted nav)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
+            request,
             "admin/audit/_rows.html",
-            {"request": request, "rows": rows, "show_result": False, "show_provider": True},
+            {"rows": rows, "show_result": False, "show_provider": True},
         )
 
     return templates.TemplateResponse(
+        request,
         "admin/endpoints/detail.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": f"endpoint_{name}",
             "css_version": get_css_version(),

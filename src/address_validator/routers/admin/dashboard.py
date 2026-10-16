@@ -34,9 +34,9 @@ async def admin_dashboard(ctx: AdminContext = Depends(get_admin_context)) -> Res
         for q in get_quota_info(ctx.request)
     ]
     return templates.TemplateResponse(
+        ctx.request,
         "admin/dashboard.html",
         {
-            "request": ctx.request,
             "user": ctx.user,
             "active_nav": "dashboard",
             "css_version": get_css_version(),

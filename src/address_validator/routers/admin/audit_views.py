@@ -83,14 +83,15 @@ async def audit_list(
 
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
+            request,
             "admin/audit/_rows.html",
-            {"request": request, "rows": rows, "show_result": False, "show_provider": True},
+            {"rows": rows, "show_result": False, "show_provider": True},
         )
 
     return templates.TemplateResponse(
+        request,
         "admin/audit/list.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": "audit",
             "css_version": get_css_version(),
