@@ -6,6 +6,10 @@ and the project uses semantic versioning.
 
 ## [Unreleased]
 
+### Security
+
+- **Runtime dependencies upgraded past 76 of 78 advisory entries** ([#317](https://github.com/CannObserv/address-validator/issues/317)). starlette 0.52.1 → 1.8.0 (via fastapi 0.129.0 → 0.143.3), python-multipart 0.0.26 → 0.0.32, cryptography 46.0.5 → 50.0.2, urllib3 2.6.3 → 2.8.0, requests, anyio, idna, mako, pyasn1 and pydantic-settings; dev-only lxml, pygments, pytest and virtualenv. starlette 1.x removed the `TemplateResponse(name, {"request": …})` form, so the admin views now pass the request first. fastapi now pulls in `opentelemetry-api`, which is inert with no provider configured. The API contract is unchanged (`/openapi.json` is byte-identical). One advisory is held: pyarrow PYSEC-2026-113 is fixed only in 23.0.1, past the `<20` bound, and is not reachable from Python ([`docs/DEPENDENCY-POLICY.md`](docs/DEPENDENCY-POLICY.md#auditing-317)). **Operators:** the deploy needs `uv sync` in the main checkout before the restart.
+
 ### Added
 
 - **Daily archive-age check** ([#249](https://github.com/CannObserv/address-validator/issues/249)). A new `archive-age-check` timer (06:00 UTC) alerts through notifier when the oldest `audit_log` row is past `AUDIT_RETENTION_DAYS` plus one grace day — the case where `audit-archive` silently stops running, which its failure hook cannot see. It reads only `min(timestamp)`. One dispatch per UTC day; journal only while the notifier config is unset. The check itself not running is still undetected (silence detection, notifier#83). **Operators:** install and enable the units, then publish the new template and set `NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID` (see `docs/DEPLOYMENT.md`). A negative `AUDIT_RETENTION_DAYS` now stops both `archive_audit.py` and the check with exit 1; the archiver used to accept it and delete every row, today's included.
