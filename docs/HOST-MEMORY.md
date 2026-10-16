@@ -215,13 +215,34 @@ writing one store) passes it.
 ## Upgrading ollama (GH #318)
 
 SocratiCode's embedder (`ollama.service`, `127.0.0.1:11434`) is a CPU-only
-manual install, outside apt. To upgrade:
+manual install, outside apt. The tarball is ~1.4 G, nearly all of it GPU runner
+trees, which the `--exclude` drops. Stage it under `$HOME` (boot wipes `/tmp`).
+Back up `bin/` and `lib/` into separate directories: both are named `ollama`,
+so a single `cp` into one directory loses the second (#318). Replace
+`lib/ollama/` whole, so no library from the old version stays behind.
 
-1. Verify the release's `ollama-linux-amd64.tar.zst` against `sha256sum.txt`.
-2. Extract with `--exclude='lib/ollama/*/*'`: the GPU runner trees are ~1.4 G,
-   and no GPU is here.
-3. Back up `bin/ollama` and `lib/ollama/` into separate directories.
-4. Swap them in between `systemctl stop` and `start ollama`.
+```bash
+V=0.40.5 S=~/staging/ollama-$V B=/usr/local/lib/ollama-$(/usr/local/bin/ollama --version 2>&1 | awk '/version/{v=$NF} END{print v}').bak
+mkdir -p "$S/x" && cd "$S"
+curl -fLO https://github.com/ollama/ollama/releases/download/v$V/ollama-linux-amd64.tar.zst
+curl -fsL https://github.com/ollama/ollama/releases/download/v$V/sha256sum.txt | grep ' ./ollama-linux-amd64.tar.zst$' | sha256sum -c
+tar --zstd -xf ollama-linux-amd64.tar.zst -C x --exclude='lib/ollama/*/*'
+find x/lib/ollama -mindepth 1 -type d -empty -delete
+sudo systemctl stop ollama
+sudo install -d "$B/bin" "$B/lib" && sudo cp -a /usr/local/bin/ollama "$B/bin/" && sudo cp -a /usr/local/lib/ollama "$B/lib/"
+sudo rm -rf /usr/local/lib/ollama && sudo cp -a x/lib/ollama /usr/local/lib/ && sudo chown -R root:root /usr/local/lib/ollama
+sudo install -m 755 -o root -g root x/bin/ollama /usr/local/bin/ollama
+sudo systemctl start ollama
+```
+
+Verify, in order:
+- `curl -s localhost:11434/api/version` shows `$V`.
+- `/api/embed` with `nomic-embed-text:latest` returns 768 dimensions.
+- `pgrep -a llama-server` (or whatever child now holds the model) still matches
+  earlyoom's `--prefer`; `tests/unit/test_earlyoom_config.py` pins the names.
+
+**Roll back** the same way, from `$B/bin/ollama` and `$B/lib/ollama`. Delete
+`$B` and `$S` once the new version has run cleanly.
 
 **Never run its `install.sh`:** it rewrites the unit, including a `PATH=` copied
 from whatever shell ran it.
