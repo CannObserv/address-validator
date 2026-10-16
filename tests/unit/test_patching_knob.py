@@ -101,11 +101,15 @@ def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None
     timers = sorted(INFRA.glob("*.timer"))
     assert timers
     for timer in timers:
-        (calendar,) = re.findall(r"^OnCalendar=(.*)$", timer.read_text(), re.M)
-        at = _minutes(re.search(r"(\d{2}:\d{2})", calendar).group(1))
-        inside = any(start <= at < end for start, end in quiet)
-        assert inside, f"{timer.name} fires outside every quiet range"
-        assert not window[0] <= at < window[1], f"{timer.name} fires inside the window"
+        calendars = re.findall(r"^OnCalendar=(.*)$", timer.read_text(), re.M)
+        assert calendars, f"{timer.name} has no OnCalendar= this test can read"
+        for calendar in calendars:
+            clock = re.search(r"(\d{2}:\d{2})", calendar)
+            assert clock, f"{timer.name}: OnCalendar={calendar} names no HH:MM"
+            at = _minutes(clock.group(1))
+            inside = any(start <= at < end for start, end in quiet)
+            assert inside, f"{timer.name} fires outside every quiet range"
+            assert not window[0] <= at < window[1], f"{timer.name} fires inside the window"
 
 
 def test_quiet_ranges_never_overlap_the_window() -> None:
