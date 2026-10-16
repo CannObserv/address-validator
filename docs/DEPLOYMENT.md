@@ -223,18 +223,10 @@ them, what to lose in order, and the SocratiCode launch pins.
 
 ## OS security updates
 
-The image masks the apt timers. Patching is a monthly scheduled run under the
-vendored `patching-hosts` skill (GH #311), driven by the knob `.skills/patching-hosts`:
-window 2nd Sunday 17:00–19:00 UTC, the Postgres datastore, callers, exceptions.
-`tests/unit/test_patching_knob.py` pins its decisions; check it with
-`bash skills/patching-hosts/scripts/read-knob.sh`. Its `health` lines include
-`infra/patching_recovery_check.py`, which proves the database path (not just
-liveness) after a Postgres restart: two real validate calls, their `audit_log`
-rows, a cache hit on the repeat.
-
-Third-party apt origins are scoped by `infra/apt-preferences.d/address-validator`
-(installed above): each origin's `Package: *` at 100, the packages it was added
-for at 600.
+The image masks the apt timers. Patching is a monthly run under the vendored
+`patching-hosts` skill (GH #311); its knob `.skills/patching-hosts` holds the window,
+datastore, callers, exceptions and the recovery check
+(`infra/patching_recovery_check.py`), pinned by `tests/unit/test_patching_knob.py`.
 
 apt's needrestart hook runs `needrestart -m u`, which Ubuntu turns into *automatic*
 restarts unless `$nrconf{restart}` is set. `infra/needrestart.conf.d/address-validator.conf`
