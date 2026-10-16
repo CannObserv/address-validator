@@ -143,6 +143,15 @@ def test_file_is_read_as_systemd_reads_it(tmp_path: Path):
     assert prc.load_config(env_file) == ("quoted key", "postgresql+asyncpg://u:p@h/d")
 
 
+def test_a_value_keeps_every_equals_sign_after_the_first(tmp_path: Path):
+    """A DSN's query string (``?ssl=require``) and a base64 key's padding."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "API_KEY=k3y==\nVALIDATION_CACHE_DSN=postgresql+asyncpg://u:p@h/d?ssl=require\n"
+    )
+    assert prc.load_config(env_file) == ("k3y==", "postgresql+asyncpg://u:p@h/d?ssl=require")
+
+
 @pytest.mark.parametrize("present", ["", "API_KEY=k\n", "VALIDATION_CACHE_DSN=postgresql://d\n"])
 def test_missing_setting_is_a_config_error(tmp_path: Path, present: str):
     env_file = tmp_path / ".env"
