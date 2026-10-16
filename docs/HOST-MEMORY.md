@@ -256,5 +256,25 @@ release where this changed.
 0.21.2 didn't (same boundary, also unbisected), so the same model gives
 different vectors for any text with an uppercase letter. Plan a full re-index
 after an upgrade, or the index mixes vectors from both engines
-(CannObserv/index#11). A full index peaks at about 1.2 G (above), so run it as
-its own step.
+(CannObserv/index#11). The watcher re-embeds only changed files, and
+`codebase_index` skips any file whose hash is unchanged, so neither one fixes
+this.
+
+A full re-index has two steps:
+1. **Run `codebase_remove` on its own.** It drops all three stores (code, graph,
+   context). Then confirm with `curl -s localhost:16333/collections` that only
+   `socraticode_metadata` is left. Sent in the same batch as `codebase_index`,
+   it failed (`Unable to remove watcher: Invalid argument`) and removed nothing,
+   and the index pass then embedded 0 chunks in 2.3 s. Calling it again on its
+   own worked.
+2. **Run `codebase_index`.** It rebuilds the code index, then the graph, then
+   every context artifact. There's no need for a separate
+   `codebase_context_index`.
+
+Measured here, 2026-10-16 (0.40.5, CPU, server already running): 2160 code
+chunks and 1129 context chunks took **53 min** (code 34, context 19).
+`MemAvailable` never fell below **2,907 MB**; it was 2,922 MB at the start. The
+1.2 G above is broker's *install* + server + index. With a pre-installed server
+the cost is time, not memory. Check afterwards: re-embed a few stored chunks
+(`search_document: ` + `relativePath` + `\n` + `content`, cut at 2048 chars)
+and compare them with their Qdrant vectors. They should be at cosine 1.0.
