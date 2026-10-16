@@ -14,13 +14,14 @@ Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
 Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower bounds.
 
-### Auditing (#317)
+### Auditing (#317, #318)
 
-The host's uv (0.10.4) has no `audit` subcommand until #318, so audit with a newer uv but **lock and sync with the host's**. The service's uv must read the lockfile, so a newer uv must never rewrite it:
+Audit, lock and sync with **the host's uv**. Since #318 that's the standalone install in `~/.local/bin`, which `/usr/local/bin/uv` symlinks to, so the units and root run the same binary. Never let a newer uv (`uvx uv@latest …`) rewrite `uv.lock`: the lockfile `revision` it writes may be one the service's uv can't read.
 
 ```bash
-uvx uv@latest audit --frozen            # all groups; add --no-dev for runtime only
-uv lock --upgrade-package <pkg> …       # host uv; a full --upgrade can cross unrelated majors
+uv audit --frozen                       # all groups; add --no-dev for runtime only
+uv lock --upgrade-package <pkg> …       # a full --upgrade can cross unrelated majors
+uv self update                          # upgrade the host's uv; then `uv --version` via /usr/local/bin too
 ```
 
 An advisory whose only fix is past a major bound is a decision, not an upgrade. Record it here with its reason:
