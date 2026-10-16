@@ -59,8 +59,9 @@ HTTP_TIMEOUT_S = 15
 AUDIT_WAIT_S = 10
 POLL_S = 0.25
 # The skill TERMs a knob command at 60 s and reports only "timed out", losing
-# the step. httpx's timeout is per phase and each poll connects again, so the
-# per-call limits don't add up to a bound: this does, with startup to spare.
+# the step. httpx's timeout bounds each phase (connect, read, ...), not a call,
+# so the per-call limits don't add up to a bound: this does, with startup to
+# spare.
 CHECK_BUDGET_S = 45
 
 # Rows are matched by request ID; the time bound lets idx_audit_ts do the work.
