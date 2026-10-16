@@ -8,6 +8,7 @@ and the project uses semantic versioning.
 
 ### Security
 
+- **Admin-JS dev toolchain cleared of all 10 npm advisories** ([#318](https://github.com/CannObserv/address-validator/issues/318)). vitest `^3.1.1` → `^4.1.12` (vite 7.3.3 → 8.3.4); vitest 4 drops tinypool, whose two critical advisories no 3.x release escapes. `npm audit fix` cleared the rest in-range: esbuild, postcss, nanoid, source-map-js, js-yaml and brace-expansion. Dev-only, so nothing ships: the admin JS is served as written.
 - **Runtime dependencies upgraded past 76 of 78 advisory entries** ([#317](https://github.com/CannObserv/address-validator/issues/317)). starlette 0.52.1 → 1.8.0 (via fastapi 0.129.0 → 0.143.3), python-multipart 0.0.26 → 0.0.32, cryptography 46.0.5 → 50.0.2, urllib3 2.6.3 → 2.8.0, requests, anyio, idna, mako, pyasn1 and pydantic-settings; dev-only lxml, pygments, pytest and virtualenv. starlette 1.x removed the `TemplateResponse(name, {"request": …})` form, so the admin views now pass the request first. fastapi now pulls in `opentelemetry-api`, which is inert with no provider configured. The API contract is unchanged (`/openapi.json` is byte-identical). One advisory is held: pyarrow PYSEC-2026-113 is fixed only in 23.0.1, past the `<20` bound, and is not reachable from Python ([`docs/DEPENDENCY-POLICY.md`](docs/DEPENDENCY-POLICY.md#auditing-317)). **Operators:** the deploy needs `uv sync` in the main checkout before the restart.
 
 ### Added

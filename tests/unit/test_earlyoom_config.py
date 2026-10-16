@@ -67,6 +67,7 @@ HOST_COMMS = frozenset(
         "docker-proxy",
         "dockerd",
         "earlyoom",
+        "llama-server",  # ollama 0.40.5 loads the model in this child; 0.21.2 didn't (#318)
         "npm exec socrat",
         "ollama",
         "polkitd",
@@ -157,12 +158,13 @@ def test_memory_alone_decides() -> None:
     )
 
 
-@pytest.mark.parametrize("comm", [LIBPOSTAL_COMM, "qdrant", "ollama"])
+@pytest.mark.parametrize("comm", [LIBPOSTAL_COMM, "qdrant", "ollama", "llama-server"])
 def test_what_restarts_on_its_own_is_preferred(comm: str) -> None:
     assert re.search(_flag("--prefer"), comm), (
         f"--prefer does not match {comm!r}. libpostal is what HOST-MEMORY.md loses "
         "first (it restarts on its own up to its #248 start limit), and SocratiCode's "
-        "qdrant and ollama restart on their own. The match is "
+        "qdrant and ollama (and ollama's llama-server model runner, #318) restart on "
+        "their own. The match is "
         "against the 15-char comm, so never $-anchor a full binary name"
     )
 

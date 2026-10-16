@@ -110,8 +110,11 @@ A dry run on 2026-09-24 answered that: stock earlyoom takes
 the stock order rests on RSS alone. After libpostal came the user's session
 bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
 postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
-`--prefer`s libpostal, then SocratiCode's `qdrant` and `ollama` (adj 0, all
-three restart on their own; libpostal up to its start limit, see the table above). It `--avoid`s the service, postgres and the user
+`--prefer`s libpostal, then SocratiCode's `qdrant`, `ollama` and ollama's model
+child `llama-server` (ollama 0.40.5 runs the model there; 0.21.2 didn't, #318).
+All are adj 0 and come back on their own: libpostal up to its start limit (see
+the table above), `llama-server` respawned by ollama on the next embed request.
+It `--avoid`s the service, postgres and the user
 manager, which puts postgres behind every small daemon. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
 `dbus.socket` restarts it on next use, so it goes fourth. The file's header
@@ -137,7 +140,7 @@ prints -1000 processes' scores from before the skip (upstream `init-socraticode`
 ```bash
 cd "$(mktemp -d)" && apt-get download earlyoom && dpkg-deb -x earlyoom_*.deb x
 timeout -s INT 2 ./x/usr/bin/earlyoom --dryrun -d -r 0 -m 99,98 -s 100,100 \
-  --prefer '^(wof-libpostal|qdrant|ollama)' \
+  --prefer '^(wof-libpostal|qdrant|ollama|llama-server)' \
   --avoid '^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$' > dry.txt 2>&1
 grep -m1 '^sending .* to process' dry.txt   # want wof-libpostal-s
 ```
@@ -208,3 +211,50 @@ so the settings block never reaches it (measured 2026-09-24, 2.1.267).
 for the declared values and `ps` for the launch. The health hook's pin-drift
 check goes silent whenever the variable is set, so a half re-pin (two builds
 writing one store) passes it.
+
+## Upgrading ollama (GH #318)
+
+SocratiCode's embedder (`ollama.service`, `127.0.0.1:11434`) is a CPU-only
+manual install, outside apt. The tarball is ~1.4 G, nearly all of it GPU runner
+trees, which the `--exclude` drops. Stage it under `$HOME` (boot wipes `/tmp`).
+Back up `bin/` and `lib/` into separate directories: both are named `ollama`,
+so a single `cp` into one directory loses the second (#318). Replace
+`lib/ollama/` whole, so no library from the old version stays behind.
+
+```bash
+V=0.40.5 S=~/staging/ollama-$V B=/usr/local/lib/ollama-$(/usr/local/bin/ollama --version 2>&1 | awk '/version/{v=$NF} END{print v}').bak
+mkdir -p "$S/x" && cd "$S"
+curl -fLO https://github.com/ollama/ollama/releases/download/v$V/ollama-linux-amd64.tar.zst
+curl -fsL https://github.com/ollama/ollama/releases/download/v$V/sha256sum.txt | grep ' ./ollama-linux-amd64.tar.zst$' | sha256sum -c
+tar --zstd -xf ollama-linux-amd64.tar.zst -C x --exclude='lib/ollama/*/*'
+find x/lib/ollama -mindepth 1 -type d -empty -delete
+sudo systemctl stop ollama
+sudo install -d "$B/bin" "$B/lib" && sudo cp -a /usr/local/bin/ollama "$B/bin/" && sudo cp -a /usr/local/lib/ollama "$B/lib/"
+sudo rm -rf /usr/local/lib/ollama && sudo cp -a x/lib/ollama /usr/local/lib/ && sudo chown -R root:root /usr/local/lib/ollama
+sudo install -m 755 -o root -g root x/bin/ollama /usr/local/bin/ollama
+sudo systemctl start ollama
+```
+
+Verify, in order:
+- `curl -s localhost:11434/api/version` shows `$V`.
+- `/api/embed` with `nomic-embed-text:latest` returns 768 dimensions.
+- `pgrep -a llama-server` (or whatever child now holds the model) still matches
+  earlyoom's `--prefer`; `tests/unit/test_earlyoom_config.py` pins the names.
+
+**Roll back** the same way, from `$B/bin/ollama` and `$B/lib/ollama`. Delete
+`$B` and `$S` once the new version has run cleanly.
+
+**Never run its `install.sh`:** it rewrites the unit, including a `PATH=` copied
+from whatever shell ran it.
+
+In 0.40.5 the loaded model runs in a child process, `llama-server`, which is
+why the earlyoom `--prefer` above names it. It exists only while a model is
+loaded. In 0.21.2 the model ran in `ollama` itself; nobody has bisected the
+release where this changed.
+
+**A version change can change the vectors.** 0.40.5 case-folds input and
+0.21.2 didn't (same boundary, also unbisected), so the same model gives
+different vectors for any text with an uppercase letter. Plan a full re-index
+after an upgrade, or the index mixes vectors from both engines
+(CannObserv/index#11). A full index peaks at about 1.2 G (above), so run it as
+its own step.
