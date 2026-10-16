@@ -201,3 +201,15 @@ async def test_a_stalled_step_is_reported_inside_the_budget(
     monkeypatch.setattr(prc, "CHECK_BUDGET_S", 0.2)
     assert await prc.run(_env_file(tmp_path), transport=httpx.MockTransport(stall)) == 1
     assert capsys.readouterr().out == "not recovered: timed out after 0.2s\n"
+
+
+async def test_an_unusable_dsn_is_one_config_line(tmp_path: Path, capsys):
+    """The skill records a knob command's output: one line, never a traceback."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        f"API_KEY={API_KEY}\nVALIDATION_CACHE_DSN=postgresql+asyncpg://u:s3cret@h:port/d\n"
+    )
+    assert await prc.run(env_file) == 1
+    out = capsys.readouterr()
+    assert out.out == "not recovered: config: VALIDATION_CACHE_DSN unusable (ValueError)\n"
+    assert "s3cret" not in out.out + out.err

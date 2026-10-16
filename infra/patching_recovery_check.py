@@ -201,7 +201,11 @@ async def run(
     except ConfigError as exc:
         print(f"not recovered: config: {exc}")
         return 1
-    engine = make_engine(dsn)
+    try:
+        engine = make_engine(dsn)
+    except Exception as exc:  # the class only: str(exc) can carry the DSN
+        print(f"not recovered: config: VALIDATION_CACHE_DSN unusable ({type(exc).__name__})")
+        return 1
     try:
         async with httpx.AsyncClient(
             base_url=base_url, transport=transport, timeout=HTTP_TIMEOUT_S
