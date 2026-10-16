@@ -35,9 +35,9 @@ exception session:adj 2027-01-31 platform session lineage; apply and dry run run
 
 # Liveness: 503 when degraded. Open route; libpostal state doesn't affect it.
 health curl -sf -o /dev/null --max-time 10 http://localhost:8000/api/v2/health
-health curl -sf -o /dev/null --max-time 10 http://localhost:4400/parse?address=1+Main+St
+health curl -sf -o /dev/null --max-time 10 'http://localhost:4400/parse?address=1+Main+St'
 # Recovery, not liveness: the app fails open while Postgres is down (step 0,
-# #235). A synthetic validate twice, both audit rows present, cache hit on the
+# #235). One public address validated twice, both audit rows present, cache hit on the
 # repeat. Exits 1 before any request while Postgres isn't accepting.
 health /home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/patching_recovery_check.py
 
