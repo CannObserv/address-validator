@@ -1,0 +1,66 @@
+# patching-hosts knob (#311). Grammar: skills/patching-hosts/references/knob.md.
+# Read by the vendored skill; never written by it. Decisions pinned in
+# tests/unit/test_patching_knob.py — change both together. Times are UTC.
+
+class production
+posture scheduled
+
+# Monthly, 2nd Sunday 17:00-19:00 UTC (decided 2026-10-16, #272/#311); first
+# window 2026-11-08. The grammar has no week-of-month, so this admits every
+# Sunday: the run itself must fall on the 2nd. UTC, so DST never moves it.
+window Sun 17:00-19:00
+
+# Daily 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
+# (After=audit-archive); Sun 03:30 docker-prune, Sun 05:00 disk-hygiene.
+quiet 03:00-06:15
+# wslcb-licensing-tracker's backfills call this host (~07:30, ~13:35 UTC).
+quiet 07:25-08:15
+quiet 13:25-14:15
+
+# First start after boot once failed on a not-yet-ready dependency and
+# Restart=on-failure recovered it (#239): --post-boot reads its NRestarts.
+service address-validator.service
+# Docker in the production path (CA parsing sidecar).
+service libpostal.service
+exception ordering:libpostal.service 2027-01-31 stateless parser sidecar; never touches Postgres, so no After= on it
+
+# docker system prune + a disk check (docker-prune-check.sh); restarts nothing.
+exception not-restarter:docker-prune.service 2027-01-31 docker system prune -f removes stopped containers and dangling images only
+
+# exe.dev image: systemd-journal-flush masked (#241); the reboot chain copies it.
+exception journal:volatile 2027-01-31 image masks the flush; reboot-chain.sh copies the journal as its last step
+# exe.dev sessions inherit -1000 from exe-init/sshd (docs/HOST-MEMORY.md); the
+# skill runs the apply and dry run under choom -n 0.
+exception session:adj 2027-01-31 platform session lineage; apply and dry run run under choom -n 0
+
+# Liveness: 503 when degraded. Open route; libpostal state doesn't affect it.
+health curl -sf -o /dev/null --max-time 10 http://localhost:8000/api/v2/health
+health curl -sf -o /dev/null --max-time 10 'http://localhost:4400/parse?address=1+Main+St'
+# Recovery, not liveness: the app fails open while Postgres is down (step 0,
+# #235). One public address validated twice, both audit rows present, cache
+# hit on the repeat. Exits 1 before any request while Postgres isn't accepting.
+health /home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/patching_recovery_check.py
+
+# Recovery point: no backup regime yet (#240), so recovery-point.sh's dump is
+# the only one. It holds PII (audit_log.raw_input): stage it under $HOME (boot
+# wipes /tmp, #238), and give it a stated retention.
+datastore postgres postgresql@16-main address_validator
+exception database:address_validator_test 2027-01-31 test fixtures only; rebuilt by alembic upgrade head on every test run
+
+# SocratiCode's semantic-search index (dev tooling, not production). Rebuilt
+# from the repo by codebase_index; no snapshot.
+exception datastore:socraticode-qdrant 2027-01-31 dev-tool index rebuilt from the repo by codebase_index
+
+# Third-party apt origins, maintenance lane. Scoped by pins in
+# /etc/apt/preferences.d/ (policy.md "Two lanes").
+origin deb.nodesource.com follow
+# The tailnet hop to notifier (docs/TAILNET.md): its own held step, so the
+# drop of that path is approved on its own.
+origin pkgs.tailscale.com follow
+hold tailscale tailscale
+
+# Synchronous callers, told before a restart (window, outage, what they get).
+caller CannObserv/power-map
+caller CannObserv/wslcb-licensing-tracker
+# A third caller's repo is private: told by hand, name kept out of this public
+# repo (gregoryfoster/skills#350). image-owner left out for the same reason.

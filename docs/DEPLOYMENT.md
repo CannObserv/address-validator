@@ -26,6 +26,9 @@ uv run pre-commit install
 
 # Install the needrestart drop-in (apt's hook lists restarts, never performs them)
 sudo install -m 644 infra/needrestart.conf.d/address-validator.conf /etc/needrestart/conf.d/
+
+# Install the third-party apt pins (NodeSource, Tailscale scoped to their packages)
+sudo install -m 644 infra/apt-preferences.d/address-validator /etc/apt/preferences.d/
 ```
 
 ### Unit file and code must move together
@@ -220,8 +223,12 @@ them, what to lose in order, and the SocratiCode launch pins.
 
 ## OS security updates
 
-The image masks the apt timers, so patching is by hand (GH #235). apt's
-needrestart hook runs `needrestart -m u`, which Ubuntu turns into *automatic*
+The image masks the apt timers. Patching is a monthly run under the vendored
+`patching-hosts` skill (GH #311); its knob `.skills/patching-hosts` holds the window,
+datastore, callers, exceptions and the recovery check
+(`infra/patching_recovery_check.py`), pinned by `tests/unit/test_patching_knob.py`.
+
+apt's needrestart hook runs `needrestart -m u`, which Ubuntu turns into *automatic*
 restarts unless `$nrconf{restart}` is set. `infra/needrestart.conf.d/address-validator.conf`
 sets `'l'`, so an apply only lists what needs restarting and the restarts happen
 in a window, under the owner's approval.
