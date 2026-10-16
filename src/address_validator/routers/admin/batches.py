@@ -40,9 +40,9 @@ async def batches_list(
     filter_status = status if status in _VALID_STATUSES else None
     rows = await list_batches(ctx.engine, status=filter_status)
     return templates.TemplateResponse(
+        request,
         "admin/batches/index.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": "batches",
             "css_version": get_css_version(),
@@ -88,9 +88,9 @@ async def batches_detail(
         raise HTTPException(status_code=404, detail="batch not found")
     candidates = await get_batch_candidates(ctx.engine, batch_id=batch["id"])
     return templates.TemplateResponse(
+        request,
         "admin/batches/detail.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": "batches",
             "css_version": get_css_version(),

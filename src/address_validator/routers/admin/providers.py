@@ -62,14 +62,15 @@ async def provider_detail(
     # HTMX partial — return just the rows (skip for boosted nav)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
+            request,
             "admin/audit/_rows.html",
-            {"request": request, "rows": rows, "show_result": True, "show_provider": False},
+            {"rows": rows, "show_result": True, "show_provider": False},
         )
 
     return templates.TemplateResponse(
+        request,
         "admin/providers/detail.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": f"provider_{name}",
             "css_version": get_css_version(),

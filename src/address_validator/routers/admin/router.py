@@ -30,9 +30,9 @@ async def _admin_auth_redirect(request: Request, exc: AdminAuthRequired) -> Resp
 
 async def _admin_db_unavailable(request: Request, exc: DatabaseUnavailable) -> Response:
     return templates.TemplateResponse(
+        request,
         "admin/error_503.html",
         {
-            "request": request,
             "user": exc.user,
             "active_nav": "",
             "css_version": get_css_version(),

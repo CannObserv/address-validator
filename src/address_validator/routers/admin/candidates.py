@@ -84,14 +84,15 @@ async def candidates_list(
 
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
+            request,
             "admin/candidates/_rows.html",
-            {"request": request, "rows": rows},
+            {"rows": rows},
         )
 
     return templates.TemplateResponse(
+        request,
         "admin/candidates/index.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": "candidates",
             "css_version": get_css_version(),
@@ -115,9 +116,9 @@ async def candidates_detail(
     submissions = await get_candidate_submissions(ctx.engine, raw_hash=raw_hash)
     assignable = await get_assignable_batches(ctx.engine)
     return templates.TemplateResponse(
+        request,
         "admin/candidates/detail.html",
         {
-            "request": request,
             "user": ctx.user,
             "active_nav": "candidates",
             "css_version": get_css_version(),
@@ -142,8 +143,9 @@ async def candidates_update_status(
     if group is None:
         raise HTTPException(status_code=404, detail="candidate group not found")
     return templates.TemplateResponse(
+        request,
         "admin/candidates/_status.html",
-        {"request": request, "group": group},
+        {"group": group},
     )
 
 
@@ -159,8 +161,9 @@ async def candidates_update_notes(
     if group is None:
         raise HTTPException(status_code=404, detail="candidate group not found")
     return templates.TemplateResponse(
+        request,
         "admin/candidates/_notes.html",
-        {"request": request, "group": group},
+        {"group": group},
     )
 
 
