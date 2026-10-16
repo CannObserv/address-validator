@@ -14,6 +14,21 @@ Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
 Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower bounds.
 
+### Auditing (#317)
+
+The host's uv (0.10.4) has no `audit` subcommand until #318, so audit with a newer uv but **lock and sync with the host's**. The service's uv must read the lockfile, so a newer uv must never rewrite it:
+
+```bash
+uvx uv@latest audit --frozen            # all groups; add --no-dev for runtime only
+uv lock --upgrade-package <pkg> …       # host uv; a full --upgrade can cross unrelated majors
+```
+
+An advisory whose only fix is past a major bound is a decision, not an upgrade. Record it here with its reason:
+
+| Advisory | Package | Fixed in | Held because |
+|---|---|---|---|
+| PYSEC-2026-113 / GHSA-rgxp-2hwp-jwgg | pyarrow 19.0.1 (`<20`) | 23.0.1 | Not reachable: the use-after-free is in Arrow C++'s IPC-file `PreBufferMetadata`, which the Python bindings don't expose, and `infra/archive_audit.py` only writes Parquet |
+
 ## JavaScript (npm + package.json)
 
 The admin dashboard's JS toolchain (ESLint, Prettier, Vitest, jsdom) is dev-only — no JS ships to a request path. Because nothing reaches runtime, the JS devDep rules are intentionally looser than the Python rules: caret ranges (`^X.Y.Z`) on devDeps are acceptable risk here, where they would not be in `pyproject.toml`. The Node runtime itself is enforced (via `engine-strict=true`) and pinned to an exact patch across `.nvmrc` / `.node-version` — see below.
