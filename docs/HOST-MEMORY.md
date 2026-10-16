@@ -209,3 +209,26 @@ so the settings block never reaches it (measured 2026-09-24, 2.1.267).
 for the declared values and `ps` for the launch. The health hook's pin-drift
 check goes silent whenever the variable is set, so a half re-pin (two builds
 writing one store) passes it.
+
+## Upgrading ollama (GH #318)
+
+SocratiCode's embedder (`ollama.service`, `127.0.0.1:11434`) is a CPU-only
+manual install, outside apt. To upgrade:
+
+1. Verify the release's `ollama-linux-amd64.tar.zst` against `sha256sum.txt`.
+2. Extract with `--exclude='lib/ollama/*/*'`: the GPU runner trees are ~1.4 G,
+   and no GPU is here.
+3. Back up `bin/ollama` and `lib/ollama/` into separate directories.
+4. Swap them in between `systemctl stop` and `start ollama`.
+
+**Never run its `install.sh`:** it rewrites the unit, including a `PATH=` copied
+from whatever shell ran it.
+
+Since 0.40 the loaded model runs in a child process, `llama-server`, which is why
+the earlyoom `--prefer` above names it. It exists only while a model is loaded.
+
+**A version change can change the vectors.** 0.40 case-folds input and 0.21
+didn't, so the same model gives different vectors for any text with an
+uppercase letter. Plan a full re-index after an upgrade, or the index mixes
+vectors from both engines (CannObserv/index#11). A full index peaks at about
+1.2 G (above), so run it as its own step.
