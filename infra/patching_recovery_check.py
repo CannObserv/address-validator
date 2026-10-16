@@ -54,9 +54,14 @@ BASE_URL = "http://localhost:8000"
 ADDRESS = "416 Sid Snyder Ave SW, Olympia, WA 98504"
 
 DB_CONNECT_TIMEOUT_S = 5
+DB_COMMAND_TIMEOUT_S = 5
 HTTP_TIMEOUT_S = 15
 AUDIT_WAIT_S = 10
 POLL_S = 0.25
+# The skill TERMs a knob command at 60 s and reports only "timed out", losing
+# the step. httpx's timeout is per phase and each poll connects again, so the
+# per-call limits don't add up to a bound: this does, with startup to spare.
+CHECK_BUDGET_S = 45
 
 # Rows are matched by request ID; the time bound lets idx_audit_ts do the work.
 _AUDIT_ROWS = text(
@@ -98,7 +103,10 @@ def load_config(env_file: Path) -> tuple[str, str]:
 
 
 def make_engine(dsn: str) -> AsyncEngine:
-    return create_async_engine(dsn, connect_args={"timeout": DB_CONNECT_TIMEOUT_S})
+    return create_async_engine(
+        dsn,
+        connect_args={"timeout": DB_CONNECT_TIMEOUT_S, "command_timeout": DB_COMMAND_TIMEOUT_S},
+    )
 
 
 async def _postgres_ready(engine: AsyncEngine) -> bool:
@@ -193,7 +201,10 @@ async def run(
         async with httpx.AsyncClient(
             base_url=base_url, transport=transport, timeout=HTTP_TIMEOUT_S
         ) as client:
-            reason = await check(client, engine, api_key, audit_wait_s=audit_wait_s)
+            async with asyncio.timeout(CHECK_BUDGET_S):
+                reason = await check(client, engine, api_key, audit_wait_s=audit_wait_s)
+    except TimeoutError:
+        reason = f"timed out after {CHECK_BUDGET_S}s"
     finally:
         await engine.dispose()
     if reason is not None:

@@ -8,6 +8,7 @@ request reaches the production service or a provider.
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import socket
 from typing import TYPE_CHECKING
@@ -183,6 +184,18 @@ async def test_run_config_error_exits_1(tmp_path: Path, capsys):
 
 
 def test_the_whole_check_fits_the_skills_limit():
-    """knob.md: a knob command is TERM'd at 60 s. Each wait is bounded well under."""
-    worst = prc.DB_CONNECT_TIMEOUT_S + 2 * prc.HTTP_TIMEOUT_S + prc.AUDIT_WAIT_S
-    assert worst < 60
+    """knob.md: a knob command is TERM'd at 60 s and reported only as timed out."""
+    assert prc.CHECK_BUDGET_S + prc.DB_CONNECT_TIMEOUT_S < 60
+    assert prc.AUDIT_WAIT_S + 2 * prc.HTTP_TIMEOUT_S < prc.CHECK_BUDGET_S
+
+
+async def test_a_stalled_step_is_reported_inside_the_budget(
+    db: AsyncEngine, tmp_path: Path, monkeypatch, capsys
+):
+    async def stall(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(5)
+        return httpx.Response(200)
+
+    monkeypatch.setattr(prc, "CHECK_BUDGET_S", 0.2)
+    assert await prc.run(_env_file(tmp_path), transport=httpx.MockTransport(stall)) == 1
+    assert capsys.readouterr().out == "not recovered: timed out after 0.2s\n"
