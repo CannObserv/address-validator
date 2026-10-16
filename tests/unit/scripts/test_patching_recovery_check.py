@@ -121,11 +121,14 @@ async def test_requests_carry_the_key_and_the_synthetic_address(db: AsyncEngine)
 # --- config -------------------------------------------------------------------
 
 
-def test_environment_wins_over_the_file(tmp_path: Path):
+def test_the_callers_environment_is_ignored(tmp_path: Path, monkeypatch):
+    """A shell still exporting the isolated test DSN (AGENTS.md) must not point
+    the audit read at another database than the one behind port 8000."""
+    monkeypatch.setenv("API_KEY", "from-env")
+    monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://e/e")
     env_file = tmp_path / ".env"
     env_file.write_text("API_KEY=from-file\nVALIDATION_CACHE_DSN=postgresql+asyncpg://f/f\n")
-    env = {"API_KEY": "from-env", "VALIDATION_CACHE_DSN": "postgresql+asyncpg://e/e"}
-    assert prc.load_config(env, env_file) == ("from-env", "postgresql+asyncpg://e/e")
+    assert prc.load_config(env_file) == ("from-file", "postgresql+asyncpg://f/f")
 
 
 def test_file_is_read_as_systemd_reads_it(tmp_path: Path):
@@ -134,7 +137,7 @@ def test_file_is_read_as_systemd_reads_it(tmp_path: Path):
         "# comment\n\nLOG_LEVEL=INFO\nAPI_KEY='quoted key'\n"
         'VALIDATION_CACHE_DSN="postgresql+asyncpg://u:p@h/d"\n'
     )
-    assert prc.load_config({}, env_file) == ("quoted key", "postgresql+asyncpg://u:p@h/d")
+    assert prc.load_config(env_file) == ("quoted key", "postgresql+asyncpg://u:p@h/d")
 
 
 @pytest.mark.parametrize("present", ["", "API_KEY=k\n", "VALIDATION_CACHE_DSN=postgresql://d\n"])
@@ -142,26 +145,31 @@ def test_missing_setting_is_a_config_error(tmp_path: Path, present: str):
     env_file = tmp_path / ".env"
     env_file.write_text(present)
     with pytest.raises(prc.ConfigError):
-        prc.load_config({}, env_file)
+        prc.load_config(env_file)
 
 
 def test_unreadable_file_is_a_config_error(tmp_path: Path):
     with pytest.raises(prc.ConfigError):
-        prc.load_config({}, tmp_path / "absent")
+        prc.load_config(tmp_path / "absent")
 
 
 # --- run: exit status and what it prints ---------------------------------------
 
 
+def _env_file(tmp_path: Path) -> Path:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"API_KEY={API_KEY}\nVALIDATION_CACHE_DSN={TEST_CACHE_DSN}\n")
+    return env_file
+
+
 async def test_run_exits_0_and_says_recovered(db: AsyncEngine, tmp_path: Path, capsys):
-    env = {"API_KEY": API_KEY, "VALIDATION_CACHE_DSN": TEST_CACHE_DSN}
-    assert await prc.run(env, tmp_path / "absent", transport=_app(db)) == 0
+    assert await prc.run(_env_file(tmp_path), transport=_app(db)) == 0
     assert capsys.readouterr().out == "recovered\n"
 
 
 async def test_run_failure_prints_no_secret_or_address(db: AsyncEngine, tmp_path: Path, capsys):
-    env = {"API_KEY": API_KEY, "VALIDATION_CACHE_DSN": TEST_CACHE_DSN}
-    assert await prc.run(env, tmp_path / "absent", transport=_app(None), audit_wait_s=0.2) == 1
+    env_file = _env_file(tmp_path)
+    assert await prc.run(env_file, transport=_app(None), audit_wait_s=0.2) == 1
     out = capsys.readouterr()
     printed = out.out + out.err
     assert printed.startswith("not recovered: ")
@@ -170,7 +178,7 @@ async def test_run_failure_prints_no_secret_or_address(db: AsyncEngine, tmp_path
 
 
 async def test_run_config_error_exits_1(tmp_path: Path, capsys):
-    assert await prc.run({}, tmp_path / "absent") == 1
+    assert await prc.run(tmp_path / "absent") == 1
     assert capsys.readouterr().out.startswith("not recovered: config")
 
 

@@ -21,8 +21,10 @@ spends one provider call; later ones are hits.
 
 A knob ``health`` line (``.skills/patching-hosts``): it runs as the invoking
 user, never root, under the skill's 60 s limit. ``API_KEY`` and
-``VALIDATION_CACHE_DSN`` come from the environment, else from
-/etc/address-validator/.env (root:exedev 0640). It prints one line, never the
+``VALIDATION_CACHE_DSN`` come only from /etc/address-validator/.env
+(root:exedev 0640), the service's own ``EnvironmentFile=``, never the caller's
+environment: a shell still exporting the test DSN would read ``audit_log`` from
+another database than the one behind port 8000. It prints one line, never the
 address, key or DSN.
 
 Usage:
@@ -35,7 +37,6 @@ which step).
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 import time
 from pathlib import Path
@@ -46,8 +47,6 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from sqlalchemy.ext.asyncio import AsyncEngine
 
 ENV_FILE = Path("/etc/address-validator/.env")
@@ -85,16 +84,13 @@ def _read_env_file(path: Path) -> dict[str, str]:
     return values
 
 
-def load_config(env: Mapping[str, str], env_file: Path) -> tuple[str, str]:
-    """``(api_key, dsn)``: the environment first, else ``env_file``."""
-    api_key, dsn = env.get("API_KEY"), env.get("VALIDATION_CACHE_DSN")
-    if not (api_key and dsn):
-        try:
-            values = _read_env_file(env_file)
-        except OSError as exc:
-            raise ConfigError(f"can't read {env_file} ({exc.strerror})") from None
-        api_key = api_key or values.get("API_KEY")
-        dsn = dsn or values.get("VALIDATION_CACHE_DSN")
+def load_config(env_file: Path) -> tuple[str, str]:
+    """``(api_key, dsn)`` from ``env_file`` alone (see the module docstring)."""
+    try:
+        values = _read_env_file(env_file)
+    except OSError as exc:
+        raise ConfigError(f"can't read {env_file} ({exc.strerror})") from None
+    api_key, dsn = values.get("API_KEY"), values.get("VALIDATION_CACHE_DSN")
     missing = [name for name, v in (("API_KEY", api_key), ("VALIDATION_CACHE_DSN", dsn)) if not v]
     if missing:
         raise ConfigError(f"{', '.join(missing)} unset")
@@ -181,7 +177,6 @@ async def check(
 
 
 async def run(
-    env: Mapping[str, str],
     env_file: Path = ENV_FILE,
     *,
     base_url: str = BASE_URL,
@@ -189,7 +184,7 @@ async def run(
     audit_wait_s: float = AUDIT_WAIT_S,
 ) -> int:
     try:
-        api_key, dsn = load_config(env, env_file)
+        api_key, dsn = load_config(env_file)
     except ConfigError as exc:
         print(f"not recovered: config: {exc}")
         return 1
@@ -209,7 +204,7 @@ async def run(
 
 
 def main() -> int:
-    return asyncio.run(run(os.environ))
+    return asyncio.run(run())
 
 
 if __name__ == "__main__":
