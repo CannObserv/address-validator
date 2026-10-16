@@ -5,6 +5,7 @@ description = "USPS address parsing and standardization service"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.143,<1",
+    "starlette>=1.8,<2",
     "uvicorn>=0.41,<1",
     "usaddress>=0.5.16,<1",
     "pydantic>=2.12,<3",
