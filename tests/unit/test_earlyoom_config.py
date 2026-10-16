@@ -67,7 +67,7 @@ HOST_COMMS = frozenset(
         "docker-proxy",
         "dockerd",
         "earlyoom",
-        "llama-server",  # ollama >= 0.40 loads the model in this child (#318)
+        "llama-server",  # ollama 0.40.5 loads the model in this child; 0.21.2 didn't (#318)
         "npm exec socrat",
         "ollama",
         "polkitd",

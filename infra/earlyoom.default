@@ -17,12 +17,14 @@
 # user manager (systemd, (sd-pam)) and then postgres, fifth, which is an HTTP
 # 503. This file sets the order instead of leaving it to RSS:
 #
-# --prefer  +300: libpostal, then SocratiCode's qdrant and ollama, and since
-#           ollama 0.40 its model child, llama-server (#318; it exists only
-#           while a model is loaded). All are adj 0 and come back on their own:
-#           Restart=always, Docker's unless-stopped, or ollama respawning the
-#           child on the next embed request. Matched against /proc/<pid>/comm, which the kernel
-#           truncates to 15 chars, so libpostal is prefix-matched, never $-anchored.
+# --prefer  +300: libpostal, then SocratiCode's qdrant and ollama, and
+#           ollama's model child, llama-server: 0.40.5 runs the model there,
+#           0.21.2 didn't, and the version between wasn't bisected (#318). It
+#           exists only while a model is loaded. All are adj 0 and come back on
+#           their own: Restart=always, Docker's unless-stopped, or ollama
+#           respawning the child on the next embed request. Matched against
+#           /proc/<pid>/comm, which the kernel truncates to 15 chars, so
+#           libpostal is prefix-matched, never $-anchored.
 # --avoid   -300: the service (uvicorn), postgres, and the user manager
 #           (systemd, (sd-pam)), which `systemd-run --user` caps need; sshd in
 #           case sessions ever stop being -1000. -300 is a shift, not an

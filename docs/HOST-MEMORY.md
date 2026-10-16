@@ -110,10 +110,11 @@ A dry run on 2026-09-24 answered that: stock earlyoom takes
 the stock order rests on RSS alone. After libpostal came the user's session
 bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
 postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
-`--prefer`s libpostal, then SocratiCode's `qdrant`, `ollama` and, since ollama
-0.40, its model child `llama-server` (#318). All are adj 0 and come back on their
-own: libpostal up to its start limit (see the table above), `llama-server`
-respawned by ollama on the next embed request. It `--avoid`s the service, postgres and the user
+`--prefer`s libpostal, then SocratiCode's `qdrant`, `ollama` and ollama's model
+child `llama-server` (ollama 0.40.5 runs the model there; 0.21.2 didn't, #318).
+All are adj 0 and come back on their own: libpostal up to its start limit (see
+the table above), `llama-server` respawned by ollama on the next embed request.
+It `--avoid`s the service, postgres and the user
 manager, which puts postgres behind every small daemon. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
 `dbus.socket` restarts it on next use, so it goes fourth. The file's header
@@ -225,11 +226,14 @@ manual install, outside apt. To upgrade:
 **Never run its `install.sh`:** it rewrites the unit, including a `PATH=` copied
 from whatever shell ran it.
 
-Since 0.40 the loaded model runs in a child process, `llama-server`, which is why
-the earlyoom `--prefer` above names it. It exists only while a model is loaded.
+In 0.40.5 the loaded model runs in a child process, `llama-server`, which is
+why the earlyoom `--prefer` above names it. It exists only while a model is
+loaded. In 0.21.2 the model ran in `ollama` itself; nobody has bisected the
+release where this changed.
 
-**A version change can change the vectors.** 0.40 case-folds input and 0.21
-didn't, so the same model gives different vectors for any text with an
-uppercase letter. Plan a full re-index after an upgrade, or the index mixes
-vectors from both engines (CannObserv/index#11). A full index peaks at about
-1.2 G (above), so run it as its own step.
+**A version change can change the vectors.** 0.40.5 case-folds input and
+0.21.2 didn't (same boundary, also unbisected), so the same model gives
+different vectors for any text with an uppercase letter. Plan a full re-index
+after an upgrade, or the index mixes vectors from both engines
+(CannObserv/index#11). A full index peaks at about 1.2 G (above), so run it as
+its own step.
