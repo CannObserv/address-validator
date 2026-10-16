@@ -16,7 +16,7 @@ Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower 
 
 ### Auditing (#317, #318)
 
-Audit, lock and sync with **the host's uv**. Since #318 that's the standalone install in `~/.local/bin`, which `/usr/local/bin/uv` symlinks to, so the units and root run the same binary. Never let a newer uv (`uvx uv@latest …`) rewrite `uv.lock`: the lockfile `revision` it writes may be one the service's uv can't read.
+Audit, lock and sync with **the host's uv**. Since #318 that's the standalone install in `~/.local/bin`, which `/usr/local/bin/uv` symlinks to, so the units and root run the same binary. Never let a different uv (`uvx uv@latest …`) rewrite `uv.lock`: lock with the uv that the deploy's `uv sync` runs, so the resolution and the `revision` stamp are the ones it would write itself, and a lock diff carries no churn from a version mismatch. Readability is not the concern: the image's uv 0.10.4 reads uv 0.13.1's `revision = 5` (`uv lock --check` exits 0, measured for #318).
 
 ```bash
 uv audit --frozen                       # all groups; add --no-dev for runtime only
