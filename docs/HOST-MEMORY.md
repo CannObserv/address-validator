@@ -111,7 +111,8 @@ the stock order rests on RSS alone. After libpostal came the user's session
 bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
 postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
 `--prefer`s libpostal, then SocratiCode's `qdrant` and `ollama` (adj 0, all
-three restart on their own; libpostal up to its start limit, see the table above). It `--avoid`s the service, postgres and the user
+three restart on their own; since ollama 0.40 the model lives in its child
+`llama-server`, preferred too, #318; libpostal up to its start limit, see the table above). It `--avoid`s the service, postgres and the user
 manager, which puts postgres behind every small daemon. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
 `dbus.socket` restarts it on next use, so it goes fourth. The file's header
@@ -137,7 +138,7 @@ prints -1000 processes' scores from before the skip (upstream `init-socraticode`
 ```bash
 cd "$(mktemp -d)" && apt-get download earlyoom && dpkg-deb -x earlyoom_*.deb x
 timeout -s INT 2 ./x/usr/bin/earlyoom --dryrun -d -r 0 -m 99,98 -s 100,100 \
-  --prefer '^(wof-libpostal|qdrant|ollama)' \
+  --prefer '^(wof-libpostal|qdrant|ollama|llama-server)' \
   --avoid '^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$' > dry.txt 2>&1
 grep -m1 '^sending .* to process' dry.txt   # want wof-libpostal-s
 ```

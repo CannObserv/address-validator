@@ -19,7 +19,9 @@
 #
 # --prefer  +300: libpostal, then SocratiCode's qdrant and ollama. All three
 #           are adj 0 and restart on their own (Restart=always, or Docker's
-#           unless-stopped). Matched against /proc/<pid>/comm, which the kernel
+#           unless-stopped). Since ollama 0.40 the model is loaded by a child,
+#           llama-server, not by `ollama` itself (#318); it is respawned on the
+#           next embed request. Matched against /proc/<pid>/comm, which the kernel
 #           truncates to 15 chars, so libpostal is prefix-matched, never $-anchored.
 # --avoid   -300: the service (uvicorn), postgres, and the user manager
 #           (systemd, (sd-pam)), which `systemd-run --user` caps need; sshd in
@@ -36,4 +38,4 @@
 # expansion itself: a space inside a regex makes it two arguments, and a
 # backslash is dropped (\. reaches earlyoom as ., matching anything). So no
 # spaces, no escapes, no inner quotes; a literal character is [(] or [.].
-EARLYOOM_ARGS="-r 3600 -m 10,5 -s 100,100 --prefer ^(wof-libpostal|qdrant|ollama) --avoid ^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$"
+EARLYOOM_ARGS="-r 3600 -m 10,5 -s 100,100 --prefer ^(wof-libpostal|qdrant|ollama|llama-server) --avoid ^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$"
