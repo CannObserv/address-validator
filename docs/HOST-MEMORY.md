@@ -110,9 +110,10 @@ A dry run on 2026-09-24 answered that: stock earlyoom takes
 the stock order rests on RSS alone. After libpostal came the user's session
 bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
 postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
-`--prefer`s libpostal, then SocratiCode's `qdrant` and `ollama` (adj 0, all
-three restart on their own; since ollama 0.40 the model lives in its child
-`llama-server`, preferred too, #318; libpostal up to its start limit, see the table above). It `--avoid`s the service, postgres and the user
+`--prefer`s libpostal, then SocratiCode's `qdrant`, `ollama` and, since ollama
+0.40, its model child `llama-server` (#318). All are adj 0 and come back on their
+own: libpostal up to its start limit (see the table above), `llama-server`
+respawned by ollama on the next embed request. It `--avoid`s the service, postgres and the user
 manager, which puts postgres behind every small daemon. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
 `dbus.socket` restarts it on next use, so it goes fourth. The file's header
