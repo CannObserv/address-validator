@@ -34,37 +34,22 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from journal_logging import configure_logging
-from notifier_client import NotifierClient, NotifierError, RetryConfig
+from notifier_client import NotifierClient, NotifierError
+from notifier_dispatch import ConfigError, NotifierConfig, dispatch
+from notifier_dispatch import load_config as _load_config
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine, Mapping
 
 logger = logging.getLogger("notify_unit_failure")
 
-EXPECTED_ENVIRONMENT = "production"
+TEMPLATE_VAR = "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID"
 TAIL_LINES = 10
 TAIL_LINE_CHARS = 500
-# Notifier delivers to every channel before it answers the dispatch, so the read
-# covers Slack + Mailgun round trips. A read timeout on a delivered dispatch would
-# log a false failure and retry into the in-flight request.
-REQUEST_TIMEOUT_SECONDS = 30.0
-RETRY = RetryConfig(max_attempts=2)
 # httpx timeouts are per phase, so attempts alone do not bound a run. This does,
 # with the 10s journalctl call still inside the unit's TimeoutStartSec=90.
 RUN_BUDGET_SECONDS = 60
 JOURNALCTL = "/usr/bin/journalctl"
-
-
-class ConfigError(ValueError):
-    """NOTIFIER_URL is set but the rest of the notifier config is not."""
-
-
-@dataclass(frozen=True)
-class NotifierConfig:
-    url: str
-    api_key: str
-    template_id: str
-    channel_ids: list[str]
 
 
 @dataclass(frozen=True)
@@ -89,26 +74,7 @@ class Failure:
 
 def load_config(env: Mapping[str, str]) -> NotifierConfig | None:
     """Return the notifier config, or None when NOTIFIER_URL is unset (journal only)."""
-    url = env.get("NOTIFIER_URL", "").strip()
-    if not url:
-        return None
-    api_key = env.get("NOTIFIER_API_KEY", "").strip()
-    template_id = env.get("NOTIFIER_UNIT_FAILURE_TEMPLATE_ID", "").strip()
-    channel_ids = [
-        c.strip() for c in env.get("NOTIFIER_UNIT_FAILURE_CHANNEL_IDS", "").split(",") if c.strip()
-    ]
-    missing = [
-        name
-        for name, value in (
-            ("NOTIFIER_API_KEY", api_key),
-            ("NOTIFIER_UNIT_FAILURE_TEMPLATE_ID", template_id),
-            ("NOTIFIER_UNIT_FAILURE_CHANNEL_IDS", channel_ids),
-        )
-        if not value
-    ]
-    if missing:
-        raise ConfigError(f"NOTIFIER_URL is set but {', '.join(missing)} is not")
-    return NotifierConfig(url, api_key, template_id, channel_ids)
+    return _load_config(env, template_var=TEMPLATE_VAR)
 
 
 def failure_from_env(unit: str, env: Mapping[str, str]) -> Failure:
@@ -159,51 +125,24 @@ async def notify(
     client_factory: Callable[..., NotifierClient] | None = None,
 ) -> str | None:
     """Dispatch the failure; return the dispatch status, or None if nothing was sent."""
-    async with (client_factory or NotifierClient)(
-        base_url=config.url,
-        api_key=config.api_key,
-        retry_config=RETRY,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    ) as client:
-        environment = (await client.health()).get("environment")
-        if environment != EXPECTED_ENVIRONMENT:
-            logger.warning(
-                "notifier at NOTIFIER_URL reports environment=%s, expected %s; not dispatching",
-                environment,
-                EXPECTED_ENVIRONMENT,
-            )
-            return None
-        result = await client.dispatch(
-            template_id=config.template_id,
-            channel_ids=config.channel_ids,
-            variables={
-                "unit": failure.unit,
-                "result": failure.summary,
-                "host": host,
-                "journal_tail": tail,
-            },
-            idempotency_key=failure.idempotency_key,
-            metadata={
-                "source": "address-validator",
-                "event": "unit-failure",
-                "unit": failure.unit,
-                "invocation_id": failure.invocation_id,
-            },
-        )
-    # 202 does not mean delivered: judge by the body's status (notifier#70).
-    status = str(result.status)
-    if status == "succeeded":
-        logger.info("notifier dispatch %s for %s: succeeded", result.id, failure.unit)
-    else:
-        logger.warning(
-            "notifier dispatch %s for %s: %s (%d of %d channels delivered)",
-            result.id,
-            failure.unit,
-            status,
-            sum(str(a.status) == "succeeded" for a in result.attempts),
-            len(result.attempts),
-        )
-    return status
+    return await dispatch(
+        config,
+        subject=failure.unit,
+        variables={
+            "unit": failure.unit,
+            "result": failure.summary,
+            "host": host,
+            "journal_tail": tail,
+        },
+        idempotency_key=failure.idempotency_key,
+        metadata={
+            "source": "address-validator",
+            "event": "unit-failure",
+            "unit": failure.unit,
+            "invocation_id": failure.invocation_id,
+        },
+        client_factory=client_factory or NotifierClient,
+    )
 
 
 async def _within_budget(coro: Coroutine[Any, Any, str | None]) -> str | None:

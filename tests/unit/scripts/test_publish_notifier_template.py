@@ -6,11 +6,12 @@ import json
 from types import SimpleNamespace
 from typing import ClassVar
 
+import archive_age_check as aac
 import notify_unit_failure as nuf
 import publish_notifier_template as ptpl
 import pytest
 
-TEMPLATE = json.loads(ptpl.TEMPLATE.read_text())
+TEMPLATE = json.loads((ptpl.NOTIFIER_DIR / "unit-failure.json").read_text())
 ENV = {"NOTIFIER_URL": "http://notifier.test:9000", "NOTIFIER_API_KEY": "nk_test"}
 
 
@@ -159,3 +160,46 @@ async def test_handler_sends_every_variable_the_template_requires():
     schema = TEMPLATE["variables_schema"]
     assert set(schema["required"]) <= set(sent)
     assert set(schema["required"]) <= set(TEMPLATE["sample_variables"])
+
+
+# --- archive-age template (#249) ----------------------------------------------
+
+
+def test_every_template_has_a_json_file():
+    for name in ptpl.TEMPLATES:
+        template = json.loads((ptpl.NOTIFIER_DIR / f"{name}.json").read_text())
+        assert template["name"] == f"address-validator-{name}"
+
+
+async def test_publish_archive_age_updates_by_its_own_id(fake):
+    env = {
+        **ENV,
+        "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID": "01UNITFAILURE",
+        "NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID": "01ARCHIVEAGE",
+    }
+    template = json.loads((ptpl.NOTIFIER_DIR / "archive-age.json").read_text())
+    await ptpl.publish(env, template, dry_run=False, id_var=ptpl.TEMPLATES["archive-age"])
+    ((action, template_id, _),) = _written(FakeClient.instances[0])
+    assert (action, template_id) == ("update", "01ARCHIVEAGE")
+
+
+def test_main_archive_age_creates_and_names_its_variable(tmp_path, monkeypatch, fake, capsys):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "NOTIFIER_URL=http://notifier.test:9000\nNOTIFIER_API_KEY=nk_x\n"
+        "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID=01UNITFAILURE\n"
+    )
+    argv = ["publish", "--env-file", str(env_file), "--template", "archive-age"]
+    monkeypatch.setattr("sys.argv", argv)
+    assert ptpl.main() == 0
+    ((action, fields),) = _written(FakeClient.instances[0])
+    assert (action, fields["name"]) == ("create", "address-validator-archive-age")
+    assert "set NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID=01NEWTEMPLATE" in capsys.readouterr().out
+
+
+def test_template_id_vars_match_their_senders():
+    """The publisher names the variable to set; the sender must read that one (CR 2)."""
+    assert ptpl.TEMPLATES == {
+        "unit-failure": nuf.TEMPLATE_VAR,
+        "archive-age": aac.TEMPLATE_VAR,
+    }

@@ -1,0 +1,25 @@
+[Unit]
+Description=Alert when audit_log holds rows past AUDIT_RETENTION_DAYS
+After=network.target postgresql.service
+# Both timers are Persistent=true: after downtime spanning 03:00 and 06:00 they
+# fire together at boot, and the check must read the archiver's result, not race it.
+After=audit-archive.service
+OnFailure=unit-failure@%n.service
+
+[Service]
+Type=oneshot
+User=exedev
+WorkingDirectory=/home/exedev/address-validator
+EnvironmentFile=/etc/address-validator/.env
+Environment=PYTHONPATH=/home/exedev/address-validator/src
+ExecStart=/home/exedev/address-validator/.venv/bin/python infra/archive_age_check.py
+# A hung run would block the next day's start without failing anything (#249).
+# The script bounds the notifier at RUN_BUDGET_SECONDS; this covers the DB too.
+TimeoutStartSec=180
+# No swap on this host: an overrun must kill this job, not port 8000 (#228).
+# Measured: 58 MB peak RSS (docs/HOST-MEMORY.md).
+MemoryHigh=192M
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

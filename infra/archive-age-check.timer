@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily audit_log archive-age check (06:00 UTC)
+
+[Timer]
+# Three hours after audit-archive (03:00 UTC), so it reads that run's result.
+OnCalendar=06:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

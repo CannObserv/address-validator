@@ -305,7 +305,13 @@ sudo infra/install-units.sh cache-sweep.service cache-sweep.timer \
 # Disk hygiene timer (weekly, Sun 05:00 UTC)
 sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
   && sudo systemctl enable --now disk-hygiene.timer
+
+# Archive-age check (daily 06:00 UTC): alerts if audit-archive stops running (#249)
+sudo infra/install-units.sh archive-age-check.service archive-age-check.timer \
+  && sudo systemctl enable --now archive-age-check.timer
 ```
+
+Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
 
 **Failures are reported to the journal and pushed through notifier.** Every
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
@@ -359,13 +365,14 @@ Only WARNING+ lines leave the host. That filter is the PII guard; see
 | `NOTIFIER_API_KEY` | `address-validator` tenant key, `nk_…` — pasted by the operator, never through an agent |
 | `NOTIFIER_UNIT_FAILURE_TEMPLATE_ID` | `01M3R970XBXWBKD31Y4EGPMAQE` (printed by `publish_notifier_template.py`) |
 | `NOTIFIER_UNIT_FAILURE_CHANNEL_IDS` | `01M3QRP1BCJW3KFB04FX4V8EQ8,01M3QRP1BDAXK27G60EJQEVEZD` (`address-validator-slack`, `-mailgun`; tenant `01M3QQMHYVVQWAS2SZ7NE66D2N`, CannObserv/notifier#95) |
+| `NOTIFIER_ARCHIVE_AGE_TEMPLATE_ID` | printed by `publish_notifier_template.py --template archive-age` (#249) |
 
 **Network.** Notifier is reachable only over the `cannobserv.org.github`
 tailnet (`http://notifier:9000`). Node, ACL, DNS takeover, and the join/rejoin
 recipe: [TAILNET.md](TAILNET.md). The handler refuses to dispatch unless `/health` reports
 `"environment": "production"`.
 
-**Template.** The wording lives in `infra/notifier/unit-failure.json`.
+**Templates.** The wording lives in `infra/notifier/<name>.json`.
 Notifier stores a copy under this tenant, and template lookup is tenant-scoped.
 The publisher reads only the `NOTIFIER_*` keys from the env file, so the
 production DSN never enters its environment. It previews the sample through
@@ -375,6 +382,7 @@ notifier, then creates the template (or PATCHes it when
 ```bash
 .venv/bin/python infra/publish_notifier_template.py --dry-run   # preview only
 .venv/bin/python infra/publish_notifier_template.py             # create / update
+.venv/bin/python infra/publish_notifier_template.py --template archive-age
 ```
 
 **Smoke tests.** The end-to-end check is a throwaway unit that fails. It takes
