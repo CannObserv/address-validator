@@ -14,7 +14,7 @@ Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
 Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower bounds.
 
-### Auditing (#317, #318)
+### Auditing (#317)
 
 Audit, lock and sync with **the host's uv**, and never let a different uv (`uvx uv@latest …`) rewrite `uv.lock`. Lock with the uv that the deploy's `uv sync` runs, so the resolution and the `revision` stamp are the ones it would write itself, and a lock diff carries no churn from a version mismatch. The concern isn't readability: the image's uv 0.10.4 reads uv 0.13.1's `revision = 5` (`uv lock --check` exits 0, measured for #318).
 
