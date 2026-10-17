@@ -242,11 +242,11 @@ async def test_export_day_streams_fixed_schema(db: AsyncEngine, tmp_path: Path) 
 async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> None:
     """The file itself, not just its Arrow read-back, matches the archived blobs.
 
-    ``pq.read_table`` re-applies the stored ARROW:schema, so a writer that
-    changed the Parquet-level timestamp annotation would still read back as
-    ``timestamp[us, tz=UTC]`` here, yet differ for non-Arrow readers of the
-    bucket. ``verify_gcs_upload`` checks only size, so this is the guard on a
-    pyarrow upgrade (#321).
+    A writer that dropped the stored ARROW:schema (``store_schema=False``)
+    still reads back as ``timestamp[us, tz=UTC]``, because the UTC-adjusted
+    annotation alone restores the tz, so the read-back test above passes it.
+    ``verify_gcs_upload`` checks only size, so this is the guard on a pyarrow
+    upgrade (#321).
     """
     day = _utc_midnight_days_ago(100)
     await _seed_day(db, [day], provider=[None], cache=[None])
