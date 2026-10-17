@@ -31,7 +31,7 @@ An advisory whose only fix is past a major bound is a decision, not an upgrade. 
 
 | Advisory | Package | Fixed in | Held because |
 |---|---|---|---|
-| PYSEC-2026-113 / GHSA-rgxp-2hwp-jwgg | pyarrow 19.0.1 (`<20`) | 23.0.1 | Not reachable: the use-after-free is in Arrow C++'s IPC-file `PreBufferMetadata`, which the Python bindings don't expose, and `infra/archive_audit.py` only writes Parquet |
+| _none held_ | | | |
 
 ## JavaScript (npm + package.json)
 

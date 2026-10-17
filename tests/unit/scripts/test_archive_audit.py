@@ -1,5 +1,6 @@
 """Tests for audit log archive script."""
 
+import json
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -236,6 +237,35 @@ async def test_export_day_streams_fixed_schema(db: AsyncEngine, tmp_path: Path) 
     assert table.num_rows == 5
     assert table.schema.equals(ARCHIVE_SCHEMA)
     assert table.column("provider").to_pylist() == [None, None, "usps", "google", "usps"]
+
+
+@pytest.mark.asyncio
+async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> None:
+    """The file itself, not just its Arrow read-back, matches the archived blobs.
+
+    A writer that dropped the stored ARROW:schema (``store_schema=False``)
+    still reads back as ``timestamp[us, tz=UTC]``, because the UTC-adjusted
+    annotation alone restores the tz, so the read-back test above passes it.
+    ``verify_gcs_upload`` checks only size, so this is the guard on a pyarrow
+    upgrade (#321).
+    """
+    day = _utc_midnight_days_ago(100)
+    await _seed_day(db, [day], provider=[None], cache=[None])
+
+    dest = tmp_path / "day.parquet"
+    await export_day(db, day, day + timedelta(days=1), dest)
+
+    md = pq.read_metadata(dest)
+    # Footer reads "2.6" for any v2 file; this only catches a fall back to 1.0.
+    assert md.format_version == "2.6"
+    assert b"ARROW:schema" in md.metadata
+    ts = md.schema.column(ARCHIVE_SCHEMA.get_field_index("timestamp"))
+    assert ts.physical_type == "INT64"
+    logical = json.loads(ts.logical_type.to_json())
+    assert logical["Type"] == "Timestamp"
+    assert logical["isAdjustedToUTC"] is True
+    assert logical["timeUnit"] == "microseconds"
+    assert md.row_group(0).column(0).compression == "SNAPPY"
 
 
 def test_archive_schema_omits_address_data() -> None:
