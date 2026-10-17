@@ -176,6 +176,8 @@ fi
 # --- uv cache: drop wheels not referenced by current environments ---
 # --force: a bare prune waits forever while any `uv run` (a dev server, a test
 # run) holds the cache lock, and this oneshot would never finish (#322)
+# Accepted cost: skipping the lock lets the prune race a concurrent `uv sync`;
+# the alternative is a run that never finishes beside any `uv run`
 if command -v uv >/dev/null 2>&1; then
   if ((DRY_RUN)); then
     log "would run: uv cache prune --force"
