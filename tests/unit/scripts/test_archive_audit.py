@@ -238,6 +238,32 @@ async def test_export_day_streams_fixed_schema(db: AsyncEngine, tmp_path: Path) 
     assert table.column("provider").to_pylist() == [None, None, "usps", "google", "usps"]
 
 
+@pytest.mark.asyncio
+async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> None:
+    """The file itself, not just its Arrow read-back, matches the archived blobs.
+
+    ``pq.read_table`` re-applies the stored ARROW:schema, so a writer that
+    changed the Parquet-level timestamp annotation would still read back as
+    ``timestamp[us, tz=UTC]`` here, yet differ for non-Arrow readers of the
+    bucket. ``verify_gcs_upload`` checks only size, so this is the guard on a
+    pyarrow upgrade (#321).
+    """
+    day = _utc_midnight_days_ago(100)
+    await _seed_day(db, [day], provider=[None], cache=[None])
+
+    dest = tmp_path / "day.parquet"
+    await export_day(db, day, day + timedelta(days=1), dest)
+
+    md = pq.read_metadata(dest)
+    assert md.format_version == "2.6"
+    assert b"ARROW:schema" in md.metadata
+    ts = md.schema.column(ARCHIVE_SCHEMA.get_field_index("timestamp"))
+    assert ts.physical_type == "INT64"
+    assert "isAdjustedToUTC=true" in str(ts.logical_type)
+    assert "timeUnit=microseconds" in str(ts.logical_type)
+    assert md.row_group(0).column(0).compression == "SNAPPY"
+
+
 def test_archive_schema_omits_address_data() -> None:
     """No address-derived column is archived; address data ends at audit retention (#147, #228).
 
