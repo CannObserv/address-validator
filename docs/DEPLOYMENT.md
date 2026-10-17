@@ -423,7 +423,7 @@ Docker prune does **not** use `-a` (active images are safe). Logs a journal warn
 journalctl -t docker-prune -p warning
 ```
 
-Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d, uv/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`, aged >30min). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Sandbox test rig: `bash tests/shell/disk-hygiene-test.sh`. Warnings (≥75% root-FS usage, unremovable paths, unreadable lru.json) go to the journal at real warning priority, matching docker-prune:
+Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d (never the pinned SocratiCode tree, `sha512(SOCRATICODE_SPEC)[:16]` from `.claude/settings.json` and the VS Code machine setting, nor one with anything written <60min; an unreadable setting skips `_npx`), uv cache (`--force`: a bare prune waits forever beside any `uv run`)/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`, aged >30min). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Sandbox test rig: `bash tests/shell/disk-hygiene-test.sh`. `TimeoutStartSec=15min` bounds a hung run (#322). Warnings (≥75% root-FS usage, unremovable paths, unreadable lru.json or SocratiCode spec) go to the journal at real warning priority, matching docker-prune:
 
 ```bash
 journalctl -u disk-hygiene -p info      # full run log

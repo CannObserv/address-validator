@@ -172,7 +172,8 @@ Verified here 2026-09-24, extension 2.1.281: the session's server launched as
 machine setting alone carried it.
 
 An exact spec launches from its own npx tree — built on first launch, so warm
-it. Install capped, with `choom`: sessions here sit at `oom_score_adj` -1000,
+it. Disk hygiene never prunes it: the keep-set is computed from both declared
+specs each run (#322). Install capped, with `choom`: sessions here sit at `oom_score_adj` -1000,
 where a cap stalls rather than kills.
 
 ```bash

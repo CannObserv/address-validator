@@ -9,6 +9,9 @@ repos:
     rev: v0.11.0.1
     hooks:
       - id: shellcheck
+        # -x: follow `# shellcheck source=` even when the sourced file isn't
+        # among the commit's files, else SC1091 fails the hook (#322)
+        args: [-x]
         files: ^(infra|tests/shell)/.*\.sh$
   - repo: local
     hooks:
@@ -16,7 +19,7 @@ repos:
         name: disk-hygiene sandbox tests
         language: system
         entry: bash tests/shell/disk-hygiene-test.sh
-        files: '^(infra/(disk-hygiene|journal-warn|docker-prune-check)\.sh|tests/shell/disk-hygiene-test\.sh)$'
+        files: '^(infra/(disk-hygiene\.(sh|service)|journal-warn\.sh|docker-prune-check\.sh)|tests/shell/disk-hygiene-test\.sh)$'
         pass_filenames: false
       - id: install-units-test
         name: install-units sandbox tests

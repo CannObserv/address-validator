@@ -22,6 +22,7 @@ VSCODE_DIR="${HOME}/.vscode-server"
 USAGE_WARN_PCT=75
 VSIX_MAX_AGE_DAYS=14
 NPX_MAX_AGE_DAYS=30
+NPX_GRACE_MIN=60
 SERVER_KEEP_COUNT=2
 WORKTREE_MIN_AGE_MIN=30
 
@@ -115,18 +116,71 @@ if command -v npm >/dev/null 2>&1; then
     npm cache clean --force 2>/dev/null || warn "npm cache clean failed (non-fatal)"
   fi
 fi
+
+# Pinned SocratiCode trees (#322): npx names a single-package tree
+# sha512(spec)[:16]. Pin every spec either source declares (the repo's
+# settings, and the VS Code machine setting that launches the session), so a
+# re-pin that reaches only one still keeps the tree in use. Computed per run,
+# never hard-coded. Losing the pinned tree makes the next session reinstall
+# it outside the memory cap (docs/HOST-MEMORY.md).
+npx_specs=()
+npx_unreadable=""
+read_specs() {
+  local file=$1 out
+  [[ -f "$file" ]] || return 0
+  if out=$(jq -r "$2" "$file" 2>/dev/null); then
+    if [[ -n "$out" ]]; then
+      mapfile -t -O "${#npx_specs[@]}" npx_specs <<<"$out"
+    fi
+  else
+    npx_unreadable+=" ${file}"
+  fi
+}
+read_specs "${REPO}/.claude/settings.json" '.env.SOCRATICODE_SPEC // empty'
+read_specs "${VSCODE_DIR}/data/Machine/settings.json" \
+  '.["claudeCode.environmentVariables"][]? | select(.name == "SOCRATICODE_SPEC") | .value // empty'
+
 if [[ -d "${HOME}/.npm/_npx" ]]; then
-  while IFS= read -r d; do
-    remove_path "$d"
-  done < <(find "${HOME}/.npm/_npx" -mindepth 1 -maxdepth 1 -mtime "+${NPX_MAX_AGE_DAYS}")
+  if [[ -n "$npx_unreadable" ]]; then
+    # An unreadable pin must never widen the prune (same rule as lru.json)
+    warn "could not read SOCRATICODE_SPEC from${npx_unreadable} — skipping _npx prune"
+  else
+    declare -A npx_pinned=()
+    for spec in "${npx_specs[@]}"; do
+      npx_pinned[$(printf '%s' "$spec" | sha512sum | cut -c1-16)]=$spec
+    done
+    for dir in "${HOME}/.npm/_npx"/*/; do
+      dir="${dir%/}"
+      name=$(basename "$dir")
+      if [[ -n "${npx_pinned[$name]:-}" ]]; then
+        log "keeping (pinned ${npx_pinned[$name]}): $dir"
+        continue
+      fi
+      [[ -n "$(find "$dir" -maxdepth 0 -mtime "+${NPX_MAX_AGE_DAYS}")" ]] || continue
+      # An install in progress is named by no process, and npx reinstalls a
+      # moved spec into its existing tree: judge by the newest entry anywhere
+      # under it, not the tree's own mtime. A walk that errors keeps the tree.
+      if ! recent=$(find "$dir" -mmin "-${NPX_GRACE_MIN}" -print -quit 2>/dev/null); then
+        log "keeping (unreadable, cannot rule out an install): $dir"
+        continue
+      fi
+      if [[ -n "$recent" ]]; then
+        log "keeping (written <${NPX_GRACE_MIN}min): $dir"
+        continue
+      fi
+      remove_path "$dir"
+    done
+  fi
 fi
 
 # --- uv cache: drop wheels not referenced by current environments ---
+# --force: a bare prune waits forever while any `uv run` (a dev server, a test
+# run) holds the cache lock, and this oneshot would never finish (#322)
 if command -v uv >/dev/null 2>&1; then
   if ((DRY_RUN)); then
-    log "would run: uv cache prune"
+    log "would run: uv cache prune --force"
   else
-    uv cache prune 2>/dev/null || warn "uv cache prune failed (non-fatal)"
+    uv cache prune --force 2>/dev/null || warn "uv cache prune failed (non-fatal)"
   fi
 fi
 
