@@ -87,6 +87,11 @@ for d in "$pinned_repo" "$pinned_machine" "$grace_old" "$grace_young"; do
 done
 touch -d "61 minutes ago" "$grace_old/node_modules/pkg/f"
 touch -d "10 minutes ago" "$grace_young/node_modules/pkg/f"
+# A tree the grace walk cannot fully read may hide a fresh write: keep it
+grace_unwalkable="$fake/.npm/_npx/grace-unwalkable"
+mkdir -p "$grace_unwalkable/node_modules/locked"
+find "$grace_unwalkable" -exec touch -d "40 days ago" {} +
+chmod 000 "$grace_unwalkable/node_modules/locked"
 
 # Fake uv records its argv: a bare `uv cache prune` waits forever while any
 # `uv run` holds the cache lock (#322), so the run must pass --force
@@ -132,6 +137,8 @@ check "_npx tree pinned by VS Code machine setting survives" test -d "$pinned_ma
 check "pinned _npx tree logged as kept" /bin/grep -qF "keeping (pinned ${repo_spec})" "$OUT"
 check "_npx tree last written 61min ago removed" test ! -d "$grace_old"
 check "_npx tree written 10min ago survives (install grace)" test -d "$grace_young"
+check "_npx tree the grace walk cannot read survives" test -d "$grace_unwalkable"
+check "unreadable _npx tree logged as kept" /bin/grep -qF "keeping (unreadable, cannot rule out an install): $grace_unwalkable" "$OUT"
 check "uv cache prune runs with --force" /bin/grep -qx "cache prune --force" "$UV_ARGS"
 check "unit bounds its run (TimeoutStartSec=)" \
   /bin/grep -qE '^TimeoutStartSec=[1-9][0-9]*(s|min)?$' "$repo_root/infra/disk-hygiene.service"
