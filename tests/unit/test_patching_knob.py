@@ -186,6 +186,19 @@ def test_a_frequent_probe_restarts_nothing(name: str) -> None:
                 assert hits == [], f"{script.name} reads as a restarter: {hits}"
 
 
+def test_the_restart_pattern_matches_the_vendored_scan() -> None:
+    """SKILL_RESTART_RE is a copy: a skill bump that widened the scan's pattern
+    would otherwise leave this test green while the real scan reports a probe
+    as an undeclared ``restarter:``."""
+    probe = REPO_ROOT / "skills" / "patching-hosts" / "scripts" / "probe.sh"
+    if not probe.is_file():
+        if socket.gethostname() == HOST:
+            pytest.fail(f"{probe} missing on the host: run bash .skills/doctor.sh")
+        pytest.skip("patching-hosts submodule not initialised")
+    (vendored,) = re.findall(r"^RESTART_RE='(.*)'$", probe.read_text(), re.M)
+    assert vendored == SKILL_RESTART_RE.pattern
+
+
 def test_a_libpostal_restart_never_alerts() -> None:
     """An outage of D seconds spans at most ``D // interval + 1`` probe runs, so
     it reaches MISSES_TO_ALERT only if ``D >= (misses - 1) * interval``."""
