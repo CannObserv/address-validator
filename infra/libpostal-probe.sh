@@ -70,7 +70,9 @@ reason() {
   esac
 }
 
-state=$(systemctl is-active "$UNIT" 2>/dev/null) || {
+# Only a state systemd reported stands it down. No answer at all (systemctl
+# couldn't reach the manager) would otherwise blind the probe on every tick.
+state=$(systemctl is-active "$UNIT" 2>/dev/null) || [[ -z "$state" ]] || {
   # The count goes, so say what it was: else an alert has no recovery line.
   was=""
   if [[ "$misses" -ge "$MISSES_TO_ALERT" ]]; then
@@ -78,10 +80,14 @@ state=$(systemctl is-active "$UNIT" 2>/dev/null) || {
   elif [[ "$misses" -gt 0 ]]; then
     was=" (count was $misses)"
   fi
-  echo "$ME: $UNIT is ${state:-unknown}; standing down$was"
+  echo "$ME: $UNIT is $state; standing down$was"
   save 0
   exit 0
 }
+
+if [[ -z "$state" ]]; then
+  journal_warn "$ME: can't read $UNIT's state; probing anyway"
+fi
 
 rc=0
 curl -sf -o /dev/null --max-time "$MAX_TIME" "$URL" || rc=$?

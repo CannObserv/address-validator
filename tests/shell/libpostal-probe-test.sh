@@ -46,6 +46,8 @@ EOF
 cat >"$sandbox/bin/systemctl" <<EOF
 #!/bin/sh
 state=\$(cat "$sandbox/unit.state")
+# NONE: systemctl couldn't reach the manager, so it prints no state
+[ "\$state" = NONE ] && exit 1
 echo "\$state"
 [ "\$state" = active ]
 EOF
@@ -126,6 +128,15 @@ probe 7 inactive
 check "stand-down after an alert: says so" /bin/grep -qx "libpostal-probe: libpostal.service is inactive; standing down (count was 3, alerted at 3)" "$OUT"
 probe 0 inactive
 check "stand-down with no count: bare line" /bin/grep -qx "libpostal-probe: libpostal.service is inactive; standing down" "$OUT"
+
+# --- no state at all: not a stand-down, or the probe goes blind ---
+probe 0
+: >"$sandbox/curl.args"
+probe 7 NONE
+check "no unit state: still probes" test -s "$sandbox/curl.args"
+check "no unit state: warns that it can't read it" /bin/grep -q "^<4>libpostal-probe: can't read libpostal.service's state; probing anyway" "$ERR"
+check "no unit state: the miss counts" test "$(misses)" = 1
+probe 0
 
 # --- state the script must not trust ---
 echo garbage >"$STATE/misses"
