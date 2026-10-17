@@ -173,8 +173,8 @@ machine setting alone carried it.
 
 An exact spec launches from its own npx tree — built on first launch, so warm
 it. Disk hygiene never prunes it: the keep-set is computed from both declared
-specs each run (#322). Install capped, with `choom`: sessions here sit at `oom_score_adj` -1000,
-where a cap stalls rather than kills.
+specs each run (#322). Install capped, with `choom`: sessions here sit at
+`oom_score_adj` -1000, where a cap stalls rather than kills.
 
 ```bash
 npm view socraticode version        # pick a literal; never @latest
