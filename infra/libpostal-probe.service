@@ -15,6 +15,7 @@ RuntimeDirectoryPreserve=yes
 ExecStart=/home/exedev/address-validator/infra/libpostal-probe.sh
 # curl is bounded at 5s; a hung run must not outlast the 2-minute interval (#249).
 TimeoutStartSec=30
-# No swap on this host (#228): bash + curl, far below these.
+# No swap on this host (#228). Measured cgroup peak 0.3-1.6 MB (docs/HOST-MEMORY.md);
+# an OOM kill would fail every run, so every tick would alert: keep the margin.
 MemoryHigh=24M
 MemoryMax=32M
