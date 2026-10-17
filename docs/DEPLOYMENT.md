@@ -324,30 +324,17 @@ sudo infra/install-units.sh libpostal-probe.service libpostal-probe.timer \
 
 Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
 
-**libpostal liveness probe** (#256). Every 2 minutes it runs
-`curl --max-time 5` against the knob's synthetic `/parse?address=1+Main+St` URL. It
-alerts on the **3rd consecutive miss**, so an outage alerts once, 4–6 minutes in.
-That run exits 1 and fires `OnFailure=unit-failure@`, and its `<4>` miss line is in
-the alert's journal tail. Later misses are logged at info and don't alert again.
-Recovery is logged at info. Rule, sizing and exit codes: the
+**libpostal liveness probe** (#256): every 2 min, curls the knob's synthetic
+`/parse` URL. The 3rd consecutive miss exits 1 (one `OnFailure=` alert per
+outage, its `<4>` miss line in the tail); later misses and recovery log at info.
+Stands down while `libpostal.service` isn't `active`; a restart costs one miss at most.
+No `OnCalendar=`: a declared frequent probe (`FREQUENT_PROBES`,
+`tests/unit/test_patching_knob.py`). Rule, sizing, exit codes: the
 `infra/libpostal-probe.sh` header.
-
-- **A deliberate restart doesn't alert.** The sidecar answers again 4–7 s after a
-  restart, which costs one miss at most. While `libpostal.service` isn't `active`
-  (restarting, failed, or stopped), the probe stands down and resets its count. A
-  failed unit has alerted already through its own crashloop hook.
-- **Its count is in `/run/libpostal-probe/misses`** (`RuntimeDirectory=`), so a
-  reboot clears it; the first run is 2 minutes after boot.
-- **It's a frequent probe, not a scheduled job.** It has no `OnCalendar=` and no
-  quiet range, and it runs through the patch window. `FREQUENT_PROBES` in
-  `tests/unit/test_patching_knob.py` declares it and holds it to that class: no
-  overlapping runs, no restarts, and a threshold sized against a restart.
-- **Each probe adds a `parse '1 main st'` line** to `journalctl -u libpostal`; the
-  sidecar logs every address it parses.
 
 ```bash
 journalctl -t libpostal-probe -p info     # misses, alert, recovery, stand-downs
-cat /run/libpostal-probe/misses           # current consecutive misses
+cat /run/libpostal-probe/misses           # consecutive misses; a reboot clears it
 ```
 
 **Failures are reported to the journal and pushed through notifier.** Every
