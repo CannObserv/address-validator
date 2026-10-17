@@ -146,14 +146,19 @@ rm -f "$STATE/misses"
 probe 0
 check "no counter yet: exits 0" test "$RC" -eq 0
 
-# An unwritable count would never reach the threshold: fail loudly instead
-chmod a-w "$STATE"
-probe 7
-chmod u+w "$STATE"
-check "unwritable counter: exits 2" test "$RC" -eq 2
-check "unwritable counter: warning names it" /bin/grep -q "^<4>libpostal-probe: can't write .*/misses" "$ERR"
-probe 0 >/dev/null
-check "unwritable counter: answer path exits 0 once writable" test "$RC" -eq 0
+# An unwritable count would never reach the threshold: fail loudly instead.
+# Root writes through a read-only mode, so the case can't be staged as root.
+if [[ "$EUID" -ne 0 ]]; then
+  chmod a-w "$STATE"
+  probe 7
+  chmod u+w "$STATE"
+  check "unwritable counter: exits 2" test "$RC" -eq 2
+  check "unwritable counter: warning names it" /bin/grep -q "^<4>libpostal-probe: can't write .*/misses" "$ERR"
+  probe 0 >/dev/null
+  check "unwritable counter: answer path exits 0 once writable" test "$RC" -eq 0
+else
+  echo "SKIP: unwritable counter (running as root)"
+fi
 
 RC=0
 PATH="$sandbox/bin:$PATH" env -u RUNTIME_DIRECTORY "$SCRIPT" >"$OUT" 2>"$ERR" || RC=$?
