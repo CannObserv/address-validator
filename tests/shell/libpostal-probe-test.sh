@@ -114,11 +114,18 @@ probe 7 activating
 check "unit activating: exits 0" test "$RC" -eq 0
 check "unit activating: curl not run" test ! -s "$sandbox/curl.args"
 check "unit activating: counter reset" test "$(misses)" = 0
-check "unit activating: info line names the state" /bin/grep -q "libpostal.service is activating; standing down" "$OUT"
+check "unit activating: info line names the state and the count" /bin/grep -qx "libpostal-probe: libpostal.service is activating; standing down (count was 2)" "$OUT"
 probe 7
 check "after a stand-down: the count restarts at 1" test "$(misses)" = 1
 probe 0 failed
 check "unit failed (crashloop alerted already): exits 0" test "$RC" -eq 0
+probe 7
+probe 7
+probe 7
+probe 7 inactive
+check "stand-down after an alert: says so" /bin/grep -qx "libpostal-probe: libpostal.service is inactive; standing down (count was 3, alerted at 3)" "$OUT"
+probe 0 inactive
+check "stand-down with no count: bare line" /bin/grep -qx "libpostal-probe: libpostal.service is inactive; standing down" "$OUT"
 
 # --- state the script must not trust ---
 echo garbage >"$STATE/misses"

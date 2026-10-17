@@ -71,7 +71,14 @@ reason() {
 }
 
 state=$(systemctl is-active "$UNIT" 2>/dev/null) || {
-  echo "$ME: $UNIT is ${state:-unknown}; standing down"
+  # The count goes, so say what it was: else an alert has no recovery line.
+  was=""
+  if [[ "$misses" -ge "$MISSES_TO_ALERT" ]]; then
+    was=" (count was $misses, alerted at $MISSES_TO_ALERT)"
+  elif [[ "$misses" -gt 0 ]]; then
+    was=" (count was $misses)"
+  fi
+  echo "$ME: $UNIT is ${state:-unknown}; standing down$was"
   save 0
   exit 0
 }
