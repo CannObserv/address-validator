@@ -1,5 +1,6 @@
 """Tests for audit log archive script."""
 
+import json
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -259,8 +260,10 @@ async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> N
     assert b"ARROW:schema" in md.metadata
     ts = md.schema.column(ARCHIVE_SCHEMA.get_field_index("timestamp"))
     assert ts.physical_type == "INT64"
-    assert "isAdjustedToUTC=true" in str(ts.logical_type)
-    assert "timeUnit=microseconds" in str(ts.logical_type)
+    logical = json.loads(ts.logical_type.to_json())
+    assert logical["Type"] == "Timestamp"
+    assert logical["isAdjustedToUTC"] is True
+    assert logical["timeUnit"] == "microseconds"
     assert md.row_group(0).column(0).compression == "SNAPPY"
 
 
