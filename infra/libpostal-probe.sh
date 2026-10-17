@@ -26,7 +26,9 @@
 #
 # Exit: 0 answered, below the threshold, past it, or stood down; 1 the
 # threshold reached on this run; 2 run outside the unit (no RUNTIME_DIRECTORY),
-# or the count couldn't be written.
+# or the count couldn't be written. Exit 2 repeats on every run, so it alerts
+# every tick, not once: accepted, since a probe that can't count is blind, and
+# a /run too full to write a few bytes is a host emergency of its own.
 # Read-only: it starts and restarts nothing, so the patching-hosts restarter
 # scan reads it clean. Keep systemctl verbs other than is-active out of it.
 
