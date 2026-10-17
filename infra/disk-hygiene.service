@@ -12,3 +12,6 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 # Stream lines are tagged with the script name by default; keep `journalctl -t disk-hygiene`
 SyslogIdentifier=disk-hygiene
 ExecStart=/home/exedev/address-validator/infra/disk-hygiene.sh
+# A oneshot's start timeout defaults to infinity: a hung step would block every
+# later Sunday's run without failing anything (#322). Measured run: ~1 s.
+TimeoutStartSec=15min

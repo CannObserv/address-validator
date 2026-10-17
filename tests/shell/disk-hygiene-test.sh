@@ -63,6 +63,46 @@ touch "$vsix/fresh.vsix"
 touch -d "20 days ago" "$vsix/stale.vsix"
 touch -d "40 days ago" "$fake/.npm/_npx/stale"
 
+# Pinned SocratiCode trees (#322): npx names a single-package tree
+# sha512(spec)[:16]. Two different specs prove each source is read: the
+# repo's declared one and the VS Code machine setting that actually launches.
+npx_hash() { printf '%s' "$1" | sha512sum | cut -c1-16; }
+repo_spec="socraticode@9.9.9"
+machine_spec="socraticode@8.8.8"
+pinned_repo="$fake/.npm/_npx/$(npx_hash "$repo_spec")"
+pinned_machine="$fake/.npm/_npx/$(npx_hash "$machine_spec")"
+mkdir -p "$sandbox/repo/.claude" "$fake/.vscode-server/data/Machine"
+machine_settings="$fake/.vscode-server/data/Machine/settings.json"
+printf '{"env": {"SOCRATICODE_SPEC": "%s"}}\n' "$repo_spec" >"$sandbox/repo/.claude/settings.json"
+printf '{"claudeCode.environmentVariables": [{"name": "SOCRATICODE_SPEC", "value": "%s"}]}\n' \
+  "$machine_spec" >"$machine_settings"
+# Install grace window: the tree's own mtime is old, but a file deep inside
+# was written N minutes ago (npx reinstalls a moved spec into the same dir)
+grace_old="$fake/.npm/_npx/grace-old"
+grace_young="$fake/.npm/_npx/grace-young"
+for d in "$pinned_repo" "$pinned_machine" "$grace_old" "$grace_young"; do
+  mkdir -p "$d/node_modules/pkg"
+  touch "$d/node_modules/pkg/f"
+  find "$d" -exec touch -d "40 days ago" {} +
+done
+touch -d "61 minutes ago" "$grace_old/node_modules/pkg/f"
+touch -d "10 minutes ago" "$grace_young/node_modules/pkg/f"
+# A tree the grace walk cannot fully read may hide a fresh write: keep it
+grace_unwalkable="$fake/.npm/_npx/grace-unwalkable"
+mkdir -p "$grace_unwalkable/node_modules/locked"
+find "$grace_unwalkable" -exec touch -d "40 days ago" {} +
+chmod 000 "$grace_unwalkable/node_modules/locked"
+
+# Fake uv records its argv: a bare `uv cache prune` waits forever while any
+# `uv run` holds the cache lock (#322), so the run must pass --force
+mkdir -p "$sandbox/uvbin"
+UV_ARGS="$sandbox/uv-args.log"
+cat >"$sandbox/uvbin/uv" <<EOF
+#!/bin/sh
+echo "\$*" >>"$UV_ARGS"
+EOF
+chmod +x "$sandbox/uvbin/uv"
+
 # Worktree fixtures: one registered, one young orphan, one old orphan
 git -C "$sandbox/repo" worktree add -q .worktrees/registered-wt -b wt-branch
 mkdir -p "$sandbox/repo/.worktrees/orphan-young" "$sandbox/repo/.worktrees/orphan-old"
@@ -80,7 +120,7 @@ check "unknown argument rejected with exit 2" test "$rc" -eq 2
 
 # --- real run against the sandbox ---
 rc=0
-HOME=$fake "$SCRIPT" >"$OUT" 2>&1 || rc=$?
+HOME=$fake PATH="$sandbox/uvbin:$PATH" "$SCRIPT" >"$OUT" 2>&1 || rc=$?
 
 check "run completes despite unremovable path" test "$rc" -eq 0
 check "unremovable path warned, not fatal" /bin/grep -q "WARNING: could not fully remove" "$OUT"
@@ -92,6 +132,40 @@ check "fresh VSIX survives" test -e "$vsix/fresh.vsix"
 check "stale VSIX removed" test ! -e "$vsix/stale.vsix"
 check "fresh _npx sandbox survives" test -d "$fake/.npm/_npx/fresh"
 check "stale _npx sandbox removed" test ! -d "$fake/.npm/_npx/stale"
+check "_npx tree pinned by repo SOCRATICODE_SPEC survives" test -d "$pinned_repo"
+check "_npx tree pinned by VS Code machine setting survives" test -d "$pinned_machine"
+check "pinned _npx tree logged as kept" /bin/grep -qF "keeping (pinned ${repo_spec})" "$OUT"
+check "_npx tree last written 61min ago removed" test ! -d "$grace_old"
+check "_npx tree written 10min ago survives (install grace)" test -d "$grace_young"
+check "_npx tree the grace walk cannot read survives" test -d "$grace_unwalkable"
+check "unreadable _npx tree logged as kept" /bin/grep -qF "keeping (unreadable, cannot rule out an install): $grace_unwalkable" "$OUT"
+check "uv cache prune runs with --force" /bin/grep -qx "cache prune --force" "$UV_ARGS"
+check "unit bounds its run (TimeoutStartSec=)" \
+  /bin/grep -qE '^TimeoutStartSec=[1-9][0-9]*(s|min)?$' "$repo_root/infra/disk-hygiene.service"
+
+# --- an unreadable spec source skips the _npx prune: never prune more ---
+mkdir -p "$fake/.npm/_npx/stale"
+touch -d "40 days ago" "$fake/.npm/_npx/stale"
+cp "$machine_settings" "$sandbox/machine-settings.good"
+echo '{ // a JSONC comment jq cannot read' >"$machine_settings"
+rc=0
+HOME=$fake PATH="$sandbox/uvbin:$PATH" "$SCRIPT" >"$OUT" 2>&1 || rc=$?
+check "unreadable machine setting: run exits 0" test "$rc" -eq 0
+check "unreadable machine setting: warns and skips" /bin/grep -q "skipping _npx prune" "$OUT"
+check "unreadable machine setting: stale _npx untouched" test -d "$fake/.npm/_npx/stale"
+check "unreadable machine setting: pinned trees untouched" test -d "$pinned_machine"
+cp "$sandbox/machine-settings.good" "$machine_settings"
+
+# --- an absent spec source pins nothing from it; the rest still apply ---
+rm "$machine_settings"
+HOME=$fake PATH="$sandbox/uvbin:$PATH" "$SCRIPT" >"$OUT" 2>&1 || true
+check "absent machine setting: stale _npx removed" test ! -d "$fake/.npm/_npx/stale"
+check "absent machine setting: its tree is no longer pinned" test ! -d "$pinned_machine"
+check "absent machine setting: repo-pinned tree survives" test -d "$pinned_repo"
+
+# --- dry-run names the forced prune ---
+HOME=$fake PATH="$sandbox/uvbin:$PATH" "$SCRIPT" --dry-run >"$OUT" 2>&1 || true
+check "dry-run names uv cache prune --force" /bin/grep -qx "disk-hygiene: would run: uv cache prune --force" "$OUT"
 check "registered worktree survives" test -d "$sandbox/repo/.worktrees/registered-wt"
 check "young orphan worktree survives (in-flight window)" test -d "$sandbox/repo/.worktrees/orphan-young"
 check "old orphan worktree removed" test ! -d "$sandbox/repo/.worktrees/orphan-old"
