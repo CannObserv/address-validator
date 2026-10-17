@@ -21,6 +21,12 @@ repos:
         entry: bash tests/shell/disk-hygiene-test.sh
         files: '^(infra/(disk-hygiene\.(sh|service)|journal-warn\.sh|docker-prune-check\.sh)|tests/shell/disk-hygiene-test\.sh)$'
         pass_filenames: false
+      - id: libpostal-probe-test
+        name: libpostal-probe sandbox tests
+        language: system
+        entry: bash tests/shell/libpostal-probe-test.sh
+        files: '^(infra/(libpostal-probe\.sh|journal-warn\.sh)|tests/shell/libpostal-probe-test\.sh)$'
+        pass_filenames: false
       - id: install-units-test
         name: install-units sandbox tests
         language: system

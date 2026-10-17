@@ -12,6 +12,8 @@ window Sun 17:00-19:00
 
 # Daily 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
 # (After=audit-archive); Sun 03:30 docker-prune, Sun 05:00 disk-hygiene.
+# libpostal-probe.timer fires every 2 min and has no quiet range: a read-only
+# liveness probe, declared in FREQUENT_PROBES (the test) with its sizing (#256).
 quiet 03:00-06:15
 # wslcb-licensing-tracker's backfills call this host (~07:30, ~13:35 UTC).
 quiet 07:25-08:15

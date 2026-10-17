@@ -1,0 +1,20 @@
+[Unit]
+Description=libpostal liveness probe: alert when the sidecar runs but doesn't answer (#256)
+# Exits 1 once per outage, on the run that reaches the miss threshold; the
+# rule and its sizing are in the script's header.
+OnFailure=unit-failure@%n.service
+
+[Service]
+Type=oneshot
+User=exedev
+# Keeps `journalctl -t libpostal-probe`
+SyslogIdentifier=libpostal-probe
+# The miss counter: kept between runs, cleared by a reboot (/run is tmpfs)
+RuntimeDirectory=libpostal-probe
+RuntimeDirectoryPreserve=yes
+ExecStart=/home/exedev/address-validator/infra/libpostal-probe.sh
+# curl is bounded at 5s; a hung run must not outlast the 2-minute interval (#249).
+TimeoutStartSec=30
+# No swap on this host (#228): bash + curl, far below these.
+MemoryHigh=24M
+MemoryMax=32M
