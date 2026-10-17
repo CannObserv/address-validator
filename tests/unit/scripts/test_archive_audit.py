@@ -256,6 +256,7 @@ async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> N
     await export_day(db, day, day + timedelta(days=1), dest)
 
     md = pq.read_metadata(dest)
+    # Footer reads "2.6" for any v2 file; this only catches a fall back to 1.0.
     assert md.format_version == "2.6"
     assert b"ARROW:schema" in md.metadata
     ts = md.schema.column(ARCHIVE_SCHEMA.get_field_index("timestamp"))
