@@ -25,7 +25,8 @@
 # clears it: misses before a reboot and the boot's warmup aren't consecutive.
 #
 # Exit: 0 answered, below the threshold, past it, or stood down; 1 the
-# threshold reached on this run; 2 run outside the unit (no RUNTIME_DIRECTORY).
+# threshold reached on this run; 2 run outside the unit (no RUNTIME_DIRECTORY),
+# or the count couldn't be written.
 # Read-only: it starts and restarts nothing, so the patching-hosts restarter
 # scan reads it clean. Keep systemctl verbs other than is-active out of it.
 
@@ -49,8 +50,12 @@ COUNTER="$RUNTIME_DIRECTORY/misses"
 misses=$(cat "$COUNTER" 2>/dev/null) || misses=0
 [[ "$misses" =~ ^[0-9]+$ ]] || misses=0
 
+# A count that can't be written would never reach the threshold: the probe
+# blind, silently. Exit 2 instead, so OnFailure= reports it.
 save() {
-  printf '%s\n' "$1" >"$COUNTER.tmp" && mv -f "$COUNTER.tmp" "$COUNTER"
+  printf '%s\n' "$1" 2>/dev/null >"$COUNTER.tmp" && mv -f "$COUNTER.tmp" "$COUNTER" 2>/dev/null && return
+  journal_warn "$ME: can't write $COUNTER; the miss count is lost"
+  exit 2
 }
 
 # A curl exit code, as a reason a reader needn't look up
