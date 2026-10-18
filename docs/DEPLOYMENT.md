@@ -316,9 +316,26 @@ sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
 # Archive-age check (daily 06:00 UTC): alerts if audit-archive stops running (#249)
 sudo infra/install-units.sh archive-age-check.service archive-age-check.timer \
   && sudo systemctl enable --now archive-age-check.timer
+
+# libpostal liveness probe (every 2 min): alerts if the sidecar stops answering (#256)
+sudo infra/install-units.sh libpostal-probe.service libpostal-probe.timer \
+  && sudo systemctl enable --now libpostal-probe.timer
 ```
 
 Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
+
+**libpostal liveness probe** (#256): every 2 min, curls the knob's synthetic
+`/parse` URL. The 3rd consecutive miss exits 1 (one `OnFailure=` alert per
+outage, its `<4>` miss line in the tail); later misses and recovery log at info.
+Stands down while `libpostal.service` isn't `active`; a restart costs one miss at most.
+No `OnCalendar=`: a declared frequent probe (`FREQUENT_PROBES`,
+`tests/unit/test_patching_knob.py`). Rule, sizing, exit codes: the
+`infra/libpostal-probe.sh` header.
+
+```bash
+journalctl -t libpostal-probe -p info     # misses, alert, recovery, stand-downs
+cat /run/libpostal-probe/misses           # consecutive misses; a reboot clears it
+```
 
 **Failures are reported to the journal and pushed through notifier.** Every
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
@@ -337,7 +354,8 @@ restarts count toward the burst.
 | `address-validator` | 10 starts / 600s | 10 × (3s + startup) |
 | `libpostal` | 5 starts / 600s | 5 × (5s + container start and model load) |
 
-A hung-but-running process, or the VM itself being down, alerts nothing. These
+A hung-but-running process, or the VM itself being down, alerts nothing; for
+libpostal, the liveness probe below covers the hung case (#256). These
 two units' alerts also carry no journal tail: every line they write is priority
 6, so read `journalctl -u <unit> -n 50` (#252).
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=libpostal liveness probe (every 2 minutes)
+
+[Timer]
+# A frequent probe, not a scheduled job: no OnCalendar=, so no quiet range
+# applies (FREQUENT_PROBES in tests/unit/test_patching_knob.py says why).
+# The boot's sidecar warmup (~7 s) is long over by the first run.
+OnBootSec=2min
+OnUnitActiveSec=2min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

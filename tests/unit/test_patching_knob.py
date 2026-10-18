@@ -94,14 +94,50 @@ def test_no_image_owner_line() -> None:
     assert _named("image-owner") == []
 
 
+# Frequent probes: a timer that fires every few minutes can't sit inside a quiet
+# range, and a liveness probe shouldn't stand down for the window, where the
+# service it watches is restarted on purpose. So each is declared here with its
+# reason, and held to a class contract instead (the tests below): monotonic,
+# keeping its cadence, restarting nothing, and its miss threshold sized so
+# a deliberate restart never alerts. Every other timer is a scheduled job, still
+# bound by the quiet-range rule.
+FREQUENT_PROBES = {
+    "libpostal-probe.timer": (
+        "#256: libpostal answering, every 2 min. Reads one synthetic /parse; "
+        "a quiet range or a window stand-down would blind it exactly when the "
+        "patch run restarts the sidecar"
+    ),
+}
+# The patching-hosts restarter scan's own pattern (probe.sh RESTART_RE): a
+# script line matching it makes its unit a restarter the knob must declare.
+SKILL_RESTART_RE = re.compile(r"systemctl[^#]*(start|restart|try-restart|reload-or-restart)")
+# The longest deliberate libpostal restart a patch run may cause. Measured
+# 4-7 s accept-to-answer (2026-09-29 boot, two 2026-09-30 restarts); the margin
+# is for a docker package upgrade restarting the daemon, which is unmeasured.
+LIBPOSTAL_RESTART_SECONDS = 120
+LIBPOSTAL_PROBE = INFRA / "libpostal-probe.sh"
+
+
+def _seconds(span: str) -> int:
+    """A plain systemd time span: ``30``, ``30s``, ``2min``, ``1h``."""
+    match = re.fullmatch(r"(\d+)\s*(s|sec|m|min|h)?", span.strip())
+    assert match, f"time span this test can't read: {span}"
+    unit = {"m": 60, "min": 60, "h": 3600}.get(match.group(2) or "s", 1)
+    return int(match.group(1)) * unit
+
+
+def _setting(path: Path, key: str) -> list[str]:
+    return re.findall(rf"^{key}=(.*)$", path.read_text(), re.M)
+
+
 def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None:
     """A new timer, or a moved one, that lands in the window goes red here."""
     quiet = [_span(words[0]) for words in _named("quiet") if len(words) == 1]
     (window,) = [_span(words[1]) for words in _named("window")]
-    timers = sorted(INFRA.glob("*.timer"))
+    timers = sorted(t for t in INFRA.glob("*.timer") if t.name not in FREQUENT_PROBES)
     assert timers
     for timer in timers:
-        calendars = re.findall(r"^OnCalendar=(.*)$", timer.read_text(), re.M)
+        calendars = _setting(timer, "OnCalendar")
         assert calendars, f"{timer.name} has no OnCalendar= this test can read"
         for calendar in calendars:
             clock = re.search(r"(\d{2}:\d{2})", calendar)
@@ -110,6 +146,83 @@ def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None
             inside = any(start <= at < end for start, end in quiet)
             assert inside, f"{timer.name} fires outside every quiet range"
             assert not window[0] <= at < window[1], f"{timer.name} fires inside the window"
+
+
+def test_each_frequent_probe_is_a_timer_with_a_reason() -> None:
+    """No stale entry: a removed or renamed probe can't keep an exemption."""
+    for name, reason in FREQUENT_PROBES.items():
+        assert (INFRA / name).is_file(), name
+        assert reason.strip(), name
+
+
+@pytest.mark.parametrize("name", sorted(FREQUENT_PROBES))
+def test_a_frequent_probe_is_monotonic_and_keeps_its_cadence(name: str) -> None:
+    """No ``OnCalendar=``: one would make it a scheduled job, which the quiet
+    rule binds. Its run is bounded below its interval: ``OnUnitActiveSec=``
+    counts from a run's start, so one that outlasted it would start the next
+    straight after, and misses would land closer than the sizing assumes."""
+    timer = INFRA / name
+    service = timer.with_suffix(".service")
+    assert _setting(timer, "OnCalendar") == [], f"{name}: a scheduled job, not a probe"
+    (interval,) = _setting(timer, "OnUnitActiveSec")
+    (timeout,) = _setting(service, "TimeoutStartSec")
+    assert _seconds(timeout) < _seconds(interval), f"{service.name}: a run can outlast its interval"
+
+
+@pytest.mark.parametrize("name", sorted(FREQUENT_PROBES))
+def test_a_frequent_probe_restarts_nothing(name: str) -> None:
+    """It runs through the window, so it must not be a restarter a data-store
+    step would have to stop. Read the way the skill's scan reads it: the unit's
+    Exec lines and each absolute script they name, comments left out."""
+    service = (INFRA / name).with_suffix(".service")
+    exec_lines = re.findall(r"^Exec\w*=(.*)$", service.read_text(), re.M)
+    assert exec_lines
+    for line in exec_lines:
+        assert not SKILL_RESTART_RE.search(line), f"{service.name}: {line}"
+        for word in line.split():
+            if word.startswith(DEPLOY_ROOT + "/infra/"):
+                script = INFRA / word.removeprefix(DEPLOY_ROOT + "/infra/")
+                lines = script.read_text().splitlines()
+                code = [ln for ln in lines if not ln.lstrip().startswith("#")]
+                hits = [ln for ln in code if SKILL_RESTART_RE.search(ln)]
+                assert hits == [], f"{script.name} reads as a restarter: {hits}"
+
+
+def test_the_restart_pattern_matches_the_vendored_scan() -> None:
+    """SKILL_RESTART_RE is a copy: a skill bump that widened the scan's pattern
+    would otherwise leave this test green while the real scan reports a probe
+    as an undeclared ``restarter:``."""
+    probe = REPO_ROOT / "skills" / "patching-hosts" / "scripts" / "probe.sh"
+    if not probe.is_file():
+        if socket.gethostname() == HOST:
+            pytest.fail(f"{probe} missing on the host: run bash .skills/doctor.sh")
+        pytest.skip("patching-hosts submodule not initialised")
+    (vendored,) = re.findall(r"^RESTART_RE='(.*)'$", probe.read_text(), re.M)
+    assert vendored == SKILL_RESTART_RE.pattern
+
+
+def test_a_libpostal_restart_never_alerts() -> None:
+    """An outage of D seconds spans at most ``D // interval + 1`` probe runs, so
+    it reaches MISSES_TO_ALERT only if ``D >= (misses - 1) * interval``."""
+    (misses,) = re.findall(r"^MISSES_TO_ALERT=(\d+)$", LIBPOSTAL_PROBE.read_text(), re.M)
+    (interval,) = _setting(INFRA / "libpostal-probe.timer", "OnUnitActiveSec")
+    assert (int(misses) - 1) * _seconds(interval) > LIBPOSTAL_RESTART_SECONDS
+
+
+def test_the_libpostal_probe_watches_a_real_unit() -> None:
+    """``systemctl is-active`` prints ``inactive`` for a unit that isn't loaded,
+    so a renamed or dropped sidecar unit would stand the probe down every tick,
+    at info: blind, silently."""
+    (unit,) = re.findall(r"^UNIT=(\S+)$", LIBPOSTAL_PROBE.read_text(), re.M)
+    assert (INFRA / unit).is_file(), unit
+    assert [unit] in _named("service"), f"{unit} is no knob service line"
+
+
+def test_the_libpostal_probe_and_the_patch_health_check_agree() -> None:
+    """One synthetic URL for both, so a patch run's health line and the probe
+    can't disagree about what answering means."""
+    (url,) = re.findall(r"^URL='(.*)'$", LIBPOSTAL_PROBE.read_text(), re.M)
+    assert any(url in " ".join(words) for words in _named("health")), url
 
 
 def test_quiet_ranges_never_overlap_the_window() -> None:
@@ -210,9 +323,11 @@ def test_unit_scripts_are_absolute_so_the_restarter_scan_can_read_them() -> None
     """patching-hosts follows an Exec line's script one level deep, but only by
     an absolute path. A relative one is unreadable: each timer service turns
     into ``restarters:unread:``, and every unit whose ``OnFailure=`` runs
-    ``unit-failure@`` into an undeclared ``restarter:`` (#311)."""
+    ``unit-failure@`` into an undeclared ``restarter:`` (#311). The program
+    itself too: a bare ``infra/x.sh`` is the same unreadable script (#256)."""
     for unit in sorted(INFRA.glob("*.service")):
         for line in re.findall(r"^ExecStart(?:Pre|Post)?=(.*)$", unit.read_text(), re.M):
             words = line.lstrip("-@+!:").split()
+            assert words[0].startswith("/"), f"{unit.name}: {line}"
             if words[0].endswith(("/python", "/python3")):
                 assert words[1].startswith("/"), f"{unit.name}: {line}"
