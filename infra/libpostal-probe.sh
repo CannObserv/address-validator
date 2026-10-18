@@ -19,7 +19,8 @@
 #
 # Stands down while libpostal.service isn't active: a failed unit has alerted
 # already, an activating one is restarting, and a stopped one was stopped on
-# purpose. The count starts afresh after a stand-down.
+# purpose. The count starts afresh after a stand-down. A state systemctl can't
+# read at all isn't one: it warns and probes anyway.
 #
 # The count lives in RuntimeDirectory= (/run/libpostal-probe), so a reboot
 # clears it: misses before a reboot and the boot's warmup aren't consecutive.
