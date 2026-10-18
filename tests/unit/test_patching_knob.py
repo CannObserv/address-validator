@@ -207,6 +207,15 @@ def test_a_libpostal_restart_never_alerts() -> None:
     assert (int(misses) - 1) * _seconds(interval) > LIBPOSTAL_RESTART_SECONDS
 
 
+def test_the_libpostal_probe_watches_a_real_unit() -> None:
+    """``systemctl is-active`` prints ``inactive`` for a unit that isn't loaded,
+    so a renamed or dropped sidecar unit would stand the probe down every tick,
+    at info: blind, silently."""
+    (unit,) = re.findall(r"^UNIT=(\S+)$", LIBPOSTAL_PROBE.read_text(), re.M)
+    assert (INFRA / unit).is_file(), unit
+    assert [unit] in _named("service"), f"{unit} is no knob service line"
+
+
 def test_the_libpostal_probe_and_the_patch_health_check_agree() -> None:
     """One synthetic URL for both, so a patch run's health line and the probe
     can't disagree about what answering means."""
