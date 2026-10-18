@@ -98,7 +98,7 @@ def test_no_image_owner_line() -> None:
 # range, and a liveness probe shouldn't stand down for the window, where the
 # service it watches is restarted on purpose. So each is declared here with its
 # reason, and held to a class contract instead (the tests below): monotonic,
-# never overlapping itself, restarting nothing, and its miss threshold sized so
+# keeping its cadence, restarting nothing, and its miss threshold sized so
 # a deliberate restart never alerts. Every other timer is a scheduled job, still
 # bound by the quiet-range rule.
 FREQUENT_PROBES = {
@@ -156,9 +156,11 @@ def test_each_frequent_probe_is_a_timer_with_a_reason() -> None:
 
 
 @pytest.mark.parametrize("name", sorted(FREQUENT_PROBES))
-def test_a_frequent_probe_is_monotonic_and_never_overlaps_itself(name: str) -> None:
+def test_a_frequent_probe_is_monotonic_and_keeps_its_cadence(name: str) -> None:
     """No ``OnCalendar=``: one would make it a scheduled job, which the quiet
-    rule binds. Its run is bounded below its interval, so runs never pile up."""
+    rule binds. Its run is bounded below its interval: ``OnUnitActiveSec=``
+    counts from a run's start, so one that outlasted it would start the next
+    straight after, and misses would land closer than the sizing assumes."""
     timer = INFRA / name
     service = timer.with_suffix(".service")
     assert _setting(timer, "OnCalendar") == [], f"{name}: a scheduled job, not a probe"
