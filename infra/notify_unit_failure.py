@@ -128,7 +128,7 @@ def _render_message(message: str) -> str:
 
 
 def _render_entry(entry: dict[str, Any]) -> list[str]:
-    """One journal entry as ``short-iso`` would print it, message rendered first."""
+    """One journal entry in the ``short-iso`` layout, timestamp in UTC, message rendered."""
     try:
         when = datetime.fromtimestamp(int(entry["__REALTIME_TIMESTAMP"]) / 1e6, tz=UTC)
         stamp = when.isoformat(timespec="seconds")
