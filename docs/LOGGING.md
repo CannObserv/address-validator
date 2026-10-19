@@ -12,6 +12,8 @@ Every line on stdout is a JSON object with a fixed field set:
 
 `timestamp`/`level`/`logger`/`message` match structlog's defaults (so a later structlog migration doesn't churn consumers); `request_id` is this service's correlation field.
 
+A record logged with an exception adds `exc_info` (the formatted traceback) and `exc_type` (the class name). Under systemd, each line also starts with its sd-daemon `<N>` priority, which journald strips; see [Journal priority and the unit-failure tail](#journal-priority-and-the-unit-failure-tail).
+
 **Single source of truth:** `core/logging.py::build_json_formatter()`. Two consumers share it —
 
 | Consumer | How |
