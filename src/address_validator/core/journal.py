@@ -32,17 +32,19 @@ def priority(levelno: int) -> int:
     return 7
 
 
-def stream_is_journal(stream: TextIO) -> bool:
+def stream_is_journal(stream: TextIO | None) -> bool:
     """True when *stream* is the one systemd connected to journald.
 
     ``JOURNAL_STREAM`` is ``<dev>:<inode>`` of the unit's stdout/stderr stream.
     A child whose stream was redirected elsewhere inherits the variable but not
     the stream, so the match is on the descriptor itself, not on the variable.
+    *stream* may be ``None``: Python sets ``sys.stdout`` so when fd 1 is closed
+    at start, and this runs at boot, so it must not raise.
     """
     value = os.environ.get("JOURNAL_STREAM", "")
     try:
         dev, inode = (int(part) for part in value.split(":"))
         stat = os.fstat(stream.fileno())
-    except (ValueError, OSError):
+    except (AttributeError, ValueError, OSError):
         return False
     return (stat.st_dev, stat.st_ino) == (dev, inode)

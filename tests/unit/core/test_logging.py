@@ -386,6 +386,13 @@ class TestJournalPriority:
             stdout.close()
             stderr.close()
 
+    def test_closed_stdout_does_not_break_boot(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``sys.stdout`` is None when fd 1 is closed at start; StreamHandler(None)
+        falls back to stderr, so formatter construction must not raise either."""
+        monkeypatch.setattr(sys, "stdout", None)
+        monkeypatch.setenv("JOURNAL_STREAM", "1:2")
+        assert not build_json_formatter().journal
+
 
 class TestSystemdUnitWiring:
     def test_service_unit_passes_log_config(self) -> None:
