@@ -1,7 +1,7 @@
 # Tailnet
 
 How this host reaches the sibling [notifier](https://github.com/CannObserv/notifier)
-service (#232). exe.dev VMs share no private network, and
+service (#232) and [co-status](https://github.com/CannObserv/status) (#255). exe.dev VMs share no private network, and
 `https://notifier.exe.xyz` stops at the exe.dev login gate. The
 `cannobserv.org.github` tailnet is the only route. Notifier's own view of the
 tailnet is in its `docs/reference/tailscale.md`.
@@ -12,7 +12,7 @@ tailnet is in its `docs/reference/tailscale.md`.
 |---|---|
 | Node | `address-validator`, `100.75.8.39`, MagicDNS `address-validator.taild0fb76.ts.net` |
 | Tag | `tag:address-validator`: tagged, **non-ephemeral**, key expiry disabled |
-| ACL | `tag:address-validator → tag:notifier:9000` only. `:9001` (notifier dev) is dropped |
+| ACL | `tag:address-validator → tag:notifier:9000` (unit-failure dispatch, #232) and `→ tag:status:9000` (co-status liveness check-in, #255). `:9001` (notifier and co-status dev) is dropped |
 | Joined | 2026-09-29, Tailscale 1.102.4 from the official apt repo |
 | DNS | MagicDNS owns `/etc/resolv.conf` (operator decision): every outbound name, USPS and Google included, resolves through `tailscaled` |
 
@@ -24,11 +24,12 @@ page-allocation-failure casualty. See [HOST-MEMORY.md](HOST-MEMORY.md).
 ```bash
 tailscale status                        # notifier listed
 curl -s http://notifier:9000/health     # "environment": "production"
+curl -s http://status:9000/health       # "environment": "production"
 ```
 
 A missing ACL rule looks like DNS failure (`Could not resolve host: notifier`),
-not like a refused connection: without the rule, notifier is absent from this
-node's netmap.
+not like a refused connection: without the rule, notifier (or status) is absent
+from this node's netmap.
 
 ## Join or rejoin
 

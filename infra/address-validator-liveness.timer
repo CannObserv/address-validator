@@ -1,0 +1,14 @@
+[Unit]
+Description=address-validator liveness check-in to co-status (every 5 minutes)
+
+[Timer]
+# A frequent probe, not a scheduled job: no OnCalendar=, so no quiet range
+# applies (FREQUENT_PROBES in tests/unit/test_patching_knob.py says why).
+# The interval is the co-status monitor's interval_seconds (300); a reboot's
+# silence fits its grace (600). The API answers within seconds of boot.
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

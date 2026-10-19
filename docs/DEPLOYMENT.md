@@ -320,6 +320,10 @@ sudo infra/install-units.sh archive-age-check.service archive-age-check.timer \
 # libpostal liveness probe (every 2 min): alerts if the sidecar stops answering (#256)
 sudo infra/install-units.sh libpostal-probe.service libpostal-probe.timer \
   && sudo systemctl enable --now libpostal-probe.timer
+
+# API liveness check-in to co-status (every 5 min): hung, degraded, VM down (#255)
+sudo infra/install-units.sh address-validator-liveness.service address-validator-liveness.timer \
+  && sudo systemctl enable --now address-validator-liveness.timer
 ```
 
 Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
@@ -336,6 +340,64 @@ No `OnCalendar=`: a declared frequent probe (`FREQUENT_PROBES`,
 journalctl -t libpostal-probe -p info     # misses, alert, recovery, stand-downs
 cat /run/libpostal-probe/misses           # consecutive misses; a reboot clears it
 ```
+
+**API liveness check-in** (#255): the off-VM uptime check. Every 5 min
+`address-validator-liveness.timer` probes `http://localhost:8000/api/v2/health`
+(the knob's health line) and checks in to co-status's dead-man monitor
+`co-address-validator-live` (tenant of the same name, on CannObserv/status's own
+VM; healthchecks.io watches co-status). Rule, sizing and exit codes: the
+`infra/address-validator-liveness.sh` header.
+
+| Probe result (retried every 2 s for 20 s) | Check-in | What co-status sends |
+|---|---|---|
+| 200 | `ok` | nothing; the `ok` that ends a fault sends *has cleared* |
+| 503 all window | `alert`, `degraded` (the failing component) | report when the fault opens, then hourly (`renotify_seconds` 3600) |
+| refused, timed out, other status | `alert`, `unreachable` (the cause) | as above; a change of fault reports at once (`metadata.fault`) |
+| no check-in (VM down, timer stopped) | — | *has stopped reporting* 300 + 600 s after the last one, *has recovered* on the next |
+
+A fault reports on the first failing run: 5 min + 20 s after onset at most. A
+deploy restart (~4 s) or the boot's ~6 s 503 falls inside the retry and never
+reports. A crashloop alerts twice by design: `unit-failure@` when the start
+limit trips, and co-status's `unreachable`.
+
+- **Key:** `/etc/address-validator/status-checkin.key`, root, mode 0600, read by
+  systemd through `LoadCredential=`. Never in `.env` or argv. Missing or empty:
+  the probe runs, logs `liveness check-in unconfigured`, exits 0.
+- **Monitor id:** `Environment=LIVENESS_MONITOR_ID=` in the unit (not a secret).
+- **Check-in failures** (co-status down, a 4xx/5xx, the tailnet hop) are a
+  `<4>` warning and exit 0: co-status's deadline is the backstop.
+  `OnFailure=` fires only for a broken run (bug, OOM kill, timeout).
+
+```bash
+journalctl -t address-validator-liveness -p info    # faults, unconfigured, check-in failures
+systemctl list-timers address-validator-liveness.timer
+curl -s http://status:9000/health | jq .environment  # "production"; DNS failure = ACL (TAILNET.md)
+```
+
+Runbook:
+
+- **Report (`unreachable`/`degraded`):** `systemctl status address-validator`,
+  `curl -s localhost:8000/api/v2/health`, `journalctl -u address-validator -n 50`.
+  `degraded` = Postgres unreachable from the app.
+- **Has stopped reporting:** is the VM up (exe.dev console)? Then
+  `systemctl list-timers` and this unit's journal: a run that can't reach
+  co-status warns every tick.
+- **Planned stop of the API, any length:** a stopped API reports `unreachable`
+  at the next tick. `sudo systemctl stop address-validator-liveness.timer`
+  first, `start` it after. If the timer stays stopped past about 15 min
+  (interval + grace), also pause the monitor, or it reports *has stopped
+  reporting*. Pausing alone isn't enough: a disabled monitor still reports
+  `alert` check-ins (status monitors.md § Faults). Pause and resume with the
+  tenant's own key:
+
+  ```bash
+  ID=$(systemctl show -p Environment address-validator-liveness.service | /bin/grep -o 'LIVENESS_MONITOR_ID=[^ ]*' | cut -d= -f2)
+  sudo cat /etc/address-validator/status-checkin.key | sed 's/^/X-API-Key: /' \
+    | curl -sX PATCH "http://status:9000/api/v1/monitors/$ID" -H @- \
+        -H 'Content-Type: application/json' -d '{"enabled": false}'   # true to resume
+  ```
+- **Known limit:** the probe runs on this VM against localhost. The exe.dev
+  proxy path and the tailnet hop to consumers (power-map) are not covered.
 
 **Failures are reported to the journal and pushed through notifier.** Every
 timer-driven service carries `OnFailure=unit-failure@%n.service`. A failed
@@ -354,8 +416,9 @@ restarts count toward the burst.
 | `address-validator` | 10 starts / 600s | 10 × (3s + startup) |
 | `libpostal` | 5 starts / 600s | 5 × (5s + container start and model load) |
 
-A hung-but-running process, or the VM itself being down, alerts nothing; for
-libpostal, the liveness probe below covers the hung case (#256). Both units'
+A hung-but-running process, or the VM itself being down, never fails the unit;
+the API liveness check-in below covers both (#255), and the libpostal probe
+covers a hung sidecar (#256). Both units'
 alerts carry a journal tail (#252). The API's JSON records carry their real
 priority, and the tail sends each one as `LEVEL logger: message [ExceptionClass]`,
 never the traceback; read that on the host with `journalctl -u address-validator
