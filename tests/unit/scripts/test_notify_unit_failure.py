@@ -7,6 +7,7 @@ one test that drives the real SDK points it at a closed local port.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import socket
 import subprocess
@@ -127,12 +128,59 @@ def _run_returning(stdout="", exc=None):
     return run, calls
 
 
+def _entry(message, ident="uvicorn", pid="4242"):
+    """One ``journalctl -o json`` line; 2026-10-19T16:00:00Z."""
+    return json.dumps(
+        {
+            "__REALTIME_TIMESTAMP": "1792425600000000",
+            "_HOSTNAME": "host",
+            "SYSLOG_IDENTIFIER": ident,
+            "_PID": pid,
+            "MESSAGE": message,
+        }
+    )
+
+
+def _journal(*messages):
+    return "".join(_entry(m) + "\n" for m in messages)
+
+
+PREFIX = "2026-10-19T16:00:00+00:00 host uvicorn[4242]: "
+# Synthetic: the shape of a psycopg unique violation quoting a cache row.
+SYNTHETIC_ADDRESS = "123 SYNTHETIC TEST AVE SPRINGFIELD ZZ 00000"
+DETAIL = f"DETAIL:  Key (canonical_key)=({SYNTHETIC_ADDRESS}) already exists."
+TRACEBACK = (
+    "Traceback (most recent call last):\n"
+    '  File "/srv/app/db.py", line 12, in store\n'
+    "    await conn.execute(stmt, {'raw': '" + SYNTHETIC_ADDRESS + "'})\n"
+    "psycopg.errors.UniqueViolation: duplicate key value violates unique constraint\n" + DETAIL
+)
+
+
+def _app_record(**fields):
+    record = {
+        "level": "ERROR",
+        "logger": "address_validator.main",
+        "message": "application startup failed",
+        "request_id": None,
+        "timestamp": "2026-10-19T16:00:00+00:00",
+    }
+    return json.dumps(record | fields)
+
+
+def _tail(*messages):
+    run, _ = _run_returning(_journal(*messages))
+    return nuf.journal_tail(nuf.failure_from_env(UNIT, MONITOR_ENV), run=run)
+
+
 def test_journal_tail_scopes_to_invocation_at_warning():
-    run, calls = _run_returning("line one\n\nline two\n")
+    run, calls = _run_returning(_journal("line one", "", "line two"))
     tail = nuf.journal_tail(nuf.failure_from_env(UNIT, MONITOR_ENV), run=run)
-    assert tail == "line one\nline two"
+    assert tail == f"{PREFIX}line one\n{PREFIX}line two"
     cmd = calls[0]
     assert cmd[cmd.index("-p") + 1] == "warning"
+    assert cmd[cmd.index("-o") + 1] == "json"
+    assert "--all" in cmd, "a message over 4 KiB would arrive as null"
     assert "_SYSTEMD_INVOCATION_ID=9fa5068adc894cab830dcd62dc49a77b" in cmd
     assert "-u" not in cmd
 
@@ -145,9 +193,76 @@ def test_journal_tail_manual_falls_back_to_unit():
 
 
 def test_journal_tail_truncates_long_lines():
-    run, _ = _run_returning("x" * 2000)
-    tail = nuf.journal_tail(nuf.failure_from_env(UNIT, MONITOR_ENV), run=run)
+    tail = _tail("x" * 2000)
     assert len(tail) == nuf.TAIL_LINE_CHARS
+
+
+def test_journal_tail_passes_timer_lines_through():
+    """journal_logging's ``LEVEL: message`` and docker/Go text are unchanged."""
+    lines = ["ERROR: archive upload failed (TimeoutError)", "docker: Error response from daemon"]
+    assert _tail(*lines) == "\n".join(PREFIX + line for line in lines)
+
+
+def test_journal_tail_json_record_sends_class_not_exception():
+    """The PII guard: exc_info's frames and message never leave the host (#252)."""
+    record = _app_record(exc_info=TRACEBACK, exc_type="psycopg.errors.UniqueViolation")
+    tail = _tail(record)
+    assert tail == (
+        f"{PREFIX}ERROR address_validator.main: application startup failed"
+        " [psycopg.errors.UniqueViolation]"
+    )
+    for leaked in (SYNTHETIC_ADDRESS, "DETAIL", "Traceback", "duplicate key", "db.py"):
+        assert leaked not in tail
+
+
+def test_journal_tail_json_record_drops_every_other_key():
+    record = _app_record(
+        level="WARNING", message="libpostal sidecar not reachable", raw=SYNTHETIC_ADDRESS
+    )
+    tail = _tail(record)
+    assert tail == f"{PREFIX}WARNING address_validator.main: libpostal sidecar not reachable"
+
+
+def test_journal_tail_json_record_keeps_only_the_message_first_line():
+    """uvicorn logs a failed startup's traceback as the message itself."""
+    tail = _tail(_app_record(logger="uvicorn.error", message=TRACEBACK))
+    assert tail == f"{PREFIX}ERROR uvicorn.error: Traceback (most recent call last):"
+
+
+def test_journal_tail_parses_before_truncating():
+    """A record far over the line limit still parses: truncate the rendering, not the JSON."""
+    record = _app_record(exc_info=TRACEBACK * 50, exc_type="ValueError")
+    assert len(record) > 10 * nuf.TAIL_LINE_CHARS
+    assert _tail(record).endswith("application startup failed [ValueError]")
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        _app_record(exc_info=TRACEBACK)[:300],  # journald LineMax split, or a broken writer
+        json.dumps({"exc_info": TRACEBACK}),  # JSON, but no log record
+        json.dumps(["not", "a", "record", SYNTHETIC_ADDRESS]),
+    ],
+)
+def test_journal_tail_withholds_json_that_is_not_a_record(message):
+    tail = _tail(message)
+    assert tail == f"{PREFIX}(JSON record withheld: not a log record)"
+
+
+def test_journal_tail_decodes_byte_list_messages():
+    """``-o json`` gives a message with unprintable bytes as a list of ints."""
+    entry = json.loads(_entry(""))
+    entry["MESSAGE"] = list(b"ERROR: bad byte \x07 here")
+    tail = nuf.journal_tail(
+        nuf.failure_from_env(UNIT, MONITOR_ENV), run=_run_returning(json.dumps(entry))[0]
+    )
+    assert tail == f"{PREFIX}ERROR: bad byte \x07 here"
+
+
+def test_journal_tail_survives_a_sparse_entry():
+    run, _ = _run_returning(json.dumps({"MESSAGE": "ERROR: x"}) + "\nnot json\n")
+    tail = nuf.journal_tail(nuf.failure_from_env(UNIT, MONITOR_ENV), run=run)
+    assert tail == "? ? ?: ERROR: x"
 
 
 @pytest.mark.parametrize(

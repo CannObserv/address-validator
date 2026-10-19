@@ -12,15 +12,22 @@ correlation field.  Two consumers share :func:`build_json_formatter`:
 
 Keeping both on one factory is what prevents the mixed plain/JSON journald
 output the rest of the cohort had to unpick.
+
+Under systemd each record also carries its sd-daemon ``<N>`` priority (#252),
+so ``journalctl -p warning`` and the unit-failure tail see real levels. The
+whole record — ``exc_info`` included — is one line at that priority, so the PII
+guard for the tail is ``notify_unit_failure.py``'s field allowlist, not a
+continuation line (docs/LOGGING.md).
 """
 
 import logging
 import os
 import sys
-from typing import TextIO
+from typing import Any, TextIO
 
 from pythonjsonlogger.json import JsonFormatter
 
+from address_validator.core.journal import priority, stream_is_journal
 from address_validator.logging_filter import RequestIdFilter
 
 #: Env var controlling the app-logger verbosity. Uvicorn's own three loggers are
@@ -47,23 +54,62 @@ PINNED_LOGGER_LEVELS: dict[str, int] = {
 }
 
 
-def build_json_formatter() -> JsonFormatter:
+def exc_type_name(exc_type: type[BaseException]) -> str:
+    """``module.QualName`` of an exception class; builtins are bare (``ValueError``)."""
+    if exc_type.__module__ == "builtins":
+        return exc_type.__qualname__
+    return f"{exc_type.__module__}.{exc_type.__qualname__}"
+
+
+class JournalJsonFormatter(JsonFormatter):
+    """JsonFormatter that adds ``exc_type`` and, under journald, a ``<N>`` prefix.
+
+    ``exc_type`` is the class name alone, so the unit-failure tail can name a
+    failure without the exception message or frames in ``exc_info`` (#252).
+    """
+
+    def __init__(self, *args: Any, journal: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.journal = journal
+
+    def add_fields(
+        self,
+        log_data: dict[str, Any],
+        record: logging.LogRecord,
+        message_dict: dict[str, Any],
+    ) -> None:
+        super().add_fields(log_data, record, message_dict)
+        if record.exc_info and record.exc_info[0] is not None:
+            log_data["exc_type"] = exc_type_name(record.exc_info[0])
+
+    def format(self, record: logging.LogRecord) -> str:
+        text = super().format(record)
+        return f"<{priority(record.levelno)}>{text}" if self.journal else text
+
+
+def build_json_formatter() -> JournalJsonFormatter:
     """Build the JSON formatter used by every handler in the process.
 
-    Field set is ``{timestamp, level, logger, message, request_id}``.  The first
-    four match structlog's defaults so a later structlog migration doesn't churn
-    downstream consumers; ``request_id`` carries the ULID set by
+    Field set is ``{timestamp, level, logger, message, request_id}``, plus
+    ``exc_info`` and ``exc_type`` when the record carries an exception.  The
+    first four match structlog's defaults so a later structlog migration doesn't
+    churn downstream consumers; ``request_id`` carries the ULID set by
     :class:`~address_validator.logging_filter.RequestIdFilter`.
 
     Keys must be named in the fmt: a bare ``JsonFormatter()`` defaults to
     ``"%(message)s"`` and emits records with no level, logger, or timestamp
     (skills#69).  Records reaching a handler that lacks the filter render
     ``request_id: null`` rather than raising.
+
+    The journal test is against ``sys.stdout`` because both consumers write
+    there: :func:`build_stdout_handler` and ``log_config.json``'s
+    ``ext://sys.stdout`` handler.
     """
-    return JsonFormatter(
+    return JournalJsonFormatter(
         "%(levelname)s %(name)s %(message)s %(request_id)s",
         timestamp=True,
         rename_fields={"levelname": "level", "name": "logger"},
+        journal=stream_is_journal(sys.stdout),
     )
 
 

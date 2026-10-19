@@ -70,9 +70,8 @@ _TAGS = [
 ]
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """FastAPI lifespan context — set API key, validate config, and close DB on shutdown."""
+async def _startup(app: FastAPI) -> asyncio.Task[None] | None:
+    """Set API key, init DB, probe libpostal, validate config; return the quota-sync task."""
     app.state.api_key = os.environ.get("API_KEY", "").strip() or None
     load_custom_model()
 
@@ -114,6 +113,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             run_reconciliation_loop(**params),
             name="google-quota-reconciliation",
         )
+    return reconciliation_task
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """FastAPI lifespan context — run startup, and close providers and DB on shutdown."""
+    try:
+        reconciliation_task = await _startup(app)
+    except Exception:
+        # uvicorn logs a failed startup's traceback as the *message* of its own
+        # record, with no exc_info, and the unit-failure tail sends only a
+        # message's first line. This record is what names the class there (#252).
+        logger.error("application startup failed", exc_info=True)
+        raise
 
     yield
 
@@ -123,8 +136,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         with contextlib.suppress(asyncio.CancelledError):
             await reconciliation_task
 
-    await registry.close()
-    await libpostal_client.aclose()
+    await app.state.registry.close()
+    await app.state.libpostal_client.aclose()
     await db_engine.close_engine()
 
 

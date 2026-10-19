@@ -23,6 +23,7 @@ run of ``unit-failure@<unit>.service``:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -30,6 +31,7 @@ import subprocess
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -91,28 +93,89 @@ def failure_from_env(unit: str, env: Mapping[str, str]) -> Failure:
     )
 
 
+def _message_text(value: object) -> str:
+    """``MESSAGE`` as text; ``journalctl -o json`` gives unprintable ones as a byte list."""
+    if isinstance(value, list):
+        return bytes(value).decode("utf-8", "replace")
+    return value if isinstance(value, str) else ""
+
+
+def _render_message(message: str) -> str:
+    """The message as the tail may send it — the PII guard for JSON records (#252).
+
+    A JSON record (the API's ``core/logging.py`` formatter) is reduced to
+    ``LEVEL logger: <first line of message> [exc_type]``. ``exc_info``,
+    ``stack_info`` and every other key are dropped: a traceback's last line
+    carries the exception message, and a psycopg one can quote row data
+    (``DETAIL: Key (…)=(…)``). Only the message's first line is kept, as
+    ``journal_logging`` keeps continuation lines at info: uvicorn logs a failed
+    startup's traceback as the message itself. A line that opens like JSON but
+    is not such a record is withheld whole. Any other line (timer scripts'
+    ``LEVEL: message``, docker and Go text) passes through.
+    """
+    if not message.lstrip().startswith(("{", "[")):
+        return message
+    try:
+        record = json.loads(message)
+    except ValueError:
+        record = None
+    if not isinstance(record, dict) or "level" not in record:
+        return "(JSON record withheld: not a log record)"
+    text = str(record.get("message") or "").strip().splitlines()
+    line = f"{record['level']} {record.get('logger', '?')}: {text[0] if text else ''}"
+    if record.get("exc_type"):
+        line += f" [{record['exc_type']}]"
+    return line
+
+
+def _render_entry(entry: dict[str, Any]) -> list[str]:
+    """One journal entry as ``short-iso`` would print it, message rendered first."""
+    try:
+        when = datetime.fromtimestamp(int(entry["__REALTIME_TIMESTAMP"]) / 1e6, tz=UTC)
+        stamp = when.isoformat(timespec="seconds")
+    except (KeyError, TypeError, ValueError):
+        stamp = "?"
+    ident = entry.get("SYSLOG_IDENTIFIER") or entry.get("_COMM") or "?"
+    pid = entry.get("SYSLOG_PID") or entry.get("_PID")
+    prefix = f"{stamp} {entry.get('_HOSTNAME', '?')} {ident}{f'[{pid}]' if pid else ''}: "
+    lines = _message_text(entry.get("MESSAGE")).splitlines()
+    return [prefix + _render_message(line) for line in lines if line.strip()]
+
+
 def journal_tail(
     failure: Failure,
     run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> str:
     """The failed run's last WARNING-or-higher journal lines.
 
-    The priority filter is the PII guard: no address content is logged at
-    WARNING+ (docs/LOGGING.md), and ``journal_logging`` keeps traceback lines at
-    info. Scoped to the failed invocation when systemd names it.
+    Two guards keep address content on the host. The priority filter: nothing
+    with address content is logged at WARNING+ (docs/LOGGING.md), and
+    ``journal_logging`` keeps traceback lines at info. And the API's JSON
+    records, which reach WARNING+ whole with any traceback, pass only the
+    allowlisted fields of :func:`_render_message`. ``-o json`` gives the exact
+    message boundary for that parse, ``--all`` keeps a message over 4 KiB from
+    arriving as null, and lines are truncated only after it. Scoped to the
+    failed invocation when systemd names it.
     """
     selector = (
         [f"_SYSTEMD_INVOCATION_ID={failure.invocation_id}"]
         if failure.invocation_id
         else ["-u", failure.unit]
     )
-    cmd = [JOURNALCTL, "--no-pager", "--quiet", "-o", "short-iso", "-p", "warning"]
+    cmd = [JOURNALCTL, "--no-pager", "--quiet", "-o", "json", "--all", "-p", "warning"]
     cmd += ["-n", str(TAIL_LINES), *selector]
     try:
         proc = run(cmd, capture_output=True, text=True, timeout=10, check=True)
     except (OSError, subprocess.SubprocessError) as exc:
         return f"(journal unavailable: {type(exc).__name__})"
-    lines = [line[:TAIL_LINE_CHARS] for line in proc.stdout.splitlines() if line.strip()]
+    lines: list[str] = []
+    for raw in proc.stdout.splitlines():
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        if isinstance(entry, dict):
+            lines += [line[:TAIL_LINE_CHARS] for line in _render_entry(entry)]
     return "\n".join(lines) or "(no WARNING-or-higher lines for this run)"
 
 

@@ -19,11 +19,16 @@ Pins five things:
 5. A ``uvicorn.access`` record renders through that same formatter — the guard
    against uvicorn's lines regressing to plain text next to JSON app logs —
    and the systemd ``ExecStart`` still passes ``--log-config``.
+6. Under journald each record carries its sd-daemon ``<N>`` priority, and an
+   exception record carries ``exc_type`` — the class name the unit-failure tail
+   sends in place of ``exc_info`` (#252).
 """
 
 import json
 import logging
 import logging.config
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -31,6 +36,7 @@ import pytest
 from address_validator.core.logging import (
     LOG_LEVEL_ENV,
     PINNED_LOGGER_LEVELS,
+    JournalJsonFormatter,
     build_json_formatter,
     build_stdout_handler,
     configure_logging,
@@ -300,6 +306,85 @@ class TestUvicornLogConfig:
         assert parsed["level"] == "INFO"
         assert parsed["message"] == '127.0.0.1:0 - "GET /api/v2/health HTTP/1.1" 200'
         assert "timestamp" in parsed
+
+
+def _exc_record(exc: BaseException, level: int = logging.ERROR) -> logging.LogRecord:
+    try:
+        raise exc
+    except BaseException:
+        exc_info = sys.exc_info()
+    return logging.LogRecord("t", level, __file__, 1, "failed", None, exc_info)
+
+
+class TestJournalPriority:
+    """#252: real priorities under journald, and a class name beside the traceback."""
+
+    @pytest.mark.parametrize(
+        ("level", "prefix"),
+        [
+            (logging.CRITICAL, "<2>"),
+            (logging.ERROR, "<3>"),
+            (logging.WARNING, "<4>"),
+            (logging.INFO, "<6>"),
+            (logging.DEBUG, "<7>"),
+        ],
+    )
+    def test_journal_prefix_maps_level_and_leaves_json(self, level: int, prefix: str) -> None:
+        formatter = JournalJsonFormatter("%(levelname)s %(message)s", journal=True)
+        out = formatter.format(logging.LogRecord("t", level, __file__, 1, "hi", None, None))
+        assert out.startswith(prefix)
+        assert json.loads(out.removeprefix(prefix))["message"] == "hi"
+
+    def test_no_prefix_off_the_journal(self) -> None:
+        out = JournalJsonFormatter("%(message)s").format(_exc_record(ValueError("x")))
+        assert json.loads(out)["message"] == "failed"
+
+    def test_whole_record_is_one_line_at_its_priority(self) -> None:
+        """Unlike journal_logging's text, a traceback cannot stay at info: the
+        tail's field allowlist is the guard (notify_unit_failure.py)."""
+        formatter = JournalJsonFormatter("%(levelname)s %(message)s", journal=True)
+        out = formatter.format(_exc_record(ValueError("DETAIL: Key (k)=(synthetic)")))
+        assert "\n" not in out
+        assert out.startswith("<3>")
+
+    @pytest.mark.parametrize(
+        ("exc", "name"),
+        [
+            (ValueError("synthetic"), "ValueError"),
+            (json.JSONDecodeError("synthetic", "doc", 0), "json.decoder.JSONDecodeError"),
+        ],
+    )
+    def test_exc_type_names_the_class_only(self, exc: BaseException, name: str) -> None:
+        parsed = json.loads(build_json_formatter().format(_exc_record(exc)))
+        assert parsed["exc_type"] == name
+        assert "synthetic" in parsed["exc_info"]  # on-host only; the tail drops it
+
+    def test_no_exc_type_without_an_exception(self) -> None:
+        record = logging.LogRecord("t", logging.ERROR, __file__, 1, "m", None, None)
+        assert "exc_type" not in json.loads(build_json_formatter().format(record))
+        record.exc_info = (None, None, None)  # exc_info=True outside an except block
+        assert "exc_type" not in json.loads(build_json_formatter().format(record))
+
+    def test_build_json_formatter_tests_stdout_not_stderr(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The app writes to stdout; the unit's stderr inherits it, but a detector
+        that tested stderr would miss a redirected stdout (#252 brief)."""
+        stdout = (tmp_path / "stdout").open("w")
+        stderr = (tmp_path / "stderr").open("w")
+        monkeypatch.setattr(sys, "stdout", stdout)
+        monkeypatch.setattr(sys, "stderr", stderr)
+        try:
+            out_stat, err_stat = os.fstat(stdout.fileno()), os.fstat(stderr.fileno())
+            monkeypatch.setenv("JOURNAL_STREAM", f"{out_stat.st_dev}:{out_stat.st_ino}")
+            assert build_json_formatter().journal
+            monkeypatch.setenv("JOURNAL_STREAM", f"{err_stat.st_dev}:{err_stat.st_ino}")
+            assert not build_json_formatter().journal
+            monkeypatch.delenv("JOURNAL_STREAM")
+            assert not build_json_formatter().journal
+        finally:
+            stdout.close()
+            stderr.close()
 
 
 class TestSystemdUnitWiring:
