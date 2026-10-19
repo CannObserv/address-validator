@@ -134,8 +134,10 @@ esac
 monitor=${LIVENESS_MONITOR_ID:-}
 key=""
 if [[ -n "${CREDENTIALS_DIRECTORY:-}" && -r "$CREDENTIALS_DIRECTORY/$CREDENTIAL" ]]; then
-  IFS= read -r key <"$CREDENTIALS_DIRECTORY/$CREDENTIAL" || true
-  key=${key%$'\r'}
+  # The first line, every space, tab and CR dropped: a key pasted through `tee`
+  # ends in LF (or CRLF), and either in the header is a 401 on every tick.
+  read -r key <"$CREDENTIALS_DIRECTORY/$CREDENTIAL" || true
+  key=${key//[[:space:]]/}
 fi
 if [[ -z "$monitor" || -z "$key" ]]; then
   echo "$ME: $outcome; liveness check-in unconfigured"

@@ -24,6 +24,9 @@ lacks() { ! /bin/grep -q -- "$1" "$2"; }
 has() { /bin/grep -q -- "$1" "$2"; }
 # jqis FILTER EXPECTED: the recorded check-in body's FILTER is EXPECTED
 jqis() { [[ "$(jq -r "$1" "$sandbox/checkin.body")" == "$2" ]]; }
+# jqmatch FILTER REGEX: the same, matched against an anchored regex. Elapsed
+# time is real seconds even with sleep faked: a slow run can cross a second.
+jqmatch() { [[ "$(jq -r "$1" "$sandbox/checkin.body")" =~ ^$2$ ]]; }
 
 # Run from a systemd unit, the rig would inherit its parent's journal stream
 unset JOURNAL_STREAM
@@ -165,22 +168,23 @@ check "stopped: waits are 2 s" test "$(sort -u "$sandbox/sleeps")" = 2
 check "stopped: alert" jqis .status alert
 check "stopped: outcome unreachable" jqis .variables.outcome unreachable
 check "stopped: metadata.fault is the outcome" jqis .metadata.fault unreachable
-check "stopped: error names the cause" jqis .variables.error \
-  "/api/v2/health: no healthy answer after 11 attempts over 0s: connection refused (curl exit 7)"
+check "stopped: error names the cause" jqmatch .variables.error \
+  "/api/v2/health: no healthy answer after 11 attempts over [0-9]+s: connection refused \(curl exit 7\)"
 check "stopped: no health fields" jqis '[.variables.health_status, .variables.database, .variables.libpostal] | join("")' ""
 check "stopped: journal warning" has "^<4>address-validator-liveness: unreachable: /api/v2/health: no healthy answer" "$ERR"
 
 # --- hung: each attempt times out ---
 health 28
 run
-check "hung: unreachable, names the timeout" jqis .variables.error \
-  "/api/v2/health: no healthy answer after 11 attempts over 0s: no answer within 5s (curl exit 28)"
+check "hung: unreachable, names the timeout" jqmatch .variables.error \
+  "/api/v2/health: no healthy answer after 11 attempts over [0-9]+s: no answer within 5s \(curl exit 28\)"
 
 # --- an unexpected status: unreachable, with the status ---
 health "0 500 Internal"
 run
 check "HTTP 500: unreachable" jqis .variables.outcome unreachable
-check "HTTP 500: error names it" has '"error":"/api/v2/health: no healthy answer after 11 attempts over 0s: HTTP 500"' "$sandbox/checkin.body"
+check "HTTP 500: error names it" jqmatch .variables.error \
+  "/api/v2/health: no healthy answer after 11 attempts over [0-9]+s: HTTP 500"
 
 # --- degraded: a 503 for the whole retry ---
 health "0 503 $DEGRADED"
@@ -189,8 +193,8 @@ check "degraded: exits 0" test "$RC" -eq 0
 check "degraded: alert" jqis .status alert
 check "degraded: outcome degraded" jqis .variables.outcome degraded
 check "degraded: metadata.fault degraded" jqis .metadata.fault degraded
-check "degraded: error names the failing component" jqis .variables.error \
-  "/api/v2/health answered 503 (database error) after 11 attempts over 0s"
+check "degraded: error names the failing component" jqmatch .variables.error \
+  "/api/v2/health answered 503 \(database error\) after 11 attempts over [0-9]+s"
 check "degraded: health fields from the body" jqis \
   '[.variables.health_status, .variables.database, .variables.libpostal] | join(",")' "degraded,error,unavailable"
 
@@ -241,6 +245,9 @@ printf '%s\r\n' "$KEY" >"$CREDS/status-checkin.key"
 health "0 200 $OK"
 run
 check "CRLF key: header is clean" test "$(cat "$sandbox/checkin.stdin")" = "X-API-Key: $KEY"
+printf ' \t%s \r\n\n' "$KEY" >"$CREDS/status-checkin.key"
+run
+check "padded key: header is clean" test "$(cat "$sandbox/checkin.stdin")" = "X-API-Key: $KEY"
 
 # --- co-status: wrong environment, unreachable, refusing ---
 reset
