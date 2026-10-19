@@ -1,6 +1,6 @@
 """Structured-log contract tests (GH #185, skills#69, skills#81).
 
-Pins five things:
+Pins six things:
 
 1. **The PII guard.** ``httpx``/``httpcore`` stay at WARNING regardless of
    ``LOG_LEVEL``, and ``log_config.json`` mirrors the pin so the uvicorn boot
