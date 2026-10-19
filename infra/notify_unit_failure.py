@@ -122,10 +122,9 @@ def _render_message(message: str) -> str:
     if not isinstance(record, dict) or "level" not in record:
         return "(JSON record withheld: not a log record)"
     text = str(record.get("message") or "").strip().splitlines()
-    line = f"{record['level']} {record.get('logger', '?')}: {text[0] if text else ''}"
-    if record.get("exc_type"):
-        line += f" [{record['exc_type']}]"
-    return line
+    exc_type = record.get("exc_type")
+    parts = [text[0] if text else "", f"[{exc_type}]" if exc_type else ""]
+    return f"{record['level']} {record.get('logger', '?')}: " + " ".join(p for p in parts if p)
 
 
 def _render_entry(entry: dict[str, Any]) -> list[str]:

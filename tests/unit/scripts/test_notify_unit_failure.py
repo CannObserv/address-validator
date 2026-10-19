@@ -229,6 +229,11 @@ def test_journal_tail_json_record_keeps_only_the_message_first_line():
     assert tail == f"{PREFIX}ERROR uvicorn.error: Traceback (most recent call last):"
 
 
+def test_journal_tail_json_record_without_message_names_the_class():
+    tail = _tail(_app_record(message="", exc_info=TRACEBACK, exc_type="ValueError"))
+    assert tail == f"{PREFIX}ERROR address_validator.main: [ValueError]"
+
+
 def test_journal_tail_parses_before_truncating():
     """A record far over the line limit still parses: truncate the rendering, not the JSON."""
     record = _app_record(exc_info=TRACEBACK * 50, exc_type="ValueError")
