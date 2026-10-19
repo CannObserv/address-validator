@@ -112,3 +112,7 @@ Raw values from a validation response body reach a log line in only these places
 - **Google `cassProcessed`**, on the `errorMessage` warning. It is logged only as a bool (or absent); any other value is shown by its type name. The text of `uspsData.errorMessage` itself is never logged.
 
 New modules: one `getLogger(__name__)` per module; `caplog` assertions in corresponding unit tests.
+
+### libpostal sidecar — no logs, by design
+
+`wof-libpostal-server` logs every request to stdout as `STATUS parse '<address>' <duration>`, with no flag to turn it off. The sidecar is in the production path, so this is the same data the policy covers. `infra/libpostal.service` therefore keeps none of its stdout (#328): `--log-driver=none` drops Docker's `json-file` copy, and `StandardOutput=null` drops the journal copy. The second is needed because an attached `docker run` streams the container's stdout through the CLI whatever the log driver is. stderr stays in the journal, where the server's ERROR/FATAL lines and Docker's own startup errors go. `docker logs libpostal` has nothing to show; whether the sidecar is up is the liveness probe's job (#256). `tests/unit/test_libpostal_unit_logging.py` pins all three settings.
