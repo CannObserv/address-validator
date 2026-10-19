@@ -18,6 +18,18 @@ RestartSec=5
 RestartMode=direct
 TimeoutStartSec=120
 
+# No address content in any log (#328). The server logs every request to stdout
+# as "STATUS parse|expand '<address>'" and has no flag to stop it. --log-driver=none
+# drops Docker's json-file copy; the attached CLI still streams stdout here, so
+# StandardOutput=null drops the journal copy. stderr carries the server's
+# ERROR/FATAL lines and docker's own errors, so it stays. Lost with stdout:
+# "STATUS listening on 0.0.0.0:4400"; liveness is libpostal-probe's job (#256).
+# `docker logs libpostal` has nothing to show. To see the server's output, run
+# the image in a throwaway container -- never `docker exec` the server binary in
+# this one: its init loads the model, and a second copy OOMs --memory (#328).
+StandardOutput=null
+StandardError=journal
+
 # Remove any stale container from a previous run before starting.
 ExecStartPre=-/usr/bin/docker stop libpostal
 ExecStartPre=-/usr/bin/docker rm libpostal
@@ -25,6 +37,7 @@ ExecStartPre=-/usr/bin/docker rm libpostal
 ExecStart=/usr/bin/docker run \
     --rm \
     --name libpostal \
+    --log-driver=none \
     -p 127.0.0.1:4400:4400 \
     --memory=2.5g \
     pelias/libpostal-service
