@@ -1,8 +1,9 @@
 """PII guard: the libpostal sidecar's per-request log line never reaches a log (GH #328).
 
-``wof-libpostal-server`` logs ``STATUS parse '<address>' <duration>`` to stdout
-on every request, and has no flag to turn it off (upstream ``main`` defines
-only ``-host`` and ``-port``). Two copies existed, and each needs its own switch:
+``wof-libpostal-server`` logs ``STATUS parse|expand '<address>' <duration>`` to
+stdout on every ``/parse`` and ``/expand`` request, and has no flag to turn it
+off (upstream ``main`` defines only ``-host`` and ``-port``). Two copies
+existed, and each needs its own switch:
 
 - Docker's ``json-file`` log, under ``/var/lib/docker/containers/``, unbounded.
   ``--log-driver=none`` removes it.

@@ -19,7 +19,7 @@ RestartMode=direct
 TimeoutStartSec=120
 
 # No address content in any log (#328). The server logs every request to stdout
-# as "STATUS parse '<address>'" and has no flag to stop it. --log-driver=none
+# as "STATUS parse|expand '<address>'" and has no flag to stop it. --log-driver=none
 # drops Docker's json-file copy; the attached CLI still streams stdout here, so
 # StandardOutput=null drops the journal copy. stderr carries the server's
 # ERROR/FATAL lines and docker's own errors, so it stays. Lost with stdout:
