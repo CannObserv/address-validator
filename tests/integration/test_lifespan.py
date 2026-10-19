@@ -23,6 +23,28 @@ class TestLifespanValidateConfig:
         with pytest.raises(ValueError, match="USPS_CONSUMER_KEY"), TestClient(app):
             pass  # pragma: no cover
 
+    def test_startup_failure_is_logged_with_its_exception(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """uvicorn logs the traceback as a plain message, which the unit-failure
+        tail cuts to its first line; this record is what carries the class (#252)."""
+        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+        monkeypatch.delenv("USPS_CONSUMER_KEY", raising=False)
+        monkeypatch.delenv("USPS_CONSUMER_SECRET", raising=False)
+
+        with (
+            caplog.at_level(logging.ERROR, logger="address_validator.main"),
+            pytest.raises(ValueError),
+            TestClient(app),
+        ):
+            pass  # pragma: no cover
+
+        (record,) = [r for r in caplog.records if r.name == "address_validator.main"]
+        assert record.getMessage() == "application startup failed"
+        assert record.levelno == logging.ERROR
+        assert record.exc_info is not None
+        assert record.exc_info[0] is ValueError
+
     def test_misconfigured_google_aborts_startup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Service must refuse to start when Google rate limit config is invalid."""
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")

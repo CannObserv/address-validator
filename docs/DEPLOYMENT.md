@@ -355,9 +355,11 @@ restarts count toward the burst.
 | `libpostal` | 5 starts / 600s | 5 × (5s + container start and model load) |
 
 A hung-but-running process, or the VM itself being down, alerts nothing; for
-libpostal, the liveness probe below covers the hung case (#256). These
-two units' alerts also carry no journal tail: every line they write is priority
-6, so read `journalctl -u <unit> -n 50` (#252).
+libpostal, the liveness probe below covers the hung case (#256). Both units'
+alerts carry a journal tail (#252). The API's JSON records carry their real
+priority, and the tail sends each one as `LEVEL logger: message [ExceptionClass]`,
+never the traceback; read that on the host with `journalctl -u address-validator
+-n 50`. libpostal's stderr, the only output it keeps, is filed at `err`.
 
 The `infra/unit-failure@.service` template runs two steps:
 
@@ -378,8 +380,8 @@ journalctl -t unit-failure --since today
 journalctl -u 'unit-failure@*' -p warning         # dispatches that did not deliver
 ```
 
-Only WARNING+ lines leave the host. That filter is the PII guard; see
-`docs/LOGGING.md`. The tail is scoped to the run's invocation ID, which
+Only WARNING+ lines leave the host, and the API's JSON records only as
+allowlisted fields. Those two filters are the PII guard; see `docs/LOGGING.md`. The tail is scoped to the run's invocation ID, which
 `logger` / `systemd-cat` lines lack; shell scripts warn via `infra/journal-warn.sh` (#246).
 
 **Notifier config** — in `/etc/address-validator/.env`:

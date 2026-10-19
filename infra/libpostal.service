@@ -29,10 +29,16 @@ TimeoutStartSec=120
 # this one: its init loads the model, and a second copy OOMs --memory (#328).
 StandardOutput=null
 StandardError=journal
+# Everything left is an error (#252): the server's stderr is only its startup
+# logger.Fatal lines, and docker's is its own errors. At err they reach the
+# unit-failure tail; at the default info a crashloop alert said nothing of why.
+SyslogLevel=err
 
-# Remove any stale container from a previous run before starting.
-ExecStartPre=-/usr/bin/docker stop libpostal
-ExecStartPre=-/usr/bin/docker rm libpostal
+# Remove any stale container from a previous run before starting. `rm -f` kills
+# it if running. Its stderr goes: under --rm the container is normally gone already,
+# and "No such container" would land, at err, in every start's tail. A real
+# docker failure still surfaces from `docker run` below.
+ExecStartPre=-/bin/sh -c '/usr/bin/docker rm -f libpostal 2>/dev/null'
 
 ExecStart=/usr/bin/docker run \
     --rm \
@@ -42,7 +48,8 @@ ExecStart=/usr/bin/docker run \
     --memory=2.5g \
     pelias/libpostal-service
 
-ExecStop=/usr/bin/docker stop libpostal
+# After a crash, --rm has already removed the container; the same stderr rule.
+ExecStop=/bin/sh -c '/usr/bin/docker stop libpostal 2>/dev/null'
 
 [Install]
 WantedBy=multi-user.target

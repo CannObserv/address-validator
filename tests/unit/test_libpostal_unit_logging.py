@@ -14,7 +14,10 @@ existed, and each needs its own switch:
 
 stderr stays in the journal: the server's ERROR/FATAL lines go to both streams,
 and the docker CLI's own errors (image, port, OCI runtime) go to stderr, so a
-crashloop still shows why.
+crashloop still shows why. It is filed at ``err`` (#252), so the unit-failure
+tail (``-p warning``) carries it; the cleanup commands, whose only usual stderr
+is ``No such container``, discard theirs so it does not land in every start's
+tail.
 """
 
 from __future__ import annotations
@@ -63,3 +66,20 @@ def test_stderr_still_reaches_the_journal() -> None:
     assert _service_settings().get("StandardError") == "journal", (
         "startup and crash errors would vanish with stdout"
     )
+
+
+def test_stderr_is_filed_at_err() -> None:
+    assert _service_settings().get("SyslogLevel") == "err", (
+        "at the default info, a crashloop alert's tail says nothing of why (#252)"
+    )
+
+
+def test_container_cleanup_discards_its_stderr() -> None:
+    """Under --rm the container is usually gone, so ``docker stop``/``rm`` print
+    ``No such container`` — at err, in every start's (and crash's) tail."""
+    text = UNIT.read_text()
+    commands = re.findall(r"^(ExecStartPre|ExecStop)=(.*)$", text, re.M)
+    assert commands
+    for key, command in commands:
+        assert "/usr/bin/docker" in command, f"{key}={command}"
+        assert "2>/dev/null" in command, f"{key}={command}"

@@ -12,6 +12,8 @@ Every line on stdout is a JSON object with a fixed field set:
 
 `timestamp`/`level`/`logger`/`message` match structlog's defaults (so a later structlog migration doesn't churn consumers); `request_id` is this service's correlation field.
 
+A record logged with an exception adds `exc_info` (the formatted traceback) and `exc_type` (the class name). Under systemd, each line also starts with its sd-daemon `<N>` priority, which journald strips; see [Journal priority and the unit-failure tail](#journal-priority-and-the-unit-failure-tail).
+
 **Single source of truth:** `core/logging.py::build_json_formatter()`. Two consumers share it —
 
 | Consumer | How |
@@ -29,7 +31,24 @@ The filter is attached to the **stdout handler**, not to a logger — a logger-l
 
 The ID is also echoed to callers as the `X-Request-ID` response header.
 
-Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message` lines rather than JSON, since they run outside a request context. The systemd-run infra scripts (`sweep_cache.py`, `archive_audit.py`, `archive_age_check.py`, `notify_unit_failure.py`) configure logging through `infra/journal_logging.py`: when stderr is the journal, each record's first line carries its sd-daemon `<N>` priority. Without it, journald files every line at info and `journalctl -p warning` misses real errors. Continuation lines (tracebacks, psycopg `DETAIL:`) stay at info. That keeps them out of the WARNING+ journal tail that `notify_unit_failure.py` sends to notifier (#232). The shell timer scripts (`disk-hygiene.sh`, `docker-prune-check.sh`, `libpostal-probe.sh`) do the same through `infra/journal-warn.sh`: a warning is one stderr line with a `<4>` prefix. Not `logger` or `systemd-cat`: their lines lose the unit's invocation ID, so the tail never includes them (#246).
+Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message` lines rather than JSON, since they run outside a request context. The systemd-run infra scripts (`sweep_cache.py`, `archive_audit.py`, `archive_age_check.py`, `notify_unit_failure.py`) configure logging through `infra/journal_logging.py`: when stderr is the journal, each record's first line carries its sd-daemon `<N>` priority (the map lives in `core/journal.py`, shared with the API). Without it, journald files every line at info and `journalctl -p warning` misses real errors. Continuation lines (tracebacks, psycopg `DETAIL:`) stay at info. That keeps them out of the WARNING+ journal tail that `notify_unit_failure.py` sends to notifier (#232). The shell timer scripts (`disk-hygiene.sh`, `docker-prune-check.sh`, `libpostal-probe.sh`) do the same through `infra/journal-warn.sh`: a warning is one stderr line with a `<4>` prefix. Not `logger` or `systemd-cat`: their lines lose the unit's invocation ID, so the tail never includes them (#246).
+
+## Journal priority and the unit-failure tail
+
+Under systemd, every writer gives journald each line's real priority, so `journalctl -p warning` and the unit-failure tail see real levels. The tail (`infra/notify_unit_failure.py::journal_tail`) sends a failed run's last 10 WARNING+ lines **off-host**, to notifier (#232). Two guards keep address content out of it: the priority filter, and a field allowlist for the API's JSON records (#252).
+
+| Writer | Units | How the priority is set | In the tail as |
+|---|---|---|---|
+| API, JSON on stdout | `address-validator` | `<N>` prefix on the **whole** record, `exc_info` included (`core/logging.py::JournalJsonFormatter`, when stdout is the journal) | `LEVEL logger: <message, first line> [exc_type]` |
+| Python infra scripts | `cache-sweep`, `audit-archive`, `archive-age-check`, `unit-failure@` | `<N>` on a record's first line; continuation lines stay at info (`infra/journal_logging.py`) | the line as written |
+| Shell timer scripts | `disk-hygiene`, `docker-prune`, `libpostal-probe` | `<4>` on each warning line (`infra/journal-warn.sh`) | the line as written |
+| libpostal sidecar | `libpostal` | `SyslogLevel=err` on every stderr line; stdout is discarded (#328) | the line as written |
+
+The level map and the journal-stream test are in `core/journal.py`, the one copy both Python formatters use. The shell scripts have only the one warning level.
+
+**The allowlist is the API's PII guard.** A JSON record reaches WARNING+ whole, so its traceback can't stay at info the way `journal_logging`'s continuation lines do. The tail parses each record and sends only `level`, `logger`, the **first line** of `message`, and `exc_type`, the exception's class name. It drops `exc_info`, `stack_info`, and every other key: a traceback's last line is the exception message, and a psycopg one can quote row data (`DETAIL: Key (…)=(…)`). It keeps one line of `message` because uvicorn logs a failed startup's traceback as the message itself. A line that opens like JSON but isn't such a record is withheld whole. The parse runs before the 500-character truncation, on `journalctl -o json --all` output: `--all` stops a long record arriving as `null`. Tests: `tests/unit/scripts/test_notify_unit_failure.py`.
+
+On the host, `journalctl -u address-validator -p warning` shows full tracebacks. Keep them on the host: don't paste them into an issue or PR.
 
 ## Event table
 
@@ -66,6 +85,7 @@ Standalone CLI scripts (`scripts/db/*`, `infra/*.py`) log plain `LEVEL: message`
 | US input: provider answered a verdict without a DPV code (weak — next provider tried; returned only if nothing better comes back, GH #258, #275) | `INFO` | `services.validation.chain_provider` | provider class name, weak status, `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
+| Application startup failed (any exception before the lifespan `yield`; re-raised, so uvicorn exits) | `ERROR` | `main` | fixed message; `exc_info` + `exc_type` — the tail sends only `exc_type` (#252) |
 | libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |
 | libpostal sidecar not reachable at boot (starts degraded; CA parse → 503) | `WARNING` | `main` | `libpostal_url`, reason — exception class name (`RemoteProtocolError`, `ConnectError`, `ReadTimeout`, `RuntimeError`) or `HTTP <status>`, never `str(exc)` (#244) |
 | libpostal sidecar unavailable (any `httpx.RequestError`, incl. disconnect during warmup — #239) | `WARNING` | `services.libpostal_client` | httpx error message (never carries the request URL), `request_id` |
@@ -115,4 +135,4 @@ New modules: one `getLogger(__name__)` per module; `caplog` assertions in corres
 
 ## libpostal sidecar — no logs, by design
 
-`wof-libpostal-server` logs every `/parse` and `/expand` request to stdout as `STATUS parse|expand '<address>' <duration>`, with no flag to turn it off. The sidecar is in the production path, so this is the same data the policy covers. `infra/libpostal.service` therefore keeps none of its stdout (#328): `--log-driver=none` drops Docker's `json-file` copy, and `StandardOutput=null` drops the journal copy. The second is needed because an attached `docker run` streams the container's stdout through the CLI whatever the log driver is. stderr stays in the journal, where the server's ERROR/FATAL lines and Docker's own startup errors go. `docker logs libpostal` has nothing to show. A clean start leaves no server lines in `journalctl -u libpostal`: nothing writes to stderr at startup (upstream never sets gracehttp's logger). The only expected lines are systemd's own, plus two `No such container: libpostal` lines from the `-`-prefixed `ExecStartPre` cleanup (`--rm` already removed the container). Any other line there is an error. Whether the sidecar is up is the liveness probe's job (#256). `tests/unit/test_libpostal_unit_logging.py` pins all three settings.
+`wof-libpostal-server` logs every `/parse` and `/expand` request to stdout as `STATUS parse|expand '<address>' <duration>`, with no flag to turn it off. The sidecar is in the production path, so this is the same data the policy covers. `infra/libpostal.service` therefore keeps none of its stdout (#328): `--log-driver=none` drops Docker's `json-file` copy, and `StandardOutput=null` drops the journal copy. The second is needed because an attached `docker run` streams the container's stdout through the CLI whatever the log driver is. stderr stays in the journal, where the server's ERROR/FATAL lines and Docker's own startup errors go. `docker logs libpostal` has nothing to show. A clean start leaves no server lines in `journalctl -u libpostal`: nothing writes to stderr at startup (upstream never sets gracehttp's logger). The only expected lines are systemd's own. The `docker rm -f` cleanup and `docker stop` discard their stderr, whose usual content is `No such container` because `--rm` has already removed the container. Every stderr line that remains is filed at `err` (`SyslogLevel=err`, #252), so it reaches the unit-failure tail. Any line there is an error. Whether the sidecar is up is the liveness probe's job (#256). `tests/unit/test_libpostal_unit_logging.py` pins these settings.

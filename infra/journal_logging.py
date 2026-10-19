@@ -8,51 +8,32 @@ sd-daemon ``<N>`` priority, which journald strips and records.
 Only a record's first line carries the prefix. Continuation lines — traceback
 frames, a psycopg ``DETAIL:`` quoting row data — stay at info, so the WARNING+
 tail that ``notify_unit_failure.py`` sends off-host never includes them.
+
+The level map and the stream test are shared with the app's JSON formatter
+(``address_validator.core.journal``, #252), so every unit needs ``src`` on
+``PYTHONPATH``.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 import sys
 
+from address_validator.core.journal import priority, stream_is_journal
+
 FORMAT = "%(levelname)s: %(message)s"
-
-_PRIORITIES = (
-    (logging.CRITICAL, 2),
-    (logging.ERROR, 3),
-    (logging.WARNING, 4),
-    (logging.INFO, 6),
-)
-
-
-def _priority(levelno: int) -> int:
-    for threshold, priority in _PRIORITIES:
-        if levelno >= threshold:
-            return priority
-    return 7
 
 
 class JournalPriorityFormatter(logging.Formatter):
     """Prefix each record with its sd-daemon ``<N>`` priority."""
 
     def format(self, record: logging.LogRecord) -> str:
-        return f"<{_priority(record.levelno)}>{super().format(record)}"
+        return f"<{priority(record.levelno)}>{super().format(record)}"
 
 
 def stderr_is_journal() -> bool:
-    """True when stderr is the stream systemd connected to journald.
-
-    ``JOURNAL_STREAM`` is ``<dev>:<inode>`` of that stream; a child whose stderr
-    was redirected elsewhere inherits the variable but not the stream.
-    """
-    value = os.environ.get("JOURNAL_STREAM", "")
-    try:
-        dev, inode = (int(part) for part in value.split(":"))
-        stat = os.fstat(sys.stderr.fileno())
-    except (ValueError, OSError):
-        return False
-    return (stat.st_dev, stat.st_ino) == (dev, inode)
+    """True when stderr — this module's handler stream — is the journal."""
+    return stream_is_journal(sys.stderr)
 
 
 def configure_logging(level: int = logging.INFO) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 
 import journal_logging
 import pytest
@@ -71,3 +72,23 @@ def test_configure_logging_picks_formatter(monkeypatch, journal, expected):
     (handler,) = captured["handlers"]
     assert type(handler.formatter) is expected
     assert captured["level"] == logging.INFO
+
+
+INFRA = Path(__file__).resolve().parents[3] / "infra"
+SRC_PATH = "Environment=PYTHONPATH=/home/exedev/address-validator/src"
+
+
+def test_every_unit_running_a_journal_logging_script_has_src_on_path():
+    """journal_logging imports address_validator.core.journal (#252). A unit
+    without ``src`` on PYTHONPATH fails at import, before it can log anything —
+    for unit-failure@, that is the notifier dispatch."""
+    users = {p.name for p in INFRA.glob("*.py") if "from journal_logging" in p.read_text()}
+    assert "notify_unit_failure.py" in users
+    checked = set()
+    for unit in INFRA.glob("*.service"):
+        text = unit.read_text()
+        runs = {name for name in users if f"/infra/{name}" in text}
+        if runs:
+            assert SRC_PATH in text.splitlines(), unit.name
+            checked |= runs
+    assert checked == users, f"no unit found for {users - checked}"

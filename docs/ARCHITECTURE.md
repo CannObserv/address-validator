@@ -85,7 +85,8 @@ services/training_batches.py    batch lifecycle — ALLOWED_TRANSITIONS state ma
 usps_data/          Pub 28 lookup tables (suffixes, directionals, states, units, routes)
 usps_data/spec.py   USPS_PUB28_SPEC* — tags every ComponentSet response
 logging_filter.py   RequestIdFilter — injects request_id into every LogRecord; attached to the stdout handler (not a logger) so propagated records carry it
-core/logging.py     build_json_formatter() (single source of truth for the JSON schema) + build_stdout_handler() + configure_logging()
+core/journal.py     sd-daemon priority map + journal-stream test; stdlib only, shared with infra/journal_logging.py (#252)
+core/logging.py     build_json_formatter() (single source of truth for the JSON schema; JournalJsonFormatter adds exc_type + journal <N> prefix) + build_stdout_handler() + configure_logging()
 core/log_config.json  uvicorn --log-config dictConfig — routes uvicorn/uvicorn.access/uvicorn.error through build_json_formatter()
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
