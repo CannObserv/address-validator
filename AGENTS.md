@@ -140,7 +140,7 @@ export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
 
 ## Sensitive areas
 
-Critical gotchas (full per-module table: `docs/SENSITIVE-AREAS.md`):
+Critical gotchas (per-module table: `docs/SENSITIVE-AREAS.md`):
 
 - **Route handlers must be `async def`** — sync `def` runs in threadpool; ContextVar writes are invisible to the audit middleware, silently breaking training candidate collection
 - **`AddressInputMixin.model_validator`** — sole 422 guard for address/components input across all endpoints; do not weaken
