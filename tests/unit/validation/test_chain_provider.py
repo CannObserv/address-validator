@@ -582,7 +582,8 @@ class TestChainHeldPrecedence:
         apply — any determined non-US answer replaces a held undetermined.
 
         PR, not CA: since GH #260 USPS is never asked about CA, but it still
-        reaches the territories, which the rule treats as non-US (GH #281)."""
+        reaches the territories, which the rule treats as non-US when sent as
+        their own code (GH #281: the supported path is country=US)."""
         std_pr = std_address.model_copy(update={"country": "PR"})
         usps_pr = _USPS_UNDETERMINED.model_copy(update={"country": "PR"})
         google_pr = _google_verdict(status, None).model_copy(update={"country": "PR"})
@@ -877,7 +878,7 @@ class TestChainCountryRouting:
     async def test_us_only_provider_asked_within_us_postal_service(
         self, country: str, std_address: StandardizeResponseV2
     ) -> None:
-        """Territories keep reaching USPS — their routing is GH #281's decision."""
+        """Territories keep reaching USPS, as country=US or as their own code (GH #281)."""
         usps = _us_only(
             ValidateResponseV2(
                 country=country,

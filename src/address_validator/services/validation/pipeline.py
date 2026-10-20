@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
-from address_validator.core.countries import VALID_ISO2
+from address_validator.core.countries import VALID_ISO2, territory_hint
 from address_validator.core.errors import APIError, raise_parsing_unavailable
 from address_validator.models import ComponentSet, StandardizedAddress
 from address_validator.services.audit import set_audit_context
@@ -162,6 +162,7 @@ async def run_non_us_pipeline(
         422 ``invalid_country_code`` — unrecognised ISO 3166-1 alpha-2 code.
         422 ``country_not_supported`` — raw string supplied for non-CA non-US country.
         422 ``country_not_supported`` — active provider does not support non-US.
+        A US territory code gets a ``country=US`` hint on both 422s (GH #281).
         503 ``parsing_unavailable`` — CA raw string, libpostal sidecar unreachable.
     """
     if req.country not in VALID_ISO2:
@@ -176,7 +177,7 @@ async def run_non_us_pipeline(
             error="country_not_supported",
             message=(
                 "Raw address strings are only supported for US and CA. "
-                "Supply pre-parsed 'components' for other countries."
+                "Supply pre-parsed 'components' for other countries." + territory_hint(req.country)
             ),
         )
     provider = registry.get_provider()
@@ -187,6 +188,7 @@ async def run_non_us_pipeline(
             message=(
                 "Non-US address validation requires the Google provider. "
                 "Set VALIDATION_PROVIDER=google or VALIDATION_PROVIDER=usps,google."
+                + territory_hint(req.country)
             ),
         )
     if req.components:

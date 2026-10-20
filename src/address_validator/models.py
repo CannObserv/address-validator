@@ -81,7 +81,11 @@ def _country_field() -> Field:  # type: ignore[valid-type]
         default="US",
         min_length=2,
         max_length=2,
-        description="ISO 3166-1 alpha-2 country code.",
+        description=(
+            "ISO 3166-1 alpha-2 country code. US territories (PR, GU, VI, AS, MP): "
+            "send `US` with the territory code as the state (in `address`, or as the "
+            "`administrative_area` component); the response's `region` echoes it."
+        ),
         examples=["US", "CA"],
     )
 

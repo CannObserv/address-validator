@@ -226,8 +226,21 @@ logic would allow. The task is cancelled on application shutdown.
 **Country routing (GH #260).** A US-only provider (`supports_non_us = False`: USPS) is asked only
 about `US_POSTAL_COUNTRIES` (`core/countries.py`: `US`, `PR`, `GU`, `VI`, `AS`, `MP`). For any
 other country it is skipped outright — not called, not counted as a failure — so a CA request
-under `usps,google` goes straight to Google. Territories still reach USPS; whether they should
-use the US pipeline instead is GH #281.
+under `usps,google` goes straight to Google.
+
+**US territories (GH #281).** Send `country=US` with the territory as the state: `PR` (or `GU`,
+`VI`, `AS`, `MP`; full names work too) in `address`, or as the `administrative_area` component
+(`state` under `component_profile=usps-pub28`). The response's `region` echoes the code. That takes every US branch: Pub 28 standardization, USPS DPV, Google CASS,
+the #258 hold rule, the secondary check. A territory code *as* `country` is not rerouted; every
+422 below is `country_not_supported` with a message naming the `country=US` path:
+- `/parse`, `/standardize` → 422, any input;
+- `/validate` raw string → 422;
+- `/validate` `components` → works, unstandardized: the non-US path (`build_non_us_std`, spec
+  `raw`), no CASS, non-US hold rule; 422 under a US-only provider — prefer `country=US`.
+
+**Known limit:** Puerto Rico's `urbanization` is not modelled (`docs/usps-pub28.md`). USPS uses
+it to tell same-street addresses apart within one ZIP, so some PR addresses may come back
+`undetermined` or ambiguous.
 
 `ChainProvider` catches `ProviderRateLimitedError` (upstream HTTP 429 after retries),
 `ProviderAtCapacityError` (local quota exhausted before sending) and `ProviderTransientError`
