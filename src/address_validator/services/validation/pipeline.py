@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from address_validator.core import warnings as warning_catalogue
 from address_validator.core.address_format import build_validated_string
-from address_validator.core.countries import VALID_ISO2
+from address_validator.core.countries import VALID_ISO2, territory_hint
 from address_validator.core.errors import APIError, raise_parsing_unavailable
 from address_validator.models import ComponentSet, StandardizedAddress
 from address_validator.services.audit import set_audit_context
@@ -176,7 +176,7 @@ async def run_non_us_pipeline(
             error="country_not_supported",
             message=(
                 "Raw address strings are only supported for US and CA. "
-                "Supply pre-parsed 'components' for other countries."
+                "Supply pre-parsed 'components' for other countries." + territory_hint(req.country)
             ),
         )
     provider = registry.get_provider()

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
+from address_validator.core.countries import territory_hint
 from address_validator.core.errors import APIError
 from address_validator.models import (
     ComponentSet,
@@ -23,6 +24,7 @@ from address_validator.services.validation.pipeline import (
     run_non_us_pipeline,
     run_us_pipeline,
 )
+from address_validator.usps_data.spec import USPS_PUB28_SPEC
 
 # ---------------------------------------------------------------------------
 # build_non_us_std
@@ -108,6 +110,31 @@ class TestRunNonUsPipeline:
         with pytest.raises(APIError) as exc_info:
             await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert "CA" in exc_info.value.message
+        assert "territor" not in exc_info.value.message
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("code", ["PR", "GU", "VI", "AS", "MP"])
+    async def test_territory_raw_string_message_points_at_country_us(self, code: str) -> None:
+        """GH #281: same 422 code; the message names the supported path."""
+        registry, _ = _make_registry()
+        req = ValidateRequest(address="123 Main St", country=code)
+        with pytest.raises(APIError) as exc_info:
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
+        assert exc_info.value.error == "country_not_supported"
+        assert exc_info.value.message.endswith(territory_hint(code))
+        assert f"region={code}" in exc_info.value.message
+
+    @pytest.mark.asyncio
+    async def test_territory_components_stay_on_the_non_us_path(self) -> None:
+        """GH #281 option 3: country=PR with components still goes to Google raw."""
+        registry, _ = _make_registry()
+        req = ValidateRequest(
+            components={"address_line_1": "123 calle luna", "city": "san juan"},
+            country="PR",
+        )
+        std, _, _ = await run_non_us_pipeline(req, registry, libpostal_client=None)
+        assert std.country == "PR"
+        assert std.components.spec == "raw"
 
     @pytest.mark.asyncio
     async def test_provider_no_non_us_support_raises_422(self) -> None:
@@ -287,6 +314,67 @@ class TestRunUsPipeline:
         std, _, _ = await run_us_pipeline(req, registry)
         assert std.address_line_1 == "123 MAIN ST"
         assert not any("parseable street" in w.lower() for w in std.warnings)
+
+
+# (code, Pub 28 Appendix B name, city, ZIP) — synthetic addresses.
+_TERRITORIES = [
+    ("PR", "Puerto Rico", "San Juan", "00901"),
+    ("GU", "Guam", "Tamuning", "96913"),
+    ("VI", "Virgin Islands", "Charlotte Amalie", "00802"),
+    ("AS", "American Samoa", "Pago Pago", "96799"),
+    ("MP", "Northern Mariana Islands", "Saipan", "96950"),
+]
+
+
+class TestRunUsPipelineTerritories:
+    """GH #281 option 3: country=US + region=<territory> is the supported path.
+
+    The result is the input every country=US branch keys on downstream
+    (Google CASS, the #258 hold rule, the secondary check)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("code", "name", "city", "zip_code"), _TERRITORIES)
+    @pytest.mark.parametrize("region_form", ["code", "name"])
+    async def test_raw_string(
+        self, code: str, name: str, city: str, zip_code: str, region_form: str
+    ) -> None:
+        registry, _ = _make_registry()
+        region = code if region_form == "code" else name
+        req = ValidateRequest(
+            address=f"123 main street apt 4, {city}, {region} {zip_code}", country="US"
+        )
+        std, _, _ = await run_us_pipeline(req, registry)
+
+        assert std.country == "US"
+        assert std.region == code
+        assert std.components.spec == USPS_PUB28_SPEC
+        assert std.standardized == f"123 MAIN ST  APT 4  {city.upper()}, {code} {zip_code}"
+        assert std.warnings == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("code", "name", "city", "zip_code"), _TERRITORIES)
+    async def test_components(self, code: str, name: str, city: str, zip_code: str) -> None:
+        registry, _ = _make_registry()
+        req = ValidateRequest(
+            components={
+                "address_number": "123",
+                "street_name": "main",
+                "street_name_post_type": "street",
+                "occupancy_type": "apartment",
+                "occupancy_identifier": "4",
+                "city": city.lower(),
+                "state": name.lower(),
+                "zip_code": zip_code,
+            },
+            country="US",
+        )
+        std, _, _ = await run_us_pipeline(req, registry)
+
+        assert std.country == "US"
+        assert std.region == code
+        assert std.components.spec == USPS_PUB28_SPEC
+        assert std.standardized == f"123 MAIN ST  APT 4  {city.upper()}, {code} {zip_code}"
+        assert std.warnings == []
 
 
 class TestRunUsPipelineSecondaryWarning:

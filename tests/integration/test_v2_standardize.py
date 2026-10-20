@@ -57,3 +57,52 @@ class TestV2StandardizeISO:
         )
         assert response.status_code == 422
         assert response.json()["error"] == "invalid_component_profile"
+
+
+class TestV2USTerritories:
+    """GH #281 option 3: territories are served as country=US + region=<code>."""
+
+    @pytest.mark.parametrize(
+        ("code", "name", "city", "zip_code"),
+        [
+            ("PR", "puerto rico", "san juan", "00901"),
+            ("GU", "guam", "tamuning", "96913"),
+            ("VI", "virgin islands", "charlotte amalie", "00802"),
+            ("AS", "american samoa", "pago pago", "96799"),
+            ("MP", "northern mariana islands", "saipan", "96950"),
+        ],
+    )
+    def test_iso_components_standardize_under_pub28(
+        self, client, code: str, name: str, city: str, zip_code: str
+    ) -> None:
+        response = client.post(
+            "/api/v2/standardize",
+            json={
+                "country": "US",
+                "components": {
+                    "premise_number": "123",
+                    "thoroughfare_name": "main",
+                    "thoroughfare_trailing_type": "street",
+                    "sub_premise_type": "suite",
+                    "sub_premise_number": "200",
+                    "locality": city,
+                    "administrative_area": name,
+                    "postcode": zip_code,
+                },
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["country"] == "US"
+        assert body["region"] == code
+        # Response spec names the key vocabulary (iso-19160-4 here); Pub 28 shows
+        # in the abbreviations below.
+        assert body["standardized"] == f"123 MAIN ST  STE 200  {city.upper()}, {code} {zip_code}"
+
+    @pytest.mark.parametrize("route", ["/api/v2/parse", "/api/v2/standardize", "/api/v2/validate"])
+    def test_territory_country_422_points_at_country_us(self, client, route: str) -> None:
+        response = client.post(route, json={"address": "123 Main St", "country": "PR"})
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"] == "country_not_supported"
+        assert "country=US with region=PR" in body["message"]
