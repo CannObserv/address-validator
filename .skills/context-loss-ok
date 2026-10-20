@@ -26,7 +26,7 @@ AGENTS.md :: tighten :: | `/enforcing-architecture` | Turn an accepted AR findin
 AGENTS.md :: tighten :: - **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
 # 2026-10-20, GH #334: AGENTS.md was 6,146 tokens before the new Design workflow (/brainstorming)
 # section; these class-C tightenings pay for it. --claims: 0 atoms dropped — skill names, IAM roles and
-# env-var defaults stay in docs/SKILLS.md and docs/VALIDATION-PROVIDERS.md; npm/uv commands kept on one line.
+# env-var defaults stay in docs/SKILLS.md and docs/VALIDATION-PROVIDERS.md; npm commands moved to one prose line.
 AGENTS.md :: tighten :: - Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
 AGENTS.md :: tighten :: Core env vars (see `docs/VALIDATION-PROVIDERS.md` for full reference):
 AGENTS.md :: tighten :: | Variable | Values | Default |

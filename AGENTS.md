@@ -114,12 +114,13 @@ uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
 uv run pytest --no-cov -m integration    # integration tests only
 uv run pytest --no-cov -m "not integration"  # unit tests only (faster; coverage fails below 80% on partial runs)
-npm run test:js | lint:js | format:js[:check]   # admin JS: vitest+jsdom | ESLint flat config | Prettier
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
 bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests
 ```
+
+Admin JS: `npm run test:js` (vitest + jsdom), `npm run lint:js` (ESLint flat config), `npm run format:js:check` / `npm run format:js` (Prettier).
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff; ESLint + Prettier when admin JS is touched; shellcheck + sandbox rig when infra/test shell scripts are touched).
 
