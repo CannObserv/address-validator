@@ -387,8 +387,8 @@ From a worktree, pass `"$PWD"` instead to validate the worktree's own manifest.
 ### Index-scope exclusions
 
 This repo excludes `skills-vendor/`, `.claude/skills/` and `.skills/`, but
-deliberately **not** `skills/` — first-party skills (`brainstorming/`,
-`train-model/`, `writing-plans/`) live there beside the vendor symlinks, and the
+deliberately **not** `skills/` — the first-party skill
+(`train-model/`) lives there beside the vendor symlinks, and the
 indexer does not follow symlinks, so excluding `skills-vendor/` already drops the
 vendored content.
 

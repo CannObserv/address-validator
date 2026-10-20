@@ -63,3 +63,11 @@ tests/unit/test_doctor_escape_hatch.py :: "See docs/DEPLOYMENT.md -> 'Why `bash 
 tests/unit/test_worktree_venv_knob.py :: "See docs/DEPLOYMENT.md -> 'Why `none` and not `link`' (GH #201)."
 tests/unit/test_worktree_venv_knob.py :: "see docs/DEPLOYMENT.md (GH #201)."
 tests/unit/test_socraticode_session_pin.py :: SECTION_HEADING = "## Don't install a SocratiCode server at launch"
+
+# 2026-10-20, GH #334: legitimate navigation into AGENTS.md sections that exist —
+# Design workflow (new, the rules this doc is the detail for), Commit convention,
+# and the dev-server URL under Infrastructure. Nothing these point at moved.
+docs/SKILLS.md :: Vendored obra-superpowers, unforked; project rules in `AGENTS.md` → Design workflow
+docs/SKILLS.md :: Our preferences live once, in `AGENTS.md` → Design workflow
+docs/SKILLS.md :: Pointer to `AGENTS.md` → Commit convention
+docs/SKILLS.md :: as in the dev-server URL `AGENTS.md` documents

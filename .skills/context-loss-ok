@@ -24,3 +24,40 @@ AGENTS.md :: tighten :: | `/enforcing-architecture` | Turn an accepted AR findin
 # 2026-09-24, CR 4 on GH #225: earlyoom now kills the service last, after libpostal, SocratiCode's
 # infra, small daemons and postgres; "the service" became "services" to match HOST-MEMORY.md's intro.
 AGENTS.md :: tighten :: - **No swap**; a session can't be OOM-killed, so the *service* dies instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
+# 2026-10-20, GH #334: AGENTS.md was 6,146 tokens before the new Design workflow (/brainstorming)
+# section; these class-C tightenings pay for it. --claims: 0 atoms dropped — skill names, IAM roles and
+# env-var defaults stay in docs/SKILLS.md and docs/VALIDATION-PROVIDERS.md; npm/uv commands kept on one line.
+AGENTS.md :: tighten :: - Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
+AGENTS.md :: tighten :: Core env vars (see `docs/VALIDATION-PROVIDERS.md` for full reference):
+AGENTS.md :: tighten :: | Variable | Values | Default |
+AGENTS.md :: tighten :: | `VALIDATION_PROVIDER` | `none`, `usps`, `google`, comma-sep list | `none` |
+AGENTS.md :: tighten :: | `VALIDATION_CACHE_DSN` | PostgreSQL DSN | — (required when non-null) |
+AGENTS.md :: tighten :: | `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
+AGENTS.md :: tighten :: | `CUSTOM_MODEL_PATH` | path to `.crfsuite` file | — (bundled usaddress model) |
+AGENTS.md :: tighten :: - Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC) prunes VS Code server builds, npm/uv caches, orphaned worktrees; dry-run with `infra/disk-hygiene.sh --dry-run`
+AGENTS.md :: tighten :: `LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
+AGENTS.md :: tighten :: npm run test:js                 # admin JS tests (vitest + jsdom)
+AGENTS.md :: tighten :: npm run lint:js                 # admin JS lint (ESLint flat config)
+AGENTS.md :: tighten :: npm run format:js:check         # admin JS format check (Prettier)
+AGENTS.md :: tighten :: npm run format:js               # admin JS format write
+AGENTS.md :: tighten :: uv sync                         # install/refresh deps
+AGENTS.md :: tighten :: uv add <package>                # add dep; commit pyproject.toml + uv.lock together
+AGENTS.md :: tighten :: uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
+AGENTS.md :: tighten :: See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
+AGENTS.md :: tighten :: Full descriptions: `docs/SKILLS.md`. Key skills:
+AGENTS.md :: tighten :: | Skill | When to use |
+AGENTS.md :: tighten :: | `/brainstorming` | Before any new feature — design before code |
+AGENTS.md :: tighten :: | `/writing-plans` | After brainstorming; before multi-step implementation |
+AGENTS.md :: tighten :: | `/using-git-worktrees` | Every feature branch — isolated worktree; ports above, lifecycle in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
+AGENTS.md :: tighten :: | `/test-driven-development` | Before writing implementation code |
+AGENTS.md :: tighten :: | `/systematic-debugging` | Any bug or unexpected test failure |
+AGENTS.md :: tighten :: | `/verification-before-completion` | Before claiming done or opening a PR |
+AGENTS.md :: tighten :: | `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
+AGENTS.md :: tighten :: | `/reviewing-architecture` | Architecture review |
+AGENTS.md :: tighten :: | `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function |
+AGENTS.md :: tighten :: | `/curating-context` | Trim AGENTS.md + docs to the 6,000-token budget; weekly maintenance |
+AGENTS.md :: tighten :: | `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
+AGENTS.md :: tighten :: | `/train-model` | CRF model retraining pipeline |
+AGENTS.md :: tighten :: | `/schedule` | Recurring or one-time background agents |
+AGENTS.md :: tighten :: | `/using-mayfly-chat` | Chat with another repo's agent; never commit the channel URL |
+AGENTS.md :: tighten :: | `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
