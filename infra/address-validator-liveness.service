@@ -1,0 +1,28 @@
+[Unit]
+Description=address-validator liveness: probe /api/v2/health, check in to co-status (#255)
+# Fires only on a broken run (a bug, an OOM kill, a timeout): probe outcomes and
+# co-status failures exit 0, and co-status pages for those. Rule in the script's header.
+OnFailure=unit-failure@%n.service
+
+[Service]
+Type=oneshot
+User=exedev
+# Keeps `journalctl -t address-validator-liveness`
+SyslogIdentifier=address-validator-liveness
+# co-status monitor co-address-validator-live (CannObserv/status#50). Not a
+# secret; empty = unconfigured. Never use it with the key from a dev or test run:
+# an `ok` from anywhere resets the production deadline.
+Environment=LIVENESS_MONITOR_ID=01M5B7W1XK1WPGDZPXTWYTMDPE
+# The check-in key: root-owned, mode 0600, never in .env or argv. The empty
+# SetCredential= is the fallback while the file is absent; without it a missing
+# LoadCredential= file fails the unit (243/CREDENTIALS) and alerts every tick.
+SetCredential=status-checkin.key:
+LoadCredential=status-checkin.key:/etc/address-validator/status-checkin.key
+ExecStart=/home/exedev/address-validator/infra/address-validator-liveness.sh
+# The probe's retry is ~20 s (25 s with a hung API), co-status's two calls
+# 5 + 10 s. A hung run must not outlast the 5-minute interval (#249).
+TimeoutStartSec=60
+# No swap on this host (#228). bash + curl + jq, as libpostal-probe; an OOM kill
+# would fail every run, so every tick would alert: keep the margin.
+MemoryHigh=24M
+MemoryMax=32M

@@ -41,7 +41,7 @@ Under systemd, every writer gives journald each line's real priority, so `journa
 |---|---|---|---|
 | API, JSON on stdout | `address-validator` | `<N>` prefix on the **whole** record, `exc_info` included (`core/logging.py::JournalJsonFormatter`, when stdout is the journal) | `LEVEL logger: <message, first line> [exc_type]` |
 | Python infra scripts | `cache-sweep`, `audit-archive`, `archive-age-check`, `unit-failure@` | `<N>` on a record's first line; continuation lines stay at info (`infra/journal_logging.py`) | the line as written |
-| Shell timer scripts | `disk-hygiene`, `docker-prune`, `libpostal-probe` | `<4>` on each warning line (`infra/journal-warn.sh`) | the line as written |
+| Shell timer scripts | `disk-hygiene`, `docker-prune`, `libpostal-probe`, `address-validator-liveness` | `<4>` on each warning line (`infra/journal-warn.sh`) | the line as written |
 | libpostal sidecar | `libpostal` | `SyslogLevel=err` on every stderr line; stdout is discarded (#328) | the line as written |
 
 The level map and the journal-stream test are in `core/journal.py`, the one copy both Python formatters use. The shell scripts have only the one warning level.

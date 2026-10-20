@@ -107,6 +107,11 @@ FREQUENT_PROBES = {
         "a quiet range or a window stand-down would blind it exactly when the "
         "patch run restarts the sidecar"
     ),
+    "address-validator-liveness.timer": (
+        "#255: co-status check-in, every 5 min. Reads /api/v2/health; co-status's "
+        "deadline is the monitor's interval, so a quiet range would page, and its "
+        "20 s retry rides out the patch run's restarts"
+    ),
 }
 # The patching-hosts restarter scan's own pattern (probe.sh RESTART_RE): a
 # script line matching it makes its unit a restarter the knob must declare.
@@ -116,6 +121,11 @@ SKILL_RESTART_RE = re.compile(r"systemctl[^#]*(start|restart|try-restart|reload-
 # is for a docker package upgrade restarting the daemon, which is unmeasured.
 LIBPOSTAL_RESTART_SECONDS = 120
 LIBPOSTAL_PROBE = INFRA / "libpostal-probe.sh"
+# The longest deliberate address-validator outage the liveness retry must ride
+# out. Measured ~4 s restart-to-listening (2026-10-19) and the boot's ~6 s 503
+# (2026-09-29); the margin is for a restart that waits on in-flight requests.
+API_RESTART_SECONDS = 10
+LIVENESS = INFRA / "address-validator-liveness.sh"
 
 
 def _seconds(span: str) -> int:
@@ -222,6 +232,36 @@ def test_the_libpostal_probe_and_the_patch_health_check_agree() -> None:
     """One synthetic URL for both, so a patch run's health line and the probe
     can't disagree about what answering means."""
     (url,) = re.findall(r"^URL='(.*)'$", LIBPOSTAL_PROBE.read_text(), re.M)
+    assert any(url in " ".join(words) for words in _named("health")), url
+
+
+def _liveness(name: str) -> int:
+    (value,) = re.findall(rf"^{name}=(\d+)$", LIVENESS.read_text(), re.M)
+    return int(value)
+
+
+def test_an_api_restart_never_alerts() -> None:
+    """The retry outlasts a restart, and the attempt cap can't cut it short when
+    every attempt is refused at once."""
+    retry = _liveness("RETRY_SECONDS")
+    assert retry > API_RESTART_SECONDS
+    assert _liveness("MAX_ATTEMPTS") * _liveness("RETRY_INTERVAL") >= retry
+
+
+def test_a_liveness_run_is_bounded_by_its_unit() -> None:
+    """The retry, plus one hung attempt past it, plus co-status's /health and
+    check-in, fits TimeoutStartSec=; a timed-out run fires OnFailure=."""
+    worst = (
+        _liveness("RETRY_SECONDS") + 2 * _liveness("PROBE_MAX_TIME") + _liveness("CHECKIN_MAX_TIME")
+    )
+    (timeout,) = _setting(LIVENESS.with_suffix(".service"), "TimeoutStartSec")
+    assert worst < _seconds(timeout)
+
+
+def test_the_liveness_probe_and_the_patch_health_check_agree() -> None:
+    """One health URL for both, so a patch run's health line and the check-in
+    can't disagree about what healthy means."""
+    (url,) = re.findall(r"^HEALTH_URL='(.*)'$", LIVENESS.read_text(), re.M)
     assert any(url in " ".join(words) for words in _named("health")), url
 
 

@@ -27,6 +27,12 @@ repos:
         entry: bash tests/shell/libpostal-probe-test.sh
         files: '^(infra/(libpostal-probe\.sh|journal-warn\.sh)|tests/shell/libpostal-probe-test\.sh)$'
         pass_filenames: false
+      - id: address-validator-liveness-test
+        name: address-validator-liveness sandbox tests
+        language: system
+        entry: bash tests/shell/address-validator-liveness-test.sh
+        files: '^(infra/(address-validator-liveness\.sh|journal-warn\.sh)|tests/shell/address-validator-liveness-test\.sh)$'
+        pass_filenames: false
       - id: install-units-test
         name: install-units sandbox tests
         language: system
