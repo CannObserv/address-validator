@@ -42,7 +42,7 @@ Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs
 
 ## Architecture
 
-See `docs/ARCHITECTURE.md` for the full module map.
+Full module map: `docs/ARCHITECTURE.md`.
 
 ## Key conventions
 
@@ -50,8 +50,8 @@ See `docs/ARCHITECTURE.md` for the full module map.
 - Response models use geography-neutral names: `region`, `postal_code`
 - `standardized` field: two-space separator between logical address lines (USPS single-line convention)
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
-- `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
-- `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
+- `warnings: list[str]` on all response models; empty on clean input. Every warning string lives in `core/warnings.py` (single source of truth), catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
+- `ValidationResult.status` vocabulary lives in `core/validation_status.py` (single source of truth), catalogued in `docs/VALIDATION-STATUS.md`; drift test `tests/unit/test_validation_status_catalogue.py` syncs the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. A new status also needs an Alembic migration widening `ck_validated_addresses_status`
 - Pipeline version (`core/pipeline_version.py`, single source of truth) stamps every cached `validated_addresses` row; code changes that alter parse/standardize output must bump `PIPELINE_CODE_VERSION` — drift test `tests/unit/test_pipeline_output_pin.py` enforces (re-pin hash + bump together). CRF model swaps via `CUSTOM_MODEL_PATH` invalidate automatically (fingerprint)
 - `db/tables.py` mirrors the Alembic-head schema and is never used for DDL; drift test `tests/unit/db/test_schema_drift.py` compares it column-by-column (nullability, generated, identity, type) against a migrated DB — schema changes need a migration first, then the mirrored Table def
 - `components` takes precedence over `address` when both supplied
@@ -103,7 +103,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*`) + `LOG_LEVEL` | systemd (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs, `ANTHROPIC_API_KEY`) | systemd (optional with `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs, `ANTHROPIC_API_KEY`) | systemd (optional, `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only app-logger knob; uvicorn's `--log-level` never reaches root → `docs/LOGGING.md`.
 
