@@ -79,7 +79,8 @@ alembic.ini
 db/tables.py
 
 # --- Deployment surface: units, timers, and ops scripts documented in
-#     AGENTS.md "Deployment"/"Infrastructure" and docs/DEPLOYMENT.md ---
+#     AGENTS.md "Deployment"/"Infrastructure", docs/DEPLOYMENT.md, docs/TIMERS.md
+#     and docs/SENSITIVE-AREAS-INFRA.md ---
 infra/
 scripts/
 .env.test
