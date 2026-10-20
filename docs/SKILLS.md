@@ -18,7 +18,7 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 
 `skills/brainstorming` is a symlink to `skills-vendor/obra-superpowers/skills/brainstorming` — upstream's text, unforked, since #334 (the v6.4.2 fork it replaced fell behind v7.0.0). Our preferences live once, in `AGENTS.md` → Design workflow, as rules that each quote the upstream instruction they replace. A rule that only says "our conventions win" loses to a skill read later, at invocation.
 
-**After a `skills-vendor/obra-superpowers` bump**, grep the new `SKILL.md` for every quoted phrase in that section. A phrase that is gone means upstream reworded it: requote the rule. The doctor no longer reports drift for this skill, because there is no override left to compare.
+**After a `skills-vendor/obra-superpowers` bump**, `tests/unit/test_brainstorming_rules.py` fails if a quoted phrase is gone from the new `SKILL.md`: upstream reworded it, so requote the rule (and the test's `QUOTED_UPSTREAM`). The doctor no longer reports drift for this skill, because there is no override left to compare; the test also fails if `skills/brainstorming` stops being a symlink.
 
 ### Preferences, re-read against v7.0.0 (2026-10-20)
 
