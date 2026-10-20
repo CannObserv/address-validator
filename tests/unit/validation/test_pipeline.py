@@ -122,7 +122,7 @@ class TestRunNonUsPipeline:
             await run_non_us_pipeline(req, registry, libpostal_client=None)
         assert exc_info.value.error == "country_not_supported"
         assert exc_info.value.message.endswith(territory_hint(code))
-        assert f"region={code}" in exc_info.value.message
+        assert f"country=US with {code} as the state" in exc_info.value.message
 
     @pytest.mark.asyncio
     async def test_territory_components_stay_on_the_non_us_path(self) -> None:
@@ -339,7 +339,7 @@ _TERRITORIES = [
 
 
 class TestRunUsPipelineTerritories:
-    """GH #281 option 3: country=US + region=<territory> is the supported path.
+    """GH #281 option 3: country=US with the territory as the state is the supported path.
 
     The result is the input every country=US branch keys on downstream
     (Google CASS, the #258 hold rule, the secondary check)."""

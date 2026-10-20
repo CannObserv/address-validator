@@ -23,7 +23,7 @@ class TestTerritoryHint:
     def test_territory_points_at_country_us(self, code: str) -> None:
         hint = territory_hint(code)
         assert "country=US" in hint
-        assert f"region={code}" in hint
+        assert f"{code} as the state" in hint
 
     def test_country_field_description_names_the_set(self) -> None:
         """CR 3: models.py can't import the set (core.errors → models cycle), so

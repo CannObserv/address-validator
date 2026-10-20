@@ -228,8 +228,9 @@ about `US_POSTAL_COUNTRIES` (`core/countries.py`: `US`, `PR`, `GU`, `VI`, `AS`, 
 other country it is skipped outright — not called, not counted as a failure — so a CA request
 under `usps,google` goes straight to Google.
 
-**US territories (GH #281).** Send `country=US` with `region=PR` (or `GU`, `VI`, `AS`, `MP`;
-full names work too). That takes every US branch: Pub 28 standardization, USPS DPV, Google CASS,
+**US territories (GH #281).** Send `country=US` with the territory as the state: `PR` (or `GU`,
+`VI`, `AS`, `MP`; full names work too) in `address`, or as the `administrative_area` component
+(`state` under `component_profile=usps-pub28`). The response's `region` echoes the code. That takes every US branch: Pub 28 standardization, USPS DPV, Google CASS,
 the #258 hold rule, the secondary check. A territory code *as* `country` is not rerouted; every
 422 below is `country_not_supported` with a message naming the `country=US` path:
 - `/parse`, `/standardize` → 422, raw string or `components`;

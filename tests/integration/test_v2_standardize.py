@@ -60,7 +60,7 @@ class TestV2StandardizeISO:
 
 
 class TestV2USTerritories:
-    """GH #281 option 3: territories are served as country=US + region=<code>."""
+    """GH #281 option 3: territories are served as country=US, territory as the state."""
 
     @pytest.mark.parametrize(
         ("code", "name", "city", "zip_code"),
@@ -105,4 +105,4 @@ class TestV2USTerritories:
         assert response.status_code == 422
         body = response.json()
         assert body["error"] == "country_not_supported"
-        assert "country=US with region=PR" in body["message"]
+        assert "country=US with PR as the state" in body["message"]

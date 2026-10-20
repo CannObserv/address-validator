@@ -28,7 +28,7 @@ Components use ISO 19160-4 element names by default; pass
   other valid codes get `422 country_not_supported`, and codes the
   `pycountry` library does not recognise get `422 invalid_country_code`.
   US territories (PR, GU, VI, AS, MP): send `country=US` with the
-  territory code as `region`.
+  territory code as the state; the response's `region` echoes it.
 - **API key authentication** — `/api/v2/*` endpoints require an
   `X-API-Key` header; docs remain open.
 - **CORS denied by default** — browsers get no cross-origin access until

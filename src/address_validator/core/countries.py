@@ -16,7 +16,7 @@ SUPPORTED_COUNTRIES: frozenset[str] = frozenset({"US", "CA"})
 # that carry their own ISO code. A provider with ``supports_non_us = False`` is
 # asked only about these (GH #260). The freely associated states (FM, MH, PW)
 # are sovereign and excluded. A territory code as ``country`` still routes
-# non-US; the supported path is country=US with region=<code> (GH #281).
+# non-US; the supported path is country=US with the code as the state (GH #281).
 US_POSTAL_COUNTRIES: frozenset[str] = frozenset({"US", "PR", "GU", "VI", "AS", "MP"})
 
 # Full set of valid ISO 3166-1 alpha-2 codes sourced from the pycountry
@@ -32,7 +32,7 @@ def territory_hint(country: str) -> str:
     """
     if country == "US" or country not in US_POSTAL_COUNTRIES:
         return ""
-    return f" For US territories, send country=US with region={country}."
+    return f" For US territories, send country=US with {country} as the state."
 
 
 def check_country(country: str) -> str:
