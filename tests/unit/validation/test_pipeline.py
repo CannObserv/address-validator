@@ -249,10 +249,10 @@ class TestRunUsPipeline:
         comps = {
             "address_number": "123",
             "street_name": "MAIN",
-            "street_suffix": "ST",
+            "street_name_post_type": "ST",
             "city": "SPRINGFIELD",
-            "region": "IL",
-            "postal_code": "62701",
+            "state": "IL",
+            "zip_code": "62701",
         }
         req = ValidateRequest(components=comps, country="US")
         _std, raw_input, _ = await run_us_pipeline(req, registry)
@@ -267,15 +267,15 @@ class TestRunUsPipeline:
         comps = {
             "address_number": "123",
             "street_name": "MAIN",
-            "street_suffix": "ST",
+            "street_name_post_type": "ST",
             "city": "SPRINGFIELD",
-            "region": "IL",
-            "postal_code": "62701",
+            "state": "IL",
+            "zip_code": "62701",
         }
         req = ValidateRequest(components=comps, country="US")
         std, _, _ = await run_us_pipeline(req, registry)
-        # USPS pipeline should produce a standardized city value
-        assert std.city != ""
+        # Every Pub 28 key translated — a key the profile drops is silently lost.
+        assert std.standardized == "123 MAIN ST  SPRINGFIELD, IL 62701"
 
     @pytest.mark.asyncio
     async def test_iso_profile_accepted(self) -> None:
