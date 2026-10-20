@@ -106,3 +106,15 @@ class TestV2USTerritories:
         body = response.json()
         assert body["error"] == "country_not_supported"
         assert "country=US with PR as the state" in body["message"]
+
+    def test_territory_country_components_on_standardize_422(self, client) -> None:
+        """CR 8: check_country() runs before the components branch, so a territory's
+        components get the 422 too."""
+        response = client.post(
+            "/api/v2/standardize",
+            json={"components": {"thoroughfare_name": "calle luna"}, "country": "PR"},
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"] == "country_not_supported"
+        assert "country=US with PR as the state" in body["message"]
