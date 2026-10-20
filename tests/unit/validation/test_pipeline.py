@@ -137,6 +137,18 @@ class TestRunNonUsPipeline:
         assert std.components.spec == "raw"
 
     @pytest.mark.asyncio
+    async def test_territory_components_under_us_only_provider_point_at_country_us(
+        self,
+    ) -> None:
+        """CR 2: USPS serves PR via country=US — don't only say "add Google"."""
+        registry, _ = _make_registry(supports_non_us=False)
+        req = ValidateRequest(components={"address_line_1": "123 calle luna"}, country="PR")
+        with pytest.raises(APIError) as exc_info:
+            await run_non_us_pipeline(req, registry, libpostal_client=None)
+        assert exc_info.value.error == "country_not_supported"
+        assert exc_info.value.message.endswith(territory_hint("PR"))
+
+    @pytest.mark.asyncio
     async def test_provider_no_non_us_support_raises_422(self) -> None:
         registry, _ = _make_registry(supports_non_us=False)
         req = ValidateRequest(
