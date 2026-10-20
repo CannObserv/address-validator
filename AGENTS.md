@@ -65,7 +65,7 @@ See `docs/ARCHITECTURE.md` for the full module map.
 - `/api/v2/health`: HTTP 503 when degraded; libpostal state does NOT affect HTTP status. Response shape → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Google provider uses ADC — no API key; IAM roles → [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md)
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
-- CORS: denied by default (GH #35). `ALLOWED_ORIGINS` grants browser origins (comma-separated, or `*`); unset = no `Access-Control-Allow-Origin` ever
+- CORS: denied by default (GH #35). `ALLOWED_ORIGINS` grants browser origins (comma-separated, or `*`); unset = no `Access-Control-Allow-Origin` header
 
 ## Logging
 
