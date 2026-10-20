@@ -1,5 +1,7 @@
 """Unit tests for core/countries.py."""
 
+import re
+
 import pytest
 
 from address_validator.core.countries import (
@@ -8,6 +10,7 @@ from address_validator.core.countries import (
     territory_hint,
 )
 from address_validator.core.errors import APIError
+from address_validator.models import ValidateRequest
 
 _TERRITORIES = sorted(US_POSTAL_COUNTRIES - {"US"})
 
@@ -21,6 +24,14 @@ class TestTerritoryHint:
         hint = territory_hint(code)
         assert "country=US" in hint
         assert f"region={code}" in hint
+
+    def test_country_field_description_names_the_set(self) -> None:
+        """CR 3: models.py can't import the set (core.errors → models cycle), so
+        the OpenAPI description's copy is pinned to it here."""
+        description = ValidateRequest.model_fields["country"].description or ""
+        listed = re.search(r"US territories \(([A-Z, ]+)\)", description)
+        assert listed is not None
+        assert sorted(listed.group(1).split(", ")) == _TERRITORIES
 
     @pytest.mark.parametrize("code", ["US", "CA", "GB", "FM", "MH", "PW"])
     def test_other_countries_get_no_hint(self, code: str) -> None:
