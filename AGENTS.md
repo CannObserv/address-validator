@@ -63,7 +63,7 @@ See `docs/ARCHITECTURE.md` for the full module map.
 - Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v2/health`
 - `/api/v2/health`: HTTP 503 when degraded; libpostal state does NOT affect HTTP status. Response shape → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
-- Google provider uses ADC — no API key. IAM: `roles/addressvalidation.user`, `roles/cloudquotas.viewer`, `roles/monitoring.viewer`
+- Google provider uses ADC — no API key; IAM roles → [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md)
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
 - CORS: denied by default (GH #35). `ALLOWED_ORIGINS` env var grants browser origins — comma-separated list, or `*` for any; unset = no `Access-Control-Allow-Origin` ever emitted
 
@@ -73,14 +73,7 @@ No PII at INFO+. Address content never in log messages at INFO or above. See `do
 
 ## Validation provider
 
-Core env vars (see `docs/VALIDATION-PROVIDERS.md` for full reference):
-
-| Variable | Values | Default |
-|---|---|---|
-| `VALIDATION_PROVIDER` | `none`, `usps`, `google`, comma-sep list | `none` |
-| `VALIDATION_CACHE_DSN` | PostgreSQL DSN | — (required when non-null) |
-| `VALIDATION_CACHE_TTL_DAYS` | non-negative int | `30` |
-| `CUSTOM_MODEL_PATH` | path to `.crfsuite` file | — (bundled usaddress model) |
+`VALIDATION_PROVIDER`: `none` (default), `usps`, `google`, or comma-sep list; non-`none` requires `VALIDATION_CACHE_DSN` (PostgreSQL). `VALIDATION_CACHE_TTL_DAYS` (default `30`). `CUSTOM_MODEL_PATH`: `.crfsuite` file (default: bundled usaddress model). Full reference: `docs/VALIDATION-PROVIDERS.md`.
 
 ## Deployment
 
@@ -90,7 +83,7 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 - Logs: `journalctl -u address-validator -f`
 - Re-install units: `sudo infra/install-units.sh [unit…]` (restart the service if its unit changed); `infra/install-units.sh --check` flags drift — re-run after moving any path a unit references (#228)
 - Pre-commit hooks: `uv run pre-commit install`
-- Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC) prunes VS Code server builds, npm/uv caches, orphaned worktrees; dry-run with `infra/disk-hygiene.sh --dry-run`
+- Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC); preview with `infra/disk-hygiene.sh --dry-run`
 
 ## Infrastructure
 
@@ -112,7 +105,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*`) + `LOG_LEVEL` | systemd (required) |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
 
-`LOG_LEVEL` (default `INFO`) is the only knob for app-logger verbosity — uvicorn's `--log-level` reaches `uvicorn.error`/`uvicorn.access`/`uvicorn.asgi` and never root. See `docs/LOGGING.md`.
+`LOG_LEVEL` (default `INFO`) is the only app-logger knob; uvicorn's `--log-level` never reaches root → `docs/LOGGING.md`.
 
 ## Testing and linting
 
@@ -121,15 +114,13 @@ uv run pytest                   # all tests + coverage
 uv run pytest --no-cov -x      # fast, stop on first failure
 uv run pytest --no-cov -m integration    # integration tests only
 uv run pytest --no-cov -m "not integration"  # unit tests only (faster; coverage fails below 80% on partial runs)
-npm run test:js                 # admin JS tests (vitest + jsdom)
-npm run lint:js                 # admin JS lint (ESLint flat config)
-npm run format:js:check         # admin JS format check (Prettier)
-npm run format:js               # admin JS format write
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
 bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests
 ```
+
+Admin JS (vitest, ESLint, Prettier): `npm run test:js`, `npm run lint:js`, `npm run format:js:check`, `npm run format:js`.
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff; ESLint + Prettier when admin JS is touched; shellcheck + sandbox rig when infra/test shell scripts are touched).
 
@@ -137,13 +128,7 @@ Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-comm
 
 ## Common tasks
 
-```
-uv sync                         # install/refresh deps
-uv add <package>                # add dep; commit pyproject.toml + uv.lock together
-uv lock --upgrade && uv sync    # upgrade all deps; then update lower bounds
-```
-
-See `docs/DEPENDENCY-POLICY.md` for version pinning rules.
+`uv add <package>` → commit `pyproject.toml` + `uv.lock` together. Upgrades and pinning rules: `docs/DEPENDENCY-POLICY.md`.
 
 ## GitHub CLI
 
@@ -167,25 +152,23 @@ Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
 
 ## Skills
 
-Full descriptions: `docs/SKILLS.md`. Key skills:
+All triggers: `docs/SKILLS.md`. Repo-specific:
 
-| Skill | When to use |
-|---|---|
-| `/brainstorming` | Before any new feature — design before code |
-| `/writing-plans` | After brainstorming; before multi-step implementation |
-| `/using-git-worktrees` | Every feature branch — isolated worktree; ports above, lifecycle in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) |
-| `/test-driven-development` | Before writing implementation code |
-| `/systematic-debugging` | Any bug or unexpected test failure |
-| `/verification-before-completion` | Before claiming done or opening a PR |
-| `/reviewing-code-python-fastapi` | Code review — tiered findings, implements approved fixes |
-| `/reviewing-architecture` | Architecture review |
-| `/enforcing-architecture` | Turn an accepted AR finding into an executable fitness function |
-| `/curating-context` | Trim AGENTS.md + docs to the 6,000-token budget; weekly maintenance |
-| `/shipping-work-python-fastapi` | Finalize — commit, push, close issues |
-| `/train-model` | CRF model retraining pipeline |
-| `/schedule` | Recurring or one-time background agents |
-| `/using-mayfly-chat` | Chat with another repo's agent; never commit the channel URL |
-| `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+- `/using-git-worktrees` — every feature branch; ports above, lifecycle in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- `/curating-context` — AGENTS.md + docs vs the 6,000-token budget; weekly
+- `/using-mayfly-chat` — never commit the channel URL
+- `socraticode:codebase-exploration` / `socraticode:codebase-management` — [docs/SOCRATICODE.md](docs/SOCRATICODE.md)
+
+## Design workflow (/brainstorming)
+
+Each rule replaces the quoted upstream text and wins over it:
+
+- **Approval:** explicit words ("approved", "proceed", "looks good") at every stage; a reply approves only the stage it answers. Tightens "Approval covers what you showed them"
+- **Doc:** `docs/plans/YYYY-MM-DD-<topic>-design.md`, commit per Commit convention. Replaces "`docs/superpowers/specs/…`"
+- **Issue:** after doc approval, `gh issue create`, report the number (no upstream step)
+- **Then the user picks** `/writing-plans` or direct implementation — its own approval stage. Replaces "invoke superpowers:writing-plans and no other skill" and the size table's "a full plan". Ours is gregoryfoster/skills' `/writing-plans`
+- **Sizing:** new endpoints, schema changes, drift-tested sources of truth → always "A project with a written design"
+- **Visual companion:** launch per [docs/SKILLS.md](docs/SKILLS.md) → Brainstorming on this VM, not `visual-companion.md`'s way
 
 ## Commit convention
 

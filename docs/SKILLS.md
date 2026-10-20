@@ -6,13 +6,57 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 
 | Skill | Trigger | Purpose |
 |---|---|---|
-| `/brainstorming` | New feature without prior design | Explore requirements and design options before any code |
+| `/brainstorming` | New feature without prior design | Explore requirements and design options before any code. Vendored obra-superpowers, unforked; project rules in `AGENTS.md` → Design workflow, detail in [Brainstorming on this VM](#brainstorming-on-this-vm) |
 | `/writing-plans` | After brainstorming; before multi-step impl | Produce a step-by-step implementation plan |
 | `/using-git-worktrees` | Every feature branch | Parallel branch checkouts via git worktree — creation, lifecycle, and cleanup; consult [DEPLOYMENT.md](DEPLOYMENT.md) for the path convention and dev-server command, and `AGENTS.md` → Infrastructure for port assignments |
 | `/test-driven-development` | Before writing implementation code | Write failing tests first, then implement |
 | `/systematic-debugging` | Any bug or unexpected test failure | Structured root-cause analysis before proposing fixes |
 | `/verification-before-completion` | Before claiming done or opening a PR | Run verification commands and confirm output; evidence before assertions |
 | `/shipping-work-python-fastapi` | Work is done and merged | Commit, push, close issues, post GH summary. Its Step 1.5 doc-drift gate reads `.skills/doc-sensitive-paths` — a project-tailored list that **replaces** the skill's built-in defaults (which assume a `src/api|models|core/` layout and match almost nothing here). Entries match whole path segments at any depth; every entry must match a tracked file, enforced by `tests/unit/test_doc_sensitive_paths.py`. Re-verify that test after any layout change ([GH #208](https://github.com/CannObserv/address-validator/issues/208)). The advice printed on a hit comes from `.skills/doc-sections`, also tailored — one doc per line, naming the headings to spot-check and the entries routed there; `tests/unit/test_doc_sections.py` enforces that each doc and quoted heading exists and every path-list entry is routed. Re-verify after any doc rename, heading edit or path-list change ([GH #210](https://github.com/CannObserv/address-validator/issues/210)) |
+
+## Brainstorming on this VM
+
+`skills/brainstorming` is a symlink to `skills-vendor/obra-superpowers/skills/brainstorming` — upstream's text, unforked, since #334 (the v6.4.2 fork it replaced fell behind v7.0.0). Our preferences live once, in `AGENTS.md` → Design workflow, as rules that each quote the upstream instruction they replace. A rule that only says "our conventions win" loses to a skill read later, at invocation.
+
+**After a `skills-vendor/obra-superpowers` bump**, `tests/unit/test_brainstorming_rules.py` fails if a quoted phrase is gone from the new `SKILL.md`: upstream reworded it, so requote the rule (and the test's `QUOTED_UPSTREAM`). The doctor no longer reports drift for this skill, because there is no override left to compare; the test also fails if `skills/brainstorming` stops being a symlink.
+
+### Preferences, re-read against v7.0.0 (2026-10-20)
+
+| Preference (ours) | v7.0.0 says | Carried as |
+|---|---|---|
+| Explicit approval words at every stage; a reply approves only the stage presented | "Approval covers what you showed them" | **Approval** rule |
+| Design doc in `docs/plans/` | `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` | **Doc** rule |
+| Commit the doc as `[docs]:` / `#<n> [docs]:` | "committed" | Pointer to `AGENTS.md` → Commit convention |
+| `gh issue create` once the doc is approved | No issue step | **Issue** rule |
+| `/writing-plans` optional; the user's pick is its own approval stage | "invoke superpowers:writing-plans and no other skill" | **Then the user picks** rule. This repo vendors gregoryfoster/skills' `writing-plans`: no `superpowers:` namespace, no execution-method stage |
+| New endpoints and schema changes get a written design | Generic "Size the Work" table | **Sizing** rule: they alter `models.py` or a drift-tested source of truth |
+| Companion reachable through the exe.dev proxy | Local browser, random high port, bare `scripts/` path | **Visual companion** rule → the invocation below |
+| Builder check (`builder-check-prompt.md`, new in v7) | A fresh subagent lists a builder's open questions before the doc is handed over | **Adopted** as upstream wrote it; no rule needed |
+| Repo-specific "too simple" examples; omitted digraph, task-per-item, `elements-of-style` | Generic examples; none of the three appears | Dropped |
+
+### Visual companion
+
+**This VM is remote: the user's browser is not on this machine.** The companion's default invocation binds `127.0.0.1` on a random ephemeral port, which their browser can never reach. Launch it exactly as below or the tab will not load.
+
+```bash
+# From the project root. Port MUST be 3000-9999 — the exe.dev proxy forwards
+# only that range, and the script's default random port falls outside it.
+# BRAINSTORM_TOKEN is load-bearing: without it a port collision falls back to a
+# random 49152-65534 port and still prints a success line (see below).
+BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
+  bash skills/brainstorming/scripts/start-server.sh \
+  --project-dir "$PWD" --host 0.0.0.0 --url-host address-validator.exe.xyz
+```
+
+- **Confirm `"port":3900` in the returned JSON before relaying the URL.** On `EADDRINUSE` the server falls back to a random 49152–65534 port — outside the proxy range, so the link can never load — and prints an ordinary `server-started` line either way (measured: a collision on 3900 bound 54972 and reported success). `BRAINSTORM_TOKEN` makes it refuse that fallback and exit 1, which is why the variable is not optional. The wrapper reports the refusal as `{"error": "Server failed to start within 5 seconds"}`, not as a port message — read that as "the port is taken", pick another free one in 3000–9999, and never drop the variable to get past it.
+- **Relay the URL as `https://`.** The script prints `http://address-validator.exe.xyz:3900/?key=…`; the proxy terminates TLS, so the user needs the same URL with `https://`. Swap the scheme by hand before sending it.
+- **Do not use `--open`** — it would open a browser on the VM, not the user's machine. Send them the link instead.
+- **`--url-host` is this VM's name**, as in the dev-server URL `AGENTS.md` documents (`https://address-validator.exe.xyz:8001/`). Confirm it there rather than trusting the literal above if the VM may have been renamed.
+- **Pick a free port.** 8000 is the production service, 8001 the dev server, 4400 libpostal, 3900 the companion ([DEPLOYMENT.md](DEPLOYMENT.md) → Port map).
+- **Invoke by the full path** shown above. The companion guide writes `bash scripts/start-server.sh` with a bare `scripts/` path, which does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)).
+- Session content and state land in `.superpowers/brainstorm/` (gitignored).
+
+`visual-companion.md` (upstream) covers screen-writing, event polling and lifecycle — read it before the first screen. Its examples use the bare `scripts/` path and `--open` and assume a local browser, so the flags above override it. Invocation unchanged in v7.0.0: `start-server.sh` and `visual-companion.md` are byte-identical to v6.4.2, and `server.cjs` changed one line (a `String.replace` callback, #334).
 
 ## Review skills
 
