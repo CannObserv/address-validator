@@ -61,3 +61,6 @@ AGENTS.md :: tighten :: | `/train-model` | CRF model retraining pipeline |
 AGENTS.md :: tighten :: | `/schedule` | Recurring or one-time background agents |
 AGENTS.md :: tighten :: | `/using-mayfly-chat` | Chat with another repo's agent; never commit the channel URL |
 AGENTS.md :: tighten :: | `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+# 2026-10-20: DEPLOYMENT.md's "## Scheduled timers" split out to docs/TIMERS.md; this pointer into it
+# was retargeted because what it points at moved in the same change.
+docs/DEPLOYMENT.md :: retarget :: stays `failed` and alerts once ([below](#scheduled-timers), #248). After fixing

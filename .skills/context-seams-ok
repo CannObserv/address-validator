@@ -71,3 +71,16 @@ docs/SKILLS.md :: Vendored obra-superpowers, unforked; project rules in `AGENTS.
 docs/SKILLS.md :: Our preferences live once, in `AGENTS.md` → Design workflow
 docs/SKILLS.md :: Pointer to `AGENTS.md` → Commit convention
 docs/SKILLS.md :: as in the dev-server URL `AGENTS.md` documents
+
+# 2026-10-20 doc-budget run: DEPLOYMENT.md "## Scheduled timers" → docs/TIMERS.md and the
+# infra/ rows of SENSITIVE-AREAS.md → docs/SENSITIVE-AREAS-INFRA.md. Each hit below points at
+# content that did NOT move (Port map, apt-pin install and "Unit file and code must move
+# together" stay in DEPLOYMENT.md; migration 014's row stays in SENSITIVE-AREAS.md), or is the
+# new annex's pointer back to its parent.
+docs/SKILLS.md :: 3900 the companion ([DEPLOYMENT.md](DEPLOYMENT.md) → Port map)
+docs/TIMERS.md :: Split out of [DEPLOYMENT.md](DEPLOYMENT.md), which keeps the service unit
+infra/apt-preferences.d/address-validator :: Install: docs/DEPLOYMENT.md.
+infra/install-units.sh :: (docs/DEPLOYMENT.md: unit file and code must move together)
+tests/unit/test_patching_knob.py :: not installed yet (docs/DEPLOYMENT.md)
+docs/SENSITIVE-AREAS-INFRA.md :: Application code: [SENSITIVE-AREAS.md](SENSITIVE-AREAS.md)
+docs/SOCRATICODE.md :: dropped and [SENSITIVE-AREAS.md](SENSITIVE-AREAS.md) records as a read-time
