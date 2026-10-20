@@ -323,7 +323,7 @@ uv run python infra/archive_audit.py --backfill
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, [TIMERS.md](TIMERS.md)) | systemd `EnvironmentFile=` (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN*` PATs; `ANTHROPIC_API_KEY` for `curating-context`'s exact `count_tokens` run. A worktree has no `.env`: `export ANTHROPIC_API_KEY=$(grep '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env \| cut -d= -f2-)` first | systemd (optional, `-` prefix), manual `export` |
 
 ### CORS
 

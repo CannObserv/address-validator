@@ -103,7 +103,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*`) + `LOG_LEVEL` | systemd (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs, `ANTHROPIC_API_KEY`) | systemd (optional with `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only app-logger knob; uvicorn's `--log-level` never reaches root → `docs/LOGGING.md`.
 
