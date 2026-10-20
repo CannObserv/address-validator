@@ -1,0 +1,6 @@
+
+# 2026-10-20 doc-budget run: the crashloop line's in-file fragment now points at docs/TIMERS.md,
+# where the section it named moved.
+docs/DEPLOYMENT.md :: retarget :: #scheduled-timers
+# Same CR round: the repo .env holds every GH_TOKEN* PAT, not only GH_TOKEN (see context-loss-ok).
+docs/DEPLOYMENT.md :: disproven :: GH_TOKEN

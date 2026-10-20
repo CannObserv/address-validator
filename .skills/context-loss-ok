@@ -61,3 +61,32 @@ AGENTS.md :: tighten :: | `/train-model` | CRF model retraining pipeline |
 AGENTS.md :: tighten :: | `/schedule` | Recurring or one-time background agents |
 AGENTS.md :: tighten :: | `/using-mayfly-chat` | Chat with another repo's agent; never commit the channel URL |
 AGENTS.md :: tighten :: | `socraticode:codebase-exploration` / `socraticode:codebase-management` | Semantic search, graphs / index, health, watching — [docs/SOCRATICODE.md](docs/SOCRATICODE.md) |
+# 2026-10-20: DEPLOYMENT.md's "## Scheduled timers" split out to docs/TIMERS.md; this pointer into it
+# was retargeted because what it points at moved in the same change.
+docs/DEPLOYMENT.md :: retarget :: stays `failed` and alerts once ([below](#scheduled-timers), #248). After fixing
+
+# 2026-10-20 doc-budget run, fresh-eyes review: index the two split-out docs (index), retarget the
+# NOTIFIER_* pointer whose target moved to TIMERS.md, and pay for the index lines with class-C
+# tightenings (--claims: 0 atoms dropped).
+AGENTS.md :: tighten :: - Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
+AGENTS.md :: tighten :: - CORS: denied by default (GH #35). `ALLOWED_ORIGINS` env var grants browser origins — comma-separated list, or `*` for any; unset = no `Access-Control-Allow-Origin` ever emitted
+AGENTS.md :: tighten :: No PII at INFO+. Address content never in log messages at INFO or above. See `docs/LOGGING.md` for event/level table.
+AGENTS.md :: tighten :: Quick ops (see `docs/DEPLOYMENT.md` for full reference):
+AGENTS.md :: tighten :: - Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
+AGENTS.md :: tighten :: - exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
+AGENTS.md :: tighten :: - All development work happens on git worktrees — never modify the main worktree directly
+AGENTS.md :: tighten :: **NEVER** source `/etc/address-validator/.env` before running tests. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. `tests/conftest.py` sets `VALIDATION_CACHE_DSN` via `os.environ.setdefault` so no shell prep is needed for `uv run pytest`. See `.env.test` for standalone-script use.
+AGENTS.md :: tighten :: PATs in `.env` are per repo: `GH_TOKEN` for this one, `GH_TOKEN_<REPO>` for others (e.g. `GH_TOKEN_SKILLS` → `gregoryfoster/skills`). Anchor the grep; unanchored matches several and `gh` rejects the result:
+AGENTS.md :: tighten :: Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
+AGENTS.md :: index :: - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
+AGENTS.md :: index :: - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
+docs/DEPLOYMENT.md :: retarget :: | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, above) | systemd `EnvironmentFile=` (required) |
+
+# 2026-10-20 CR round on the doc-budget branch. `disproven`: the repo .env row named only the
+# GH_TOKEN PATs; `grep -c '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env` = 1 (and GH_TOKEN_SKILLS
+# exists, hence GH_TOKEN*). `tighten`: three class-C rewrites paying for that row (--claims: 0 atoms dropped).
+AGENTS.md :: tighten :: See `docs/ARCHITECTURE.md` for the full module map.
+AGENTS.md :: tighten :: - `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
+AGENTS.md :: tighten :: - `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
+AGENTS.md :: disproven :: | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
+docs/DEPLOYMENT.md :: disproven :: | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |

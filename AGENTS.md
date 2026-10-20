@@ -42,7 +42,7 @@ Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs
 
 ## Architecture
 
-See `docs/ARCHITECTURE.md` for the full module map.
+Full module map: `docs/ARCHITECTURE.md`.
 
 ## Key conventions
 
@@ -50,8 +50,8 @@ See `docs/ARCHITECTURE.md` for the full module map.
 - Response models use geography-neutral names: `region`, `postal_code`
 - `standardized` field: two-space separator between logical address lines (USPS single-line convention)
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
-- `warnings: list[str]` on all response models; empty on clean input. Every warning string is defined in `core/warnings.py` (single source of truth) and catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
-- `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
+- `warnings: list[str]` on all response models; empty on clean input. Every warning string lives in `core/warnings.py` (single source of truth), catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
+- `ValidationResult.status` vocabulary lives in `core/validation_status.py` (single source of truth), catalogued in `docs/VALIDATION-STATUS.md`; drift test `tests/unit/test_validation_status_catalogue.py` syncs the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. A new status also needs an Alembic migration widening `ck_validated_addresses_status`
 - Pipeline version (`core/pipeline_version.py`, single source of truth) stamps every cached `validated_addresses` row; code changes that alter parse/standardize output must bump `PIPELINE_CODE_VERSION` — drift test `tests/unit/test_pipeline_output_pin.py` enforces (re-pin hash + bump together). CRF model swaps via `CUSTOM_MODEL_PATH` invalidate automatically (fingerprint)
 - `db/tables.py` mirrors the Alembic-head schema and is never used for DDL; drift test `tests/unit/db/test_schema_drift.py` compares it column-by-column (nullability, generated, identity, type) against a migrated DB — schema changes need a migration first, then the mirrored Table def
 - `components` takes precedence over `address` when both supplied
@@ -60,16 +60,16 @@ See `docs/ARCHITECTURE.md` for the full module map.
 ## Authentication
 
 - All `/api/*` require `X-API-Key`; value from `API_KEY` env var
-- Key at `/etc/address-validator/.env` (mode 640); loaded via `EnvironmentFile=` in systemd unit
+- Key at `/etc/address-validator/.env` (mode 640), loaded by the unit's `EnvironmentFile=`
 - Open routes: `GET /`, `/docs`, `/redoc`, `/openapi.json`, `GET /api/v2/health`
 - `/api/v2/health`: HTTP 503 when degraded; libpostal state does NOT affect HTTP status. Response shape → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - Google provider uses ADC — no API key; IAM roles → [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md)
 - Admin (`/admin/*`) requires exe.dev proxy auth (`X-ExeDev-UserID`, `X-ExeDev-Email`)
-- CORS: denied by default (GH #35). `ALLOWED_ORIGINS` env var grants browser origins — comma-separated list, or `*` for any; unset = no `Access-Control-Allow-Origin` ever emitted
+- CORS: denied by default (GH #35). `ALLOWED_ORIGINS` grants browser origins (comma-separated, or `*`); unset = no `Access-Control-Allow-Origin` header
 
 ## Logging
 
-No PII at INFO+. Address content never in log messages at INFO or above. See `docs/LOGGING.md` for event/level table.
+No PII at INFO+: address content never in INFO+ log messages. Event/level table: `docs/LOGGING.md`.
 
 ## Validation provider
 
@@ -77,7 +77,7 @@ No PII at INFO+. Address content never in log messages at INFO or above. See `do
 
 ## Deployment
 
-Quick ops (see `docs/DEPLOYMENT.md` for full reference):
+Quick ops (full reference: `docs/DEPLOYMENT.md`):
 
 - Restart: `sudo systemctl restart address-validator` (>10 in 600s → stays `failed`; `reset-failed` first, #248)
 - Logs: `journalctl -u address-validator -f`
@@ -88,11 +88,11 @@ Quick ops (see `docs/DEPLOYMENT.md` for full reference):
 ## Infrastructure
 
 Single-VM dev+prod model ([exe.dev](https://exe.dev)):
-- Port 8000 = systemd production service (main worktree) — **never** start uvicorn manually on this port
+- Port 8000 = systemd production service (main worktree) — **never** start uvicorn on it by hand
 - Port 8001 = dev server (active git worktree, `--reload`)
 - **No swap**; a session can't be OOM-killed, so *services* die instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
-- exe.dev proxy: dev server accessible at `https://address-validator.exe.xyz:8001/`
-- All development work happens on git worktrees — never modify the main worktree directly
+- Dev server via exe.dev proxy: `https://address-validator.exe.xyz:8001/`
+- All development in git worktrees — never modify the main worktree
 - Worktrees: `.worktrees/<branch-slug>/` only, via the `using-git-worktrees` scripts — never `git worktree remove`
 - New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in (`.skills/worktree_venv=none`: under the `link` default a worktree's `uv sync` *prunes* the port-8000 service's venv), and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
@@ -103,7 +103,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets (`API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*`) + `LOG_LEVEL` | systemd (required) |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs, `ANTHROPIC_API_KEY`) | systemd (optional, `-` prefix), manual `export` |
 
 `LOG_LEVEL` (default `INFO`) is the only app-logger knob; uvicorn's `--log-level` never reaches root → `docs/LOGGING.md`.
 
@@ -124,7 +124,7 @@ Admin JS (vitest, ESLint, Prettier): `npm run test:js`, `npm run lint:js`, `npm 
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff; ESLint + Prettier when admin JS is touched; shellcheck + sandbox rig when infra/test shell scripts are touched).
 
-**NEVER** source `/etc/address-validator/.env` before running tests. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. `tests/conftest.py` sets `VALIDATION_CACHE_DSN` via `os.environ.setdefault` so no shell prep is needed for `uv run pytest`. See `.env.test` for standalone-script use.
+**NEVER** source `/etc/address-validator/.env` before running tests. It points `VALIDATION_CACHE_DSN` at the production database; the audit middleware writes real rows on every `TestClient` request. `tests/conftest.py` sets it via `os.environ.setdefault`, so `uv run pytest` needs no shell prep. Standalone scripts: `.env.test`.
 
 ## Common tasks
 
@@ -132,7 +132,7 @@ Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-comm
 
 ## GitHub CLI
 
-PATs in `.env` are per repo: `GH_TOKEN` for this one, `GH_TOKEN_<REPO>` for others (e.g. `GH_TOKEN_SKILLS` → `gregoryfoster/skills`). Anchor the grep; unanchored matches several and `gh` rejects the result:
+PATs in `.env` are per repo: `GH_TOKEN` for this one, `GH_TOKEN_<REPO>` for others (e.g. `GH_TOKEN_SKILLS` → `gregoryfoster/skills`). Anchor the grep (unanchored matches several; `gh` rejects that):
 
 ```bash
 export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
@@ -140,7 +140,7 @@ export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
 
 ## Sensitive areas
 
-Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
+Critical gotchas (per-module table: `docs/SENSITIVE-AREAS.md`):
 
 - **Route handlers must be `async def`** — sync `def` runs in threadpool; ContextVar writes are invisible to the audit middleware, silently breaking training candidate collection
 - **`AddressInputMixin.model_validator`** — sole 422 guard for address/components input across all endpoints; do not weaken
@@ -180,10 +180,10 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 ## Detail Docs
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, timers, DB scripts, env, worktree + dev-server
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, [timers](docs/TIMERS.md), DB scripts, env, worktree + dev-server
 - [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md) — memory reservations, OOM ordering, SocratiCode pins, ollama upgrades
 - [docs/TAILNET.md](docs/TAILNET.md) — tailnet node, ACL, MagicDNS takeover, join/rejoin (notifier hop)
-- [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently
+- [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently; [infra/](docs/SENSITIVE-AREAS-INFRA.md)
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
 - [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue
