@@ -120,7 +120,7 @@ uv run ruff format .            # format
 bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests
 ```
 
-Admin JS: `npm run test:js` (vitest + jsdom), `npm run lint:js` (ESLint flat config), `npm run format:js:check` / `npm run format:js` (Prettier).
+Admin JS (vitest, ESLint, Prettier): `npm run test:js`, `npm run lint:js`, `npm run format:js:check`, `npm run format:js`.
 
 Coverage floor: **80%** line + branch. Baseline ~93% — don't regress. Pre-commit hooks must pass before any commit (ruff; ESLint + Prettier when admin JS is touched; shellcheck + sandbox rig when infra/test shell scripts are touched).
 
@@ -152,7 +152,7 @@ Critical gotchas (see `docs/SENSITIVE-AREAS.md` for full per-module risk table):
 
 ## Skills
 
-Every skill's trigger + description: `docs/SKILLS.md`. Repo-specific:
+All triggers: `docs/SKILLS.md`. Repo-specific:
 
 - `/using-git-worktrees` — every feature branch; ports above, lifecycle in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 - `/curating-context` — AGENTS.md + docs vs the 6,000-token budget; weekly
@@ -161,14 +161,14 @@ Every skill's trigger + description: `docs/SKILLS.md`. Repo-specific:
 
 ## Design workflow (/brainstorming)
 
-Upstream skill, unforked. Each rule replaces the quoted upstream text and wins over it:
+Each rule replaces the quoted upstream text and wins over it:
 
 - **Approval:** explicit words ("approved", "proceed", "looks good") at every stage; a reply approves only the stage it answers. Tightens "Approval covers what you showed them"
 - **Doc:** `docs/plans/YYYY-MM-DD-<topic>-design.md`, commit per Commit convention. Replaces "`docs/superpowers/specs/…`"
-- **Issue:** after doc approval, `gh issue create`; report the number. Upstream has none
+- **Issue:** after doc approval, `gh issue create`, report the number (no upstream step)
 - **Then the user picks** `/writing-plans` or direct implementation — its own approval stage. Replaces "invoke superpowers:writing-plans and no other skill" and the size table's "a full plan". Ours is gregoryfoster/skills' `/writing-plans`
 - **Sizing:** new endpoints, schema changes, drift-tested sources of truth → always "A project with a written design"
-- **Visual companion:** remote VM — launch per [docs/SKILLS.md](docs/SKILLS.md) → Brainstorming on this VM, not `visual-companion.md`'s invocation
+- **Visual companion:** launch per [docs/SKILLS.md](docs/SKILLS.md) → Brainstorming on this VM, not `visual-companion.md`'s way
 
 ## Commit convention
 
