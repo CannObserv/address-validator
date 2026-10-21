@@ -269,7 +269,9 @@ src/address_validator/
 alembic/                       # Database migrations
 docs/                          # Architecture docs, USPS/ISO research, design plans
 infra/                         # systemd units, timers and their scripts (audit archive, cache sweep, unit-failure → notifier)
+openapi.json                   # Committed OpenAPI schema — pinned API contract, drift-tested (#276)
 scripts/
+  export_openapi.py            # Regenerates openapi.json from the app
   build/                       # Tailwind CLI build and pre-commit hook
   db/                          # DB maintenance and one-time migration scripts
   model/                       # Training pipeline scripts (identify → contribute)
