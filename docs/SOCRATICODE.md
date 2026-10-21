@@ -23,7 +23,7 @@ heading down there, not in `AGENTS.md`.
 | Every symbol declared in a file | `codebase_symbols` |
 | Imports/dependents of a file | `codebase_graph_query` |
 | Import cycles | `codebase_graph_circular` |
-| Documented contracts (logging, DPV map, Pub 28, USPS API specs, style, dependency policy), design history — the declared artifacts | `codebase_context` / `codebase_context_search` |
+| Documented contracts (logging, DPV map, Pub 28, this service's API (`openapi.json`), USPS API specs, style, dependency policy), design history — the declared artifacts | `codebase_context` / `codebase_context_search` |
 | Current DB schema, allowed values, migrations | `codebase_search` or the migrations (`alembic/versions/`) |
 | Path-pattern walks ("all `*.py` under `src/address_validator/routers/`") | the Explore subagent |
 
@@ -277,7 +277,8 @@ figures carry the date they were taken; re-measure rather than trusting them.
 
 ### Schemas: no schema artifact, so never context search
 
-No schema, migration or source file is a context artifact here, so the
+No DB schema, migration or source file is a context artifact here (the API
+schema, `openapi.json`, is), so the
 generated schema row above has no `artifactName` half: schema, status
 vocabularies and migrations go to `codebase_search` or `alembic/versions/`.
 An unscoped `codebase_context_search` answers them from `design-plans`, and
@@ -372,10 +373,11 @@ check did not run. It is not an all-clear.
 
 ### Context artifacts
 
-11 declared, all **documentation** — AGENTS.md, the two vendored USPS OpenAPI
-specs, Pub 28, the provider / logging / style / dependency references, the
-research doc, `docs/plans/`, and this file. No source, schema or migration is
-registered. Validate with:
+12 declared: this service's own OpenAPI schema (`openapi.json`, generated
+from the app and drift-tested, #276) plus 11 **documentation** artifacts —
+AGENTS.md, the two vendored USPS OpenAPI specs, Pub 28, the provider / logging /
+style / dependency references, the research doc, `docs/plans/`, and this file.
+No source, DB schema or migration is registered. Validate with:
 
 ```bash
 node skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/mcp-driver.mjs \
