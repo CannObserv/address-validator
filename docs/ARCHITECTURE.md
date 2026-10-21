@@ -60,6 +60,8 @@ HTTP request
 
 Key files: `models.py` (API contract) · `db/tables.py` (schema) · `core/countries.py` · `core/errors.py` · `services/validation/pipeline.py` (parse→std→provider)
 
+**Committed OpenAPI schema** (#276): `openapi.json` at the repo root is the app's `/openapi.json`, pinned. Regenerate with `uv run python scripts/export_openapi.py`; a change that alters the schema ships the regenerated file in the same PR. `tests/unit/test_openapi_schema.py` fails on drift. The repo has no test CI, so that test fails the local `uv run pytest` gate, not CI. No env var reaches the schema, so the test env's export matches prod's.
+
 ```
 db/tables.py        SQLAlchemy Core Table definitions (audit_log, audit_daily_stats, model_training_candidates, training_batches, candidate_batch_assignments)
 db/engine.py        AsyncEngine singleton — init_engine(), get_engine(), close_engine(), Alembic migrations
