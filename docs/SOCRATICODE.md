@@ -23,7 +23,7 @@ heading down there, not in `AGENTS.md`.
 | Every symbol declared in a file | `codebase_symbols` |
 | Imports/dependents of a file | `codebase_graph_query` |
 | Import cycles | `codebase_graph_circular` |
-| Documented contracts (logging, DPV map, Pub 28, USPS API specs, style, dependency policy), design history — the declared artifacts | `codebase_context` / `codebase_context_search` |
+| Documented contracts (logging, DPV map, Pub 28, this service's API (`openapi.json`), USPS API specs, style, dependency policy), design history — the declared artifacts | `codebase_context` / `codebase_context_search` |
 | Current DB schema, allowed values, migrations | `codebase_search` or the migrations (`alembic/versions/`) |
 | Path-pattern walks ("all `*.py` under `src/address_validator/routers/`") | the Explore subagent |
 

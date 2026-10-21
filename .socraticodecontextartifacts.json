@@ -6,6 +6,11 @@
       "description": "Full agent guidance: Code Exploration Policy (SocratiCode deferred tools, prefetch hook, negative rule), architecture overview, middleware stack, service topology, router/service breakdown, sensitive areas, deployment, auth, env vars, and commit conventions."
     },
     {
+      "name": "service-api-spec",
+      "path": "./openapi.json",
+      "description": "This service's own OpenAPI schema (Address Validator API, /api/v2) — the committed contract: endpoints, request/response models, the validation.status enum, field descriptions. Regenerated from the app and drift-tested (GH #276)."
+    },
+    {
       "name": "usps-api-spec",
       "path": "./docs/usps-addresses-v3r2_4.yaml",
       "description": "USPS Addresses API v3 OpenAPI spec (v3.2.3, pre-Enhanced) — legacy provider contract, request/response shapes, DPV fields. Superseded in production by usps-enhanced-api-spec; retained for comparison."
