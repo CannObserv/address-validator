@@ -133,7 +133,8 @@ def test_unmatched_gets_sentinel_and_logs_count_only(caplog: pytest.LogCaptureFi
     assert len(caplog.records) == 1
     record = caplog.records[0]
     assert record.levelno == logging.WARNING
-    assert "2" in record.getMessage()
+    # Exactly the count and the sentinel — nothing derived from the text.
+    assert record.args == (2, WarningCode.UNRECOGNIZED.value)
     # Never the text: templated warnings carry address fragments (#252).
     for rendered in (record.getMessage(), repr(record.args), repr(record.__dict__)):
         assert secret_a not in rendered
