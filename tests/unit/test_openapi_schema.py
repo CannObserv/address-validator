@@ -10,12 +10,18 @@ If you change the API contract, regenerate the file and commit it with the
 change::
 
     uv run python scripts/export_openapi.py
+
+It also guards that building the schema logs nothing at WARNING+ (GH #342):
+a fault-free path must not add noise to the operators' warning triage.
 """
 
 import difflib
+import logging
 
 import export_openapi
 import pytest
+
+from address_validator.main import app
 
 # Enough of the diff to locate the change without flooding the report.
 _MAX_DIFF_LINES = 60
@@ -53,3 +59,16 @@ def test_main_writes_rendered_schema(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(export_openapi, "PROJECT_ROOT", tmp_path)
     export_openapi.main()
     assert target.read_text(encoding="utf-8") == export_openapi.render()
+
+
+def test_schema_generation_logs_no_warning(caplog, monkeypatch) -> None:
+    """GH #342: schema generation is fault-free, so it must log nothing at WARNING+.
+
+    ``contact.email`` is typed ``EmailStr`` in FastAPI's OpenAPI models; without
+    ``email-validator`` installed, every validation of it logs a WARNING.
+    """
+    monkeypatch.setattr(app, "openapi_schema", None)  # defeat the per-process cache
+    with caplog.at_level(logging.WARNING):
+        app.openapi()
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert warnings == [], [f"{r.name}: {r.getMessage()}" for r in warnings]
