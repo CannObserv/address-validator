@@ -50,7 +50,7 @@ Full module map: `docs/ARCHITECTURE.md`.
 - Response models use geography-neutral names: `region`, `postal_code`
 - `standardized` field: two-space separator between logical address lines (USPS single-line convention)
 - Address input capped at 1000 chars (`Field(max_length=1000)`)
-- `warnings: list[str]` on all response models; empty on clean input. Every warning string lives in `core/warnings.py` (single source of truth), catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal
+- `warnings: list[str]` on all response models; empty on clean input. Every warning string lives in `core/warnings.py` (single source of truth), catalogued in `docs/WARNINGS.md`; a drift test enforces sync — never inline a new warning literal. Each warning has a `WarningCode` (computed `warning_codes`, index-aligned; codes never renamed — frozen in the drift test)
 - `ValidationResult.status` vocabulary lives in `core/validation_status.py` (single source of truth), catalogued in `docs/VALIDATION-STATUS.md`; drift test `tests/unit/test_validation_status_catalogue.py` syncs the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. A new status also needs an Alembic migration widening `ck_validated_addresses_status`
 - Pipeline version (`core/pipeline_version.py`, single source of truth) stamps every cached `validated_addresses` row; code changes that alter parse/standardize output must bump `PIPELINE_CODE_VERSION` — drift test `tests/unit/test_pipeline_output_pin.py` enforces (re-pin hash + bump together). CRF model swaps via `CUSTOM_MODEL_PATH` invalidate automatically (fingerprint)
 - `db/tables.py` mirrors the Alembic-head schema and is never used for DDL; drift test `tests/unit/db/test_schema_drift.py` compares it column-by-column (nullability, generated, identity, type) against a migrated DB — schema changes need a migration first, then the mirrored Table def
@@ -186,7 +186,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently; [infra/](docs/SENSITIVE-AREAS-INFRA.md)
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
-- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue
+- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` + `warning_codes[]` catalogue
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger
