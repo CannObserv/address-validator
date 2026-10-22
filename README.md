@@ -83,7 +83,8 @@ The `country` field is optional (defaults to `"US"`).
   },
   "type": "Street Address",
   "warnings": [],
-  "api_version": "2"
+  "api_version": "2",
+  "warning_codes": []
 }
 ```
 
@@ -92,8 +93,11 @@ The `type` field is one of `"Street Address"`, `"Intersection"`, or
 silently modified during parsing — for example when parenthesized text
 is stripped, when repeated address numbers are joined into a range, or
 when a unit designator is recovered from a mis-tagged field.  It is
-empty on clean input.  See [`docs/WARNINGS.md`](docs/WARNINGS.md) for the
-authoritative catalogue of every string that may appear in `warnings`.
+empty on clean input.  `warning_codes` gives each warning's stable
+machine-readable code, same length and order (e.g.
+`parenthesized_removed`): **match on codes, not on the prose**, which may
+change.  See [`docs/WARNINGS.md`](docs/WARNINGS.md) for the
+authoritative catalogue of every warning and its code.
 
 The `components` field is a `ComponentSet` containing:
 
@@ -161,7 +165,8 @@ ignored.
     }
   },
   "warnings": [],
-  "api_version": "2"
+  "api_version": "2",
+  "warning_codes": []
 }
 ```
 

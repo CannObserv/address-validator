@@ -85,6 +85,7 @@ On the host, `journalctl -u address-validator -p warning` shows full tracebacks.
 | US input: provider answered a verdict without a DPV code (weak — next provider tried; returned only if nothing better comes back, GH #258, #275) | `INFO` | `services.validation.chain_provider` | provider class name, weak status, `request_id` |
 | Validation outcome (every validate request) | `INFO` | `services.validation.cache_provider` | `provider=`, `status=`, `cache_hit=`, `request_id` |
 | Audit invariant violated (NULL fields on 2xx validate) | `WARNING` | `middleware.audit` | `endpoint=`, missing field names, `request_id` |
+| Response warning matched no catalogued template; coded `unrecognized` (should never fire; at most once per response, GH #338) | `WARNING` | `core.warning_codes` | count only — never the warning text, which can carry address fragments, `request_id` |
 | Application startup failed (any exception before the lifespan `yield`; re-raised, so uvicorn exits) | `ERROR` | `main` | fixed message; `exc_info` + `exc_type` — the tail sends only `exc_type` (#252) |
 | libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |
 | libpostal sidecar not reachable at boot (starts degraded; CA parse → 503) | `WARNING` | `main` | `libpostal_url`, reason — exception class name (`RemoteProtocolError`, `ConnectError`, `ReadTimeout`, `RuntimeError`) or `HTTP <status>`, never `str(exc)` (#244) |

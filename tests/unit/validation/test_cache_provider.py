@@ -249,6 +249,34 @@ class TestCacheHit:
         assert result.components.spec == USPS_PUB28_SPEC
         assert result.warnings == ["provider-warning"]
 
+    async def test_cache_hit_warning_codes_match_fresh(self, db: AsyncEngine) -> None:
+        """GH #338: codes derive from the stored prose, so a hit returns the
+        same ``warning_codes`` as the fresh answer — no stored codes needed."""
+        fresh = _make_confirmed_response().model_copy(
+            update={
+                "warnings": [
+                    warning_catalogue.PROVIDER_INFERRED,
+                    warning_catalogue.PROVIDER_REPLACED,
+                    warning_catalogue.PROVIDER_UNCONFIRMED,
+                ]
+            }
+        )
+        inner = _make_provider(fresh)
+        provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
+        std = _make_std()
+
+        miss = await provider.validate(std)
+        hit = await provider.validate(std)
+
+        inner.validate.assert_awaited_once()
+        assert hit is not miss
+        assert hit.warning_codes == fresh.warning_codes
+        assert hit.model_dump(mode="json")["warning_codes"] == [
+            "provider_inferred",
+            "provider_replaced",
+            "provider_unconfirmed",
+        ]
+
     async def test_different_pattern_same_canonical(self, db: AsyncEngine) -> None:
         """Two patterns that produce the same provider result share one canonical record."""
         response = _make_confirmed_response()

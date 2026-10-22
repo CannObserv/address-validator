@@ -56,3 +56,21 @@ class TestV2ParseISO:
         response = client.post("/api/v2/parse", json={"address": "   "})
         assert response.status_code == 400
         assert response.json()["error"] == "address_required"
+
+
+class TestV2ParseWarningCodes:
+    """GH #338: each warning carries a machine-readable code, index-aligned."""
+
+    def test_warning_codes_aligned_with_warnings(self, client) -> None:
+        response = client.post(
+            "/api/v2/parse",
+            json={"address": "456 Oak Ln (rear\nentrance) Boise ID 83702"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["warnings"] == ["Parenthesized text removed: 'rear\nentrance'"]
+        assert body["warning_codes"] == ["parenthesized_removed"]
+
+    def test_clean_input_has_empty_warning_codes(self, client) -> None:
+        response = client.post("/api/v2/parse", json={"address": "123 Main St"})
+        assert response.json()["warning_codes"] == []

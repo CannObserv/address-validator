@@ -186,7 +186,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently; [infra/](docs/SENSITIVE-AREAS-INFRA.md)
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas
 - [docs/VALIDATION-STATUS.md](docs/VALIDATION-STATUS.md) — `ValidationResult.status` vocabulary
-- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` catalogue
+- [docs/WARNINGS.md](docs/WARNINGS.md) — `warnings[]` + `warning_codes[]` catalogue
 - [docs/LOGGING.md](docs/LOGGING.md) — event/level table, PII policy
 - [docs/STYLE.md](docs/STYLE.md) — admin dashboard: brand, dark mode, WCAG 2.1 AA
 - [docs/SKILLS.md](docs/SKILLS.md) — every vendored skill and its trigger

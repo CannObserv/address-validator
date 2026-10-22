@@ -259,6 +259,15 @@
             "title": "Type",
             "type": "string"
           },
+          "warning_codes": {
+            "description": "Machine-readable code for each entry of `warnings`: same length, same order. Match on codes; warning prose may change.",
+            "items": {
+              "$ref": "#/components/schemas/WarningCode"
+            },
+            "readOnly": true,
+            "title": "Warning Codes",
+            "type": "array"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -271,7 +280,8 @@
           "input",
           "country",
           "components",
-          "type"
+          "type",
+          "warning_codes"
         ],
         "title": "ParseResponseV2",
         "type": "object"
@@ -361,6 +371,15 @@
             "title": "Standardized",
             "type": "string"
           },
+          "warning_codes": {
+            "description": "Machine-readable code for each entry of `warnings`: same length, same order. Match on codes; warning prose may change.",
+            "items": {
+              "$ref": "#/components/schemas/WarningCode"
+            },
+            "readOnly": true,
+            "title": "Warning Codes",
+            "type": "array"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -377,7 +396,8 @@
           "postal_code",
           "country",
           "standardized",
-          "components"
+          "components",
+          "warning_codes"
         ],
         "title": "StandardizeResponseV2",
         "type": "object"
@@ -512,6 +532,15 @@
           "validation": {
             "$ref": "#/components/schemas/ValidationResult"
           },
+          "warning_codes": {
+            "description": "Machine-readable code for each entry of `warnings`: same length, same order. Match on codes; warning prose may change.",
+            "items": {
+              "$ref": "#/components/schemas/WarningCode"
+            },
+            "readOnly": true,
+            "title": "Warning Codes",
+            "type": "array"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -522,7 +551,8 @@
         },
         "required": [
           "country",
-          "validation"
+          "validation",
+          "warning_codes"
         ],
         "title": "ValidateResponseV2",
         "type": "object"
@@ -581,6 +611,34 @@
         ],
         "title": "ValidationResult",
         "type": "object"
+      },
+      "WarningCode": {
+        "description": "Machine-readable code for each entry of a response's `warnings`.\n\nMatch on these codes, not on warning prose: prose may be reworded, codes\nare never renamed. `unrecognized` is never emitted by design; if it\nappears, treat it as an unknown warning.",
+        "enum": [
+          "parenthesized_removed",
+          "repeated_numbers_range",
+          "repeated_labels",
+          "unit_recovered_from_field",
+          "unit_fragment_from_city",
+          "locality_from_recipient",
+          "delivery_line_recovered",
+          "unit_list_item_recovered",
+          "unrecognized_unit_designator",
+          "duplicate_unit_collapsed",
+          "no_parseable_street",
+          "general_delivery_discarded",
+          "unrecognized_region",
+          "provider_inferred",
+          "provider_replaced",
+          "provider_unconfirmed",
+          "provider_rejected_malformed",
+          "provider_fallback_unreachable",
+          "provider_secondary_narrowed",
+          "provider_secondary_omitted",
+          "unrecognized"
+        ],
+        "title": "WarningCode",
+        "type": "string"
       }
     },
     "securitySchemes": {
