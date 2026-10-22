@@ -20,18 +20,19 @@ Skills are invoked as slash commands (e.g. `/brainstorming`). All available skil
 
 **After a `skills-vendor/obra-superpowers` bump**, `tests/unit/test_brainstorming_rules.py` fails if a quoted phrase is gone from the new `SKILL.md`: upstream reworded it, so requote the rule (and the test's `QUOTED_UPSTREAM`). The doctor no longer reports drift for this skill, because there is no override left to compare; the test also fails if `skills/brainstorming` stops being a symlink.
 
-### Preferences, re-read against v7.0.0 (2026-10-20)
+### Preferences, re-read against v7.0.1 (2026-10-22)
 
-| Preference (ours) | v7.0.0 says | Carried as |
+| Preference (ours) | v7.0.1 says | Carried as |
 |---|---|---|
 | Explicit approval words at every stage; a reply approves only the stage presented | "Approval covers what you showed them" | **Approval** rule |
 | Design doc in `docs/plans/` | `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` | **Doc** rule |
 | Commit the doc as `[docs]:` / `#<n> [docs]:` | "committed" | Pointer to `AGENTS.md` → Commit convention |
 | `gh issue create` once the doc is approved | No issue step | **Issue** rule |
-| `/writing-plans` optional; the user's pick is its own approval stage | "invoke superpowers:writing-plans and no other skill" | **Then the user picks** rule. This repo vendors gregoryfoster/skills' `writing-plans`: no `superpowers:` namespace, no execution-method stage |
-| New endpoints and schema changes get a written design | Generic "Size the Work" table | **Sizing** rule: they alter `models.py` or a drift-tested source of truth |
+| `/writing-plans` optional; the user's pick is its own approval stage | "superpowers:writing-plans and no other skill" (HARD-GATE) and "Invoke the superpowers:writing-plans skill" (the must-in-order list, new in v7.0.1) | **Then the user picks** rule. This repo vendors gregoryfoster/skills' `writing-plans`: no `superpowers:` namespace, no execution-method stage |
+| New endpoints and schema changes get a written design | Generic "Size the Work" table: a small change gets a short design doc, a project "the full written design" | **Sizing** rule: they alter `models.py` or a drift-tested source of truth |
 | Companion reachable through the exe.dev proxy | Local browser, random high port, bare `scripts/` path | **Visual companion** rule → the invocation below |
 | Builder check (`builder-check-prompt.md`, new in v7) | A fresh subagent lists a builder's open questions before the doc is handed over | **Adopted** as upstream wrote it; no rule needed |
+| Approaches before the doc (new in v7.0.1) | "Lay out the approaches" in a message of its own; the doc records them; even a small change gets a short design doc | **Adopted**; the **Doc** rule places the short doc too |
 | Repo-specific "too simple" examples; omitted digraph, task-per-item, `elements-of-style` | Generic examples; none of the three appears | Dropped |
 
 ### Visual companion
@@ -56,7 +57,7 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 - **Invoke by the full path** shown above. The companion guide writes `bash scripts/start-server.sh` with a bare `scripts/` path, which does not resolve from the project root ([gregoryfoster/skills#63](https://github.com/gregoryfoster/skills/issues/63)).
 - Session content and state land in `.superpowers/brainstorm/` (gitignored).
 
-`visual-companion.md` (upstream) covers screen-writing, event polling and lifecycle — read it before the first screen. Its examples use the bare `scripts/` path and `--open` and assume a local browser, so the flags above override it. Invocation unchanged in v7.0.0: `start-server.sh` and `visual-companion.md` are byte-identical to v6.4.2, and `server.cjs` changed one line (a `String.replace` callback, #334).
+`visual-companion.md` (upstream) covers screen-writing, event polling and lifecycle — read it before the first screen. Its examples use the bare `scripts/` path and `--open` and assume a local browser, so the flags above override it. Invocation unchanged in v7.0.0 and v7.0.1 (v7.0.1 changed only `SKILL.md`): `start-server.sh` and `visual-companion.md` are byte-identical to v6.4.2, and `server.cjs` changed one line (a `String.replace` callback, #334).
 
 ## Review skills
 

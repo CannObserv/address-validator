@@ -166,8 +166,8 @@ Each rule replaces the quoted upstream text and wins over it:
 - **Approval:** explicit words ("approved", "proceed", "looks good") at every stage; a reply approves only the stage it answers. Tightens "Approval covers what you showed them"
 - **Doc:** `docs/plans/YYYY-MM-DD-<topic>-design.md`, commit per Commit convention. Replaces "`docs/superpowers/specs/…`"
 - **Issue:** after doc approval, `gh issue create`, report the number (no upstream step)
-- **Then the user picks** `/writing-plans` or direct implementation — its own approval stage. Replaces "invoke superpowers:writing-plans and no other skill" and the size table's "a full plan". Ours is gregoryfoster/skills' `/writing-plans`
-- **Sizing:** new endpoints, schema changes, drift-tested sources of truth → always "A project with a written design"
+- **Then the user picks** `/writing-plans` or direct implementation — its own approval stage. Replaces "superpowers:writing-plans and no other skill" and the must-in-order list's "Invoke the superpowers:writing-plans skill". Ours is gregoryfoster/skills' `/writing-plans`
+- **Sizing:** new endpoints, schema changes, drift-tested sources of truth → always "A project": "the full written design"
 - **Visual companion:** launch per [docs/SKILLS.md](docs/SKILLS.md) → Brainstorming on this VM, not `visual-companion.md`'s way
 
 ## Commit convention

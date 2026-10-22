@@ -26,9 +26,9 @@ SECTION = "## Design workflow (/brainstorming)"
 QUOTED_UPSTREAM = (
     "Approval covers what you showed them",
     "docs/superpowers/specs/",
-    "invoke superpowers:writing-plans and no other skill",
-    "a full plan",
-    "A project with a written design",
+    "superpowers:writing-plans and no other skill",
+    "Invoke the superpowers:writing-plans skill",
+    "the full written design",
 )
 
 
