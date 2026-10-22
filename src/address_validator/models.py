@@ -9,7 +9,7 @@ Note: ``api_version`` in response bodies refers to the route namespace
 The two signals are intentionally decoupled.
 """
 
-from typing import Literal, Self, get_args
+from typing import TYPE_CHECKING, Literal, Self, get_args
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
@@ -250,6 +250,9 @@ class WarningCodesMixin(BaseModel):
     prose. Defines no fields, so ``warnings`` keeps its place in field order.
     """
 
+    if TYPE_CHECKING:  # declared by each subclass; no runtime field here
+        warnings: list[str]
+
     @computed_field(
         description=(
             "Machine-readable code for each entry of `warnings`: same length, "
@@ -258,7 +261,7 @@ class WarningCodesMixin(BaseModel):
     )
     @property
     def warning_codes(self) -> list[WarningCode]:
-        return resolve_warning_codes(self.warnings)  # type: ignore[attr-defined]
+        return resolve_warning_codes(self.warnings)
 
 
 class ParseResponseV2(WarningCodesMixin):
