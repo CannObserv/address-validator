@@ -10,6 +10,9 @@ If you change the API contract, regenerate the file and commit it with the
 change::
 
     uv run python scripts/export_openapi.py
+
+It also guards that building the schema logs nothing at WARNING+ (GH #342):
+a fault-free path must not add noise to the operators' warning triage.
 """
 
 import difflib
