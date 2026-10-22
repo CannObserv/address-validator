@@ -13,7 +13,7 @@ Per-module risk table. Read before touching any of these files.
 | `src/address_validator/usps_data/` tables | Verify against USPS Pub 28 before editing |
 | `src/address_validator/services/standardizer/_lines.py` `_get()` | Every component value flows through this; changes cascade everywhere |
 | `src/address_validator/models.py` | Breaking API change if field names/types change |
-| `src/address_validator/core/warnings.py` `WarningCode` / `core/warning_codes.py` | Codes are the consumer matching contract (GH #338): renaming or removing a code silently breaks clients (the frozen `SHIPPED_CODES` test catches it); the resolver must never log an unmatched warning's text (address fragments; WARNING lines leave the host, #252); a new template whose fixed head overlaps another's makes matching ambiguous (test-enforced) |
+| `src/address_validator/core/warnings.py` `WarningCode` / `core/warning_codes.py` | Codes are the client matching contract (#338): never rename or remove one (frozen-list test); never log an unmatched warning's text (address fragments, #252); a template head overlapping another's makes matching ambiguous (tested) |
 | `src/address_validator/models.py` `AddressInputMixin` | Single enforcement point for address/components input validation across all endpoints — removing or weakening the `model_validator` silently removes the 422 guard for both `/standardize` and `/validate` |
 | `src/address_validator/usps_data/spec.py` | `USPS_PUB28_SPEC*` tags every response |
 | `src/address_validator/auth.py` | API key read from `app.state.api_key` (set by lifespan); raises 503 when `API_KEY` unset — module is importable without the env var |
