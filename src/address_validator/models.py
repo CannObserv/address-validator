@@ -11,9 +11,11 @@ The two signals are intentionally decoupled.
 
 from typing import Literal, Self, get_args
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from address_validator.core.validation_status import VALIDATION_STATUSES
+from address_validator.core.warning_codes import resolve_warning_codes
+from address_validator.core.warnings import WarningCode
 
 
 class ComponentSet(BaseModel):
@@ -239,7 +241,27 @@ class HealthResponseV2(BaseModel):
     libpostal: Literal["ok", "unavailable"] = "unavailable"
 
 
-class ParseResponseV2(BaseModel):
+class WarningCodesMixin(BaseModel):
+    """Adds ``warning_codes``, derived from the model's ``warnings`` (GH #338).
+
+    Every response model with ``warnings: list[str]`` must inherit this (a test
+    enforces it). The codes are computed, never stored, so a cache hit and a
+    ``model_copy(update={"warnings": ...})`` always carry codes that match the
+    prose. Defines no fields, so ``warnings`` keeps its place in field order.
+    """
+
+    @computed_field(
+        description=(
+            "Machine-readable code for each entry of `warnings`: same length, "
+            "same order. Match on codes; warning prose may change."
+        )
+    )
+    @property
+    def warning_codes(self) -> list[WarningCode]:
+        return resolve_warning_codes(self.warnings)  # type: ignore[attr-defined]
+
+
+class ParseResponseV2(WarningCodesMixin):
     """Response body for POST /api/v2/parse."""
 
     input: str
@@ -250,7 +272,7 @@ class ParseResponseV2(BaseModel):
     api_version: Literal["2"] = "2"
 
 
-class StandardizeResponseV2(BaseModel):
+class StandardizeResponseV2(WarningCodesMixin):
     """Response body for POST /api/v2/standardize."""
 
     address_line_1: str
@@ -271,7 +293,7 @@ class StandardizeResponseV2(BaseModel):
 StandardizedAddress = StandardizeResponseV2
 
 
-class ValidateResponseV2(BaseModel):
+class ValidateResponseV2(WarningCodesMixin):
     """Response body for POST /api/v2/validate.
 
     Address fields default to empty strings (not ``None``) because they

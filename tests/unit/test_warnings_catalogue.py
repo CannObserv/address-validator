@@ -5,10 +5,16 @@ Asserts bidirectional sync between the single source of truth
 (``docs/WARNINGS.md``):
 
 - every warning template defined in code is documented, and
-- every documented template maps back to a live code template.
+- every documented template maps back to a live code template, and
+- every warning has exactly one ``WarningCode``, listed beside its template on
+  the same ``docs/WARNINGS.md`` row (GH #338).
 
 If you add or change a response warning, update both ``core/warnings.py`` and
 ``docs/WARNINGS.md`` — this test fails on any divergence.
+
+Codes are the matching contract and are never renamed: ``SHIPPED_CODES`` below
+freezes every code ever published. Adding a code means adding it there too;
+removing or renaming one is a contract-major change.
 """
 
 import ast
@@ -16,6 +22,7 @@ import re
 from pathlib import Path
 
 from address_validator.core import warnings as warning_catalogue
+from address_validator.core.warnings import WARNING_CODES, WarningCode
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WARNINGS_DOC = REPO_ROOT / "docs" / "WARNINGS.md"
@@ -31,6 +38,15 @@ def _documented_templates() -> set[str]:
     for row in re.finditer(r"^\|\s*`([^`]+)`\s*\|", text, flags=re.MULTILINE):
         templates.add(row.group(1))
     return templates
+
+
+def _documented_codes() -> dict[str, str]:
+    """Map each documented template to the code in its row's second column."""
+    text = WARNINGS_DOC.read_text(encoding="utf-8")
+    return {
+        row.group(1): row.group(2)
+        for row in re.finditer(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|", text, flags=re.MULTILINE)
+    }
 
 
 def _module_string_constants() -> dict[str, str]:
@@ -159,3 +175,86 @@ def test_no_inline_warning_literals_in_src() -> None:
     assert not violations, (
         f"inline warning literals found (use core/warnings.py constants instead): {violations}"
     )
+
+
+# Every code ever published (GH #338). Append-only: a code is never renamed, and
+# removing one is a contract-major change. A new warning adds its code here.
+SHIPPED_CODES = frozenset(
+    {
+        "parenthesized_removed",
+        "repeated_numbers_range",
+        "repeated_labels",
+        "unit_recovered_from_field",
+        "unit_fragment_from_city",
+        "locality_from_recipient",
+        "delivery_line_recovered",
+        "unit_list_item_recovered",
+        "unrecognized_unit_designator",
+        "duplicate_unit_collapsed",
+        "no_parseable_street",
+        "general_delivery_discarded",
+        "unrecognized_region",
+        "provider_inferred",
+        "provider_replaced",
+        "provider_unconfirmed",
+        "provider_rejected_malformed",
+        "provider_fallback_unreachable",
+        "provider_secondary_narrowed",
+        "provider_secondary_omitted",
+        "unrecognized",
+    }
+)
+
+
+def test_every_warning_has_a_code() -> None:
+    missing = [w for w in warning_catalogue.CATALOGUE if w not in WARNING_CODES]
+    assert not missing, f"warnings without a WarningCode in WARNING_CODES: {missing}"
+
+
+def test_every_code_entry_is_a_catalogued_warning() -> None:
+    catalogue = set(warning_catalogue.CATALOGUE)
+    orphaned = [w for w in WARNING_CODES if w not in catalogue]
+    assert not orphaned, f"WARNING_CODES keys absent from CATALOGUE: {orphaned}"
+
+
+def test_every_code_maps_to_exactly_one_warning() -> None:
+    """One code per warning, and every code but the sentinel is in use."""
+    used = list(WARNING_CODES.values())
+    duplicated = sorted({c for c in used if used.count(c) > 1})
+    assert not duplicated, f"codes shared by more than one warning: {duplicated}"
+    unused = set(WarningCode) - set(used) - {WarningCode.UNRECOGNIZED}
+    assert not unused, f"WarningCode members with no warning: {sorted(unused)}"
+
+
+def test_codes_are_snake_case() -> None:
+    bad = [c.value for c in WarningCode if not re.fullmatch(r"[a-z][a-z0-9_]*", c.value)]
+    assert not bad, f"codes must be snake_case: {bad}"
+
+
+def test_no_shipped_code_renamed_or_removed() -> None:
+    gone = SHIPPED_CODES - {c.value for c in WarningCode}
+    assert not gone, (
+        f"published codes renamed or removed (contract-major — never rename): {sorted(gone)}"
+    )
+
+
+def test_every_code_is_frozen_as_shipped() -> None:
+    new = {c.value for c in WarningCode} - SHIPPED_CODES
+    assert not new, f"new codes must be appended to SHIPPED_CODES: {sorted(new)}"
+
+
+def test_doc_lists_each_warning_with_its_code() -> None:
+    documented = _documented_codes()
+    wrong = {
+        template: (documented.get(template), code.value)
+        for template, code in WARNING_CODES.items()
+        if documented.get(template) != code.value
+    }
+    assert not wrong, (
+        f"docs/WARNINGS.md row code (documented, expected) differs from WARNING_CODES: {wrong}"
+    )
+
+
+def test_doc_describes_sentinel_code() -> None:
+    text = WARNINGS_DOC.read_text(encoding="utf-8")
+    assert f"`{WarningCode.UNRECOGNIZED.value}`" in text
