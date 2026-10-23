@@ -235,6 +235,19 @@ already rejected it without a restart. To probe a client, connect it to
 `https://dv-g3b-noct-emudhra.we-have-a-problem.com/`. A certificate error means
 it's fixed; any HTTP-level answer means it still trusts the chain.
 
+**SocratiCode's Qdrant was recreated by hand** (2026-10-23) so that its
+telemetry is off and its ports listen on loopback only. SocratiCode reuses a
+container named `socraticode-qdrant` if one exists. If none exists, it creates
+one with telemetry on and both ports on `0.0.0.0`. So if the container is ever
+removed (`docker system prune` removes stopped ones), recreate it before
+SocratiCode does. The index is in the named volume, so it survives:
+
+```bash
+docker run -d --name socraticode-qdrant -p 127.0.0.1:16333:6333 -p 127.0.0.1:16334:6334 \
+  -v socraticode_qdrant_data:/qdrant/storage --restart unless-stopped \
+  -e QDRANT__TELEMETRY_DISABLED=true qdrant/qdrant:v1.17.0
+```
+
 ## Upgrading ollama (GH #318)
 
 SocratiCode's embedder (`ollama.service`, `127.0.0.1:11434`) is a CPU-only
