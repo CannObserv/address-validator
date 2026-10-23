@@ -13,7 +13,7 @@ tailnet is in its `docs/reference/tailscale.md`.
 | Node | `address-validator`, `100.75.8.39`, MagicDNS `address-validator.taild0fb76.ts.net` |
 | Tag | `tag:address-validator`: tagged, **non-ephemeral**, key expiry disabled |
 | ACL | `tag:address-validator → tag:notifier:9000` (unit-failure dispatch, #232) and `→ tag:status:9000` (co-status liveness check-in, #255). `:9001` (notifier and co-status dev) is dropped |
-| Joined | 2026-09-29, Tailscale 1.102.4 from the official apt repo |
+| Joined | 2026-09-29, Tailscale 1.102.4 from the official apt repo; 1.104.2 since 2026-10-23 (TS-2026-013, #345) |
 | DNS | MagicDNS owns `/etc/resolv.conf` (operator decision): every outbound name, USPS and Google included, resolves through `tailscaled` |
 
 `tailscaled` is roughly 51 MB RSS, and on this swapless host it is a
