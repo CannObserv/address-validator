@@ -9,6 +9,11 @@ posture scheduled
 # window 2026-11-08. The grammar has no week-of-month, so this admits every
 # Sunday: the run itself must fall on the 2nd. UTC, so DST never moves it.
 window Sun 17:00-19:00
+# TEMPORARY (#345): out-of-cycle window for Tailscale's TS-2026-013 bulletin
+# (eMudhra compromise), apply.sh --lane origin:pkgs.tailscale.com only. Remove
+# both lines when #345 closes. Each sits between quiet ranges and timers.
+window Fri 00:00-03:00
+window Fri 14:15-23:59
 
 # Daily 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
 # (After=audit-archive); Sun 03:30 docker-prune, Sun 05:00 disk-hygiene.

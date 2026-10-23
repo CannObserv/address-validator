@@ -83,10 +83,21 @@ def test_the_knob_reads_clean() -> None:
     assert knob["posture"]["value"] == "scheduled"
 
 
+# Out-of-cycle windows, each tied to the issue that removes it when it closes.
+TEMPORARY_WINDOWS = {
+    # #345: Tailscale TS-2026-013 (eMudhra), apply.sh --lane origin:pkgs.tailscale.com
+    ("Fri", "00:00-03:00"): 345,
+    ("Fri", "14:15-23:59"): 345,
+}
+
+
 def test_the_window_is_the_owners_and_in_utc() -> None:
     """2nd Sunday 17:00-19:00 UTC (#272, 2026-10-16). The grammar has no week of
-    the month, so the line admits every Sunday; UTC so DST never moves it."""
-    assert _named("window") == [["Sun", "17:00-19:00"]]
+    the month, so the line admits every Sunday; UTC so DST never moves it. Any
+    other window is a declared temporary one."""
+    windows = [tuple(words) for words in _named("window")]
+    assert windows[0] == ("Sun", "17:00-19:00")
+    assert set(windows[1:]) == set(TEMPORARY_WINDOWS)
 
 
 def test_no_image_owner_line() -> None:
@@ -143,7 +154,7 @@ def _setting(path: Path, key: str) -> list[str]:
 def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None:
     """A new timer, or a moved one, that lands in the window goes red here."""
     quiet = [_span(words[0]) for words in _named("quiet") if len(words) == 1]
-    (window,) = [_span(words[1]) for words in _named("window")]
+    windows = [_span(words[1]) for words in _named("window")]
     timers = sorted(t for t in INFRA.glob("*.timer") if t.name not in FREQUENT_PROBES)
     assert timers
     for timer in timers:
@@ -155,7 +166,8 @@ def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None
             at = _minutes(clock.group(1))
             inside = any(start <= at < end for start, end in quiet)
             assert inside, f"{timer.name} fires outside every quiet range"
-            assert not window[0] <= at < window[1], f"{timer.name} fires inside the window"
+            for start, end in windows:
+                assert not start <= at < end, f"{timer.name} fires inside a window"
 
 
 def test_each_frequent_probe_is_a_timer_with_a_reason() -> None:
@@ -265,11 +277,11 @@ def test_the_liveness_probe_and_the_patch_health_check_agree() -> None:
     assert any(url in " ".join(words) for words in _named("health")), url
 
 
-def test_quiet_ranges_never_overlap_the_window() -> None:
-    (window,) = [_span(words[1]) for words in _named("window")]
-    for words in _named("quiet"):
-        start, end = _span(words[0])
-        assert end <= window[0] or start >= window[1], words
+def test_quiet_ranges_never_overlap_a_window() -> None:
+    for window in [_span(words[1]) for words in _named("window")]:
+        for words in _named("quiet"):
+            start, end = _span(words[0])
+            assert end <= window[0] or start >= window[1], (words, window)
 
 
 FORBIDDEN_IN_COMMANDS = (
