@@ -238,6 +238,15 @@ def test_a_session_reparented_to_pid_1_reports_its_root(tmp_path: Path) -> None:
     assert _session_root_adj(tmp_path, 1200) == -1000
 
 
+def test_a_session_under_a_resident_exe_init_reports_its_root(tmp_path: Path) -> None:
+    # #238's newer layout: exe-init stays running and starts sessions itself, so its
+    # child is the root wherever the child's cgroup is.
+    _fake_process(tmp_path, 1, 0, "exe-init", -1000)
+    _fake_process(tmp_path, 400, 1, "sh", -1000, "0::/exe.slice/session.scope")
+    _fake_process(tmp_path, 401, 400, "npm", 500)  # a choom'd leaf
+    assert _session_root_adj(tmp_path, 401) == -1000
+
+
 @pytest.mark.parametrize(
     ("comm", "cgroup"),
     [
