@@ -203,11 +203,9 @@ def _session_root_adj(proc: Path, pid: int) -> int | None:
         ppid = int(re.search(r"^PPid:\s*(\d+)", status, flags=re.MULTILINE).group(1))
         if ppid < 1:
             return None
-        if (proc / str(ppid) / "comm").read_text().strip() in SESSION_PARENTS:
-            return int((proc / str(pid) / "oom_score_adj").read_text())
-        if ppid == 1:
-            if INIT_SCOPE not in (proc / str(pid) / "cgroup").read_text().splitlines():
-                return None
+        if (proc / str(ppid) / "comm").read_text().strip() in SESSION_PARENTS or (
+            ppid == 1 and INIT_SCOPE in (proc / str(pid) / "cgroup").read_text().splitlines()
+        ):
             return int((proc / str(pid) / "oom_score_adj").read_text())
         pid = ppid
     return None
