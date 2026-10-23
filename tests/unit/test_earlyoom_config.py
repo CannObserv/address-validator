@@ -88,6 +88,9 @@ HOST_COMMS = frozenset(
 OOM_FLOOR = -1000
 # What exe.dev starts a session from; the -1000 is theirs, inherited or not.
 SESSION_PARENTS = frozenset({"exe-init", "sshd"})
+# PID 1's own cgroup. exe.dev's sshd starts outside systemd and sits in it, as does
+# anything it spawns, reparented or not; systemd never puts a unit's process there.
+INIT_SCOPE = "0::/init.scope"
 
 
 def _value() -> str:
@@ -190,24 +193,32 @@ def _session_root_adj(proc: Path, pid: int) -> int | None:
     Walks the ancestry to the first process whose parent is in
     ``SESSION_PARENTS`` and reads that one, not ``pid`` itself: a leaf can be
     ``choom``'d (HOST-MEMORY.md's capped install is), the session root cannot.
-    ``None`` when no ancestor is a session: CI, a systemd unit, cron.
+    A session that outlives its ssh connection is reparented to PID 1 with no
+    sshd left above it (#236); then the root is the child of PID 1, if it sits
+    in ``INIT_SCOPE``. ``None`` when no ancestor is a session: CI, a systemd
+    unit, cron.
     """
     while pid > 1:
         status = (proc / str(pid) / "status").read_text()
         ppid = int(re.search(r"^PPid:\s*(\d+)", status, flags=re.MULTILINE).group(1))
         if ppid < 1:
             return None
-        if (proc / str(ppid) / "comm").read_text().strip() in SESSION_PARENTS:
+        if (proc / str(ppid) / "comm").read_text().strip() in SESSION_PARENTS or (
+            ppid == 1 and INIT_SCOPE in (proc / str(pid) / "cgroup").read_text().splitlines()
+        ):
             return int((proc / str(pid) / "oom_score_adj").read_text())
         pid = ppid
     return None
 
 
-def _fake_process(proc: Path, pid: int, ppid: int, comm: str, adj: int) -> None:
+def _fake_process(
+    proc: Path, pid: int, ppid: int, comm: str, adj: int, cgroup: str = INIT_SCOPE
+) -> None:
     (proc / str(pid)).mkdir(parents=True)
     (proc / str(pid) / "status").write_text(f"Name:\t{comm}\nPPid:\t{ppid}\n")
     (proc / str(pid) / "comm").write_text(f"{comm}\n")
     (proc / str(pid) / "oom_score_adj").write_text(f"{adj}\n")
+    (proc / str(pid) / "cgroup").write_text(f"{cgroup}\n")
 
 
 def test_a_session_under_sshd_reports_its_root(tmp_path: Path) -> None:
@@ -217,9 +228,36 @@ def test_a_session_under_sshd_reports_its_root(tmp_path: Path) -> None:
     assert _session_root_adj(tmp_path, 900) == -1000
 
 
-def test_no_session_ancestor_is_none(tmp_path: Path) -> None:
+def test_a_session_reparented_to_pid_1_reports_its_root(tmp_path: Path) -> None:
+    # The VS Code server outlives its ssh connection (#236): sshd is gone from the chain.
     _fake_process(tmp_path, 1, 0, "systemd", 0)
-    _fake_process(tmp_path, 300, 1, "systemd", 100)
+    _fake_process(tmp_path, 1031, 1, "sh", -1000)
+    _fake_process(tmp_path, 1035, 1031, "node", -1000)
+    _fake_process(tmp_path, 1125, 1035, "claude", -1000)
+    _fake_process(tmp_path, 1200, 1125, "npm", 500)  # a choom'd leaf
+    assert _session_root_adj(tmp_path, 1200) == -1000
+
+
+def test_a_session_under_a_resident_exe_init_reports_its_root(tmp_path: Path) -> None:
+    # #238's newer layout: exe-init stays running and starts sessions itself, so its
+    # child is the root wherever the child's cgroup is.
+    _fake_process(tmp_path, 1, 0, "exe-init", -1000)
+    _fake_process(tmp_path, 400, 1, "sh", -1000, "0::/exe.slice/session.scope")
+    _fake_process(tmp_path, 401, 400, "npm", 500)  # a choom'd leaf
+    assert _session_root_adj(tmp_path, 401) == -1000
+
+
+@pytest.mark.parametrize(
+    ("comm", "cgroup"),
+    [
+        # The user manager's cgroup also ends in init.scope; only PID 1's own counts.
+        ("systemd", "0::/user.slice/user-1000.slice/user@1000.service/init.scope"),
+        ("cron", "0::/system.slice/cron.service"),
+    ],
+)
+def test_no_session_ancestor_is_none(tmp_path: Path, comm: str, cgroup: str) -> None:
+    _fake_process(tmp_path, 1, 0, "systemd", 0)
+    _fake_process(tmp_path, 300, 1, comm, 100, cgroup)
     _fake_process(tmp_path, 301, 300, "python3", 0)
     assert _session_root_adj(tmp_path, 301) is None
 

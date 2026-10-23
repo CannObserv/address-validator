@@ -4,7 +4,11 @@ Single-VM dev+prod means an interactive agent session shares 7.2 GiB **and no
 swap** with the production service. Two facts make that sharper than it sounds:
 
 - exe.dev session processes inherit `oom_score_adj` **-1000** from exe.dev's
-  `sshd` (this host has no `exe-init`). No OOM killer can pick a session —
+  `sshd`. The adj survives reparenting: the VS Code server that hosts Claude
+  Code outlives its ssh connection and ends up under PID 1 with no `sshd` above
+  it, still at -1000, so read the adj up the chain rather than look for `sshd`
+  (#236). `exe-init` is the kernel's `init=` and execs systemd, so no `exe-init`
+  process is left running (#238). No OOM killer can pick a session —
   neither the kernel's nor earlyoom — so under real exhaustion something on
   the host goes instead, `address-validator.service` included.
 - With no swap and a small `vm.min_free_kbytes`, the host does not reach the
