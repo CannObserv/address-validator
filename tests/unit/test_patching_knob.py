@@ -83,12 +83,9 @@ def test_the_knob_reads_clean() -> None:
     assert knob["posture"]["value"] == "scheduled"
 
 
-# Out-of-cycle windows, each tied to the issue that removes it when it closes.
-TEMPORARY_WINDOWS = {
-    # #345: Tailscale TS-2026-013 (eMudhra), apply.sh --lane origin:pkgs.tailscale.com
-    ("Fri", "00:00-03:00"): 345,
-    ("Fri", "14:15-23:59"): 345,
-}
+# Out-of-cycle windows, (weekday, range) -> the issue that removes the line when
+# it closes. A bulletin's one-origin lane needs one (#345 used Fri 14:15-23:59).
+TEMPORARY_WINDOWS: dict[tuple[str, str], int] = {}
 
 
 def test_the_window_is_the_owners_and_in_utc() -> None:
