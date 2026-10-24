@@ -90,6 +90,11 @@ class IpHasher:
         self._key = key
         self.key_id = key_id
 
+    @property
+    def key_length(self) -> int:
+        """Key size in bytes, for ``--check``; the key itself never leaves the object."""
+        return len(self._key)
+
     def hash(self, ip: str) -> str:
         """Hex HMAC-SHA256(key, canonical_ip(ip))."""
         return hmac.new(self._key, canonical_ip(ip).encode(), hashlib.sha256).hexdigest()
@@ -141,8 +146,7 @@ def cli(argv: Sequence[str], environ: Mapping[str, str]) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.check:
-        key_bytes = len(hasher._key)  # noqa: SLF001
-        print(f"key id {hasher.key_id}, {key_bytes} bytes: ok")
+        print(f"key id {hasher.key_id}, {hasher.key_length} bytes: ok")
         return 0
     ip = _read_ip().strip()
     if not ip:
