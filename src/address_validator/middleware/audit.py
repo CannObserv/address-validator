@@ -163,10 +163,22 @@ def _should_audit(path: str) -> bool:
 
 
 def _get_client_ip(scope: Scope) -> str:
-    """Extract client IP from X-Forwarded-For or fall back to scope client."""
+    """Client IP: the rightmost X-Forwarded-For entry, else the socket peer.
+
+    The exe.dev proxy appends the address it saw to any X-Forwarded-For the
+    caller sent, so only the rightmost entry is trustworthy; the leftmost is
+    caller-supplied and spoofable (GH #233). Several header lines read as one
+    comma-joined list, so the last line's last entry wins. An empty entry
+    falls back to ``scope["client"]``.
+    """
+    forwarded = None
     for name, value in scope.get("headers", []):
         if name == b"x-forwarded-for":
-            return value.decode().split(",")[0].strip()
+            forwarded = value
+    if forwarded is not None:
+        rightmost = forwarded.decode("latin-1").rsplit(",", 1)[-1].strip()
+        if rightmost:
+            return rightmost
     client = scope.get("client")
     if client:
         return client[0]
