@@ -22,8 +22,8 @@ the DB, in every mode (``--skip-upload`` included), and never falls back to
 the raw IP. Never swap in a plain SHA-256: the IPv4 space is small enough to
 brute-force. Never log a raw IP, the key, or an HMAC (the journal is
 persistent, #241). Scheme, key rotation, crypto-shredding and how to look up
-a known IP: ``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP
-and were rewritten in place by ``rehash_archive_ips.py``.
+a known IP: ``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP;
+``rehash_archive_ips.py`` rewrites them in place, once, at the #233 deploy.
 
 Usage:
     uv run python infra/archive_audit.py               # archive expired rows
