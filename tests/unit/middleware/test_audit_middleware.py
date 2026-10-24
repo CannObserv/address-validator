@@ -23,6 +23,7 @@ from address_validator.middleware.audit import (
     AuditMiddleware,
     AuditWriteQueue,
     _check_validate_invariants,
+    _get_client_ip,
     _should_audit,
 )
 from address_validator.middleware.request_id import RequestIdMiddleware
@@ -72,6 +73,31 @@ def test_should_not_audit_docs() -> None:
     assert _should_audit("/docs") is False
     assert _should_audit("/redoc") is False
     assert _should_audit("/openapi.json") is False
+
+
+def _scope(*xff: bytes, client: tuple[str, int] | None = ("10.0.0.5", 5555)) -> dict:
+    headers = [(b"host", b"example")] + [(b"x-forwarded-for", v) for v in xff]
+    return {"headers": headers, "client": client}
+
+
+@pytest.mark.parametrize(
+    ("scope", "expected"),
+    [
+        (_scope(), "10.0.0.5"),
+        (_scope(b"203.0.113.7"), "203.0.113.7"),
+        # exe.dev appends the IP it saw to whatever the caller sent (GH #233):
+        # the leftmost entry is caller-supplied, the rightmost is exe.dev's.
+        (_scope(b"198.51.100.1, 203.0.113.7"), "203.0.113.7"),
+        (_scope(b"1.1.1.1,2.2.2.2 ,  203.0.113.7 "), "203.0.113.7"),
+        (_scope(b""), "10.0.0.5"),
+        (_scope(b"198.51.100.1, "), "10.0.0.5"),
+        (_scope(b"198.51.100.1", b"203.0.113.7"), "203.0.113.7"),
+        (_scope(client=None), "unknown"),
+        (_scope(b"", client=None), "unknown"),
+    ],
+)
+def test_get_client_ip_takes_the_rightmost_forwarded_entry(scope: dict, expected: str) -> None:
+    assert _get_client_ip(scope) == expected
 
 
 def test_audit_row_receives_request_id(client: TestClient) -> None:

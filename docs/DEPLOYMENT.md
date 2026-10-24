@@ -343,6 +343,16 @@ uv run python infra/archive_audit.py
 
 # Backfill daily rollup aggregates (all complete UTC days, never today)
 uv run python infra/archive_audit.py --backfill
+
+# Both archive commands need AUDIT_IP_HMAC_KEY(+_ID) and exit 1 without (#233).
+# Validate the key without printing it; hash a known IP (prompted off-screen).
+# Lookup, rotation and crypto-shredding: infra/audit_ip_hmac.py docstring.
+uv run python infra/audit_ip_hmac.py --check
+uv run python infra/audit_ip_hmac.py
+
+# One-off, at the #233 deploy: rewrite pre-#233 raw-IP blobs in place
+# (dry-run by default; add --apply). A rerun skips rewritten files.
+uv run python infra/rehash_archive_ips.py
 ```
 
 ## Env file locations

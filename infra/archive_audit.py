@@ -13,9 +13,17 @@ archived: ``raw_input`` (address content, PII) lives only for the
 audit-retention window (#147) and is dropped for good when the row is
 deleted, and ``pattern_key`` is an unsalted SHA-256 of the standardized
 address — archiving it would let anyone holding the archive confirm or
-enumerate queried addresses. ``client_ip`` IS archived, raw — an operator
-decision on #228; a keyed-hash (HMAC) replacement is tracked in #233. Never
-swap in a plain SHA-256: the IPv4 space is small enough to brute-force.
+enumerate queried addresses.
+
+No raw IP is archived (#233): ``client_ip`` becomes ``client_ip_hmac``, a hex
+HMAC-SHA256 of the canonical IP under ``AUDIT_IP_HMAC_KEY``, plus
+``client_ip_key_id``. Without a valid key the script exits 1 before touching
+the DB, in every mode (``--skip-upload`` included), and never falls back to
+the raw IP. Never swap in a plain SHA-256: the IPv4 space is small enough to
+brute-force. Never log a raw IP, the key, or an HMAC (the journal is
+persistent, #241). Scheme, key rotation, crypto-shredding and how to look up
+a known IP: ``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP;
+``rehash_archive_ips.py`` rewrites them in place, once, at the #233 deploy.
 
 Usage:
     uv run python infra/archive_audit.py               # archive expired rows
@@ -27,6 +35,8 @@ Env vars:
     AUDIT_RETENTION_DAYS    Hot window in days (default: 90)
     AUDIT_ARCHIVE_BUCKET    GCS bucket name (required for upload)
     AUDIT_ARCHIVE_PREFIX    GCS key prefix (default: "audit/")
+    AUDIT_IP_HMAC_KEY       hex HMAC key, >= 32 bytes (required)
+    AUDIT_IP_HMAC_KEY_ID    label stamped on every row (required)
 """
 
 from __future__ import annotations
@@ -44,6 +54,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy as sa
+from audit_ip_hmac import IpHasher, KeyConfigError, load_hasher
 from audit_retention import compute_cutoff, parse_retention_days
 from google.cloud import storage as gcs
 from journal_logging import configure_logging
@@ -74,7 +85,8 @@ ARCHIVE_SCHEMA = pa.schema(
         ("id", pa.int64()),
         ("timestamp", pa.timestamp("us", tz="UTC")),
         ("request_id", pa.string()),
-        ("client_ip", pa.string()),
+        ("client_ip_hmac", pa.string()),
+        ("client_ip_key_id", pa.string()),
         ("method", pa.string()),
         ("endpoint", pa.string()),
         ("status_code", pa.int64()),
@@ -86,6 +98,32 @@ ARCHIVE_SCHEMA = pa.schema(
         ("parse_type", pa.string()),
     ]
 )
+
+# Read from audit_log: the archived columns, with the raw client_ip in place
+# of the two hashed ones. client_ip never reaches a file (#233).
+_SOURCE_COLUMNS = [
+    "client_ip" if name == "client_ip_hmac" else name
+    for name in ARCHIVE_SCHEMA.names
+    if name != "client_ip_key_id"
+]
+
+
+def _archive_writer(dest: Path) -> pq.ParquetWriter:
+    """The one Parquet writer for archive files; settings are the #321 contract.
+
+    Shared with ``rehash_archive_ips.py`` so a rewritten file and a nightly
+    file can't drift apart.
+    """
+    return pq.ParquetWriter(dest, ARCHIVE_SCHEMA, compression="snappy")
+
+
+def _hash_row(row: dict, hasher: IpHasher) -> dict:
+    """Replace the raw ``client_ip`` with its keyed hash and the key ID."""
+    out = dict(row)
+    ip = out.pop("client_ip")
+    out["client_ip_hmac"] = hasher.hash(ip)
+    out["client_ip_key_id"] = hasher.key_id
+    return out
 
 
 def _build_aggregate_select() -> sa.Select:
@@ -164,6 +202,19 @@ def _get_config() -> tuple[str, int, str | None, str]:
     return dsn, retention, bucket, prefix
 
 
+def _load_hasher_or_exit() -> IpHasher:
+    """The archive's IP hasher, or exit 1: never archive raw IPs (#233).
+
+    The error names the variable, never its value.
+    """
+    try:
+        hasher = load_hasher(os.environ)
+    except KeyConfigError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
+    return hasher
+
+
 def _check_upload_config(bucket: str | None, *, skip_upload: bool) -> None:
     """Exit unless there is somewhere to upload or skipping was asked for.
 
@@ -211,16 +262,18 @@ async def export_day(
     cutoff: datetime,
     dest: Path,
     *,
+    hasher: IpHasher,
     batch_size: int = 10_000,
 ) -> int:
     """Stream one UTC day's rows (bounded by cutoff) to Parquet. Returns rows written.
 
     Rows go through a server-side cursor in ``batch_size`` batches, so peak
     memory is one batch, not the whole day. Writes no file for an empty day.
+    Each row's ``client_ip`` is replaced by ``hasher``'s HMAC and key ID.
     """
     end = min(day + timedelta(days=1), cutoff)
     stmt = (
-        select(*(audit_log.c[name] for name in ARCHIVE_SCHEMA.names))
+        select(*(audit_log.c[name] for name in _SOURCE_COLUMNS))
         .where(audit_log.c.timestamp >= day, audit_log.c.timestamp < end)
         .order_by(audit_log.c.timestamp)
     )
@@ -231,11 +284,11 @@ async def export_day(
             result = await conn.stream(stmt)
             async for partition in result.partitions(batch_size):
                 batch = pa.RecordBatch.from_pylist(
-                    [dict(r._mapping) for r in partition],  # noqa: SLF001
+                    [_hash_row(dict(r._mapping), hasher) for r in partition],  # noqa: SLF001
                     schema=ARCHIVE_SCHEMA,
                 )
                 if writer is None:
-                    writer = pq.ParquetWriter(dest, ARCHIVE_SCHEMA, compression="snappy")
+                    writer = _archive_writer(dest)
                 writer.write_batch(batch)
                 written += batch.num_rows
     finally:
@@ -314,6 +367,7 @@ async def run_archive(
     cutoff: datetime,
     *,
     prefix: str,
+    hasher: IpHasher,
     upload: Uploader | None,
 ) -> None:
     """Aggregate, export, upload, delete and VACUUM rows before ``cutoff``.
@@ -321,6 +375,7 @@ async def run_archive(
     ``upload=None`` skips the upload (explicit --skip-upload). Any upload
     failure raises before the delete step, so no row is lost.
     """
+    logger.info("Hashing archived client IPs with key id %s.", hasher.key_id)
     logger.info("Aggregating rows older than %s...", cutoff.date())
     inserted = await aggregate(engine, cutoff=cutoff)
     logger.info("Aggregated %d rollup rows.", inserted)
@@ -340,7 +395,7 @@ async def run_archive(
             local_path = Path(tmpdir) / filename
             blob_name = f"{prefix}year={year}/month={month}/{filename}"
 
-            exported = await export_day(engine, day, cutoff, local_path)
+            exported = await export_day(engine, day, cutoff, local_path, hasher=hasher)
             total_exported += exported
             logger.info("Exported %d rows for %s.", exported, day_key)
 
@@ -370,6 +425,7 @@ async def main() -> None:
     args = _parse_args()
     dsn, retention_days, bucket, prefix = _get_config()
     _check_upload_config(bucket, skip_upload=args.skip_upload)
+    hasher = _load_hasher_or_exit()
 
     engine = create_async_engine(dsn)
     now = datetime.now(UTC)
@@ -383,7 +439,13 @@ async def main() -> None:
             logger.info("Backfilled %d rollup rows.", inserted)
 
         upload = _gcs_uploader(bucket) if bucket and not args.skip_upload else None
-        await run_archive(engine, compute_cutoff(now, retention_days), prefix=prefix, upload=upload)
+        await run_archive(
+            engine,
+            compute_cutoff(now, retention_days),
+            prefix=prefix,
+            hasher=hasher,
+            upload=upload,
+        )
     finally:
         await engine.dispose()
 
