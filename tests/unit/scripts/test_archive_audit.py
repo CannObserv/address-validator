@@ -34,6 +34,21 @@ def _hmac(ip: str) -> str:
     return hmac.new(bytes.fromhex(KEY_HEX), ip.encode(), hashlib.sha256).hexdigest()
 
 
+def _assert_no_raw_ip(path: Path, ips: set[str]) -> None:
+    """No value in any column equals or contains a raw IP.
+
+    Read back, not grepped: Snappy can split a literal, so a byte search of
+    the file alone could miss one (#233).
+    """
+    table = pq.read_table(path)
+    for name in table.column_names:
+        for value in table.column(name).to_pylist():
+            if isinstance(value, str):
+                assert not any(ip in value for ip in ips), name
+    raw = path.read_bytes()
+    assert not any(ip.encode() in raw for ip in ips)
+
+
 async def _seed_old_and_new_rows(engine: AsyncEngine) -> None:
     """Insert audit rows: 3 old (100 days ago) and 2 recent (today)."""
     old = datetime.now(UTC) - timedelta(days=100)
@@ -337,8 +352,7 @@ async def test_export_day_writes_keyed_hash_of_each_ip(db: AsyncEngine, tmp_path
         [_hmac("1.1.1.1"), _hmac("1.1.1.1"), _hmac("2.2.2.2")]
     )
     assert table.column("client_ip_key_id").to_pylist() == ["test-k1"] * 3
-    assert b"1.1.1.1" not in dest.read_bytes()
-    assert b"2.2.2.2" not in dest.read_bytes()
+    _assert_no_raw_ip(dest, {"1.1.1.1", "2.2.2.2"})
 
 
 @pytest.mark.asyncio

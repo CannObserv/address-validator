@@ -27,6 +27,21 @@ def _hmac(ip: str) -> str:
     return hmac.new(bytes.fromhex(KEY_HEX), ip.encode(), hashlib.sha256).hexdigest()
 
 
+def _assert_no_raw_ip(path: Path, ips: set[str]) -> None:
+    """No value in any column equals or contains a raw IP.
+
+    Read back, not grepped: Snappy can split a literal, so a byte search of
+    the file alone could miss one (#233).
+    """
+    table = pq.read_table(path)
+    for name in table.column_names:
+        for value in table.column(name).to_pylist():
+            if isinstance(value, str):
+                assert not any(ip in value for ip in ips), name
+    raw = path.read_bytes()
+    assert not any(ip.encode() in raw for ip in ips)
+
+
 def _legacy_rows(ips: list[str] = IPS) -> list[dict]:
     return [
         {
@@ -110,9 +125,7 @@ def test_rehash_file_verifies_and_holds_no_raw_ip(tmp_path: Path) -> None:
     assert rai.rehash_file(src, dest, HASHER) == len(IPS)
 
     assert pq.read_schema(dest).equals(ARCHIVE_SCHEMA)
-    raw = dest.read_bytes()
-    for ip in set(IPS):
-        assert ip.encode() not in raw
+    _assert_no_raw_ip(dest, set(IPS))
 
 
 def test_rehash_file_refuses_a_current_file(tmp_path: Path) -> None:
@@ -262,6 +275,7 @@ def test_apply_rewrites_legacy_and_is_idempotent(tmp_path: Path) -> None:
     out = tmp_path / "check.parquet"
     out.write_bytes(bucket.objects["audit/a.parquet"][0])
     assert pq.read_schema(out).equals(ARCHIVE_SCHEMA)
+    _assert_no_raw_ip(out, set(IPS))
     # outside the prefix: untouched
     assert pq.read_schema(_dump(bucket, "other/x.parquet", tmp_path)).equals(
         rai.LEGACY_ARCHIVE_SCHEMA
