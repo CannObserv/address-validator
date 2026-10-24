@@ -101,7 +101,6 @@ ARCHIVE_SCHEMA = pa.schema(
 
 # Read from audit_log: the archived columns, with the raw client_ip in place
 # of the two hashed ones. client_ip never reaches a file (#233).
-_HASHED_COLUMNS = ("client_ip_hmac", "client_ip_key_id")
 _SOURCE_COLUMNS = [
     "client_ip" if name == "client_ip_hmac" else name
     for name in ARCHIVE_SCHEMA.names
