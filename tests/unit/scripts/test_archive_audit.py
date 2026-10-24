@@ -1,9 +1,14 @@
 """Tests for audit log archive script."""
 
+import asyncio
+import hashlib
+import hmac
 import json
+import logging
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
+import archive_audit
 import pyarrow.parquet as pq
 import pytest
 from archive_audit import (
@@ -17,8 +22,16 @@ from archive_audit import (
     fetch_expired_dates,
     run_archive,
 )
+from audit_ip_hmac import KEY_ENV, KEY_ID_ENV, load_hasher
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+KEY_HEX = "5a" * 32
+HASHER = load_hasher({KEY_ENV: KEY_HEX, KEY_ID_ENV: "test-k1"})
+
+
+def _hmac(ip: str) -> str:
+    return hmac.new(bytes.fromhex(KEY_HEX), ip.encode(), hashlib.sha256).hexdigest()
 
 
 async def _seed_old_and_new_rows(engine: AsyncEngine) -> None:
@@ -230,7 +243,7 @@ async def test_export_day_streams_fixed_schema(db: AsyncEngine, tmp_path: Path) 
     )
 
     dest = tmp_path / "day.parquet"
-    written = await export_day(db, day, day + timedelta(days=1), dest, batch_size=2)
+    written = await export_day(db, day, day + timedelta(days=1), dest, hasher=HASHER, batch_size=2)
 
     assert written == 5
     table = pq.read_table(dest)
@@ -253,7 +266,7 @@ async def test_export_day_parquet_contract(db: AsyncEngine, tmp_path: Path) -> N
     await _seed_day(db, [day], provider=[None], cache=[None])
 
     dest = tmp_path / "day.parquet"
-    await export_day(db, day, day + timedelta(days=1), dest)
+    await export_day(db, day, day + timedelta(days=1), dest, hasher=HASHER)
 
     md = pq.read_metadata(dest)
     # Footer reads "2.6" for any v2 file; this only catches a fall back to 1.0.
@@ -279,6 +292,118 @@ def test_archive_schema_omits_address_data() -> None:
     assert "parse_type" in ARCHIVE_SCHEMA.names
 
 
+def test_archive_schema_holds_no_raw_ip() -> None:
+    """The archive keeps a keyed hash of the IP, never the IP itself (#233)."""
+    assert "client_ip" not in ARCHIVE_SCHEMA.names
+    assert "client_ip_hmac" in ARCHIVE_SCHEMA.names
+    assert "client_ip_key_id" in ARCHIVE_SCHEMA.names
+
+
+def test_archive_schema_is_pinned() -> None:
+    """ARCHIVE_SCHEMA is a data contract with every blob in the bucket; change it deliberately.
+
+    A change also needs the rewrite script's schema handling and the
+    mixed-generation test reviewed (#233, #321).
+    """
+    assert ARCHIVE_SCHEMA.names == [
+        "id",
+        "timestamp",
+        "request_id",
+        "client_ip_hmac",
+        "client_ip_key_id",
+        "method",
+        "endpoint",
+        "status_code",
+        "latency_ms",
+        "provider",
+        "validation_status",
+        "cache_hit",
+        "error_detail",
+        "parse_type",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_export_day_writes_keyed_hash_of_each_ip(db: AsyncEngine, tmp_path: Path) -> None:
+    """Each row carries HMAC-SHA256(key, ip) and the key ID; equal IPs hash alike."""
+    await _seed_old_and_new_rows(db)
+    day = _utc_midnight_days_ago(100)
+
+    dest = tmp_path / "day.parquet"
+    assert await export_day(db, day, day + timedelta(days=1), dest, hasher=HASHER) == 3
+
+    table = pq.read_table(dest)
+    assert sorted(table.column("client_ip_hmac").to_pylist()) == sorted(
+        [_hmac("1.1.1.1"), _hmac("1.1.1.1"), _hmac("2.2.2.2")]
+    )
+    assert table.column("client_ip_key_id").to_pylist() == ["test-k1"] * 3
+    assert b"1.1.1.1" not in dest.read_bytes()
+    assert b"2.2.2.2" not in dest.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_run_archive_logs_no_ip_key_or_hash(
+    db: AsyncEngine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The journal is persistent (#241): no raw IP, key or HMAC at any level (#233)."""
+    await _seed_old_and_new_rows(db)
+    caplog.set_level(logging.DEBUG)
+
+    await run_archive(
+        db,
+        compute_cutoff(datetime.now(UTC), 90),
+        prefix="audit/",
+        hasher=HASHER,
+        upload=_FakeUploader(),
+    )
+
+    text_ = caplog.text
+    assert "test-k1" in text_  # the key ID is logged; it is not secret
+    for secret in ("1.1.1.1", "2.2.2.2", "3.3.3.3", KEY_HEX, _hmac("1.1.1.1"), _hmac("2.2.2.2")):
+        assert secret not in text_
+
+
+@pytest.mark.parametrize(
+    "key_env",
+    [
+        {},
+        {KEY_ENV: "ab" * 8, KEY_ID_ENV: "k1"},
+        {KEY_ENV: "not-hex-" * 8, KEY_ID_ENV: "k1"},
+        {KEY_ENV: KEY_HEX},
+    ],
+)
+def test_main_refuses_to_run_without_a_valid_key(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, key_env: dict
+) -> None:
+    """No key, no run: exits 1 before any DB or GCS work, in every mode (#233).
+
+    Even --skip-upload refuses; there is no path that falls back to raw IPs.
+    """
+    for name in (KEY_ENV, KEY_ID_ENV):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in key_env.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://x/y")
+    monkeypatch.setenv("AUDIT_ARCHIVE_BUCKET", "bucket")
+    monkeypatch.setattr("sys.argv", ["archive_audit.py", "--skip-upload"])
+    monkeypatch.setattr(archive_audit, "configure_logging", lambda: None)
+
+    def _no_engine(*_a, **_k):
+        raise AssertionError("engine created without a key")
+
+    monkeypatch.setattr(archive_audit, "create_async_engine", _no_engine)
+    monkeypatch.setattr(archive_audit.gcs, "Client", _no_engine)
+    caplog.set_level(logging.ERROR, logger="archive_audit")
+
+    with pytest.raises(SystemExit) as exc:
+        asyncio.run(archive_audit.main())
+
+    assert exc.value.code == 1
+    assert "AUDIT_IP_HMAC_KEY" in caplog.text
+    for value in key_env.values():
+        assert value not in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_export_day_clamps_to_cutoff(db: AsyncEngine, tmp_path: Path) -> None:
     """Rows at or after the cutoff are never exported, even mid-day."""
@@ -286,7 +411,7 @@ async def test_export_day_clamps_to_cutoff(db: AsyncEngine, tmp_path: Path) -> N
     await _seed_day(db, [day + timedelta(hours=1), day + timedelta(hours=5)])
 
     dest = tmp_path / "day.parquet"
-    written = await export_day(db, day, day + timedelta(hours=3), dest)
+    written = await export_day(db, day, day + timedelta(hours=3), dest, hasher=HASHER)
     assert written == 1
 
 
@@ -295,7 +420,7 @@ async def test_export_day_empty_writes_nothing(db: AsyncEngine, tmp_path: Path) 
     """A day with no rows writes no file and returns 0."""
     day = _utc_midnight_days_ago(100)
     dest = tmp_path / "empty.parquet"
-    assert await export_day(db, day, day + timedelta(days=1), dest) == 0
+    assert await export_day(db, day, day + timedelta(days=1), dest, hasher=HASHER) == 0
     assert not dest.exists()
 
 
@@ -324,11 +449,15 @@ async def test_consecutive_nights_keep_boundary_day_whole(db: AsyncEngine) -> No
     blob = f"audit/year={day:%Y}/month={day:%m}/audit-{day:%Y-%m-%d}.parquet"
 
     night1 = day + timedelta(days=90, hours=3)
-    await run_archive(db, compute_cutoff(night1, 90), prefix="audit/", upload=uploader)
+    await run_archive(
+        db, compute_cutoff(night1, 90), prefix="audit/", hasher=HASHER, upload=uploader
+    )
     assert uploader.calls == []
 
     night2 = night1 + timedelta(days=1)
-    await run_archive(db, compute_cutoff(night2, 90), prefix="audit/", upload=uploader)
+    await run_archive(
+        db, compute_cutoff(night2, 90), prefix="audit/", hasher=HASHER, upload=uploader
+    )
     assert uploader.calls == [(blob, 4)]
 
     async with db.connect() as conn:
@@ -373,7 +502,9 @@ async def test_full_archive_cycle(db: AsyncEngine) -> None:
     await _seed_old_and_new_rows(db)
     uploader = _FakeUploader()
 
-    await run_archive(db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", upload=uploader)
+    await run_archive(
+        db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", hasher=HASHER, upload=uploader
+    )
 
     assert len(uploader.calls) == 1
     assert uploader.calls[0][1] == 3
@@ -395,7 +526,11 @@ async def test_run_archive_logs_actual_upload_count(
     caplog.set_level("INFO", logger="archive_audit")
 
     await run_archive(
-        db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", upload=_FakeUploader()
+        db,
+        compute_cutoff(datetime.now(UTC), 90),
+        prefix="audit/",
+        hasher=HASHER,
+        upload=_FakeUploader(),
     )
 
     assert "Uploaded and verified 1 Parquet file(s)." in caplog.messages
@@ -406,7 +541,9 @@ async def test_run_archive_skip_upload_still_deletes(db: AsyncEngine) -> None:
     """upload=None (explicit --skip-upload) aggregates and deletes without uploading."""
     await _seed_old_and_new_rows(db)
 
-    await run_archive(db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", upload=None)
+    await run_archive(
+        db, compute_cutoff(datetime.now(UTC), 90), prefix="audit/", hasher=HASHER, upload=None
+    )
 
     async with db.connect() as conn:
         live_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_log"))).scalar()
