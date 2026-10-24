@@ -103,6 +103,15 @@ app while letting the thing it returns 503 without be reclaimed out from under
 it. Only `address-validator` gets `OOMScoreAdjust` — giving postgres the same
 value would restore the tie between them rather than ordering them.
 
+**The journal no longer lives in RAM** (#241). While the image's mask on
+`systemd-journal-flush` kept it volatile, journald wrote to `/run/log/journal`,
+a tmpfs: unswappable shmem charged to memory, up to its 147.6M runtime cap, and
+a 51-day uptime reached 101.5 MB of it. Persistent now, it writes
+`/var/log/journal` (512M cap, disk). After the flush `/run/log/journal` is empty
+and its pages are free; the disk files are page cache, which reclaim can drop.
+The flush runs again at every boot. If it ever stops (a re-mask), the RAM cost
+comes back with the data loss: read `df -h /run` and `ls -A /run/log/journal/*/`.
+
 ## earlyoom: kept, for libpostal
 
 GH #225. earlyoom cannot close the session gap: 1.7 skips a -1000 process

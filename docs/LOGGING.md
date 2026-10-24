@@ -137,3 +137,18 @@ New modules: one `getLogger(__name__)` per module; `caplog` assertions in corres
 ## libpostal sidecar — no logs, by design
 
 `wof-libpostal-server` logs every `/parse` and `/expand` request to stdout as `STATUS parse|expand '<address>' <duration>`, with no flag to turn it off. The sidecar is in the production path, so this is the same data the policy covers. `infra/libpostal.service` therefore keeps none of its stdout (#328): `--log-driver=none` drops Docker's `json-file` copy, and `StandardOutput=null` drops the journal copy. The second is needed because an attached `docker run` streams the container's stdout through the CLI whatever the log driver is. stderr stays in the journal, where the server's ERROR/FATAL lines and Docker's own startup errors go. `docker logs libpostal` has nothing to show. A clean start leaves no server lines in `journalctl -u libpostal`: nothing writes to stderr at startup (upstream never sets gracehttp's logger). The only expected lines are systemd's own. The `docker rm -f` cleanup and `docker stop` discard their stderr, whose usual content is `No such container` because `--rm` has already removed the container. Every stderr line that remains is filed at `err` (`SyslogLevel=err`, #252), so it reaches the unit-failure tail. Any line there is an error. Whether the sidecar is up is the liveness probe's job (#256). `tests/unit/test_libpostal_unit_logging.py` pins these settings.
+
+## Journal retention — persistent, capped at 512M
+
+The journal persists across reboots since #241, capped at **512M** on the 30 G root disk. Until then it never did: the Feb-2026 exeuntu image masked `systemd-journal-flush.service`, so journald stayed in `/run` despite the image's own `Storage=persistent`, and the 2026-09-29 reboot lost 51 days of logs.
+
+| Piece | What it does |
+|---|---|
+| `systemctl unmask systemd-journal-flush.service` | the fix: at each boot the vendor unit (pulled by `sysinit.target`) runs `journalctl --flush`, moving `/run/log/journal` into `/var/log/journal`. A drop-in can't do this: systemd ignores drop-ins on a masked unit |
+| `infra/journald.conf.d/address-validator.conf` → `/etc/systemd/journald.conf.d/` | tracks `Storage=persistent` and sets `SystemMaxUse=512M`. Install: [DEPLOYMENT.md](DEPLOYMENT.md#journal) |
+| gregoryfoster/skills#425's `zz-cannobserv-journal.conf` (not installed yet, #326) | sets the same 512M in `/usr/local/lib/systemd/journald.conf.d/`. It sorts last and wins, so keep the two equal |
+
+- **What can put the mask back:** a VM rebuilt from the Feb-2026 image. An apt upgrade of systemd can't: dpkg never writes masks in `/etc/systemd/system`. Newer exeuntu images don't mask the flush. `tests/unit/test_journald_config.py` fails on the host if the unit is masked again or `system.journal` is missing, and the patching-hosts probe reports `journal:volatile`. The knob holds no exception for it.
+- **Shutdown evidence** for a reboot is now the previous boot's tail, `journalctl -b -1 -n 50`, ending in journald's `Journal stopped`. The patching reboot chain no longer copies the journal: it skips an empty `/run/log/journal`.
+- **Reach:** `journalctl --list-boots` and `journalctl --disk-usage`. At 512M, older entries rotate out first.
+- **PII:** what reaches the journal now stays on disk for as long as the cap allows, reboot or not. The INFO+ policy above is unchanged, and `DEBUG off in production` matters more. The files are `root:systemd-journal` 0640 with a read ACL for `adm`, which `exedev` is in. If address content did reach the journal, `sudo journalctl --rotate && sudo journalctl --vacuum-time=1s` drops every archived file.

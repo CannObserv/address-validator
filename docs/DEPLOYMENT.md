@@ -29,6 +29,9 @@ sudo install -m 644 infra/needrestart.conf.d/address-validator.conf /etc/needres
 
 # Install the third-party apt pins (NodeSource, Tailscale scoped to their packages)
 sudo install -m 644 infra/apt-preferences.d/address-validator /etc/apt/preferences.d/
+
+# Install the journald drop-in (persistent, 512M cap; see "Journal" below)
+sudo install -m 644 infra/journald.conf.d/address-validator.conf /etc/systemd/journald.conf.d/
 ```
 
 ### Unit file and code must move together
@@ -241,6 +244,30 @@ in a window, under the owner's approval.
   and `containerd` may restart itself. Hold them as separate steps.
 - `tests/unit/test_needrestart_config.py` evaluates the file as Perl, and on the
   host pins the installed copy and the live `conf.d` chain.
+
+## Journal
+
+Persistent since #241, capped at 512M. Why, the PII note and what could undo it:
+[LOGGING.md](LOGGING.md#journal-retention--persistent-capped-at-512m). From the
+main checkout, under the owner's approval and outside the knob's quiet ranges:
+
+```bash
+sudo install -m 644 infra/journald.conf.d/address-validator.conf /etc/systemd/journald.conf.d/
+sudo systemctl unmask systemd-journal-flush.service
+sudo systemctl restart systemd-journald          # reads the cap; services' streams survive (fd store)
+sudo systemctl start systemd-journal-flush.service   # journalctl --flush: /run -> /var
+
+# Verify: the unit is active, the file is on disk and grows, usage is under the cap
+systemctl is-active systemd-journal-flush        # active
+ls -l /var/log/journal/$(cat /etc/machine-id)/system.journal; ls -A /run/log/journal/*/   # /run empty
+journalctl -b -u systemd-journald | grep 'System Journal'   # "... max 512.0M ..."
+journalctl --disk-usage
+```
+
+A reboot proves itself only afterwards: `journalctl --list-boots` shows more than
+one boot, and `journalctl -b -1 -n 5` ends in `Journal stopped`.
+`tests/unit/test_journald_config.py` pins the drop-in, and on the host the
+installed copy, the live `conf.d` chain and the unmasked flush.
 
 ## Server lifecycle
 

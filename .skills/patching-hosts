@@ -29,8 +29,9 @@ exception ordering:libpostal.service 2027-01-31 stateless parser sidecar; never 
 # docker system prune + a disk check (docker-prune-check.sh); restarts nothing.
 exception not-restarter:docker-prune.service 2027-01-31 docker system prune -f removes stopped containers and dangling images only
 
-# exe.dev image: systemd-journal-flush masked (#241); the reboot chain copies it.
-exception journal:volatile 2027-01-31 image masks the flush; reboot-chain.sh copies the journal as its last step
+# No journal:volatile exception: the journal persists since #241 (flush unmasked,
+# 512M cap, infra/journald.conf.d/). The probe reads files under /var/log/journal,
+# so a re-mask shows up as a finding again; so does tests/unit/test_journald_config.py.
 # exe.dev sessions inherit -1000 from exe-init/sshd (docs/HOST-MEMORY.md); the
 # skill runs the apply and dry run under choom -n 0.
 exception session:adj 2027-01-31 platform session lineage; apply and dry run run under choom -n 0
