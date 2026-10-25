@@ -22,12 +22,12 @@ from archive_audit import (
     fetch_expired_dates,
     run_archive,
 )
-from audit_ip_hmac import KEY_ENV, KEY_ID_ENV, load_hasher
+from audit_ip_hmac import CREDENTIAL, CREDENTIALS_DIR_ENV, KEY_ENV, KEY_ID_ENV, IpHasher
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 KEY_HEX = "5a" * 32
-HASHER = load_hasher({KEY_ENV: KEY_HEX, KEY_ID_ENV: "test-k1"})
+HASHER = IpHasher(bytes.fromhex(KEY_HEX), "test-k1")
 
 
 def _hmac(ip: str) -> str:
@@ -377,29 +377,13 @@ async def test_run_archive_logs_no_ip_key_or_hash(
         assert secret not in text_
 
 
-@pytest.mark.parametrize(
-    "key_env",
-    [
-        {},
-        {KEY_ENV: "ab" * 8, KEY_ID_ENV: "k1"},
-        {KEY_ENV: "not-hex-" * 8, KEY_ID_ENV: "k1"},
-        {KEY_ENV: KEY_HEX},
-    ],
-)
-def test_main_refuses_to_run_without_a_valid_key(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, key_env: dict
-) -> None:
-    """No key, no run: exits 1 before any DB or GCS work, in every mode (#233).
-
-    Even --skip-upload refuses; there is no path that falls back to raw IPs.
-    """
-    for name in (KEY_ENV, KEY_ID_ENV):
+def _main_env(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
+    """A config that gets past every check but the key; DB and GCS are tripwires."""
+    for name in (KEY_ENV, KEY_ID_ENV, CREDENTIALS_DIR_ENV):
         monkeypatch.delenv(name, raising=False)
-    for name, value in key_env.items():
-        monkeypatch.setenv(name, value)
     monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://x/y")
     monkeypatch.setenv("AUDIT_ARCHIVE_BUCKET", "bucket")
-    monkeypatch.setattr("sys.argv", ["archive_audit.py", "--skip-upload"])
+    monkeypatch.setattr("sys.argv", ["archive_audit.py", *argv])
     monkeypatch.setattr(archive_audit, "configure_logging", lambda: None)
 
     def _no_engine(*_a, **_k):
@@ -407,15 +391,59 @@ def test_main_refuses_to_run_without_a_valid_key(
 
     monkeypatch.setattr(archive_audit, "create_async_engine", _no_engine)
     monkeypatch.setattr(archive_audit.gcs, "Client", _no_engine)
+
+
+@pytest.mark.parametrize(
+    ("credential", "env"),
+    [
+        (None, {KEY_ID_ENV: "k1"}),  # no $CREDENTIALS_DIRECTORY, no --key-file
+        ("", {KEY_ID_ENV: "k1"}),  # the unit's empty SetCredential= fallback
+        ("ab" * 8, {KEY_ID_ENV: "k1"}),
+        ("not-hex-" * 8, {KEY_ID_ENV: "k1"}),
+        (KEY_HEX, {}),
+        (KEY_HEX, {KEY_ID_ENV: "k1", KEY_ENV: KEY_HEX}),  # the retired env var (#352)
+    ],
+)
+def test_main_refuses_to_run_without_a_valid_key(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    tmp_path: Path,
+    credential: str | None,
+    env: dict,
+) -> None:
+    """No key, no run: exits 1 before any DB or GCS work, in every mode (#233).
+
+    Even --skip-upload refuses; there is no path that falls back to raw IPs.
+    """
+    _main_env(monkeypatch, ["--skip-upload"])
+    if credential is not None:
+        (tmp_path / CREDENTIAL).write_text(credential)
+        monkeypatch.setenv(CREDENTIALS_DIR_ENV, str(tmp_path))
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
     caplog.set_level(logging.ERROR, logger="archive_audit")
 
     with pytest.raises(SystemExit) as exc:
         asyncio.run(archive_audit.main())
 
     assert exc.value.code == 1
-    assert "AUDIT_IP_HMAC_KEY" in caplog.text
-    for value in key_env.values():
-        assert value not in caplog.text
+    assert caplog.records
+    for value in (credential, *env.values()):
+        if value and value != "k1":
+            assert value not in caplog.text
+
+
+def test_main_takes_the_key_from_key_file(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    """By hand, ``--key-file`` supplies the key; the run gets as far as the DB."""
+    key_file = tmp_path / "k"
+    key_file.write_text(KEY_HEX)
+    _main_env(monkeypatch, ["--skip-upload", "--key-file", str(key_file)])
+    monkeypatch.setenv(KEY_ID_ENV, "k1")
+
+    with pytest.raises(AssertionError, match="engine created"):
+        asyncio.run(archive_audit.main())
 
 
 @pytest.mark.asyncio

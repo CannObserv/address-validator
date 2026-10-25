@@ -8,6 +8,13 @@ Type=oneshot
 User=exedev
 WorkingDirectory=/home/exedev/address-validator
 EnvironmentFile=/etc/address-validator/.env
+# The IP HMAC key is a credential, never an env var (#352): .env is also the
+# API's, so a key there sits in its /proc/<pid>/environ. Root-only file, read
+# by systemd into $CREDENTIALS_DIRECTORY. The lone-newline fallback lets a
+# missing file reach the script, which exits 1 naming it, not 243/CREDENTIALS
+# before exec. Not an empty value: systemd 255 ignores that as invalid syntax.
+SetCredential=audit-ip-hmac.key:\n
+LoadCredential=audit-ip-hmac.key:/etc/address-validator/audit-ip-hmac.key
 Environment=PYTHONPATH=/home/exedev/address-validator/src
 ExecStart=/home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/archive_audit.py
 # No swap on this host: an overrun must kill this job, not port 8000 (#228).
