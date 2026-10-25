@@ -23,13 +23,14 @@ Its 7-day soft-delete keeps each raw original restorable for 7 days (to
 someone with restore permission); after that it is gone. Key rotation can't
 use this script: once rewritten, the raw IP no longer exists.
 
-Usage (main checkout, outside the quiet ranges):
+Usage (main checkout, outside the quiet ranges; the key through a pipe, #352):
     set -a && source /etc/address-validator/.env && set +a
-    PYTHONPATH=src .venv/bin/python infra/rehash_archive_ips.py           # dry run
-    PYTHONPATH=src .venv/bin/python infra/rehash_archive_ips.py --apply
+    K=/etc/address-validator/audit-ip-hmac.key
+    PYTHONPATH=src .venv/bin/python infra/rehash_archive_ips.py --key-file <(sudo cat $K)  # dry run
+    PYTHONPATH=src .venv/bin/python infra/rehash_archive_ips.py --key-file <(sudo cat $K) --apply
 
 Env vars: AUDIT_ARCHIVE_BUCKET (required), AUDIT_ARCHIVE_PREFIX (default
-"audit/"), AUDIT_IP_HMAC_KEY + AUDIT_IP_HMAC_KEY_ID (required).
+"audit/"), AUDIT_IP_HMAC_KEY_ID (required). The key itself: ``--key-file``.
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ from typing import TYPE_CHECKING, Literal
 import pyarrow as pa
 import pyarrow.parquet as pq
 from archive_audit import ARCHIVE_SCHEMA, _archive_writer
-from audit_ip_hmac import IpHasher, KeyConfigError, load_hasher
+from audit_ip_hmac import IpHasher, KeyConfigError, add_key_file_argument, load_hasher
 from google.cloud import storage as gcs
 
 if TYPE_CHECKING:
@@ -194,10 +195,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure_logging()
     parser = argparse.ArgumentParser(description="Rewrite archived raw IPs as keyed hashes.")
     parser.add_argument("--apply", action="store_true", help="Write; default is a dry run.")
+    add_key_file_argument(parser)
     args = parser.parse_args(argv)
 
     try:
-        hasher = load_hasher(os.environ)
+        hasher = load_hasher(os.environ, args.key_file)
     except KeyConfigError as exc:
         logger.error("%s", exc)
         return 1

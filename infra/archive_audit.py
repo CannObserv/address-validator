@@ -16,27 +16,30 @@ address — archiving it would let anyone holding the archive confirm or
 enumerate queried addresses.
 
 No raw IP is archived (#233): ``client_ip`` becomes ``client_ip_hmac``, a hex
-HMAC-SHA256 of the canonical IP under ``AUDIT_IP_HMAC_KEY``, plus
-``client_ip_key_id``. Without a valid key the script exits 1 before touching
-the DB, in every mode (``--skip-upload`` included), and never falls back to
-the raw IP. Never swap in a plain SHA-256: the IPv4 space is small enough to
-brute-force. Never log a raw IP, the key, or an HMAC (the journal is
-persistent, #241). Scheme, key rotation, crypto-shredding and how to look up
-a known IP: ``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP;
+HMAC-SHA256 of the canonical IP under the archive key, plus
+``client_ip_key_id``. The key is a credential, never an env var (#352): the
+unit's ``LoadCredential=``, or ``--key-file`` by hand. Without a valid key
+the script exits 1 before touching the DB, in every mode (``--skip-upload``
+included), and never falls back to the raw IP. Never swap in a plain
+SHA-256: the IPv4 space is small enough to brute-force. Never log a raw IP,
+the key, or an HMAC (the journal is persistent, #241). Scheme, key
+rotation, crypto-shredding and how to look up a known IP:
+``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP;
 ``rehash_archive_ips.py`` rewrites them in place, once, at the #233 deploy.
 
-Usage:
-    uv run python infra/archive_audit.py               # archive expired rows
-    uv run python infra/archive_audit.py --backfill     # aggregate all complete days first
-    uv run python infra/archive_audit.py --skip-upload  # aggregate + delete, no GCS
+Usage (by hand; the key through a pipe, never an env var):
+    K=/etc/address-validator/audit-ip-hmac.key
+    uv run python infra/archive_audit.py --key-file <(sudo cat $K)    # archive expired rows
+    uv run python infra/archive_audit.py --key-file <(sudo cat $K) --backfill     # all days first
+    uv run python infra/archive_audit.py --key-file <(sudo cat $K) --skip-upload  # no GCS
 
 Env vars:
     VALIDATION_CACHE_DSN    PostgreSQL DSN (required)
     AUDIT_RETENTION_DAYS    Hot window in days (default: 90)
     AUDIT_ARCHIVE_BUCKET    GCS bucket name (required for upload)
     AUDIT_ARCHIVE_PREFIX    GCS key prefix (default: "audit/")
-    AUDIT_IP_HMAC_KEY       hex HMAC key, >= 32 bytes (required)
     AUDIT_IP_HMAC_KEY_ID    label stamped on every row (required)
+    CREDENTIALS_DIRECTORY   set by systemd; holds the key unless --key-file
 """
 
 from __future__ import annotations
@@ -54,7 +57,7 @@ from typing import TYPE_CHECKING
 import pyarrow as pa
 import pyarrow.parquet as pq
 import sqlalchemy as sa
-from audit_ip_hmac import IpHasher, KeyConfigError, load_hasher
+from audit_ip_hmac import IpHasher, KeyConfigError, add_key_file_argument, load_hasher
 from audit_retention import compute_cutoff, parse_retention_days
 from google.cloud import storage as gcs
 from journal_logging import configure_logging
@@ -183,6 +186,7 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip GCS upload (aggregate + delete only). Required when no bucket is set.",
     )
+    add_key_file_argument(parser)
     return parser.parse_args()
 
 
@@ -202,13 +206,13 @@ def _get_config() -> tuple[str, int, str | None, str]:
     return dsn, retention, bucket, prefix
 
 
-def _load_hasher_or_exit() -> IpHasher:
+def _load_hasher_or_exit(key_file: str | None) -> IpHasher:
     """The archive's IP hasher, or exit 1: never archive raw IPs (#233).
 
-    The error names the variable, never its value.
+    The error names the key's source, never its value.
     """
     try:
-        hasher = load_hasher(os.environ)
+        hasher = load_hasher(os.environ, key_file)
     except KeyConfigError as exc:
         logger.error("%s", exc)
         sys.exit(1)
@@ -425,7 +429,7 @@ async def main() -> None:
     args = _parse_args()
     dsn, retention_days, bucket, prefix = _get_config()
     _check_upload_config(bucket, skip_upload=args.skip_upload)
-    hasher = _load_hasher_or_exit()
+    hasher = _load_hasher_or_exit(args.key_file)
 
     engine = create_async_engine(dsn)
     now = datetime.now(UTC)

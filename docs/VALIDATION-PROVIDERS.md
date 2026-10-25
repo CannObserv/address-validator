@@ -20,8 +20,7 @@
 | `AUDIT_RETENTION_DAYS` | non-negative int | `90` | Days to retain audit_log rows before archival |
 | `AUDIT_ARCHIVE_BUCKET` | GCS bucket name | — | Required for archival |
 | `AUDIT_ARCHIVE_PREFIX` | string | `audit/` | GCS key prefix for archived rows |
-| `AUDIT_IP_HMAC_KEY` | hex, ≥ 32 bytes | — | Required by the archiver: archived `client_ip` is HMAC'd with it (#233). `openssl rand -hex 32`; never print it. Rotation/shredding: `infra/audit_ip_hmac.py` |
-| `AUDIT_IP_HMAC_KEY_ID` | `[A-Za-z0-9._-]{1,32}` | — | Required with the key; stamped on every archived row as `client_ip_key_id` |
+| `AUDIT_IP_HMAC_KEY_ID` | `[A-Za-z0-9._-]{1,32}` | — | Required by the archiver; stamped on every archived row as `client_ip_key_id` (#233). The key itself is not an env var: `/etc/address-validator/audit-ip-hmac.key` (root, 0600) via `LoadCredential=`, and `AUDIT_IP_HMAC_KEY` set anywhere is refused (#352). Rotation/shredding: `infra/audit_ip_hmac.py` |
 | `CUSTOM_MODEL_PATH` | absolute path | — | Path to `.crfsuite` model file; unset = bundled usaddress model |
 
 ## DPV status mapping

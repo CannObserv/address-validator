@@ -13,12 +13,12 @@ import pyarrow.parquet as pq
 import pytest
 import rehash_archive_ips as rai
 from archive_audit import ARCHIVE_SCHEMA, export_day
-from audit_ip_hmac import KEY_ENV, KEY_ID_ENV, load_hasher
+from audit_ip_hmac import CREDENTIALS_DIR_ENV, KEY_ENV, KEY_ID_ENV, IpHasher
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 KEY_HEX = "7c" * 32
-HASHER = load_hasher({KEY_ENV: KEY_HEX, KEY_ID_ENV: "2026-10"})
+HASHER = IpHasher(bytes.fromhex(KEY_HEX), "2026-10")
 DAY = datetime(2026, 7, 1, tzinfo=UTC)
 IPS = ["198.51.100.4", "198.51.100.4", "203.0.113.9", "127.0.0.1", "unknown"]
 
@@ -344,8 +344,9 @@ def test_logs_names_and_counts_only(tmp_path: Path, caplog: pytest.LogCaptureFix
 
 
 def test_main_refuses_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (KEY_ENV, KEY_ID_ENV):
+    for name in (KEY_ENV, KEY_ID_ENV, CREDENTIALS_DIR_ENV):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(KEY_ID_ENV, "2026-10")
     monkeypatch.setenv("AUDIT_ARCHIVE_BUCKET", "bucket")
     monkeypatch.setattr(rai, "configure_logging", lambda: None)
 
@@ -356,9 +357,21 @@ def test_main_refuses_without_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert rai.main(["--apply"]) == 1
 
 
-def test_main_refuses_without_bucket(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_refuses_the_retired_env_var(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A key in the environment is refused even beside a valid --key-file (#352)."""
+    (tmp_path / "k").write_text(KEY_HEX)
     monkeypatch.setenv(KEY_ENV, KEY_HEX)
+    monkeypatch.setenv(KEY_ID_ENV, "2026-10")
+    monkeypatch.setenv("AUDIT_ARCHIVE_BUCKET", "bucket")
+    monkeypatch.setattr(rai, "configure_logging", lambda: None)
+    monkeypatch.setattr(rai.gcs, "Client", lambda *_a, **_k: pytest.fail("GCS client created"))
+    assert rai.main(["--key-file", str(tmp_path / "k")]) == 1
+
+
+def test_main_refuses_without_bucket(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    (tmp_path / "k").write_text(KEY_HEX)
+    monkeypatch.delenv(KEY_ENV, raising=False)
     monkeypatch.setenv(KEY_ID_ENV, "2026-10")
     monkeypatch.delenv("AUDIT_ARCHIVE_BUCKET", raising=False)
     monkeypatch.setattr(rai, "configure_logging", lambda: None)
-    assert rai.main([]) == 1
+    assert rai.main(["--key-file", str(tmp_path / "k")]) == 1

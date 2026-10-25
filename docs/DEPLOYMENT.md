@@ -337,22 +337,28 @@ uv run python scripts/db/backfill_audit_raw_input.py
 # Must run with the same CUSTOM_MODEL_PATH the service uses.
 uv run python scripts/db/backfill_pipeline_version.py --apply
 
+# The archive commands below need the IP HMAC key and exit 1 without (#233).
+# It is a root-only file, never an env var (#352): the unit's LoadCredential=,
+# or --key-file through a pipe (argv shows /dev/fd/N; runs as you, not root).
+# AUDIT_IP_HMAC_KEY_ID still comes from .env.
+K=/etc/address-validator/audit-ip-hmac.key
+
 # Archive audit log to GCS + delete archived rows. Exits if AUDIT_ARCHIVE_BUCKET
 # is unset; --skip-upload deletes without archiving, deliberately.
-uv run python infra/archive_audit.py
+uv run python infra/archive_audit.py --key-file <(sudo cat $K)
 
 # Backfill daily rollup aggregates (all complete UTC days, never today)
-uv run python infra/archive_audit.py --backfill
+uv run python infra/archive_audit.py --key-file <(sudo cat $K) --backfill
 
-# Both archive commands need AUDIT_IP_HMAC_KEY(+_ID) and exit 1 without (#233).
 # Validate the key without printing it; hash a known IP (prompted off-screen).
 # Lookup, rotation and crypto-shredding: infra/audit_ip_hmac.py docstring.
-uv run python infra/audit_ip_hmac.py --check
-uv run python infra/audit_ip_hmac.py
+uv run python infra/audit_ip_hmac.py --key-file <(sudo cat $K) --check
+# --check through the unit's LoadCredential= path: the systemd-run in that docstring
+uv run python infra/audit_ip_hmac.py --key-file <(sudo cat $K)
 
 # One-off, at the #233 deploy: rewrite pre-#233 raw-IP blobs in place
 # (dry-run by default; add --apply). A rerun skips rewritten files.
-uv run python infra/rehash_archive_ips.py
+uv run python infra/rehash_archive_ips.py --key-file <(sudo cat $K)
 ```
 
 ## Env file locations
@@ -360,6 +366,7 @@ uv run python infra/rehash_archive_ips.py
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, [TIMERS.md](TIMERS.md)) | systemd `EnvironmentFile=` (required) |
+| `/etc/address-validator/*.key` | Keys no environment may hold (root, 0600): `audit-ip-hmac.key` (archive IP HMAC, #352), `status-checkin.key` (liveness, [TIMERS.md](TIMERS.md)) | systemd `LoadCredential=` on the one unit that uses each; by hand, `--key-file <(sudo cat …)` |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN*` PATs; `ANTHROPIC_API_KEY` for `curating-context`'s exact `count_tokens` run. A worktree has no `.env`: `export ANTHROPIC_API_KEY=$(grep '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env \| cut -d= -f2-)` first | systemd (optional, `-` prefix), manual `export` |
 
 ### CORS
