@@ -157,6 +157,14 @@ def test_bad_key_is_refused_without_echoing_it(tmp_path: Path, content: str | by
     assert exc.value.__suppress_context__ or exc.value.__context__ is None
 
 
+def test_unit_fallback_names_the_missing_key_file(tmp_path: Path) -> None:
+    """A missing file reaches the script as SetCredential='s lone newline: say where to look."""
+    with pytest.raises(aih.KeyConfigError) as exc:
+        aih.load_hasher(_creds(tmp_path, "\n"))
+    assert "missing or empty" in str(exc.value)
+    assert aih.KEY_FILE in str(exc.value)
+
+
 def test_oversized_key_file_is_refused_unread() -> None:
     """``--key-file /dev/urandom`` by mistake stops at the cap, not at OOM."""
     with pytest.raises(aih.KeyConfigError) as exc:

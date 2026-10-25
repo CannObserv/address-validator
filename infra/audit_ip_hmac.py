@@ -149,7 +149,9 @@ def _read_key(path: Path, label: str) -> bytes:
         msg = f"the key ({label}) is over {_MAX_KEY_FILE_BYTES} bytes: not a key file"
         raise KeyConfigError(msg)
     if not raw:
-        msg = f"the key ({label}) is empty; refusing to archive raw IPs"
+        # Under the unit a missing file arrives as the lone-newline SetCredential= fallback.
+        where = KEY_FILE if label.startswith("credential") else "the file given"
+        msg = f"the key ({label}) is missing or empty: {where}; refusing to archive raw IPs"
         raise KeyConfigError(msg)
     try:
         key = bytes.fromhex(raw.decode("ascii"))
