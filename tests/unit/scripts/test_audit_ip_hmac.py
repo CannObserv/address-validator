@@ -157,6 +157,13 @@ def test_bad_key_is_refused_without_echoing_it(tmp_path: Path, content: str | by
     assert exc.value.__suppress_context__ or exc.value.__context__ is None
 
 
+def test_oversized_key_file_is_refused_unread() -> None:
+    """``--key-file /dev/urandom`` by mistake stops at the cap, not at OOM."""
+    with pytest.raises(aih.KeyConfigError) as exc:
+        aih.load_hasher({aih.KEY_ID_ENV: "k1"}, "/dev/zero")
+    assert "not a key file" in str(exc.value)
+
+
 def test_missing_credential_file_is_refused(tmp_path: Path) -> None:
     env = {aih.CREDENTIALS_DIR_ENV: str(tmp_path), aih.KEY_ID_ENV: "k1"}
     with pytest.raises(aih.KeyConfigError) as exc:

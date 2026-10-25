@@ -82,6 +82,7 @@ CREDENTIAL = "audit-ip-hmac.key"  # the LoadCredential= id in audit-archive.serv
 KEY_FILE = "/etc/address-validator/audit-ip-hmac.key"  # root:root 0600
 CREDENTIALS_DIR_ENV = "CREDENTIALS_DIRECTORY"
 MIN_KEY_BYTES = 32
+_MAX_KEY_FILE_BYTES = 4096  # a hex key is ~65; more means the wrong file (e.g. /dev/urandom)
 _KEY_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,32}")
 
 
@@ -139,10 +140,14 @@ def _key_source(environ: Mapping[str, str], key_file: str | None) -> tuple[Path,
 def _read_key(path: Path, label: str) -> bytes:
     """The key bytes in ``path``. Errors name ``label``, never the content."""
     try:
-        raw = path.read_bytes().strip()
+        with path.open("rb") as fh:
+            raw = fh.read(_MAX_KEY_FILE_BYTES + 1).strip()
     except OSError as exc:
         msg = f"cannot read the key ({label}): {exc.strerror}"
         raise KeyConfigError(msg) from None
+    if len(raw) > _MAX_KEY_FILE_BYTES:
+        msg = f"the key ({label}) is over {_MAX_KEY_FILE_BYTES} bytes: not a key file"
+        raise KeyConfigError(msg)
     if not raw:
         msg = f"the key ({label}) is empty; refusing to archive raw IPs"
         raise KeyConfigError(msg)
