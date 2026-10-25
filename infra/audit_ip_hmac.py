@@ -50,8 +50,8 @@ Rotate: write the new key to the key file and the new key ID to the env file
 in one sitting (a key under the wrong ID mislabels every row), then
 ``--check``; the next nightly file uses both. Older files keep their key ID.
 One caller hashes differently under each key, so joining rows across the
-boundary needs both keys. Files can't be
-re-hashed under a new key: the raw IP is gone.
+boundary needs both keys. Files can't be re-hashed under a new key: the raw
+IP is gone.
 
 Destroy (crypto-shred): delete every copy of a key ID (key file, backups,
 password manager). Its files can then no longer be linked to any IP; they
