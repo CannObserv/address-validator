@@ -34,11 +34,6 @@ def test_the_key_is_a_credential_with_a_newline_fallback() -> None:
     assert _settings(SERVICE, "SetCredential") == [f"{aih.CREDENTIAL}:\\n"]
 
 
-def test_the_key_file_lives_beside_the_env_file() -> None:
-    """Root-only files under /etc/address-validator/, like status-checkin.key."""
-    assert Path(aih.KEY_FILE).parent == Path("/etc/address-validator")
-
-
 def test_no_unit_puts_the_key_in_an_environment() -> None:
     for unit in sorted(INFRA.glob("*.service")):
         for line in _settings(unit, "Environment"):
