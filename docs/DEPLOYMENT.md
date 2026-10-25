@@ -353,6 +353,7 @@ uv run python infra/archive_audit.py --key-file <(sudo cat $K) --backfill
 # Validate the key without printing it; hash a known IP (prompted off-screen).
 # Lookup, rotation and crypto-shredding: infra/audit_ip_hmac.py docstring.
 uv run python infra/audit_ip_hmac.py --key-file <(sudo cat $K) --check
+# --check through the unit's LoadCredential= path: the systemd-run in that docstring
 uv run python infra/audit_ip_hmac.py --key-file <(sudo cat $K)
 
 # One-off, at the #233 deploy: rewrite pre-#233 raw-IP blobs in place

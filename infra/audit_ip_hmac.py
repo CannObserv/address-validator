@@ -46,9 +46,22 @@ passes the key through a pipe: argv shows only ``/dev/fd/N``, and the tool
 runs as you, not root. ``--check`` validates the key and prints only its ID
 and length.
 
+Check the unit's own path (``LoadCredential=``, as exedev; prints ID and length):
+
+    sudo systemd-run --wait --pipe -q -p User=exedev \
+        -p EnvironmentFile=/etc/address-validator/.env \
+        -p LoadCredential=audit-ip-hmac.key:/etc/address-validator/audit-ip-hmac.key \
+        $PWD/.venv/bin/python $PWD/infra/audit_ip_hmac.py --check
+
 Rotate: write the new key to the key file and the new key ID to the env file
 in one sitting (a key under the wrong ID mislabels every row), then
-``--check``; the next nightly file uses both. Older files keep their key ID.
+``--check``; the next nightly file uses both. Write the file so the key is
+never echoed and never world-readable:
+
+    K=/etc/address-validator/audit-ip-hmac.key
+    sudo install -m 600 -o root -g root /dev/null $K.new
+    openssl rand -hex 32 | sudo tee $K.new >/dev/null && sudo mv $K.new $K
+ Older files keep their key ID.
 One caller hashes differently under each key, so joining rows across the
 boundary needs both keys. Files can't be re-hashed under a new key: the raw
 IP is gone.
