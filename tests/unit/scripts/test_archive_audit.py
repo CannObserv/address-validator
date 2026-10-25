@@ -394,14 +394,14 @@ def _main_env(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
 
 
 @pytest.mark.parametrize(
-    ("credential", "env"),
+    ("credential", "env", "names"),
     [
-        (None, {KEY_ID_ENV: "k1"}),  # no $CREDENTIALS_DIRECTORY, no --key-file
-        ("", {KEY_ID_ENV: "k1"}),  # the unit's empty SetCredential= fallback
-        ("ab" * 8, {KEY_ID_ENV: "k1"}),
-        ("not-hex-" * 8, {KEY_ID_ENV: "k1"}),
-        (KEY_HEX, {}),
-        (KEY_HEX, {KEY_ID_ENV: "k1", KEY_ENV: KEY_HEX}),  # the retired env var (#352)
+        (None, {KEY_ID_ENV: "k1"}, "--key-file"),  # no $CREDENTIALS_DIRECTORY, no --key-file
+        ("\n", {KEY_ID_ENV: "k1"}, CREDENTIAL),  # the unit's lone-newline SetCredential= fallback
+        ("ab" * 8, {KEY_ID_ENV: "k1"}, CREDENTIAL),
+        ("not-hex-" * 8, {KEY_ID_ENV: "k1"}, CREDENTIAL),
+        (KEY_HEX, {}, KEY_ID_ENV),
+        (KEY_HEX, {KEY_ID_ENV: "k1", KEY_ENV: KEY_HEX}, KEY_ENV),  # the retired env var (#352)
     ],
 )
 def test_main_refuses_to_run_without_a_valid_key(
@@ -410,6 +410,7 @@ def test_main_refuses_to_run_without_a_valid_key(
     tmp_path: Path,
     credential: str | None,
     env: dict,
+    names: str,
 ) -> None:
     """No key, no run: exits 1 before any DB or GCS work, in every mode (#233).
 
@@ -427,9 +428,9 @@ def test_main_refuses_to_run_without_a_valid_key(
         asyncio.run(archive_audit.main())
 
     assert exc.value.code == 1
-    assert caplog.records
+    assert names in caplog.text
     for value in (credential, *env.values()):
-        if value and value != "k1":
+        if value and value.strip() and value != "k1":
             assert value not in caplog.text
 
 
