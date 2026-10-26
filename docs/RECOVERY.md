@@ -13,7 +13,7 @@ archive, and the cohort keeps a flat 30 days. Drill results go in the
 |---|---|
 | **What** | `pg_dump --format=custom` of `address_validator`: every table, the alembic head, ownership and grants. 12.7 MB in 1.5 s at #235 (2026-09-29) |
 | **Not** | roles (cluster state; see [step 0](#step-0--what-no-backup-holds)), the `address_validator_test*` databases, the files in step 0 |
-| **Bucket** | `gs://co-address-validator-backup` (project `co-address-validator`), its own, never the audit archive's bucket |
+| **Bucket** | `gs://co-address-validator-backup` (the cohort's `co-gcs` project), its own, never the audit archive's bucket |
 | **Key** | `<hostname>/<YYYYMMDDTHHMMSSZ>.dump`, the time `pg_dump` started: `address-validator/20261027T023001Z.dump` |
 | **Metadata** | `dumped_at`, `sha256`, `size_bytes`, `alembic_head`, `server_version`, `pg_dump_version`, `toc_entries`, `source_host` |
 | **Retention** | the bucket's: a lifecycle rule deletes at 30 days; soft-delete (7 days) stays on |
@@ -89,10 +89,11 @@ are in git. libpostal is a stateless image.
 ## Provisioning — needs the GCP project owner
 
 The node has no `gcloud`. Run this from a workstation with `roles/storage.admin`
-and `roles/iam.serviceAccountAdmin` on `co-address-validator`:
+and `roles/iam.serviceAccountAdmin` on `co-gcs`. The cohort sets no gcloud
+default project, so every command names it:
 
 ```bash
-PROJECT=co-address-validator
+PROJECT=co-gcs
 BUCKET=co-address-validator-backup
 SA=address-validator-backup
 MEMBER="serviceAccount:$SA@$PROJECT.iam.gserviceaccount.com"
@@ -138,9 +139,10 @@ gcloud iam service-accounts keys create address-validator-backup.json --iam-acco
 - The bucket policy holds only `projectOwner` legacy bindings and the service
   account's two roles.
 - The project policy grants no storage role, and no `editor` or `viewer`,
-  beyond the owner. A project-level role there reaches this bucket too:
-  `address-validator@` (the API and audit archive) must hold its grants on
-  `co-address-validator-audit` only.
+  beyond the owner. A project-level role there reaches this bucket too, and
+  `co-gcs` is shared by the cohort: any other host's service account with a
+  project-level storage role could read this host's PII. Each must hold its
+  grants on its own buckets only.
 
 Copy `address-validator-backup.json` to the node by `scp`, then delete the
 workstation copy.

@@ -32,8 +32,8 @@ seriously:
 
 | Question | Proposal |
 |---|---|
-| **Bucket** | `gs://co-address-validator-backup`, project `co-address-validator`, the audit bucket's location (`US-WEST2`), `STANDARD`. Uniform access, public-access prevention, no versioning. Lifecycle: delete at age 30. Soft-delete on (7-day default) |
-| **Writer** | Service account `address-validator-backup@co-address-validator.iam.gserviceaccount.com`, bucket-level `objectCreator` + `objectViewer` only. Key `/etc/address-validator/backup-gcs.json`, root:root 0600 |
+| **Bucket** | `gs://co-address-validator-backup`, project `co-gcs` (the cohort's; corrected by the owner 2026-10-26), the audit bucket's location (`US-WEST2`), `STANDARD`. Uniform access, public-access prevention, no versioning. Lifecycle: delete at age 30. Soft-delete on (7-day default) |
+| **Writer** | Service account `address-validator-backup@co-gcs.iam.gserviceaccount.com`, bucket-level `objectCreator` + `objectViewer` only. Key `/etc/address-validator/backup-gcs.json`, root:root 0600 |
 | **Object** | `<hostname>/<YYYYMMDDTHHMMSSZ>.dump` (`address-validator/…`). Metadata: `dumped_at`, `sha256`, `size_bytes`, `alembic_head`, `server_version`, `pg_dump_version`, `toc_entries`, `source_host`. `if_generation_match=0` |
 | **Time** | **02:30 UTC** daily, `Persistent=true`, no jitter. `TimeoutStartSec=15min`, so even a slow run finishes before the 03:00 archive deletes rows. Knob: `quiet 03:00-06:15` → `quiet 02:30-06:15` |
 | **Unit / role** | `address-validator-backup.service`, `DynamicUser=yes`, `User=address_validator_backup`. Postgres role `address_validator_backup`: `LOGIN INHERIT PASSWORD NULL`, every other attribute off (`NOSUPERUSER … NOBYPASSRLS`), member of `pg_read_all_data` only, reached by `local all all peer` (already covers it) |
@@ -48,8 +48,8 @@ addresses) and the validation cache. So:
 
 - **Readers:** the backup service account and the project owner. Nobody else.
   The provisioning commands list the project's IAM policy and must show no
-  project-level storage role (on `address-validator@`, the API's account, or
-  anyone else) that reaches the bucket.
+  project-level storage role in the shared `co-gcs` project (any cohort
+  service account) that reaches the bucket.
 - **Retention:** 30 days, plus 7 days of soft-delete. A row the archive deletes
   at 90 days survives in backups up to ~37 days more. That is the stated cost
   of a 24 h RPO; `docs/RECOVERY.md` says it.
