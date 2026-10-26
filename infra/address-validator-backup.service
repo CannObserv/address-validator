@@ -35,10 +35,10 @@ Environment=GOOGLE_APPLICATION_CREDENTIALS=%d/gcs
 # carries the API key, the DSN and provider secrets, none of which this needs.
 Environment=BACKUP_BUCKET=co-address-validator-backup
 Environment=BACKUP_CHECKIN_BASE_URL=http://status:9000
-# co-status monitor co-address-validator-backup. Empty = check-in unconfigured
-# (a warning every run). Never use it with a key from a dev or test run: an `ok`
-# from anywhere resets the production deadline.
-Environment=BACKUP_MONITOR_ID=
+# co-status monitor co-address-validator-backup (CannObserv/status#63). Not a
+# secret; empty = check-in unconfigured (a warning every run). Never use it with
+# a key from a dev or test run: an `ok` from anywhere resets the production deadline.
+Environment=BACKUP_MONITOR_ID=01M5WQXG1GGJBQW3ZKBPV806MY
 Environment=PYTHONPATH=/home/exedev/address-validator/src
 # The tree is read-only to this unit; say so rather than let Python try.
 Environment=PYTHONDONTWRITEBYTECODE=1

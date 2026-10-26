@@ -149,8 +149,8 @@ workstation copy.
 
 ## The co-status monitor
 
-Created on co-status (CannObserv/status), as #255 did for
-`co-address-validator-live`. It goes in the same tenant, so the unit reuses
+Created on co-status (CannObserv/status#63, 2026-10-26), as #255 did for
+`co-address-validator-live`: monitor id `01M5WQXG1GGJBQW3ZKBPV806MY`. It is in the same tenant, so the unit reuses
 `/etc/address-validator/status-checkin.key`, which is already there. Monitor
 `co-address-validator-backup`, on the tenant's notifier channels:
 
@@ -169,10 +169,9 @@ The check-in is `POST /api/v1/monitors/<id>/checkin`, `X-API-Key`, body
 `unchanged`), `object`, `dumped_at`, `size_bytes`, `sha256`, `alembic_head` and
 `source_host`.
 
-The id goes into the unit as `Environment=BACKUP_MONITOR_ID=<id>` (not a
-secret) by a commit, then `sudo infra/install-units.sh
-address-validator-backup.service`. Until then each run logs `check-in not
-configured` and ships anyway.
+The id is in the unit as `Environment=BACKUP_MONITOR_ID=` (not a secret). An
+empty value makes each run log `check-in not configured` and ship anyway. The
+monitor was created disabled: co-status enables it after the first `ok`.
 
 **Then see the alarm fire** before relying on it: narrow the monitor to
 `interval_seconds` 60 / `grace_seconds` 0 and wait for *"has stopped
