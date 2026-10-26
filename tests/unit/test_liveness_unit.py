@@ -4,8 +4,9 @@ The probe's behaviour is pinned by ``tests/shell/address-validator-liveness-test
 its cadence against the patching knob by ``test_patching_knob.py``. Pinned here:
 
 - the check-in key arrives as a ``LoadCredential=`` credential, never from an
-  env file, with an empty ``SetCredential=`` fallback: without it a missing key
-  file fails the unit (243/CREDENTIALS) on every tick, and every tick alerts;
+  env file, with a lone-newline ``SetCredential=`` fallback: without it a missing
+  key file fails the unit (243/CREDENTIALS) on every tick, and every tick
+  alerts. Not an empty value: systemd 255 ignores that as invalid syntax (#354);
 - the script reads the credential the unit loads, under the same id;
 - the monitor id is a plain ``Environment=``: empty (unconfigured) or a ULID;
 - the timer's interval is the co-status monitor's ``interval_seconds``.
@@ -35,10 +36,10 @@ def _credential() -> str:
     return name
 
 
-def test_the_key_is_a_credential_with_an_empty_fallback() -> None:
+def test_the_key_is_a_credential_with_a_lone_newline_fallback() -> None:
     name = _credential()
     assert _settings(SERVICE, "LoadCredential") == [f"{name}:{KEY_FILE}"]
-    assert _settings(SERVICE, "SetCredential") == [f"{name}:"]
+    assert _settings(SERVICE, "SetCredential") == [f"{name}:\\n"]
 
 
 def test_no_env_file_reaches_the_unit() -> None:
