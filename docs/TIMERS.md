@@ -49,9 +49,28 @@ sudo infra/install-units.sh libpostal-probe.service libpostal-probe.timer \
 # API liveness check-in to co-status (every 5 min): hung, degraded, VM down (#255)
 sudo infra/install-units.sh address-validator-liveness.service address-validator-liveness.timer \
   && sudo systemctl enable --now address-validator-liveness.timer
+
+# Nightly Postgres backup to GCS (02:30 UTC, #240). Role and key first, and one
+# hand-started run before enabling: docs/RECOVERY.md "Install and first run"
+sudo infra/install-units.sh address-validator-backup.service address-validator-backup.timer \
+  && sudo systemctl start address-validator-backup.service \
+  && sudo systemctl enable --now address-validator-backup.timer
 ```
 
 Rule, exit codes, limits: `infra/archive_age_check.py` docstring.
+
+**Postgres backup** (#240): daily 02:30 UTC, a verified `pg_dump` to
+`gs://co-address-validator-backup/<hostname>/<ts>.dump`, create-only, as its own
+`DynamicUser=` with no database credential. A missing key fails the start
+(`243/CREDENTIALS`, no `SetCredential=` fallback); a failed run alerts through
+`unit-failure@` and checks in `alert` to co-status's `co-address-validator-backup`,
+whose deadline catches a run that never happens. Provisioning, restore, the
+go/no-go and the drill: [RECOVERY.md](RECOVERY.md).
+
+```bash
+journalctl -u address-validator-backup -o cat           # object, size, sha256, alembic head
+systemctl show -p Result,ExecMainStatus address-validator-backup.service   # LogTarget=console hides Finished lines
+```
 
 **libpostal liveness probe** (#256): every 2 min, curls the knob's synthetic
 `/parse` URL. The 3rd consecutive miss exits 1 (one `OnFailure=` alert per

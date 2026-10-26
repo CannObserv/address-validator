@@ -1,0 +1,15 @@
+[Unit]
+Description=Nightly Postgres backup to GCS (02:30 UTC, #240)
+
+[Timer]
+# Before the 03:00 audit-archive deletes expired rows, so each dump still holds
+# them; the unit's 15-minute timeout ends any run by 02:45. Inside the patching
+# knob's quiet range (02:30-06:15). No jitter: nothing else fires at 02:30, and
+# the quiet-range test reads one HH:MM. Persistent=true runs a night a reboot
+# skipped; pg_dump reads one MVCC snapshot, so overlapping the archive then is
+# harmless.
+OnCalendar=02:30 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

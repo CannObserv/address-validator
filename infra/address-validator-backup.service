@@ -1,0 +1,87 @@
+[Unit]
+Description=Nightly Postgres dump to GCS: verified, create-only, holds no database credential (#240)
+# The cohort's backup unit (CannObserv/provisioner docs/BACKUP.md), ported from
+# wslcb-licensing-tracker's. After postgresql so a boot-time catch-up run
+# (Persistent=true) does not race the server; after tailscaled because the
+# check-in goes to co-status over the tailnet. Ordering only, no Wants=: a
+# tailscale restart must not take a backup down, and a check-in that fails is
+# itself what the dead-man monitor alarms on.
+After=network-online.target postgresql.service tailscaled.service
+Wants=network-online.target
+OnFailure=unit-failure@%n.service
+
+[Service]
+Type=oneshot
+# Its own unprivileged user, allocated by systemd for each run: nothing to
+# provision, no account to log in to, a uid no other process holds. Postgres
+# knows it as the role of the same name, pg_read_all_data and nothing more
+# (scripts/db/setup-backup-role.sql), reached by peer auth over the local
+# socket, so no database credential exists for the job at all.
+DynamicUser=yes
+User=address_validator_backup
+WorkingDirectory=/home/exedev/address-validator
+
+# The keys, as credentials, never environment: systemd reads each root-only
+# file and hands the run a private copy under $CREDENTIALS_DIRECTORY.
+# NO SetCredential= fallback, unlike the liveness unit (#354): a backup without
+# its key must fail the start (243/CREDENTIALS -> OnFailure=) and miss its
+# check-in. Loud is right here. The check-in key is the liveness probe's tenant
+# key; both monitors share the co-address-validator-live tenant.
+LoadCredential=gcs:/etc/address-validator/backup-gcs.json
+LoadCredential=checkin-key:/etc/address-validator/status-checkin.key
+# The SDK takes a path: the private copy's. backup_db.py refuses any other.
+Environment=GOOGLE_APPLICATION_CREDENTIALS=%d/gcs
+# Configuration, not secrets. No EnvironmentFile=: /etc/address-validator/.env
+# carries the API key, the DSN and provider secrets, none of which this needs.
+Environment=BACKUP_BUCKET=co-address-validator-backup
+Environment=BACKUP_CHECKIN_BASE_URL=http://status:9000
+# co-status monitor co-address-validator-backup (CannObserv/status#63). Not a
+# secret; empty = check-in unconfigured (a warning every run). Never use it with
+# a key from a dev or test run: an `ok` from anywhere resets the production deadline.
+Environment=BACKUP_MONITOR_ID=01M5WQXG1GGJBQW3ZKBPV806MY
+Environment=PYTHONPATH=/home/exedev/address-validator/src
+# The tree is read-only to this unit; say so rather than let Python try.
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# The sandbox. A read-only filesystem but for a private /tmp (the dump is
+# written there, and goes with it); no new privileges.
+ProtectSystem=strict
+# An empty /home, with only the checkout bound back in, read-only: the venv and
+# the code, no ~/.ssh, no other checkout. The venv's python links to
+# /usr/bin/python3.12, outside /home; a uv-managed interpreter under
+# ~/.local/share/uv would be hidden (203/EXEC). tests/unit/test_backup_unit.py
+# fails on a host where that is so.
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/exedev/address-validator
+# Every secret file is already closed to this uid by mode; hidden as well, so a
+# later chmod cannot open one. systemd reads the credentials before the
+# namespace exists, so hiding their directory costs nothing.
+InaccessiblePaths=/etc/address-validator
+InaccessiblePaths=-/home/exedev/address-validator/.env
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+# The local socket for pg_dump, IP for GCS and co-status.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# No capabilities at all.
+CapabilityBoundingSet=
+# Background work on the host that serves port 8000.
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+ExecStart=/home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/backup_db.py
+# The dump measured 12.7 MB in 1.5 s (#235). Fifteen minutes is generous and
+# keeps a 02:30 run clear of the 03:00 audit-archive, which deletes rows. The
+# co-status monitor's grace (docs/RECOVERY.md) must outlast it: a run killed by
+# the timeout cannot check in.
+TimeoutStartSec=15min
+# No swap on this host: an overrun must kill this job, not port 8000 (#228).
+# pg_dump's server-side backend is charged to postgres, not here. Measured on
+# the first run (docs/HOST-MEMORY.md).
+MemoryHigh=384M
+MemoryMax=512M

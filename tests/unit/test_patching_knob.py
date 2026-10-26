@@ -321,6 +321,14 @@ def test_the_datastore_is_the_production_database_only() -> None:
     assert _named("datastore") == [["postgres", "postgresql@16-main", "address_validator"]]
     excepted = {words[0] for words in _named("exception")}
     assert "database:address_validator_test" in excepted
+    # The backup rehearsal's standing restore target (#240).
+    assert "database:address_validator_test_rehearsal" in excepted
+
+
+def test_the_recovery_point_is_the_nightly_backup() -> None:
+    """recovery-point.sh starts this unit instead of writing its own PII dump (#240)."""
+    assert _named("backup") == [["address-validator-backup.service", "postgresql@16-main"]]
+    assert (INFRA / "address-validator-backup.service").is_file()
 
 
 def test_the_services_are_the_app_and_its_docker_sidecar() -> None:

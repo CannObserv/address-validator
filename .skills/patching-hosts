@@ -10,11 +10,12 @@ posture scheduled
 # Sunday: the run itself must fall on the 2nd. UTC, so DST never moves it.
 window Sun 17:00-19:00
 
-# Daily 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
+# Daily 02:30 address-validator-backup (#240; done by 02:45, its timeout),
+# 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
 # (After=audit-archive); Sun 03:30 docker-prune, Sun 05:00 disk-hygiene.
 # libpostal-probe.timer fires every 2 min and has no quiet range: a read-only
 # liveness probe, declared in FREQUENT_PROBES (the test) with its sizing (#256).
-quiet 03:00-06:15
+quiet 02:30-06:15
 # wslcb-licensing-tracker's backfills call this host (~07:30, ~13:35 UTC).
 quiet 07:25-08:15
 quiet 13:25-14:15
@@ -44,11 +45,13 @@ health curl -sf -o /dev/null --max-time 10 'http://localhost:4400/parse?address=
 # hit on the repeat. Exits 1 before any request while Postgres isn't accepting.
 health /home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/patching_recovery_check.py
 
-# Recovery point: no backup regime yet (#240), so recovery-point.sh's dump is
-# the only one. It holds PII (audit_log.raw_input): stage it under $HOME (boot
-# wipes /tmp, #238), and give it a stated retention.
+# Recovery point: the nightly backup (#240, docs/RECOVERY.md). recovery-point.sh
+# starts it and needs that run to succeed, instead of writing its own dump,
+# which would hold PII (audit_log.raw_input, raw client IPs) under $HOME.
 datastore postgres postgresql@16-main address_validator
+backup address-validator-backup.service postgresql@16-main
 exception database:address_validator_test 2027-01-31 test fixtures only; rebuilt by alembic upgrade head on every test run
+exception database:address_validator_test_rehearsal 2027-01-31 the backup rehearsal's restore target; emptied and reloaded by every test run (#240)
 
 # SocratiCode's semantic-search index (dev tooling, not production). Rebuilt
 # from the repo by codebase_index; no snapshot.
