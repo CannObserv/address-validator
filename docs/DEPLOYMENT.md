@@ -306,6 +306,8 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 Unit install (`infra/install-units.sh`), every timer's schedule, alerting and journal queries: [TIMERS.md](TIMERS.md).
 
+The nightly Postgres backup, its provisioning, restore and drill: [RECOVERY.md](RECOVERY.md) (#240).
+
 ## Database maintenance scripts
 
 **NEVER** source `/etc/address-validator/.env` before `uv run pytest`. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. For one-off scripts only:
@@ -366,7 +368,7 @@ uv run python infra/rehash_archive_ips.py --key-file <(sudo cat $K)
 | File | Contents | Loaded by |
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, [TIMERS.md](TIMERS.md)) | systemd `EnvironmentFile=` (required) |
-| `/etc/address-validator/*.key` | Keys no environment may hold (root, 0600): `audit-ip-hmac.key` (archive IP HMAC, #352), `status-checkin.key` (liveness, [TIMERS.md](TIMERS.md)) | systemd `LoadCredential=` on the one unit that uses each; by hand, `--key-file <(sudo cat …)` |
+| `/etc/address-validator/*.key` | Keys no environment may hold (root, 0600): `audit-ip-hmac.key` (archive IP HMAC, #352), `status-checkin.key` (liveness and backup check-ins, [TIMERS.md](TIMERS.md)); also `backup-gcs.json`, the backup's create-only GCS key ([RECOVERY.md](RECOVERY.md)) | systemd `LoadCredential=` on the one unit that uses each; by hand, `--key-file <(sudo cat …)` |
 | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN*` PATs; `ANTHROPIC_API_KEY` for `curating-context`'s exact `count_tokens` run. A worktree has no `.env`: `export ANTHROPIC_API_KEY=$(grep '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env \| cut -d= -f2-)` first | systemd (optional, `-` prefix), manual `export` |
 
 ### CORS
