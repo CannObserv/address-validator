@@ -227,10 +227,19 @@ reset
 : >"$CREDS/status-checkin.key"
 health 7
 run
-check "empty key (SetCredential= fallback): unconfigured, with the outcome" \
+check "empty key: unconfigured, with the outcome" \
   has "^address-validator-liveness: unreachable; liveness check-in unconfigured$" "$OUT"
 check "empty key: the fault still warns" has "^<4>address-validator-liveness: unreachable:" "$ERR"
 check "empty key: co-status not called" lacks status:9000 "$sandbox/curl.args"
+# What a missing key file delivers: the unit's SetCredential=…:\n fallback (#354)
+reset
+printf '\n' >"$CREDS/status-checkin.key"
+health "0 200 $OK"
+run
+check "lone-newline key (SetCredential= fallback): exits 0" test "$RC" -eq 0
+check "lone-newline key: unconfigured, with the outcome" \
+  test "$(cat "$OUT")" = "address-validator-liveness: ok; liveness check-in unconfigured"
+check "lone-newline key: co-status not called" lacks status:9000 "$sandbox/curl.args"
 reset
 RC=0
 PATH="$sandbox/bin:$PATH" LIVENESS_MONITOR_ID=$MONITOR env -u CREDENTIALS_DIRECTORY \

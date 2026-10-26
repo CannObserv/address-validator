@@ -13,10 +13,11 @@ SyslogIdentifier=address-validator-liveness
 # secret; empty = unconfigured. Never use it with the key from a dev or test run:
 # an `ok` from anywhere resets the production deadline.
 Environment=LIVENESS_MONITOR_ID=01M5B7W1XK1WPGDZPXTWYTMDPE
-# The check-in key: root-owned, mode 0600, never in .env or argv. The empty
+# The check-in key: root-owned, mode 0600, never in .env or argv. The lone-newline
 # SetCredential= is the fallback while the file is absent; without it a missing
 # LoadCredential= file fails the unit (243/CREDENTIALS) and alerts every tick.
-SetCredential=status-checkin.key:
+# Not an empty value: systemd 255 ignores that as invalid syntax (#354).
+SetCredential=status-checkin.key:\n
 LoadCredential=status-checkin.key:/etc/address-validator/status-checkin.key
 ExecStart=/home/exedev/address-validator/infra/address-validator-liveness.sh
 # The probe's retry is ~20 s (25 s with a hung API), co-status's two calls
