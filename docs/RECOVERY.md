@@ -326,3 +326,4 @@ Newest first.
 
 | Date | By | Object | What it proved | Notes |
 |---|---|---|---|---|
+| 2026-10-26 | owner + agent (#240) | `address-validator/20261026T212635Z.dump`, 6.9 MB | First drill: `--latest --prefix` picked the newest dump, sha256 checked, restored into `address_validator_drill` in 3 s. GO: all 8 tables' row counts matched the dump (82,682 in `audit_log`), head 022, both roles present | Tables owned by `address_validator`; `pgcrypto` and `pg_trgm` restored; no `.dump` left on disk. Same day, the co-status rehearsal confirmed all four notices on Slack and Mailgun (CannObserv/status#63) |
