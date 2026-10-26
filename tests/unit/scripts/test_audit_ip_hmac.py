@@ -133,7 +133,7 @@ def test_no_source_names_both_ways_to_supply_the_key() -> None:
 @pytest.mark.parametrize(
     "content",
     [
-        "",  # the unit's empty SetCredential= fallback: key file missing
+        "",  # an empty key file
         "  \n",
         "zz" * 32,
         "abc",
