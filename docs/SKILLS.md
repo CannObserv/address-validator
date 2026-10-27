@@ -92,6 +92,7 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 | `/simplify` | After implementing a feature | Reviews changed code for reuse, quality, efficiency |
 | `/writing-skills` | Create or edit a skill | Authors new skills and verifies before deployment |
 | `/managing-skills` | Add/update external skill repos | git submodule + symlink pattern for skills-vendor/ |
+| `/adopting-dependabot` | "adopt Dependabot", "is Dependabot working", "land the Dependabot PRs" | Maps CI credentials and what the bot can move, writes `.github/dependabot.yml` with a guard test, the merge path, and `check-dependabot.sh` (read-only: config, PR-limit headroom, update runs, graph vs lockfiles, alerts, security updates). Repo settings are the owner's to switch on |
 | `/init-socraticode` | Re-audit the SocratiCode install; after a SocratiCode upgrade | Idempotent audit re-run — re-validates the manifest, re-measures graph yield, repairs hooks and the policy block. Detail: [SOCRATICODE.md](SOCRATICODE.md) |
 | `/curating-context` | "curate context", "trim AGENTS.md"; weekly maintenance | Curates AGENTS.md + its doc tree against the token budget (`.skills/context-budget`, 6,000). Its `context-budget-guard.sh` PostToolUse hook warns on every edit that pushes the file over |
 
