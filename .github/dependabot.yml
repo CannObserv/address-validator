@@ -1,0 +1,75 @@
+# Proposes the version bumps nothing else does (#361). Security updates arrive
+# on an advisory regardless of this file. There's no PR CI here: every PR lands
+# through the pre-ship merge path in docs/DEPENDENCY-POLICY.md (Dependabot).
+#
+# Guarded by tests/ci/test_dependabot.py and tests/ci/test_dependabot_repo.py.
+# Every key below fails SILENTLY when wrong: no PRs, no error anywhere a person
+# looks, and a quiet bot reads as "no updates available".
+#
+# Version 1 configs are ignored without an error.
+version: 2
+updates:
+  # A mistyped ecosystem (github_actions, python) opens nothing.
+  - package-ecosystem: "github-actions"
+    # "/" scans .github/workflows/; "/.github/workflows" is silence.
+    # context-cadence.yml is generated (install-cadence.sh) and scheduled-only:
+    # a re-render writes older pins back (gregoryfoster/skills#373), and no PR
+    # runs it, so dispatch it once after landing a bump.
+    directory: "/"
+    # Without an interval Dependabot rejects the block, visibly only in its tab.
+    schedule:
+      interval: "weekly"
+    # Default 5; past it no version update opens and nothing says so. One PR
+    # per action (1 today); the guard derives the bound.
+    open-pull-requests-limit: 5
+    # The PR's commit lands as-is: "[chore]: bump …" is the repo's form.
+    commit-message:
+      prefix: "[chore]"
+
+  - package-ecosystem: "uv"
+    directory: "/" # one uv.lock
+    schedule:
+      interval: "weekly"
+    # `auto` resolves to `widen`, which uv doesn't support. In-range bumps are
+    # lock changes; a major moves the >=X.Y,<X+1 bound (DEPENDENCY-POLICY).
+    versioning-strategy: increase-if-necessary
+    # Above 23 runtime (each could be a major, its own PR) + 2 groups.
+    open-pull-requests-limit: 30
+    commit-message:
+      prefix: "[chore]"
+    groups:
+      # Dev tooling carries the churn; no restart. Ruff has one pin (uv.lock),
+      # so this group moves pre-commit's ruff too.
+      dev-tools:
+        dependency-type: "development"
+      # One PR for in-range runtime bumps: one session, one deploy. Majors
+      # stay individual PRs, each a decision and a changelog read.
+      runtime:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+    ignore:
+      # A [tool.uv.sources] git tag: the updater doesn't move it, and a quiet
+      # bot would look like coverage. Bumped by hand (#232).
+      - dependency-name: "notifier-client"
+
+  - package-ecosystem: "npm"
+    directory: "/" # package.json: the admin JS toolchain, dev-only
+    schedule:
+      interval: "weekly"
+    # Above 6 devDependencies (each could be a major) + 1 group.
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "[chore]"
+    groups:
+      # Majors (eslint, vitest, jsdom…) stay individual PRs.
+      js-tooling:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "pre-commit"
+    directory: "/" # .pre-commit-config.yaml; ruff isn't here (runs from uv.lock)
+    schedule:
+      interval: "weekly"
+    # One PR per remote hook repo (shellcheck-py today).
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "[chore]"
