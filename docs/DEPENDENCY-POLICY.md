@@ -88,8 +88,12 @@ This is the recipe that cleared the postcss / vite / ws findings during the Node
 
 There's no PR CI (`gh pr checks` is always empty), so **pre-ship on the PR's current head is the gate**. Land one PR at a time, because each merge puts the others behind `main`.
 
+Run the block from the main checkout as **one script** (one Bash call), not line by line: `set -e` is what turns each check into a gate, so a red one stops the run before `gh pr merge`. In a login shell it would close the shell instead.
+
 ```bash
-export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
+set -euo pipefail   # every command below is a gate; no `a && b`: set -e ignores a failing `a`
+GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2); export GH_TOKEN   # split: export hides a failed grep
+MAIN=$PWD
 N=<pr>
 # 1. Read the release notes for every version between, not just the diff.
 # 2. If main moved past the PR's base, rebase, and wait for a NEW head. Reading
@@ -104,17 +108,22 @@ SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
 BR=$(gh pr view $N --json headRefName -q .headRefName)
 # 3. Gate that head in its own worktree.
 git fetch origin "+$BR:$BR"                  # + : Dependabot force-pushes on rebase
-bash .claude/skills/using-git-worktrees/scripts/worktree-create.sh "$BR"   # cd into the printed path
-uv sync --locked && bash .skills/doctor.sh   # --locked: never re-lock the PR's uv.lock
+WT=$(bash .claude/skills/using-git-worktrees/scripts/worktree-create.sh "$BR")   # stdout: the path
+cd "$WT"
+uv sync --locked                            # --locked: never re-lock the PR's uv.lock
+bash .skills/doctor.sh
 npm ci                                      # npm PRs: else npm run finds the MAIN checkout's node_modules
 test "$(git rev-parse HEAD)" = "$SHA"
-uv run pre-commit clean && uv run pre-commit run --all-files
+uv run pre-commit clean
+uv run pre-commit run --all-files
 bash .claude/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
-uv audit --frozen && uv lock --check
+uv audit --frozen
+uv lock --check
 # 4. Merge exactly the head that was gated, with nothing rewritten under it.
 test -z "$(git status --porcelain)"
 gh pr merge $N --merge --match-head-commit "$SHA"
-# 5. From the main checkout: the doctor ran, so --force.
+# 5. Destroy refuses the worktree it runs from; the doctor ran, so --force.
+cd "$MAIN"
 bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force
 ```
 
