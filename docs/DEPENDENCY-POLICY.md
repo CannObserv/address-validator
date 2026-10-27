@@ -99,12 +99,18 @@ N=<pr>
 # 2. If main moved past the PR's base, rebase, and wait for a NEW head. Reading
 #    the old head right after the comment tests a commit that won't land.
 OLD=$(gh pr view $N --json headRefOid -q .headRefOid)
+SHA=$OLD
 git fetch origin
 if ! git merge-base --is-ancestor origin/main "$OLD"; then
   gh pr comment $N --body "@dependabot rebase"
-  until [ "$(gh pr view $N --json headRefOid -q .headRefOid)" != "$OLD" ]; do sleep 30; done
+  # Bounded: Dependabot won't rebase a PR someone else pushed to; it comments instead.
+  for _ in $(seq 40); do
+    sleep 30
+    SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
+    [ "$SHA" = "$OLD" ] || break
+  done
+  [ "$SHA" != "$OLD" ] || { echo "#$N: no new head in 20 min; read its comments" >&2; exit 1; }
 fi
-SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
 BR=$(gh pr view $N --json headRefName -q .headRefName)
 # 3. Gate that head in its own worktree.
 git fetch origin "+$BR:$BR"                  # + : Dependabot force-pushes on rebase
