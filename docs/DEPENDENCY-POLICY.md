@@ -103,7 +103,7 @@ fi
 SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
 BR=$(gh pr view $N --json headRefName -q .headRefName)
 # 3. Gate that head in its own worktree.
-git fetch origin "$BR:$BR"
+git fetch origin "+$BR:$BR"                  # + : Dependabot force-pushes on rebase
 bash .claude/skills/using-git-worktrees/scripts/worktree-create.sh "$BR"   # cd into the printed path
 uv sync && bash .skills/doctor.sh
 npm ci                                      # npm PRs: else npm run finds the MAIN checkout's node_modules
