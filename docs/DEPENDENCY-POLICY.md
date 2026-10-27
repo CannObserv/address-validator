@@ -130,6 +130,7 @@ test -z "$(git status --porcelain)"
 gh pr merge $N --merge --match-head-commit "$SHA"
 # 5. Destroy refuses the worktree it runs from; the doctor ran, so --force.
 cd "$MAIN"
+git fetch origin   # destroy checks $BR against origin/main, which doesn't hold the merge yet
 bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force
 ```
 
