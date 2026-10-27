@@ -95,9 +95,11 @@ N=<pr>
 # 2. If main moved past the PR's base, rebase, and wait for a NEW head. Reading
 #    the old head right after the comment tests a commit that won't land.
 OLD=$(gh pr view $N --json headRefOid -q .headRefOid)
-git fetch origin && git merge-base --is-ancestor origin/main "$OLD" \
-  || gh pr comment $N --body "@dependabot rebase"
-until [ "$(gh pr view $N --json headRefOid -q .headRefOid)" != "$OLD" ]; do sleep 30; done  # only after a rebase
+git fetch origin
+if ! git merge-base --is-ancestor origin/main "$OLD"; then
+  gh pr comment $N --body "@dependabot rebase"
+  until [ "$(gh pr view $N --json headRefOid -q .headRefOid)" != "$OLD" ]; do sleep 30; done
+fi
 SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
 BR=$(gh pr view $N --json headRefName -q .headRefName)
 # 3. Gate that head in its own worktree.
