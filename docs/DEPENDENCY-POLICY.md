@@ -134,6 +134,8 @@ git fetch origin   # destroy checks $BR against origin/main, which doesn't hold 
 bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force
 ```
 
+**A red gate leaves its worktree**, with `$BR` checked out, and a re-run then dies at `git fetch origin "+$BR:$BR"` ("refusing to fetch into branch … checked out"). Read the failure there first, then, from the main checkout: `bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force --descoped "red gate at <sha>"`.
+
 Then, by what the PR touched:
 
 - **Runtime** (`runtime` group, a runtime major, or a security update to a runtime package): live only after the deploy, which is its own approval. Pull the main checkout, `uv sync`, then `sudo systemctl restart address-validator`, outside the `quiet` ranges in `.skills/patching-hosts` (re-read `date -u` first).
