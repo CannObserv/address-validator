@@ -12,7 +12,7 @@ Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
 **Git-sourced deps** (`notifier-client`, #232) are pinned by tag in `[tool.uv.sources]`, per the source repo's release doc. uv does not enforce the `>=` floor against a git source: the floor records intent, and the tag is the pin. To upgrade, change the tag, run `uv sync`, and raise the floor to match.
 
-Upgrade cadence: `uv lock --upgrade && uv sync` periodically; then update lower bounds.
+Upgrade cadence: Dependabot proposes bumps weekly ([below](#dependabot-361)). By hand: `uv lock --upgrade-package <pkg>`, then update lower bounds.
 
 ### Auditing (#317)
 
@@ -68,3 +68,59 @@ rm -rf node_modules package-lock.json && npm install && npm audit
 ```
 
 This is the recipe that cleared the postcss / vite / ws findings during the Node 24 floor bump (#119).
+
+## Dependabot (#361)
+
+`.github/dependabot.yml` proposes version updates weekly for `uv`, `npm`, `pre-commit` and `github-actions`. Security updates arrive on an advisory, whatever the schedule. Design and rationale: `docs/plans/2026-10-27-dependabot-adoption-design.md`. Guarded by `tests/ci/test_dependabot.py` (the `adopting-dependabot` skill's asset: edit only its ADAPT block) and `tests/ci/test_dependabot_repo.py`.
+
+| Ecosystem | PRs | Lands as |
+|---|---|---|
+| uv | `dev-tools` group; `runtime` group (minor + patch); one PR per runtime **major** | runtime → deploy; dev → no restart |
+| npm | `js-tooling` group (minor + patch); one PR per major | dev-only, no restart |
+| pre-commit | one per hook repo (shellcheck only: ruff runs from `uv.lock`) | no restart |
+| github-actions | one per action | no restart; dispatch the workflow once |
+
+**Not moved by the bot:** `notifier-client` (a git tag, ignored; bump by hand, per the git-sourced rule above). `context-cadence.yml` is generated: after any `install-cadence.sh` re-render, check `git diff` for `uses:` pins that went backwards and restore them (gregoryfoster/skills#373).
+
+**The PR limits are derived, not guessed.** Past `open-pull-requests-limit` Dependabot opens no more version updates and says so nowhere. The guard tests fail when a new dependency, hook repo or action pushes a batch past a limit: raise it then.
+
+### Merge path
+
+There's no PR CI (`gh pr checks` is always empty), so **pre-ship on the PR's current head is the gate**. Land one PR at a time, because each merge puts the others behind `main`.
+
+```bash
+export GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2)
+N=<pr>
+# 1. Read the release notes for every version between, not just the diff.
+# 2. If main moved past the PR's base, rebase, and wait for a NEW head. Reading
+#    the old head right after the comment tests a commit that won't land.
+OLD=$(gh pr view $N --json headRefOid -q .headRefOid)
+git fetch origin && git merge-base --is-ancestor origin/main "$OLD" \
+  || gh pr comment $N --body "@dependabot rebase"
+until [ "$(gh pr view $N --json headRefOid -q .headRefOid)" != "$OLD" ]; do sleep 30; done  # only after a rebase
+SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
+BR=$(gh pr view $N --json headRefName -q .headRefName)
+# 3. Gate that head in its own worktree.
+git fetch origin "$BR:$BR"
+bash .claude/skills/using-git-worktrees/scripts/worktree-create.sh "$BR"   # cd into the printed path
+uv sync && bash .skills/doctor.sh
+npm ci                                      # npm PRs: else npm run finds the MAIN checkout's node_modules
+test "$(git rev-parse HEAD)" = "$SHA"
+uv run pre-commit clean && uv run pre-commit run --all-files
+bash .claude/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+uv audit --frozen && uv lock --check
+# 4. Merge exactly the head that was gated.
+gh pr merge $N --merge --match-head-commit "$SHA"
+# 5. From the main checkout: the doctor ran, so --force.
+bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force
+```
+
+Then, by what the PR touched:
+
+- **Runtime** (`runtime` group, a runtime major, or a security update to a runtime package): live only after the deploy, which is its own approval. Pull the main checkout, `uv sync`, then `sudo systemctl restart address-validator`, outside the `quiet` ranges in `.skills/patching-hosts` (re-read `date -u` first).
+- **Dev, npm, pre-commit**: no restart.
+- **`.github/workflows/`**: no PR runs a scheduled-only workflow, so dispatch it once (`gh workflow run context-cadence.yml`; the PAT can't, so the operator does) and read the run.
+
+A bump whose hooks or tests go red isn't landed by pinning it back: report it, and fix forward on a branch of its own. A major is checked against the `>=X.Y,<X+1` form above before merging.
+
+**The trade-off:** every PR costs a pre-ship session. A `pull_request` workflow running ruff and pytest would let each bump gate itself and cut a landing to a review. Weigh it with `auditing-ci-cost` before the bot's volume grows.
