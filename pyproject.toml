@@ -32,12 +32,14 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx>=0.28.1,<1",
-    "parserator>=0.6.9",
-    "pre-commit>=4.5.1",
-    "pytest>=9.1.1",
+    "packaging>=26.3,<27",  # tests/ci imports it directly (#361)
+    "parserator>=0.6.9,<1",
+    "pre-commit>=4.5.1,<5",
+    "pytest>=9.1.1,<10",
     "pytest-asyncio>=1.3.0,<2",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.15.4",
+    "pytest-cov>=7.0.0,<8",
+    "pyyaml>=6.0.3,<7",  # tests/ci imports it directly (#361)
+    "ruff>=0.15.4,<1",
 ]
 
 [tool.uv.sources]
@@ -109,6 +111,10 @@ ignore = [
     "PLR2004", # Magic value comparisons are expected in assertions
     "SLF001",  # Private member access is intentional in tests
 ]
+# Copied from the adopting-dependabot skill's assets; edited only in their ADAPT
+# blocks, so their docstrings keep upstream's line length (#361).
+"tests/ci/test_dependabot.py" = ["E501"]
+"tests/ci/test_dependency_imports.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends"]

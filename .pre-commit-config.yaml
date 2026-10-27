@@ -1,10 +1,23 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.4
+  # Ruff runs from uv.lock, not ruff-pre-commit: one pin, which Dependabot's
+  # dev-tools group moves. A second `rev:` here would drift on every dev bump,
+  # and pre-ship already runs `uv run ruff` (#361). Guarded by
+  # tests/ci/test_dependabot_repo.py.
+  - repo: local
     hooks:
       - id: ruff
+        name: ruff check
+        language: system
+        entry: uv run --frozen ruff check --force-exclude
         args: [--fix]
+        types_or: [python, pyi, jupyter]
+        require_serial: true
       - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run --frozen ruff format --force-exclude
+        types_or: [python, pyi, jupyter]
+        require_serial: true
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
