@@ -12,7 +12,7 @@ Always commit `uv.lock` alongside `pyproject.toml` after any dep change.
 
 **Git-sourced deps** (`notifier-client`, #232) are pinned by tag in `[tool.uv.sources]`, per the source repo's release doc. uv does not enforce the `>=` floor against a git source: the floor records intent, and the tag is the pin. To upgrade, change the tag, run `uv sync`, and raise the floor to match.
 
-Upgrade cadence: Dependabot proposes bumps weekly ([below](#dependabot-361)). By hand: `uv lock --upgrade-package <pkg>`, then update lower bounds.
+Upgrade cadence: Dependabot proposes bumps weekly ([below](#dependabot-361)). By hand: `uv lock --upgrade-package <pkg> && uv sync`, then update lower bounds.
 
 ### Auditing (#317)
 
