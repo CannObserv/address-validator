@@ -123,7 +123,7 @@ test "$(git rev-parse HEAD)" = "$SHA"
 uv run pre-commit clean
 uv run pre-commit run --all-files
 bash .claude/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
-uv audit --frozen
+uv audit --frozen                            # each advisory held in the Auditing table: --ignore <ID>
 uv lock --check
 # 4. Merge exactly the head that was gated, with nothing rewritten under it.
 test -z "$(git status --porcelain)"
