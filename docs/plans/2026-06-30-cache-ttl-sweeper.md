@@ -217,9 +217,7 @@ async def sweep_expired(
                 delete(query_patterns).where(query_patterns.c.canonical_key.in_(keys))
             )
             va_res = await conn.execute(
-                delete(validated_addresses).where(
-                    validated_addresses.c.canonical_key.in_(keys)
-                )
+                delete(validated_addresses).where(validated_addresses.c.canonical_key.in_(keys))
             )
             total_qp += qp_res.rowcount
             total_va += va_res.rowcount

@@ -33,9 +33,7 @@ class TestValidateRequestV1Model:
         assert req.components is None
 
     def test_accepts_components_dict(self) -> None:
-        req = ValidateRequestV1(
-            components={"address_number": "123", "street_name": "MAIN"}
-        )
+        req = ValidateRequestV1(components={"address_number": "123", "street_name": "MAIN"})
         assert req.components == {"address_number": "123", "street_name": "MAIN"}
         assert req.address is None
 
@@ -479,18 +477,14 @@ class TestUSPSProvider:
         assert result.validated == "123 MAIN ST  SPRINGFIELD, IL 62701-1234"
 
     @pytest.mark.asyncio
-    async def test_lat_lng_are_none(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_lat_lng_are_none(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std())
         assert result.latitude is None
         assert result.longitude is None
 
     @pytest.mark.asyncio
-    async def test_warnings_is_empty(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_warnings_is_empty(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         result = await provider.validate(_make_std())
         assert result.warnings == []
@@ -522,9 +516,7 @@ class TestUSPSProvider:
         )
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_http_error_raises(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         with pytest.raises(httpx.TimeoutException):
             await provider.validate(_make_std())
@@ -1090,9 +1082,7 @@ class TestValidateEndpoint:
         assert body["validation"]["status"] == "unavailable"
         assert body["api_version"] == "1"
 
-    def test_raw_string_provider_receives_standardize_response(
-        self, client: TestClient
-    ) -> None:
+    def test_raw_string_provider_receives_standardize_response(self, client: TestClient) -> None:
         """Provider must receive a StandardizeResponseV1, not raw user input."""
         mock_provider = _make_null_provider(NULL_RESPONSE)
         with patch("routers.v1.validate.get_provider", return_value=mock_provider):
@@ -1220,9 +1210,7 @@ class TestValidateEndpoint:
         assert resp.status_code == 400
         assert resp.json()["error"] == "components_or_address_required"
 
-    def test_empty_components_dict_falls_through_to_address_error(
-        self, client: TestClient
-    ) -> None:
+    def test_empty_components_dict_falls_through_to_address_error(self, client: TestClient) -> None:
         """An empty components dict is treated as absent."""
         resp = client.post("/api/v1/validate", json={"components": {}})
         assert resp.status_code == 400

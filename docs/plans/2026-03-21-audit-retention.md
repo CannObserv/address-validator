@@ -102,16 +102,15 @@ def upgrade() -> None:
         "uq_daily_stats_dimensions",
         "audit_daily_stats",
         [
-            "date", "endpoint",
+            "date",
+            "endpoint",
             sa.text("COALESCE(provider, '')"),
             "status_code",
             sa.text("COALESCE(cache_hit, false)"),
         ],
         unique=True,
     )
-    op.create_index(
-        "idx_daily_stats_date", "audit_daily_stats", [sa.text("date DESC")]
-    )
+    op.create_index("idx_daily_stats_date", "audit_daily_stats", [sa.text("date DESC")])
 
 
 def downgrade() -> None:
@@ -131,7 +130,9 @@ Old:
 
 New:
 ```python
-            text("TRUNCATE validated_addresses, query_patterns, audit_log, audit_daily_stats RESTART IDENTITY CASCADE")
+text(
+    "TRUNCATE validated_addresses, query_patterns, audit_log, audit_daily_stats RESTART IDENTITY CASCADE"
+)
 ```
 
 - [ ] **Step 3: Run migrations against test DB to verify**
@@ -176,17 +177,62 @@ async def _seed_old_and_new_rows(engine: AsyncEngine) -> None:
     now = datetime.now(UTC)
     rows = [
         # Old rows — should be aggregated and archived
-        {"ts": old, "ip": "1.1.1.1", "method": "POST", "ep": "/api/v1/validate",
-         "status": 200, "provider": "usps", "vs": "confirmed", "cache": True, "latency": 42},
-        {"ts": old, "ip": "1.1.1.1", "method": "POST", "ep": "/api/v1/validate",
-         "status": 200, "provider": "usps", "vs": "confirmed", "cache": False, "latency": 88},
-        {"ts": old, "ip": "2.2.2.2", "method": "POST", "ep": "/api/v1/parse",
-         "status": 400, "provider": None, "vs": None, "cache": None, "latency": 5},
+        {
+            "ts": old,
+            "ip": "1.1.1.1",
+            "method": "POST",
+            "ep": "/api/v1/validate",
+            "status": 200,
+            "provider": "usps",
+            "vs": "confirmed",
+            "cache": True,
+            "latency": 42,
+        },
+        {
+            "ts": old,
+            "ip": "1.1.1.1",
+            "method": "POST",
+            "ep": "/api/v1/validate",
+            "status": 200,
+            "provider": "usps",
+            "vs": "confirmed",
+            "cache": False,
+            "latency": 88,
+        },
+        {
+            "ts": old,
+            "ip": "2.2.2.2",
+            "method": "POST",
+            "ep": "/api/v1/parse",
+            "status": 400,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+            "latency": 5,
+        },
         # Recent rows — should remain untouched
-        {"ts": now, "ip": "3.3.3.3", "method": "POST", "ep": "/api/v1/validate",
-         "status": 200, "provider": "usps", "vs": "confirmed", "cache": True, "latency": 30},
-        {"ts": now, "ip": "3.3.3.3", "method": "POST", "ep": "/api/v1/parse",
-         "status": 200, "provider": None, "vs": None, "cache": None, "latency": 10},
+        {
+            "ts": now,
+            "ip": "3.3.3.3",
+            "method": "POST",
+            "ep": "/api/v1/validate",
+            "status": 200,
+            "provider": "usps",
+            "vs": "confirmed",
+            "cache": True,
+            "latency": 30,
+        },
+        {
+            "ts": now,
+            "ip": "3.3.3.3",
+            "method": "POST",
+            "ep": "/api/v1/parse",
+            "status": 200,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+            "latency": 10,
+        },
     ]
     async with engine.begin() as conn:
         for r in rows:
@@ -291,11 +337,13 @@ _AGGREGATE_ALL_SQL = text("""
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Archive old audit_log rows.")
     parser.add_argument(
-        "--backfill", action="store_true",
+        "--backfill",
+        action="store_true",
         help="Aggregate ALL existing rows (not just expired ones).",
     )
     parser.add_argument(
-        "--skip-upload", action="store_true",
+        "--skip-upload",
+        action="store_true",
         help="Skip GCS upload (aggregate + delete only).",
     )
     return parser.parse_args()
@@ -396,7 +444,10 @@ def verify_gcs_upload(bucket_name: str, blob_name: str) -> bool:
 
 
 async def delete_expired_rows(
-    engine: AsyncEngine, cutoff: datetime, *, batch_size: int = 10_000,
+    engine: AsyncEngine,
+    cutoff: datetime,
+    *,
+    batch_size: int = 10_000,
 ) -> int:
     """Delete audit_log rows older than cutoff in batches. Returns total deleted."""
     total_deleted = 0
@@ -594,10 +645,20 @@ def test_export_parquet_writes_file(tmp_path) -> None:
     import pyarrow.parquet as pq
 
     rows = [
-        {"id": 1, "timestamp": datetime.now(UTC), "endpoint": "/api/v1/validate",
-         "status_code": 200, "client_ip": "1.1.1.1"},
-        {"id": 2, "timestamp": datetime.now(UTC), "endpoint": "/api/v1/parse",
-         "status_code": 400, "client_ip": "2.2.2.2"},
+        {
+            "id": 1,
+            "timestamp": datetime.now(UTC),
+            "endpoint": "/api/v1/validate",
+            "status_code": 200,
+            "client_ip": "1.1.1.1",
+        },
+        {
+            "id": 2,
+            "timestamp": datetime.now(UTC),
+            "endpoint": "/api/v1/parse",
+            "status_code": 400,
+            "client_ip": "2.2.2.2",
+        },
     ]
     dest = tmp_path / "test.parquet"
     count = export_parquet(rows, dest)
@@ -694,13 +755,29 @@ async def _seed_stats_rows(engine: AsyncEngine) -> None:
 
     rows = [
         # Archived: 120 days ago — validate/200/usps/cached
-        {"d": date(2025, 11, 21), "ep": "/api/v1/validate", "provider": "usps",
-         "status": 200, "cache": True, "req_count": 50, "err_count": 0,
-         "avg_lat": 45, "p95_lat": 90},
+        {
+            "d": date(2025, 11, 21),
+            "ep": "/api/v1/validate",
+            "provider": "usps",
+            "status": 200,
+            "cache": True,
+            "req_count": 50,
+            "err_count": 0,
+            "avg_lat": 45,
+            "p95_lat": 90,
+        },
         # Archived: 120 days ago — parse/400/null/null
-        {"d": date(2025, 11, 21), "ep": "/api/v1/parse", "provider": None,
-         "status": 400, "cache": None, "req_count": 10, "err_count": 10,
-         "avg_lat": 5, "p95_lat": 8},
+        {
+            "d": date(2025, 11, 21),
+            "ep": "/api/v1/parse",
+            "provider": None,
+            "status": 400,
+            "cache": None,
+            "req_count": 10,
+            "err_count": 10,
+            "avg_lat": 5,
+            "p95_lat": 8,
+        },
     ]
     async with engine.begin() as conn:
         for r in rows:
@@ -719,8 +796,8 @@ async def _seed_stats_rows(engine: AsyncEngine) -> None:
 @pytest.mark.asyncio
 async def test_dashboard_stats_includes_archived(db: AsyncEngine) -> None:
     """All-time total includes both live audit_log and archived audit_daily_stats."""
-    await _seed_rows(db)          # 6 live rows
-    await _seed_stats_rows(db)    # 60 archived requests
+    await _seed_rows(db)  # 6 live rows
+    await _seed_stats_rows(db)  # 60 archived requests
 
     stats = await get_dashboard_stats(db)
     # All-time: 6 live + 60 archived = 66
@@ -731,7 +808,7 @@ async def test_dashboard_stats_includes_archived(db: AsyncEngine) -> None:
     # Endpoint breakdown all-time should include archived
     bd = stats["endpoint_breakdown"]
     assert bd["all"]["/validate"] == 52  # 2 live + 50 archived
-    assert bd["all"]["/parse"] == 12     # 2 live + 10 archived
+    assert bd["all"]["/parse"] == 12  # 2 live + 10 archived
 
 
 @pytest.mark.asyncio
@@ -741,7 +818,7 @@ async def test_endpoint_stats_includes_archived(db: AsyncEngine) -> None:
     await _seed_stats_rows(db)
 
     stats = await get_endpoint_stats(db, "validate")
-    assert stats["total"] == 52   # 2 live + 50 archived
+    assert stats["total"] == 52  # 2 live + 50 archived
     assert stats["last_24h"] == 2  # Only live
 
     # Status codes should include archived
@@ -755,7 +832,7 @@ async def test_provider_stats_includes_archived(db: AsyncEngine) -> None:
     await _seed_stats_rows(db)
 
     stats = await get_provider_stats(db, "usps")
-    assert stats["total"] == 52   # 2 live + 50 archived
+    assert stats["total"] == 52  # 2 live + 50 archived
     assert stats["last_24h"] == 2  # Only live
 ```
 
@@ -1218,8 +1295,8 @@ async def test_full_archive_cycle(db: AsyncEngine, tmp_path) -> None:
     async with db.connect() as conn:
         live_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_log"))).scalar()
         stats_count = (await conn.execute(text("SELECT COUNT(*) FROM audit_daily_stats"))).scalar()
-    assert live_count == 2   # Only recent rows
-    assert stats_count > 0   # Rollups exist
+    assert live_count == 2  # Only recent rows
+    assert stats_count > 0  # Rollups exist
 ```
 
 - [ ] **Step 2: Run integration test**

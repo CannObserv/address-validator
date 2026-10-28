@@ -48,6 +48,7 @@ OptionalRawInputDays = Annotated[int | None, BeforeValidator(_blank_to_none)]
 @router.get("/", response_class=HTMLResponse, response_model=None)
 async def audit_list(
     request: Request,
+    *,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
     endpoint: str | None = Query(None),

@@ -249,6 +249,7 @@ def _emit_audit_artifacts(
     path: str,
     status_code: int,
     elapsed_ms: int,
+    *,
     exc_info: BaseException | None,
     queue: AuditWriteQueue,
 ) -> None:
@@ -389,7 +390,9 @@ class AuditMiddleware:
         finally:
             elapsed_ms = int((time.monotonic() - start) * 1000)
             try:
-                _emit_audit_artifacts(scope, path, status_code, elapsed_ms, exc_info, self.queue)
+                _emit_audit_artifacts(
+                    scope, path, status_code, elapsed_ms, exc_info=exc_info, queue=self.queue
+                )
             except Exception:
                 # Defense in depth: a bug in the helper must never mask the
                 # exception we are re-raising (or suppress a clean return).

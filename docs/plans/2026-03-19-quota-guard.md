@@ -492,9 +492,7 @@ class QuotaGuard:
                 for i, window in enumerate(self._windows):
                     rate = window.limit / window.duration_s
                     elapsed = now - self._last_refill[i]
-                    self._tokens[i] = min(
-                        float(window.limit), self._tokens[i] + elapsed * rate
-                    )
+                    self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
                     self._last_refill[i] = now
 
             # --- Consume from all windows ---
@@ -544,65 +542,58 @@ from services.validation.errors import ProviderAtCapacityError, ProviderRateLimi
 New test methods to add inside `TestChainProvider`:
 
 ```python
-    @pytest.mark.asyncio
-    async def test_falls_back_to_second_on_at_capacity(self, std_address: object) -> None:
-        primary = AsyncMock()
-        primary.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
-        secondary = _mock_provider(_GOOGLE_CONFIRMED)
-        chain = ChainProvider(providers=[primary, secondary])
+@pytest.mark.asyncio
+async def test_falls_back_to_second_on_at_capacity(self, std_address: object) -> None:
+    primary = AsyncMock()
+    primary.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
+    secondary = _mock_provider(_GOOGLE_CONFIRMED)
+    chain = ChainProvider(providers=[primary, secondary])
 
-        result = await chain.validate(std_address)  # type: ignore[arg-type]
-        assert result.validation.provider == "google"
-        primary.validate.assert_awaited_once()
-        secondary.validate.assert_awaited_once()
+    result = await chain.validate(std_address)  # type: ignore[arg-type]
+    assert result.validation.provider == "google"
+    primary.validate.assert_awaited_once()
+    secondary.validate.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_raises_all_when_all_providers_at_capacity(self, std_address: object) -> None:
-        p1 = AsyncMock()
-        p1.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
-        p2 = AsyncMock()
-        p2.validate = AsyncMock(side_effect=ProviderAtCapacityError("google"))
-        chain = ChainProvider(providers=[p1, p2])
 
-        with pytest.raises(ProviderRateLimitedError) as exc_info:
-            await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.provider == "all"
+@pytest.mark.asyncio
+async def test_raises_all_when_all_providers_at_capacity(self, std_address: object) -> None:
+    p1 = AsyncMock()
+    p1.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps"))
+    p2 = AsyncMock()
+    p2.validate = AsyncMock(side_effect=ProviderAtCapacityError("google"))
+    chain = ChainProvider(providers=[p1, p2])
 
-    @pytest.mark.asyncio
-    async def test_retry_after_propagated_from_at_capacity_error(
-        self, std_address: object
-    ) -> None:
-        p1 = AsyncMock()
-        p1.validate = AsyncMock(
-            side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.5)
-        )
-        p2 = AsyncMock()
-        p2.validate = AsyncMock(
-            side_effect=ProviderAtCapacityError("google", retry_after_seconds=2.0)
-        )
-        chain = ChainProvider(providers=[p1, p2])
+    with pytest.raises(ProviderRateLimitedError) as exc_info:
+        await chain.validate(std_address)  # type: ignore[arg-type]
+    assert exc_info.value.provider == "all"
 
-        with pytest.raises(ProviderRateLimitedError) as exc_info:
-            await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.retry_after_seconds == 2.0
 
-    @pytest.mark.asyncio
-    async def test_at_capacity_mixed_with_rate_limited_propagates_last(
-        self, std_address: object
-    ) -> None:
-        p1 = AsyncMock()
-        p1.validate = AsyncMock(
-            side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.1)
-        )
-        p2 = AsyncMock()
-        p2.validate = AsyncMock(
-            side_effect=ProviderRateLimitedError("google", retry_after_seconds=3.0)
-        )
-        chain = ChainProvider(providers=[p1, p2])
+@pytest.mark.asyncio
+async def test_retry_after_propagated_from_at_capacity_error(self, std_address: object) -> None:
+    p1 = AsyncMock()
+    p1.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.5))
+    p2 = AsyncMock()
+    p2.validate = AsyncMock(side_effect=ProviderAtCapacityError("google", retry_after_seconds=2.0))
+    chain = ChainProvider(providers=[p1, p2])
 
-        with pytest.raises(ProviderRateLimitedError) as exc_info:
-            await chain.validate(std_address)  # type: ignore[arg-type]
-        assert exc_info.value.retry_after_seconds == 3.0
+    with pytest.raises(ProviderRateLimitedError) as exc_info:
+        await chain.validate(std_address)  # type: ignore[arg-type]
+    assert exc_info.value.retry_after_seconds == 2.0
+
+
+@pytest.mark.asyncio
+async def test_at_capacity_mixed_with_rate_limited_propagates_last(
+    self, std_address: object
+) -> None:
+    p1 = AsyncMock()
+    p1.validate = AsyncMock(side_effect=ProviderAtCapacityError("usps", retry_after_seconds=0.1))
+    p2 = AsyncMock()
+    p2.validate = AsyncMock(side_effect=ProviderRateLimitedError("google", retry_after_seconds=3.0))
+    chain = ChainProvider(providers=[p1, p2])
+
+    with pytest.raises(ProviderRateLimitedError) as exc_info:
+        await chain.validate(std_address)  # type: ignore[arg-type]
+    assert exc_info.value.retry_after_seconds == 3.0
 ```
 
 - [ ] **Step 2: Run tests — expect failure**
@@ -690,57 +681,59 @@ from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 Replace the `client` fixture inside `TestUSPSClient`:
 
 ```python
-    @pytest.fixture()
-    def _default_guard(self) -> QuotaGuard:
-        return QuotaGuard(
-            windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
-            latency_budget_s=1.0,
-            provider_name="usps",
-        )
+@pytest.fixture()
+def _default_guard(self) -> QuotaGuard:
+    return QuotaGuard(
+        windows=[QuotaWindow(limit=5, duration_s=1.0, mode="soft")],
+        latency_budget_s=1.0,
+        provider_name="usps",
+    )
 
-    @pytest.fixture()
-    def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> USPSClient:
-        return USPSClient(
-            consumer_key="key",
-            consumer_secret="secret",
-            http_client=mock_http,
-            quota_guard=_default_guard,
-        )
+
+@pytest.fixture()
+def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> USPSClient:
+    return USPSClient(
+        consumer_key="key",
+        consumer_secret="secret",
+        http_client=mock_http,
+        quota_guard=_default_guard,
+    )
 ```
 
 Replace `test_accepts_custom_rate_limit_rps` with:
 
 ```python
-    def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
-        guard = QuotaGuard(
-            windows=[QuotaWindow(limit=10, duration_s=1.0, mode="soft")],
-            provider_name="usps",
-        )
-        client = USPSClient(
-            consumer_key="key",
-            consumer_secret="secret",
-            http_client=mock_http,
-            quota_guard=guard,
-        )
-        assert client._rate_limiter is guard
+def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
+    guard = QuotaGuard(
+        windows=[QuotaWindow(limit=10, duration_s=1.0, mode="soft")],
+        provider_name="usps",
+    )
+    client = USPSClient(
+        consumer_key="key",
+        consumer_secret="secret",
+        http_client=mock_http,
+        quota_guard=guard,
+    )
+    assert client._rate_limiter is guard
 
-    @pytest.mark.asyncio
-    async def test_at_capacity_raises_before_http_call(
-        self, client: USPSClient, mock_http: AsyncMock
-    ) -> None:
-        """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
-        from services.validation.errors import ProviderAtCapacityError
 
-        with patch.object(
-            client._rate_limiter,
-            "acquire",
-            side_effect=ProviderAtCapacityError("usps"),
-        ):
-            with pytest.raises(ProviderAtCapacityError):
-                await client.validate_address("123 Main St", "Springfield", "IL")
+@pytest.mark.asyncio
+async def test_at_capacity_raises_before_http_call(
+    self, client: USPSClient, mock_http: AsyncMock
+) -> None:
+    """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
+    from services.validation.errors import ProviderAtCapacityError
 
-        mock_http.get.assert_not_called()
-        mock_http.post.assert_not_called()
+    with patch.object(
+        client._rate_limiter,
+        "acquire",
+        side_effect=ProviderAtCapacityError("usps"),
+    ):
+        with pytest.raises(ProviderAtCapacityError):
+            await client.validate_address("123 Main St", "Springfield", "IL")
+
+    mock_http.get.assert_not_called()
+    mock_http.post.assert_not_called()
 ```
 
 - [ ] **Step 2: Run tests — expect failure**
@@ -838,49 +831,51 @@ from services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
 Replace the `client` fixture in `TestGoogleClientValidateAddress`:
 
 ```python
-    @pytest.fixture()
-    def _default_guard(self) -> QuotaGuard:
-        return QuotaGuard(
-            windows=[
-                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
-                QuotaWindow(limit=160, duration_s=86_400.0, mode="hard"),
-            ],
-            latency_budget_s=1.0,
-            provider_name="google",
-        )
+@pytest.fixture()
+def _default_guard(self) -> QuotaGuard:
+    return QuotaGuard(
+        windows=[
+            QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+            QuotaWindow(limit=160, duration_s=86_400.0, mode="hard"),
+        ],
+        latency_budget_s=1.0,
+        provider_name="google",
+    )
 
-    @pytest.fixture()
-    def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> GoogleClient:
-        return GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=_default_guard)
+
+@pytest.fixture()
+def client(self, mock_http: AsyncMock, _default_guard: QuotaGuard) -> GoogleClient:
+    return GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=_default_guard)
 ```
 
 Replace `test_has_rate_limiter` and `test_accepts_custom_rate_limit_rps` with:
 
 ```python
-    def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
-        guard = QuotaGuard(
-            windows=[QuotaWindow(limit=5, duration_s=60.0, mode="soft")],
-            provider_name="google",
-        )
-        client = GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=guard)
-        assert client._rate_limiter is guard
+def test_accepts_quota_guard(self, mock_http: AsyncMock) -> None:
+    guard = QuotaGuard(
+        windows=[QuotaWindow(limit=5, duration_s=60.0, mode="soft")],
+        provider_name="google",
+    )
+    client = GoogleClient(api_key=API_KEY, http_client=mock_http, quota_guard=guard)
+    assert client._rate_limiter is guard
 
-    @pytest.mark.asyncio
-    async def test_at_capacity_raises_before_http_call(
-        self, client: GoogleClient, mock_http: AsyncMock
-    ) -> None:
-        """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
-        from services.validation.errors import ProviderAtCapacityError
 
-        with patch.object(
-            client._rate_limiter,
-            "acquire",
-            side_effect=ProviderAtCapacityError("google"),
-        ):
-            with pytest.raises(ProviderAtCapacityError):
-                await client.validate_address("123 Main St")
+@pytest.mark.asyncio
+async def test_at_capacity_raises_before_http_call(
+    self, client: GoogleClient, mock_http: AsyncMock
+) -> None:
+    """QuotaGuard raising ProviderAtCapacityError must prevent any HTTP call."""
+    from services.validation.errors import ProviderAtCapacityError
 
-        mock_http.post.assert_not_called()
+    with patch.object(
+        client._rate_limiter,
+        "acquire",
+        side_effect=ProviderAtCapacityError("google"),
+    ):
+        with pytest.raises(ProviderAtCapacityError):
+            await client.validate_address("123 Main St")
+
+    mock_http.post.assert_not_called()
 ```
 
 - [ ] **Step 2: Run tests — expect failure**
@@ -986,127 +981,137 @@ Add `QuotaGuard, QuotaWindow` to imports (no new import needed — we only intro
 **Replace** `test_usps_rate_limit_rps_env_var` (in `TestGetProvider`):
 
 ```python
-    def test_usps_rate_limit_rps_configures_per_second_window(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "10.0")
-        result = get_provider()
-        assert isinstance(result, CachingProvider)
-        usps: USPSProvider = result._inner  # type: ignore[assignment]
-        guard = usps._client._rate_limiter
-        assert guard._windows[0].limit == 10
-        assert guard._windows[0].duration_s == 1.0
+def test_usps_rate_limit_rps_configures_per_second_window(
+    self, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "10.0")
+    result = get_provider()
+    assert isinstance(result, CachingProvider)
+    usps: USPSProvider = result._inner  # type: ignore[assignment]
+    guard = usps._client._rate_limiter
+    assert guard._windows[0].limit == 10
+    assert guard._windows[0].duration_s == 1.0
 
-    def test_usps_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_DAILY_LIMIT", "5000")
-        result = get_provider()
-        usps: USPSProvider = result._inner  # type: ignore[assignment]
-        guard = usps._client._rate_limiter
-        assert guard._windows[1].limit == 5000
-        assert guard._windows[1].duration_s == 86_400.0
+
+def test_usps_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_DAILY_LIMIT", "5000")
+    result = get_provider()
+    usps: USPSProvider = result._inner  # type: ignore[assignment]
+    guard = usps._client._rate_limiter
+    assert guard._windows[1].limit == 5000
+    assert guard._windows[1].duration_s == 86_400.0
 ```
 
 **Replace** `test_google_rate_limit_rps_env_var`:
 
 ```python
-    def test_google_rate_limit_rpm_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "10")
-        result = get_provider()
-        assert isinstance(result, CachingProvider)
-        google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
-        assert guard._windows[0].limit == 10
-        assert guard._windows[0].duration_s == 60.0
+def test_google_rate_limit_rpm_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "10")
+    result = get_provider()
+    assert isinstance(result, CachingProvider)
+    google: GoogleProvider = result._inner  # type: ignore[assignment]
+    guard = google._client._rate_limiter
+    assert guard._windows[0].limit == 10
+    assert guard._windows[0].duration_s == 60.0
 
-    def test_google_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "80")
-        result = get_provider()
-        google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
-        assert guard._windows[1].limit == 80
-        assert guard._windows[1].mode == "hard"
 
-    def test_google_daily_window_is_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        result = get_provider()
-        google: GoogleProvider = result._inner  # type: ignore[assignment]
-        guard = google._client._rate_limiter
-        assert guard._windows[1].mode == "hard"
+def test_google_daily_limit_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "80")
+    result = get_provider()
+    google: GoogleProvider = result._inner  # type: ignore[assignment]
+    guard = google._client._rate_limiter
+    assert guard._windows[1].limit == 80
+    assert guard._windows[1].mode == "hard"
+
+
+def test_google_daily_window_is_hard(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    result = get_provider()
+    google: GoogleProvider = result._inner  # type: ignore[assignment]
+    guard = google._client._rate_limiter
+    assert guard._windows[1].mode == "hard"
 ```
 
 Add new `validate_config` tests at the end of `TestValidateConfig`:
 
 ```python
-    def test_invalid_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "not-a-number")
-        with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
-            validate_config()
+def test_invalid_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "not-a-number")
+    with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
+        validate_config()
 
-    def test_zero_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "0")
-        with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
-            validate_config()
 
-    def test_invalid_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_DAILY_LIMIT", "abc")
-        with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
-            validate_config()
+def test_zero_latency_budget_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("VALIDATION_LATENCY_BUDGET_S", "0")
+    with pytest.raises(ValueError, match="VALIDATION_LATENCY_BUDGET_S"):
+        validate_config()
 
-    def test_zero_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_DAILY_LIMIT", "0")
-        with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
-            validate_config()
 
-    def test_invalid_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "abc")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
-            validate_config()
+def test_invalid_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_DAILY_LIMIT", "abc")
+    with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
+        validate_config()
 
-    def test_zero_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "0")
-        with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
-            validate_config()
 
-    def test_invalid_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "abc")
-        with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
-            validate_config()
+def test_zero_usps_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_DAILY_LIMIT", "0")
+    with pytest.raises(ValueError, match="USPS_DAILY_LIMIT"):
+        validate_config()
 
-    def test_zero_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "google")
-        monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
-        monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "0")
-        with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
-            validate_config()
+
+def test_invalid_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "abc")
+    with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
+        validate_config()
+
+
+def test_zero_google_rpm_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_RATE_LIMIT_RPM", "0")
+    with pytest.raises(ValueError, match="GOOGLE_RATE_LIMIT_RPM"):
+        validate_config()
+
+
+def test_invalid_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "abc")
+    with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
+        validate_config()
+
+
+def test_zero_google_daily_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "google")
+    monkeypatch.setenv("GOOGLE_API_KEY", "gkey")
+    monkeypatch.setenv("GOOGLE_DAILY_LIMIT", "0")
+    with pytest.raises(ValueError, match="GOOGLE_DAILY_LIMIT"):
+        validate_config()
 ```
 
 **Remove** the four tests in `TestGetProviderRpsGuard` that reference `GOOGLE_RATE_LIMIT_RPS`
@@ -1126,21 +1131,22 @@ or check `_rate_limiter.rate` (that attribute no longer exists on `QuotaGuard`):
 inspecting the removed `.rate` attribute:
 
 ```python
-    def test_usps_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0")
-        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
-            get_provider()
+def test_usps_zero_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "0")
+    with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+        get_provider()
 
-    def test_usps_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
-        monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
-        monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
-        monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
-        with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
-            get_provider()
+
+def test_usps_negative_rate_limit_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VALIDATION_PROVIDER", "usps")
+    monkeypatch.setenv("USPS_CONSUMER_KEY", "key")
+    monkeypatch.setenv("USPS_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("USPS_RATE_LIMIT_RPS", "-1.0")
+    with pytest.raises(ValueError, match="USPS_RATE_LIMIT_RPS"):
+        get_provider()
 ```
 
 And in `TestValidateConfig`, remove the three tests that reference `GOOGLE_RATE_LIMIT_RPS`:
@@ -1200,23 +1206,17 @@ def _parse_google_config() -> tuple[str, int, int]:
     """Read, validate, and return ``(api_key, rpm, daily_limit)``."""
     api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
     if not api_key:
-        raise ValueError(
-            "GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER"
-        )
+        raise ValueError("GOOGLE_API_KEY must be set when 'google' appears in VALIDATION_PROVIDER")
     try:
         rpm = int(os.environ.get("GOOGLE_RATE_LIMIT_RPM", "5"))
     except ValueError:
-        raise ValueError(
-            "GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')"
-        ) from None
+        raise ValueError("GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')") from None
     if rpm <= 0:
         raise ValueError("GOOGLE_RATE_LIMIT_RPM must be a positive integer (e.g. '5')")
     try:
         daily_limit = int(os.environ.get("GOOGLE_DAILY_LIMIT", "160"))
     except ValueError:
-        raise ValueError(
-            "GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')"
-        ) from None
+        raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')") from None
     if daily_limit <= 0:
         raise ValueError("GOOGLE_DAILY_LIMIT must be a positive integer (e.g. '160')")
     return api_key, rpm, daily_limit
@@ -1234,9 +1234,7 @@ def _parse_latency_budget() -> float:
             "VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')"
         ) from None
     if budget <= 0:
-        raise ValueError(
-            "VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')"
-        )
+        raise ValueError("VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')")
     return budget
 ```
 

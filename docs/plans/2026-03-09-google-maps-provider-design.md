@@ -69,9 +69,9 @@ class ValidateResponseV1(BaseModel):
     address_line_2: str | None = None
     city: str | None = None
     region: str | None = None
-    postal_code: str | None = None   # full postal code; ZIP+4 (e.g. "90210-1234") when available
+    postal_code: str | None = None  # full postal code; ZIP+4 (e.g. "90210-1234") when available
     country: str
-    validated: str | None = None     # single-line canonical address, two-space separator convention
+    validated: str | None = None  # single-line canonical address, two-space separator convention
     components: ComponentSet | None = None
     validation: ValidationResult
     latitude: float | None = None

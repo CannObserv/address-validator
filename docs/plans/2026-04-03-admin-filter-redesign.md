@@ -68,6 +68,7 @@ async def test_get_audit_rows_by_validation_statuses_multiple(db: AsyncEngine) -
     # seed_rows only has 'confirmed'; add a not_confirmed row
     from datetime import UTC, datetime
     from sqlalchemy import text
+
     async with db.begin() as conn:
         await conn.execute(
             text("""
@@ -85,13 +86,13 @@ async def test_get_audit_rows_by_validation_statuses_multiple(db: AsyncEngine) -
 
 
 @pytest.mark.asyncio
-async def test_get_audit_rows_status_codes_and_validation_statuses_combined(db: AsyncEngine) -> None:
+async def test_get_audit_rows_status_codes_and_validation_statuses_combined(
+    db: AsyncEngine,
+) -> None:
     """status_codes AND validation_statuses filters combine as AND across categories."""
     await _seed_rows(db)
     # seed has 2 validate/200/usps/confirmed rows — filter to both confirmed AND 200
-    rows, total = await get_audit_rows(
-        db, status_codes=[200], validation_statuses=["confirmed"]
-    )
+    rows, total = await get_audit_rows(db, status_codes=[200], validation_statuses=["confirmed"])
     assert total == 2
     assert all(r["status_code"] == 200 and r["validation_status"] == "confirmed" for r in rows)
 ```
@@ -210,8 +211,8 @@ async def test_get_endpoint_stats_all_time_includes_archived(db: AsyncEngine) ->
     await _seed_stats_rows(db)  # adds archived parse/400 x10
     stats = await get_endpoint_stats(db, "parse")
     assert stats["status_codes_all"][400] == 11  # 1 live + 10 archived
-    assert stats["status_codes_24h"][400] == 1   # live only
-    assert stats["status_codes_7d"][400] == 1    # live only
+    assert stats["status_codes_24h"][400] == 1  # live only
+    assert stats["status_codes_7d"][400] == 1  # live only
 ```
 
 - [ ] **Step 2: Run tests to confirm they fail**
@@ -357,8 +358,8 @@ async def test_get_provider_stats_status_codes_all_includes_archived(db: AsyncEn
     await _seed_rows(db)
     await _seed_stats_rows(db)  # adds archived validate/200/usps x50
     stats = await get_provider_stats(db, "usps")
-    assert stats["status_codes_all"][200] == 52   # 2 live + 50 archived
-    assert stats["status_codes_24h"][200] == 2    # live only
+    assert stats["status_codes_all"][200] == 52  # 2 live + 50 archived
+    assert stats["status_codes_24h"][200] == 2  # live only
     # validation_statuses only from live data (no archive column)
     assert stats["validation_statuses_all"]["confirmed"] == 2
 ```
@@ -376,73 +377,69 @@ Expected: FAIL.
 Inside the `async with engine.connect() as conn:` block, add queries for per-window status codes and validation statuses. After the existing `archived_total` query:
 
 ```python
-        # Status code distributions (live only, 24h)
-        live_status_24h_rows = (
-            await conn.execute(
-                select(
-                    audit_log.c.status_code,
-                    sa.cast(func.count(), sa.Integer).label("cnt"),
-                )
-                .where(
-                    audit_log.c.provider == provider_name,
-                    audit_log.c.timestamp >= tb["last_24h"],
-                )
-                .group_by(audit_log.c.status_code)
-            )
-        ).fetchall()
+# Status code distributions (live only, 24h)
+live_status_24h_rows = (
+    await conn.execute(
+        select(
+            audit_log.c.status_code,
+            sa.cast(func.count(), sa.Integer).label("cnt"),
+        )
+        .where(
+            audit_log.c.provider == provider_name,
+            audit_log.c.timestamp >= tb["last_24h"],
+        )
+        .group_by(audit_log.c.status_code)
+    )
+).fetchall()
 
-        # Status code distributions (live + archived, all-time)
-        live_status_all = (
-            select(
-                audit_log.c.status_code,
-                sa.cast(func.count(), sa.Integer).label("cnt"),
-            )
-            .where(audit_log.c.provider == provider_name)
-            .group_by(audit_log.c.status_code)
+# Status code distributions (live + archived, all-time)
+live_status_all = (
+    select(
+        audit_log.c.status_code,
+        sa.cast(func.count(), sa.Integer).label("cnt"),
+    )
+    .where(audit_log.c.provider == provider_name)
+    .group_by(audit_log.c.status_code)
+)
+archived_status_all = (
+    select(
+        audit_daily_stats.c.status_code,
+        sa.cast(func.sum(audit_daily_stats.c.request_count), sa.Integer).label("cnt"),
+    )
+    .where(
+        audit_daily_stats.c.provider == provider_name,
+        _ARCHIVED_DATE_GUARD,
+    )
+    .group_by(audit_daily_stats.c.status_code)
+)
+combined_status = union_all(live_status_all, archived_status_all).subquery("combined_status")
+status_all_rows = (
+    await conn.execute(
+        select(
+            combined_status.c.status_code,
+            sa.cast(func.sum(combined_status.c.cnt), sa.Integer).label("count"),
         )
-        archived_status_all = (
-            select(
-                audit_daily_stats.c.status_code,
-                sa.cast(
-                    func.sum(audit_daily_stats.c.request_count), sa.Integer
-                ).label("cnt"),
-            )
-            .where(
-                audit_daily_stats.c.provider == provider_name,
-                _ARCHIVED_DATE_GUARD,
-            )
-            .group_by(audit_daily_stats.c.status_code)
-        )
-        combined_status = union_all(live_status_all, archived_status_all).subquery(
-            "combined_status"
-        )
-        status_all_rows = (
-            await conn.execute(
-                select(
-                    combined_status.c.status_code,
-                    sa.cast(func.sum(combined_status.c.cnt), sa.Integer).label("count"),
-                )
-                .group_by(combined_status.c.status_code)
-                .order_by(combined_status.c.status_code)
-            )
-        ).fetchall()
+        .group_by(combined_status.c.status_code)
+        .order_by(combined_status.c.status_code)
+    )
+).fetchall()
 
-        # Validation status distributions (live only — no archive column)
-        vs_24h_rows = (
-            await conn.execute(
-                _from_live(
-                    [
-                        audit_log.c.validation_status,
-                        func.count().label("count"),
-                    ],
-                    audit_log.c.provider == provider_name,
-                    audit_log.c.validation_status.isnot(None),
-                    audit_log.c.timestamp >= tb["last_24h"],
-                )
-                .group_by(audit_log.c.validation_status)
-                .order_by(func.count().desc())
-            )
-        ).fetchall()
+# Validation status distributions (live only — no archive column)
+vs_24h_rows = (
+    await conn.execute(
+        _from_live(
+            [
+                audit_log.c.validation_status,
+                func.count().label("count"),
+            ],
+            audit_log.c.provider == provider_name,
+            audit_log.c.validation_status.isnot(None),
+            audit_log.c.timestamp >= tb["last_24h"],
+        )
+        .group_by(audit_log.c.validation_status)
+        .order_by(func.count().desc())
+    )
+).fetchall()
 ```
 
 The existing `status_rows` query (which becomes `validation_statuses_all`) stays as-is. Update the return dict:
@@ -539,7 +536,9 @@ def test_provider_detail_accepts_status_code_param(client: TestClient, admin_hea
     assert response.status_code == 200
 
 
-def test_provider_detail_accepts_validation_status_param(client: TestClient, admin_headers: dict) -> None:
+def test_provider_detail_accepts_validation_status_param(
+    client: TestClient, admin_headers: dict
+) -> None:
     response = client.get(
         "/admin/providers/usps?validation_status=confirmed&validation_status=not_confirmed",
         headers=admin_headers,
@@ -760,7 +759,9 @@ def test_endpoint_detail_has_all_time_card(client: TestClient, admin_headers: di
     assert "Requests (All Time)" in response.text
 
 
-def test_endpoint_detail_no_status_code_pills_section(client: TestClient, admin_headers: dict) -> None:
+def test_endpoint_detail_no_status_code_pills_section(
+    client: TestClient, admin_headers: dict
+) -> None:
     """Old Status Codes pills section is gone."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert response.status_code == 200

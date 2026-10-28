@@ -151,8 +151,7 @@ def upgrade() -> None:
     op.execute("UPDATE model_training_candidates SET status = 'new' WHERE status = 'reviewed'")
 
     op.execute(
-        "ALTER TABLE model_training_candidates "
-        "DROP CONSTRAINT ck_model_training_candidates_status"
+        "ALTER TABLE model_training_candidates DROP CONSTRAINT ck_model_training_candidates_status"
     )
     op.execute(
         "ALTER TABLE model_training_candidates "
@@ -188,8 +187,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS training_batches")
 
     op.execute(
-        "ALTER TABLE model_training_candidates "
-        "DROP CONSTRAINT ck_model_training_candidates_status"
+        "ALTER TABLE model_training_candidates DROP CONSTRAINT ck_model_training_candidates_status"
     )
     op.execute(
         "ALTER TABLE model_training_candidates "
@@ -264,9 +262,18 @@ from address_validator.db.tables import (
 def test_training_batches_columns() -> None:
     cols = {c.name for c in training_batches.columns}
     assert cols == {
-        "id", "slug", "description", "targeted_failure_pattern",
-        "status", "current_step", "manifest_path", "upstream_pr",
-        "created_at", "activated_at", "deployed_at", "closed_at",
+        "id",
+        "slug",
+        "description",
+        "targeted_failure_pattern",
+        "status",
+        "current_step",
+        "manifest_path",
+        "upstream_pr",
+        "created_at",
+        "activated_at",
+        "deployed_at",
+        "closed_at",
     }
 
 
@@ -333,7 +340,9 @@ training_batches = sa.Table(
     ),
     sa.Column("manifest_path", sa.Text(), nullable=True),
     sa.Column("upstream_pr", sa.Text(), nullable=True),
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+    sa.Column(
+        "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    ),
     sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True),
     sa.Column("deployed_at", sa.DateTime(timezone=True), nullable=True),
     sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True),
@@ -350,7 +359,9 @@ candidate_batch_assignments = sa.Table(
         nullable=False,
         primary_key=True,
     ),
-    sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+    sa.Column(
+        "assigned_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")
+    ),
     sa.Column("assigned_by", sa.Text(), nullable=True),
 )
 ```
@@ -361,10 +372,10 @@ Then update the existing `model_training_candidates` definition:
 - Add four columns just before `sa.Column("notes", ...)`:
 
 ```python
-    sa.Column("endpoint", sa.Text(), nullable=True),
-    sa.Column("provider", sa.Text(), nullable=True),
-    sa.Column("api_version", sa.Text(), nullable=True),
-    sa.Column("failure_reason", sa.Text(), nullable=True),
+(sa.Column("endpoint", sa.Text(), nullable=True),)
+(sa.Column("provider", sa.Text(), nullable=True),)
+(sa.Column("api_version", sa.Text(), nullable=True),)
+(sa.Column("failure_reason", sa.Text(), nullable=True),)
 ```
 
 - [ ] **Step 4: Re-run the test — expect pass**
@@ -487,10 +498,17 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 
 # Fine-grained step within a batch. Advances independently of status;
 # status transitions typically piggy-back on step boundaries in the skill.
-VALID_STEPS: frozenset[str] = frozenset({
-    "identifying", "labeling", "training", "testing",
-    "deployed", "observing", "contributed",
-})
+VALID_STEPS: frozenset[str] = frozenset(
+    {
+        "identifying",
+        "labeling",
+        "training",
+        "testing",
+        "deployed",
+        "observing",
+        "contributed",
+    }
+)
 
 
 class InvalidTransitionError(ValueError):
@@ -500,9 +518,7 @@ class InvalidTransitionError(ValueError):
 def assert_transition_allowed(current: str, target: str) -> None:
     allowed = ALLOWED_TRANSITIONS.get(current, frozenset())
     if target not in allowed:
-        raise InvalidTransitionError(
-            f"illegal status transition: {current!r} -> {target!r}"
-        )
+        raise InvalidTransitionError(f"illegal status transition: {current!r} -> {target!r}")
 
 
 def _new_batch_id() -> str:
@@ -560,9 +576,7 @@ async def transition_status(
             values["closed_at"] = now
 
         await conn.execute(
-            sa.update(training_batches)
-            .where(training_batches.c.id == batch_id)
-            .values(**values)
+            sa.update(training_batches).where(training_batches.c.id == batch_id).values(**values)
         )
 
 
@@ -817,9 +831,9 @@ async def test_unassign_last_batch_reverts_to_new(engine) -> None:
         ).first()
         remaining = (
             await conn.execute(
-                sa.select(sa.func.count()).select_from(candidate_batch_assignments).where(
-                    candidate_batch_assignments.c.raw_address_hash == h
-                )
+                sa.select(sa.func.count())
+                .select_from(candidate_batch_assignments)
+                .where(candidate_batch_assignments.c.raw_address_hash == h)
             )
         ).scalar()
     assert cand.status == "new"
@@ -876,6 +890,7 @@ Add to `tests/unit/test_training_candidates.py`:
 ```python
 async def test_write_persists_context_columns(engine) -> None:
     from address_validator.services.training_candidates import write_training_candidate
+
     await write_training_candidate(
         engine,
         raw_address="111 TEST ST",
@@ -889,12 +904,9 @@ async def test_write_persists_context_columns(engine) -> None:
     )
     import sqlalchemy as sa
     from address_validator.db.tables import model_training_candidates as mtc
+
     async with engine.connect() as conn:
-        row = (
-            await conn.execute(
-                sa.select(mtc).where(mtc.c.raw_address == "111 TEST ST")
-            )
-        ).first()
+        row = (await conn.execute(sa.select(mtc).where(mtc.c.raw_address == "111 TEST ST"))).first()
     assert row.endpoint == "/api/v1/parse"
     assert row.api_version == "1"
     assert row.failure_reason.startswith("RepeatedLabelError")
@@ -1011,10 +1023,12 @@ async def test_audit_writes_candidate_with_endpoint_and_version(engine, client):
 
     # Background task is scheduled; give it a tick.
     import asyncio
+
     await asyncio.sleep(0.05)
 
     import sqlalchemy as sa
     from address_validator.db.tables import model_training_candidates as mtc
+
     async with engine.connect() as conn:
         row = (
             await conn.execute(
@@ -1129,6 +1143,7 @@ async def test_rollup_assigned_when_linked_to_batch(engine) -> None:
     # seed a candidate
     import sqlalchemy as sa
     from address_validator.db.tables import model_training_candidates as mtc
+
     async with engine.begin() as conn:
         await conn.execute(
             mtc.insert().values(
@@ -1138,16 +1153,23 @@ async def test_rollup_assigned_when_linked_to_batch(engine) -> None:
                 status="new",
             )
         )
-        h = (await conn.execute(
-            sa.select(mtc.c.raw_address_hash).where(mtc.c.raw_address == "ASSIGN ME")
-        )).scalar_one()
+        h = (
+            await conn.execute(
+                sa.select(mtc.c.raw_address_hash).where(mtc.c.raw_address == "ASSIGN ME")
+            )
+        ).scalar_one()
 
     batch_id = await create_batch(engine, slug="q-test", description="d")
     await assign_candidates(engine, batch_id=batch_id, raw_address_hashes=[h])
 
     rows, _ = await get_candidate_groups(
-        engine, status="assigned", failure_type=None,
-        since=None, until=None, limit=10, offset=0,
+        engine,
+        status="assigned",
+        failure_type=None,
+        since=None,
+        until=None,
+        limit=10,
+        offset=0,
     )
     assert any(r["raw_hash"] == h for r in rows)
     match = next(r for r in rows if r["raw_hash"] == h)
@@ -1200,6 +1222,7 @@ from address_validator.db.tables import (
 )
 
 ...
+
 
 async def get_candidate_groups(
     engine: AsyncEngine,
@@ -1523,9 +1546,7 @@ async def get_batch_candidates(engine: AsyncEngine, *, batch_id: str) -> list[di
             sa.func.max(cba.c.assigned_at).label("assigned_at"),
             sa.func.max(cba.c.assigned_by).label("assigned_by"),
         )
-        .select_from(
-            cba.join(mtc, mtc.c.raw_address_hash == cba.c.raw_address_hash)
-        )
+        .select_from(cba.join(mtc, mtc.c.raw_address_hash == cba.c.raw_address_hash))
         .where(cba.c.batch_id == batch_id)
         .group_by(mtc.c.raw_address, mtc.c.raw_address_hash)
         .order_by(sa.func.max(cba.c.assigned_at).desc())
@@ -1592,8 +1613,11 @@ async def test_list_page_renders(admin_client):
 async def test_plan_batch_creates_row(admin_client):
     resp = await admin_client.post(
         "/admin/batches/",
-        data={"slug": "plan-from-ui", "description": "desc",
-              "targeted_failure_pattern": "repeated_label_error"},
+        data={
+            "slug": "plan-from-ui",
+            "description": "desc",
+            "targeted_failure_pattern": "repeated_label_error",
+        },
     )
     assert resp.status_code in (200, 303)
     listing = await admin_client.get("/admin/batches/")
@@ -1741,6 +1765,7 @@ Modify `src/address_validator/routers/admin/router.py`:
 
 ```python
 from address_validator.routers.admin.batches import router as batches_router
+
 ...
 admin_router.include_router(batches_router)
 ```
@@ -1922,6 +1947,7 @@ async def test_assign_candidate_to_batch(admin_client, engine):
     # Seed: a candidate + a planned batch.
     import sqlalchemy as sa
     from address_validator.db.tables import model_training_candidates as mtc
+
     async with engine.begin() as conn:
         await conn.execute(
             mtc.insert().values(
@@ -1931,10 +1957,13 @@ async def test_assign_candidate_to_batch(admin_client, engine):
                 status="new",
             )
         )
-        h = (await conn.execute(
-            sa.select(mtc.c.raw_address_hash).where(mtc.c.raw_address == "TRIAGE ASSIGN")
-        )).scalar_one()
+        h = (
+            await conn.execute(
+                sa.select(mtc.c.raw_address_hash).where(mtc.c.raw_address == "TRIAGE ASSIGN")
+            )
+        ).scalar_one()
     from address_validator.services.training_batches import create_batch
+
     batch_id = await create_batch(engine, slug="ui-assign", description="d")
 
     resp = await admin_client.post(
@@ -1944,10 +1973,13 @@ async def test_assign_candidate_to_batch(admin_client, engine):
     assert resp.status_code in (200, 303)
 
     from address_validator.db.tables import candidate_batch_assignments as cba
+
     async with engine.connect() as conn:
-        count = (await conn.execute(
-            sa.select(sa.func.count()).select_from(cba).where(cba.c.raw_address_hash == h)
-        )).scalar()
+        count = (
+            await conn.execute(
+                sa.select(sa.func.count()).select_from(cba).where(cba.c.raw_address_hash == h)
+            )
+        ).scalar()
     assert count == 1
 ```
 
@@ -1988,7 +2020,9 @@ async def candidates_assign_batch(
     return RedirectResponse(url=f"/admin/candidates/{raw_hash}", status_code=303)
 
 
-@router.post("/{raw_hash}/batches/{batch_slug}/unassign", response_class=HTMLResponse, response_model=None)
+@router.post(
+    "/{raw_hash}/batches/{batch_slug}/unassign", response_class=HTMLResponse, response_model=None
+)
 async def candidates_unassign_batch(
     request: Request,
     raw_hash: str,
@@ -1998,9 +2032,7 @@ async def candidates_unassign_batch(
     batch = await get_batch_by_slug(ctx.engine, slug=batch_slug)
     if batch is None:
         raise HTTPException(status_code=404, detail="batch not found")
-    await unassign_candidates(
-        ctx.engine, batch_id=batch["id"], raw_address_hashes=[raw_hash]
-    )
+    await unassign_candidates(ctx.engine, batch_id=batch["id"], raw_address_hashes=[raw_hash])
     return RedirectResponse(url=f"/admin/candidates/{raw_hash}", status_code=303)
 ```
 
@@ -2220,10 +2252,9 @@ if args.create_batch:
 elif args.batch:
     import sqlalchemy as sa
     from address_validator.db.tables import training_batches as tb
+
     async with engine.connect() as conn:
-        row = (await conn.execute(
-            sa.select(tb.c.id).where(tb.c.slug == args.batch)
-        )).first()
+        row = (await conn.execute(sa.select(tb.c.id).where(tb.c.slug == args.batch))).first()
     if row is None:
         parser.error(f"unknown batch slug: {args.batch}")
     batch_id = row.id

@@ -129,10 +129,10 @@ Add `CANDIDATE_STATUS_META` alongside existing `VS_META`:
 
 ```python
 CANDIDATE_STATUS_META = {
-    "new":      {"label": "New",      "symbol": "●", "color": "blue"},
+    "new": {"label": "New", "symbol": "●", "color": "blue"},
     "reviewed": {"label": "Reviewed", "symbol": "✓", "color": "green"},
     "rejected": {"label": "Rejected", "symbol": "✗", "color": "gray"},
-    "mixed":    {"label": "Mixed",    "symbol": "~", "color": "amber"},
+    "mixed": {"label": "Mixed", "symbol": "~", "color": "amber"},
 }
 ```
 

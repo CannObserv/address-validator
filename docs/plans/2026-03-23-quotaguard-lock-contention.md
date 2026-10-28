@@ -47,9 +47,7 @@ async def acquire(self) -> None:  # noqa: PLR0912
                     continue
                 rate = window.limit / window.duration_s
                 elapsed = now - self._last_refill[i]
-                self._tokens[i] = min(
-                    float(window.limit), self._tokens[i] + elapsed * rate
-                )
+                self._tokens[i] = min(float(window.limit), self._tokens[i] + elapsed * rate)
                 self._last_refill[i] = now
 
             # --- Hard windows: reject immediately if exhausted ---
@@ -213,9 +211,7 @@ async def test_concurrent_acquires_sleep_in_parallel(self) -> None:
         await asyncio.gather(guard.acquire(), guard.acquire())
 
     # Both callers should have slept concurrently (max_concurrent >= 2)
-    assert max_concurrent >= 2, (
-        f"Expected concurrent sleeps but max_concurrent={max_concurrent}"
-    )
+    assert max_concurrent >= 2, f"Expected concurrent sleeps but max_concurrent={max_concurrent}"
 ```
 
 - [ ] **Step 2: Run test to verify it passes**

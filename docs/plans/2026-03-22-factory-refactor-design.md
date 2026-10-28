@@ -67,7 +67,7 @@ No `global` statements. State lives on the instance. Single instance created in
 async def lifespan(app):
     config = ValidationConfig()
     registry = ProviderRegistry(config)
-    registry.get_provider()          # eagerly construct + wire quota sync
+    registry.get_provider()  # eagerly construct + wire quota sync
     app.state.registry = registry
     # start reconciliation task from registry.get_reconciliation_params()
     yield

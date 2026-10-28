@@ -65,6 +65,7 @@ def _find_custom_training_files(batch_dir: Path) -> list[Path]:
 
 
 def _build_manifest(
+    *,
     name: str,
     description: str,
     batch_dir: str,

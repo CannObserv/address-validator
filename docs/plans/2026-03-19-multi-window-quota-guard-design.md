@@ -50,8 +50,8 @@ A USPS per-hour window may also exist; if confirmed it should be added as a thir
 ```python
 @dataclass
 class QuotaWindow:
-    limit: int           # max requests in the window
-    duration_s: float    # window duration in seconds
+    limit: int  # max requests in the window
+    duration_s: float  # window duration in seconds
     mode: Literal["soft", "hard"]
 ```
 
@@ -113,8 +113,8 @@ internally. The `acquire()` call site is unchanged in both retry loops.
 
 ```python
 [
-    QuotaWindow(limit=usps_rate_limit_rps,  duration_s=1.0,     mode="soft"),  # per-second
-    QuotaWindow(limit=usps_daily_limit,     duration_s=86_400.0, mode="soft"),  # per-day
+    QuotaWindow(limit=usps_rate_limit_rps, duration_s=1.0, mode="soft"),  # per-second
+    QuotaWindow(limit=usps_daily_limit, duration_s=86_400.0, mode="soft"),  # per-day
 ]
 ```
 
@@ -125,8 +125,8 @@ traffic, and queuing briefly is preferable to abandoning USPS prematurely.
 
 ```python
 [
-    QuotaWindow(limit=google_rate_limit_rpm, duration_s=60.0,    mode="soft"),  # per-minute
-    QuotaWindow(limit=google_daily_limit,    duration_s=86_400.0, mode="hard"),  # per-day
+    QuotaWindow(limit=google_rate_limit_rpm, duration_s=60.0, mode="soft"),  # per-minute
+    QuotaWindow(limit=google_daily_limit, duration_s=86_400.0, mode="hard"),  # per-day
 ]
 ```
 

@@ -54,6 +54,7 @@ def _parse_since(raw: str | None) -> datetime | None:
 @router.get("/", response_class=HTMLResponse, response_model=None)
 async def candidates_list(
     request: Request,
+    *,
     page: int = Query(1, ge=1),
     status: str = Query("new"),
     failure_type: str | None = Query(None),

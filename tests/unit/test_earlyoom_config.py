@@ -212,7 +212,7 @@ def _session_root_adj(proc: Path, pid: int) -> int | None:
 
 
 def _fake_process(
-    proc: Path, pid: int, ppid: int, comm: str, adj: int, cgroup: str = INIT_SCOPE
+    proc: Path, pid: int, ppid: int, comm: str, adj: int, *, cgroup: str = INIT_SCOPE
 ) -> None:
     (proc / str(pid)).mkdir(parents=True)
     (proc / str(pid) / "status").write_text(f"Name:\t{comm}\nPPid:\t{ppid}\n")
@@ -242,7 +242,7 @@ def test_a_session_under_a_resident_exe_init_reports_its_root(tmp_path: Path) ->
     # #238's newer layout: exe-init stays running and starts sessions itself, so its
     # child is the root wherever the child's cgroup is.
     _fake_process(tmp_path, 1, 0, "exe-init", -1000)
-    _fake_process(tmp_path, 400, 1, "sh", -1000, "0::/exe.slice/session.scope")
+    _fake_process(tmp_path, 400, 1, "sh", -1000, cgroup="0::/exe.slice/session.scope")
     _fake_process(tmp_path, 401, 400, "npm", 500)  # a choom'd leaf
     assert _session_root_adj(tmp_path, 401) == -1000
 
@@ -257,7 +257,7 @@ def test_a_session_under_a_resident_exe_init_reports_its_root(tmp_path: Path) ->
 )
 def test_no_session_ancestor_is_none(tmp_path: Path, comm: str, cgroup: str) -> None:
     _fake_process(tmp_path, 1, 0, "systemd", 0)
-    _fake_process(tmp_path, 300, 1, comm, 100, cgroup)
+    _fake_process(tmp_path, 300, 1, comm, 100, cgroup=cgroup)
     _fake_process(tmp_path, 301, 300, "python3", 0)
     assert _session_root_adj(tmp_path, 301) is None
 

@@ -46,6 +46,7 @@ from address_validator.usps_data.spec import USPS_PUB28_SPEC, USPS_PUB28_SPEC_VE
 
 
 def _make_std(
+    *,
     address_number: str = "123",
     street_name: str = "MAIN",
     street_type: str = "ST",

@@ -21,6 +21,7 @@ _PER_PAGE = 50
 async def endpoint_detail(
     request: Request,
     name: str,
+    *,
     page: int = Query(1, ge=1),
     client_ip: str | None = Query(None),
     status_code: Annotated[list[int] | None, Query()] = None,

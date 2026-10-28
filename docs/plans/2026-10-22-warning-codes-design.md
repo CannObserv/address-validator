@@ -94,8 +94,10 @@ drift check.
 On `ParseResponseV2`, `StandardizeResponseV2`, `ValidateResponseV2`:
 
 ```python
-@computed_field(description="Machine-readable code for each entry of `warnings`, "
-                "same length and order. Match on codes; warning prose may change.")
+@computed_field(
+    description="Machine-readable code for each entry of `warnings`, "
+    "same length and order. Match on codes; warning prose may change."
+)
 @property
 def warning_codes(self) -> list[WarningCode]:
     return resolve_warning_codes(self.warnings)

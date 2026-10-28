@@ -102,14 +102,18 @@ class TestFixedResetQuotaWindow:
         # 11:59:00 PM PT → 60 seconds until midnight
         fake_now = datetime(2026, 3, 20, 23, 59, 0, tzinfo=PT)
         w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now):
+        with patch(
+            "address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now
+        ):
             assert w.seconds_until_reset() == pytest.approx(60.0, abs=1.0)
 
     def test_seconds_until_reset_at_start_of_day(self) -> None:
         # 12:00:01 AM PT → ~86399 seconds until next midnight
         fake_now = datetime(2026, 3, 20, 0, 0, 1, tzinfo=PT)
         w = FixedResetQuotaWindow(limit=160, mode="hard")
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now):
+        with patch(
+            "address_validator.services.validation._rate_limit._now_in_tz", return_value=fake_now
+        ):
             remaining = w.seconds_until_reset()
             assert 86_398 <= remaining <= 86_400
 
@@ -118,14 +122,19 @@ class TestFixedResetQuotaWindow:
         # Last reset was yesterday
         yesterday = datetime(2026, 3, 19, 0, 0, 0, tzinfo=PT)
         now = datetime(2026, 3, 20, 0, 0, 1, tzinfo=PT)
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=now):
+        with patch(
+            "address_validator.services.validation._rate_limit._now_in_tz", return_value=now
+        ):
             assert w.should_reset(yesterday) is True
 
     def test_should_reset_false_same_day(self) -> None:
         w = FixedResetQuotaWindow(limit=160, mode="hard")
         today_morning = datetime(2026, 3, 20, 8, 0, 0, tzinfo=PT)
         today_afternoon = datetime(2026, 3, 20, 14, 0, 0, tzinfo=PT)
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=today_afternoon):
+        with patch(
+            "address_validator.services.validation._rate_limit._now_in_tz",
+            return_value=today_afternoon,
+        ):
             assert w.should_reset(today_morning) is False
 
     def test_mode_soft_allowed(self) -> None:
@@ -233,26 +242,29 @@ Extend `QuotaGuard` to accept `FixedResetQuotaWindow` alongside `QuotaWindow`, a
 Append to `tests/unit/validation/test_rate_limit.py` in class `TestQuotaGuard`:
 
 ```python
-    def test_adjust_tokens_decreases_tokens(self) -> None:
-        guard = self._soft_guard(limit=100, duration_s=86_400.0)
-        guard.adjust_tokens(0, -30)
-        assert guard._tokens[0] == 70.0
+def test_adjust_tokens_decreases_tokens(self) -> None:
+    guard = self._soft_guard(limit=100, duration_s=86_400.0)
+    guard.adjust_tokens(0, -30)
+    assert guard._tokens[0] == 70.0
 
-    def test_adjust_tokens_does_not_go_below_zero(self) -> None:
-        guard = self._soft_guard(limit=100, duration_s=86_400.0)
-        guard.adjust_tokens(0, -200)
-        assert guard._tokens[0] == 0.0
 
-    def test_adjust_tokens_does_not_exceed_limit(self) -> None:
-        guard = self._soft_guard(limit=100, duration_s=86_400.0)
-        guard._tokens[0] = 50.0
-        guard.adjust_tokens(0, 100)
-        assert guard._tokens[0] == 100.0
+def test_adjust_tokens_does_not_go_below_zero(self) -> None:
+    guard = self._soft_guard(limit=100, duration_s=86_400.0)
+    guard.adjust_tokens(0, -200)
+    assert guard._tokens[0] == 0.0
 
-    def test_adjust_tokens_raises_for_invalid_index(self) -> None:
-        guard = self._soft_guard(limit=100, duration_s=86_400.0)
-        with pytest.raises(IndexError):
-            guard.adjust_tokens(5, -10)
+
+def test_adjust_tokens_does_not_exceed_limit(self) -> None:
+    guard = self._soft_guard(limit=100, duration_s=86_400.0)
+    guard._tokens[0] = 50.0
+    guard.adjust_tokens(0, 100)
+    assert guard._tokens[0] == 100.0
+
+
+def test_adjust_tokens_raises_for_invalid_index(self) -> None:
+    guard = self._soft_guard(limit=100, duration_s=86_400.0)
+    with pytest.raises(IndexError):
+        guard.adjust_tokens(5, -10)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -294,39 +306,41 @@ Expected: All PASS
 Append to `tests/unit/validation/test_rate_limit.py` in class `TestQuotaGuard`:
 
 ```python
-    def test_accepts_fixed_reset_window(self) -> None:
-        from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
-        guard = QuotaGuard(
-            windows=[
-                QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
-                FixedResetQuotaWindow(limit=160, mode="hard"),
-            ],
-            provider_name="google",
-        )
-        assert len(guard._windows) == 2
-        assert guard._tokens[1] == 160.0
+def test_accepts_fixed_reset_window(self) -> None:
+    from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
 
-    @pytest.mark.asyncio
-    async def test_fixed_reset_window_resets_at_midnight(self) -> None:
-        from datetime import datetime
-        from zoneinfo import ZoneInfo
-        from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
+    guard = QuotaGuard(
+        windows=[
+            QuotaWindow(limit=5, duration_s=60.0, mode="soft"),
+            FixedResetQuotaWindow(limit=160, mode="hard"),
+        ],
+        provider_name="google",
+    )
+    assert len(guard._windows) == 2
+    assert guard._tokens[1] == 160.0
 
-        PT = ZoneInfo("America/Los_Angeles")
-        guard = QuotaGuard(
-            windows=[FixedResetQuotaWindow(limit=160, mode="hard")],
-            provider_name="google",
-        )
-        # Drain tokens and simulate last refill was yesterday
-        guard._tokens[0] = 0.0
-        yesterday = datetime(2026, 3, 19, 23, 0, 0, tzinfo=PT)
-        guard._last_reset = [yesterday]
 
-        today = datetime(2026, 3, 20, 0, 1, 0, tzinfo=PT)
-        with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=today):
-            await guard.acquire()
-        # Tokens should have been reset to full, then 1 consumed
-        assert guard._tokens[0] == 159.0
+@pytest.mark.asyncio
+async def test_fixed_reset_window_resets_at_midnight(self) -> None:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
+
+    PT = ZoneInfo("America/Los_Angeles")
+    guard = QuotaGuard(
+        windows=[FixedResetQuotaWindow(limit=160, mode="hard")],
+        provider_name="google",
+    )
+    # Drain tokens and simulate last refill was yesterday
+    guard._tokens[0] = 0.0
+    yesterday = datetime(2026, 3, 19, 23, 0, 0, tzinfo=PT)
+    guard._last_reset = [yesterday]
+
+    today = datetime(2026, 3, 20, 0, 1, 0, tzinfo=PT)
+    with patch("address_validator.services.validation._rate_limit._now_in_tz", return_value=today):
+        await guard.acquire()
+    # Tokens should have been reset to full, then 1 consumed
+    assert guard._tokens[0] == 159.0
 ```
 
 - [ ] **Step 6: Run tests to verify they fail**
@@ -352,10 +366,9 @@ In `_rate_limit.py`, update the `QuotaGuard` class:
 
 2. Add `_last_reset` tracking in `__init__` (after `_last_refill`):
 ```python
-        self._last_reset: list[datetime | None] = [
-            _now_in_tz(w.timezone) if isinstance(w, FixedResetQuotaWindow) else None
-            for w in windows
-        ]
+self._last_reset: list[datetime | None] = [
+    _now_in_tz(w.timezone) if isinstance(w, FixedResetQuotaWindow) else None for w in windows
+]
 ```
 
 3. At the start of `acquire()`, before the existing refill loop (line 109), add fixed-reset logic:
@@ -459,6 +472,7 @@ class TestGetCredentials:
     @patch("address_validator.services.validation.gcp_auth.google.auth.default")
     def test_propagates_auth_error(self, mock_default) -> None:
         from google.auth.exceptions import DefaultCredentialsError
+
         mock_default.side_effect = DefaultCredentialsError("no creds")
         with pytest.raises(DefaultCredentialsError):
             get_credentials()
@@ -788,10 +802,14 @@ def fetch_daily_limit(
             if info.refresh_interval == "day":
                 if info.dimensions_infos:
                     value = info.dimensions_infos[0].details.value
-                    logger.info("gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value)
+                    logger.info(
+                        "gcp_quota_sync: discovered daily limit=%d from Cloud Quotas", value
+                    )
                     return int(value)
     except Exception:
-        logger.warning("gcp_quota_sync: failed to fetch daily limit from Cloud Quotas", exc_info=True)
+        logger.warning(
+            "gcp_quota_sync: failed to fetch daily limit from Cloud Quotas", exc_info=True
+        )
     return None
 
 
@@ -836,7 +854,9 @@ def fetch_daily_usage(
                 logger.info("gcp_quota_sync: daily usage=%d from Cloud Monitoring", usage)
                 return int(usage)
     except Exception:
-        logger.warning("gcp_quota_sync: failed to fetch daily usage from Cloud Monitoring", exc_info=True)
+        logger.warning(
+            "gcp_quota_sync: failed to fetch daily usage from Cloud Monitoring", exc_info=True
+        )
     return None
 
 
@@ -1130,12 +1150,13 @@ def _parse_google_config() -> tuple[int, int]:
 Replace `_get_google_provider` (lines 138-161):
 
 ```python
-def _get_google_provider(
-    rpm: int, daily_limit: int, latency_budget_s: float
-) -> GoogleProvider:
+def _get_google_provider(rpm: int, daily_limit: int, latency_budget_s: float) -> GoogleProvider:
     global _google_provider  # noqa: PLW0603
     if _google_provider is None:
-        from address_validator.services.validation.gcp_auth import get_credentials, resolve_project_id
+        from address_validator.services.validation.gcp_auth import (
+            get_credentials,
+            resolve_project_id,
+        )
         from address_validator.services.validation.gcp_quota_sync import (
             fetch_daily_limit,
             fetch_daily_usage,
@@ -1148,21 +1169,28 @@ def _get_google_provider(
         if project_id:
             try:
                 from google.cloud import quotas_v1
+
                 quotas_client = quotas_v1.CloudQuotasClient(credentials=credentials)
                 discovered = fetch_daily_limit(quotas_client, project_id)
                 if discovered is not None:
                     daily_limit = discovered
             except Exception:
-                logger.warning("get_provider: Cloud Quotas API unavailable, using configured limit=%d", daily_limit)
+                logger.warning(
+                    "get_provider: Cloud Quotas API unavailable, using configured limit=%d",
+                    daily_limit,
+                )
 
         if not project_id:
-            logger.warning("get_provider: GCP project ID not resolved — quota sync features disabled, using env var defaults")
+            logger.warning(
+                "get_provider: GCP project ID not resolved — quota sync features disabled, using env var defaults"
+            )
 
         logger.debug(
             "get_provider: creating GoogleProvider singleton (%d rpm, %d/day)", rpm, daily_limit
         )
 
         from address_validator.services.validation._rate_limit import FixedResetQuotaWindow
+
         guard = QuotaGuard(
             windows=[
                 QuotaWindow(limit=rpm, duration_s=60.0, mode="soft"),
@@ -1177,14 +1205,21 @@ def _get_google_provider(
         if project_id:
             try:
                 from google.cloud import monitoring_v3
+
                 monitoring_client = monitoring_v3.MetricServiceClient(credentials=credentials)
                 usage = fetch_daily_usage(monitoring_client, project_id)
                 if usage is not None and usage > 0:
                     guard.adjust_tokens(1, -usage)
-                    logger.info("get_provider: seeded daily quota from Monitoring (used=%d, remaining=%d)", usage, daily_limit - usage)
+                    logger.info(
+                        "get_provider: seeded daily quota from Monitoring (used=%d, remaining=%d)",
+                        usage,
+                        daily_limit - usage,
+                    )
             except Exception:
                 monitoring_client = None
-                logger.warning("get_provider: Cloud Monitoring API unavailable, starting with full bucket")
+                logger.warning(
+                    "get_provider: Cloud Monitoring API unavailable, starting with full bucket"
+                )
 
         _google_provider = GoogleProvider(
             client=GoogleClient(
@@ -1294,7 +1329,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """FastAPI lifespan context — validate config on startup, close DB on shutdown."""
     import asyncio
 
-    from address_validator.services.validation.factory import get_provider, get_reconciliation_params
+    from address_validator.services.validation.factory import (
+        get_provider,
+        get_reconciliation_params,
+    )
 
     validate_config()
 
@@ -1308,6 +1346,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     params = get_reconciliation_params()
     if params:
         from address_validator.services.validation.gcp_quota_sync import run_reconciliation_loop
+
         reconciliation_task = asyncio.create_task(
             run_reconciliation_loop(**params),
             name="google-quota-reconciliation",
@@ -1333,6 +1372,7 @@ Add to a new test or append to existing lifespan tests:
 ```python
 # In an appropriate test file (e.g., tests/unit/test_main.py or test_provider_factory.py)
 
+
 async def test_lifespan_starts_reconciliation_when_google_active(monkeypatch):
     """Reconciliation background task is created when Google provider is configured."""
     from unittest.mock import patch, MagicMock, AsyncMock
@@ -1348,11 +1388,20 @@ async def test_lifespan_starts_reconciliation_when_google_active(monkeypatch):
 
     with (
         patch("address_validator.services.validation.factory.validate_config"),
-        patch("address_validator.services.validation.factory.get_reconciliation_params", return_value=mock_params),
-        patch("address_validator.services.validation.gcp_quota_sync.run_reconciliation_loop", new_callable=AsyncMock) as mock_loop,
-        patch("address_validator.services.validation.cache_db.close_engine", new_callable=AsyncMock),
+        patch(
+            "address_validator.services.validation.factory.get_reconciliation_params",
+            return_value=mock_params,
+        ),
+        patch(
+            "address_validator.services.validation.gcp_quota_sync.run_reconciliation_loop",
+            new_callable=AsyncMock,
+        ) as mock_loop,
+        patch(
+            "address_validator.services.validation.cache_db.close_engine", new_callable=AsyncMock
+        ),
     ):
         from address_validator.main import lifespan, app
+
         async with lifespan(app):
             # Give the task a moment to start
             await asyncio.sleep(0.01)

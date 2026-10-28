@@ -47,9 +47,7 @@ def _make_request(app: FastAPI, headers: dict | None = None) -> Request:
         "method": "GET",
         "path": "/admin/",
         "query_string": b"",
-        "headers": [
-            (k.lower().encode(), v.encode()) for k, v in (headers or {}).items()
-        ],
+        "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
         "app": app,
     }
     return Request(scope)
@@ -58,10 +56,13 @@ def _make_request(app: FastAPI, headers: dict | None = None) -> Request:
 class TestGetAdminUser:
     def test_returns_admin_user_when_headers_present(self) -> None:
         app = FastAPI()
-        req = _make_request(app, {
-            "x-exedev-userid": "u1",
-            "x-exedev-email": "a@b.com",
-        })
+        req = _make_request(
+            app,
+            {
+                "x-exedev-userid": "u1",
+                "x-exedev-email": "a@b.com",
+            },
+        )
         user = get_admin_user(req)
         assert isinstance(user, AdminUser)
         assert user.user_id == "u1"
@@ -95,10 +96,13 @@ class TestGetAdminContext:
     def test_returns_context_with_user_and_engine(self) -> None:
         app = FastAPI()
         app.state.engine = "fake-engine"
-        req = _make_request(app, {
-            "x-exedev-userid": "u1",
-            "x-exedev-email": "a@b.com",
-        })
+        req = _make_request(
+            app,
+            {
+                "x-exedev-userid": "u1",
+                "x-exedev-email": "a@b.com",
+            },
+        )
         ctx = get_admin_context(req)
         assert isinstance(ctx, AdminContext)
         assert ctx.user.user_id == "u1"
@@ -116,20 +120,26 @@ class TestGetAdminContext:
     def test_raises_database_unavailable_when_no_engine(self) -> None:
         app = FastAPI()
         app.state.engine = None
-        req = _make_request(app, {
-            "x-exedev-userid": "u1",
-            "x-exedev-email": "a@b.com",
-        })
+        req = _make_request(
+            app,
+            {
+                "x-exedev-userid": "u1",
+                "x-exedev-email": "a@b.com",
+            },
+        )
         with pytest.raises(DatabaseUnavailable) as exc_info:
             get_admin_context(req)
         assert exc_info.value.user.user_id == "u1"
 
     def test_raises_database_unavailable_when_no_state_attr(self) -> None:
         app = FastAPI()
-        req = _make_request(app, {
-            "x-exedev-userid": "u1",
-            "x-exedev-email": "a@b.com",
-        })
+        req = _make_request(
+            app,
+            {
+                "x-exedev-userid": "u1",
+                "x-exedev-email": "a@b.com",
+            },
+        )
         with pytest.raises(DatabaseUnavailable):
             get_admin_context(req)
 ```

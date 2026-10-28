@@ -98,15 +98,15 @@ git commit -m "#73 feat: migration 007 — add raw_input + pattern_key columns"
 In `src/address_validator/db/tables.py`, add to `audit_log` after `error_detail`:
 
 ```python
-    sa.Column("error_detail", sa.Text(), nullable=True),
-    sa.Column("pattern_key", sa.Text(), nullable=True),
+(sa.Column("error_detail", sa.Text(), nullable=True),)
+(sa.Column("pattern_key", sa.Text(), nullable=True),)
 ```
 
 Add to `query_patterns` after `created_at`:
 
 ```python
-    sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-    sa.Column("raw_input", sa.Text(), nullable=True),
+(sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),)
+(sa.Column("raw_input", sa.Text(), nullable=True),)
 ```
 
 - [ ] **Step 2: Verify existing tests still pass**
@@ -354,6 +354,7 @@ Add to `tests/unit/validation/test_null_provider.py`:
 async def test_validate_accepts_raw_input_kwarg(std_address) -> None:
     """NullProvider.validate must accept raw_input without raising."""
     from address_validator.services.validation.null_provider import NullProvider
+
     provider = NullProvider()
     result = await provider.validate(std_address, raw_input="123 Main St, Springfield IL")
     assert result.validation.status == "unavailable"
@@ -372,9 +373,11 @@ Expected: `TypeError: validate() got an unexpected keyword argument 'raw_input'`
 In `src/address_validator/services/validation/protocol.py`, change the `validate` signature:
 
 ```python
-    async def validate(self, std: StandardizeResponseV1, *, raw_input: str | None = None) -> ValidateResponseV1:
-        """Validate the standardised address *std* and return an authoritative response."""
-        ...
+async def validate(
+    self, std: StandardizeResponseV1, *, raw_input: str | None = None
+) -> ValidateResponseV1:
+    """Validate the standardised address *std* and return an authoritative response."""
+    ...
 ```
 
 - [ ] **Step 4: Update `null_provider.py`**
@@ -433,26 +436,27 @@ git commit -m "#73 feat: add raw_input kwarg to ValidationProvider protocol + le
 Add to `tests/unit/validation/test_chain_provider.py` inside `class TestChainProvider`:
 
 ```python
-    @pytest.mark.asyncio
-    async def test_raw_input_threaded_to_provider(self, std_address) -> None:
-        """ChainProvider must forward raw_input to each sub-provider."""
-        provider = _mock_provider(_CONFIRMED)
-        chain = ChainProvider(providers=[provider])
+@pytest.mark.asyncio
+async def test_raw_input_threaded_to_provider(self, std_address) -> None:
+    """ChainProvider must forward raw_input to each sub-provider."""
+    provider = _mock_provider(_CONFIRMED)
+    chain = ChainProvider(providers=[provider])
 
-        await chain.validate(std_address, raw_input="123 Main St, Springfield IL")
+    await chain.validate(std_address, raw_input="123 Main St, Springfield IL")
 
-        provider.validate.assert_awaited_once_with(std_address, raw_input="123 Main St, Springfield IL")
+    provider.validate.assert_awaited_once_with(std_address, raw_input="123 Main St, Springfield IL")
 
-    @pytest.mark.asyncio
-    async def test_raw_input_threaded_on_fallback(self, std_address) -> None:
-        """raw_input is passed to the fallback provider, not lost on retry."""
-        first = _rate_limited_provider()
-        second = _mock_provider(_GOOGLE_CONFIRMED)
-        chain = ChainProvider(providers=[first, second])
 
-        await chain.validate(std_address, raw_input="456 Elm Ave")
+@pytest.mark.asyncio
+async def test_raw_input_threaded_on_fallback(self, std_address) -> None:
+    """raw_input is passed to the fallback provider, not lost on retry."""
+    first = _rate_limited_provider()
+    second = _mock_provider(_GOOGLE_CONFIRMED)
+    chain = ChainProvider(providers=[first, second])
 
-        second.validate.assert_awaited_once_with(std_address, raw_input="456 Elm Ave")
+    await chain.validate(std_address, raw_input="456 Elm Ave")
+
+    second.validate.assert_awaited_once_with(std_address, raw_input="456 Elm Ave")
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -468,19 +472,21 @@ Expected: `AssertionError` — called without `raw_input` kwarg.
 In `src/address_validator/services/validation/chain_provider.py`, replace the `validate` method:
 
 ```python
-    async def validate(self, std: StandardizeResponseV1, *, raw_input: str | None = None) -> ValidateResponseV1:
-        last_exc: ProviderRateLimitedError | ProviderAtCapacityError | None = None
-        for provider in self._providers:
-            name = type(provider).__name__
-            try:
-                return await provider.validate(std, raw_input=raw_input)
-            except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
-                last_exc = exc
-                logger.warning(
-                    "ChainProvider: %s at capacity or rate-limited, trying next provider", name
-                )
-        retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
-        raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)
+async def validate(
+    self, std: StandardizeResponseV1, *, raw_input: str | None = None
+) -> ValidateResponseV1:
+    last_exc: ProviderRateLimitedError | ProviderAtCapacityError | None = None
+    for provider in self._providers:
+        name = type(provider).__name__
+        try:
+            return await provider.validate(std, raw_input=raw_input)
+        except (ProviderRateLimitedError, ProviderAtCapacityError) as exc:
+            last_exc = exc
+            logger.warning(
+                "ChainProvider: %s at capacity or rate-limited, trying next provider", name
+            )
+    retry_after = last_exc.retry_after_seconds if last_exc is not None else 0.0
+    raise ProviderRateLimitedError("all", retry_after_seconds=retry_after)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -543,6 +549,7 @@ class TestPatternKeyContextVar:
     async def test_pattern_key_set_on_cache_miss(self, db: AsyncEngine) -> None:
         """pattern_key ContextVar is set after a successful cache store."""
         from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
+
         reset_audit_context()
 
         response = _make_confirmed_response()
@@ -559,6 +566,7 @@ class TestPatternKeyContextVar:
     async def test_pattern_key_set_on_cache_hit(self, db: AsyncEngine) -> None:
         """pattern_key ContextVar is set on a cache hit."""
         from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
+
         response = _make_confirmed_response()
         inner = _make_provider(response)
         provider = CachingProvider(inner=inner, get_engine=MagicMock(return_value=db))
@@ -577,6 +585,7 @@ class TestPatternKeyContextVar:
         """pattern_key ContextVar is NOT set when _store raises (fail-open)."""
         from unittest.mock import patch
         from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
+
         reset_audit_context()
 
         response = _make_confirmed_response()
@@ -595,6 +604,7 @@ class TestPatternKeyContextVar:
     async def test_pattern_key_not_set_for_unavailable(self, db: AsyncEngine) -> None:
         """pattern_key is not set when status is unavailable (nothing stored)."""
         from address_validator.services.audit import get_audit_pattern_key, reset_audit_context
+
         reset_audit_context()
 
         response = _make_unavailable_response()
@@ -700,66 +710,68 @@ async def _store(
 Replace `CachingProvider.validate`:
 
 ```python
-    async def validate(self, std: StandardizeResponseV1, *, raw_input: str | None = None) -> ValidateResponseV1:
-        """Check the cache; delegate to inner provider on miss; store the result.
+async def validate(
+    self, std: StandardizeResponseV1, *, raw_input: str | None = None
+) -> ValidateResponseV1:
+    """Check the cache; delegate to inner provider on miss; store the result.
 
-        Fail-open: any database error during lookup or store is logged as a
-        warning and the request continues without the cache.
-        """
-        pattern_key = _make_pattern_key(std)
-        engine: AsyncEngine | None = None
+    Fail-open: any database error during lookup or store is logged as a
+    warning and the request continues without the cache.
+    """
+    pattern_key = _make_pattern_key(std)
+    engine: AsyncEngine | None = None
 
-        try:
-            engine = self._get_engine()
-            cached = await _lookup(engine, pattern_key, self._ttl_days)
-        except Exception:
-            logger.warning("cache_lookup: storage error — failing open", exc_info=True)
-            cached = None
+    try:
+        engine = self._get_engine()
+        cached = await _lookup(engine, pattern_key, self._ttl_days)
+    except Exception:
+        logger.warning("cache_lookup: storage error — failing open", exc_info=True)
+        cached = None
 
-        if cached is not None:
-            set_audit_context(
-                provider=cached.validation.provider,
-                validation_status=cached.validation.status,
-                cache_hit=True,
-                pattern_key=pattern_key,
-            )
-            logger.info(
-                "validate: provider=%s status=%s cache_hit=true",
-                cached.validation.provider,
-                cached.validation.status,
-            )
-            return cached
-
-        result: ValidateResponseV1 = await self._inner.validate(std, raw_input=raw_input)
-
+    if cached is not None:
         set_audit_context(
-            provider=result.validation.provider,
-            validation_status=result.validation.status,
-            cache_hit=False,
+            provider=cached.validation.provider,
+            validation_status=cached.validation.status,
+            cache_hit=True,
+            pattern_key=pattern_key,
         )
-
         logger.info(
-            "validate: provider=%s status=%s cache_hit=false",
-            result.validation.provider,
-            result.validation.status,
+            "validate: provider=%s status=%s cache_hit=true",
+            cached.validation.provider,
+            cached.validation.status,
         )
+        return cached
 
-        if result.validation.status == "unavailable":
-            logger.debug(
-                "cache_store: skip provider=%s status=unavailable",
-                result.validation.provider,
-            )
-            return result
+    result: ValidateResponseV1 = await self._inner.validate(std, raw_input=raw_input)
 
-        if engine is not None:
-            try:
-                canonical_key = _make_canonical_key(result)
-                await _store(engine, pattern_key, canonical_key, result, raw_input=raw_input)
-                set_audit_context(pattern_key=pattern_key)
-            except Exception:
-                logger.warning("cache_store: storage error — result not cached", exc_info=True)
+    set_audit_context(
+        provider=result.validation.provider,
+        validation_status=result.validation.status,
+        cache_hit=False,
+    )
 
+    logger.info(
+        "validate: provider=%s status=%s cache_hit=false",
+        result.validation.provider,
+        result.validation.status,
+    )
+
+    if result.validation.status == "unavailable":
+        logger.debug(
+            "cache_store: skip provider=%s status=unavailable",
+            result.validation.provider,
+        )
         return result
+
+    if engine is not None:
+        try:
+            canonical_key = _make_canonical_key(result)
+            await _store(engine, pattern_key, canonical_key, result, raw_input=raw_input)
+            set_audit_context(pattern_key=pattern_key)
+        except Exception:
+            logger.warning("cache_store: storage error — result not cached", exc_info=True)
+
+    return result
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -902,36 +914,37 @@ git commit -m "#73 feat: thread pattern_key from ContextVar through audit middle
 Add to `tests/unit/test_validate_router.py` inside `class TestValidateEndpoint`:
 
 ```python
-    def test_address_string_raw_input_passed_to_provider(self, client: TestClient) -> None:
-        """The original address string is passed as raw_input to the provider."""
-        provider = _make_null_provider(NULL_RESPONSE)
-        with _mock_registry_with(provider):
-            client.post(
-                "/api/v1/validate",
-                json={"address": "123 Main St, Springfield, IL 62701"},
-            )
-        kwargs = provider.validate.call_args.kwargs
-        assert kwargs.get("raw_input") == "123 Main St, Springfield, IL 62701"
+def test_address_string_raw_input_passed_to_provider(self, client: TestClient) -> None:
+    """The original address string is passed as raw_input to the provider."""
+    provider = _make_null_provider(NULL_RESPONSE)
+    with _mock_registry_with(provider):
+        client.post(
+            "/api/v1/validate",
+            json={"address": "123 Main St, Springfield, IL 62701"},
+        )
+    kwargs = provider.validate.call_args.kwargs
+    assert kwargs.get("raw_input") == "123 Main St, Springfield, IL 62701"
 
-    def test_components_raw_input_is_json(self, client: TestClient) -> None:
-        """Component dict input is JSON-serialised as raw_input."""
-        import json as json_mod
 
-        comps = {
-            "address_number": "123",
-            "street_name": "MAIN",
-            "street_suffix": "ST",
-            "city": "SPRINGFIELD",
-            "region": "IL",
-            "postal_code": "62701",
-        }
-        provider = _make_null_provider(NULL_RESPONSE)
-        with _mock_registry_with(provider):
-            client.post("/api/v1/validate", json={"components": comps})
+def test_components_raw_input_is_json(self, client: TestClient) -> None:
+    """Component dict input is JSON-serialised as raw_input."""
+    import json as json_mod
 
-        raw = provider.validate.call_args.kwargs.get("raw_input")
-        assert raw is not None
-        assert json_mod.loads(raw) == comps
+    comps = {
+        "address_number": "123",
+        "street_name": "MAIN",
+        "street_suffix": "ST",
+        "city": "SPRINGFIELD",
+        "region": "IL",
+        "postal_code": "62701",
+    }
+    provider = _make_null_provider(NULL_RESPONSE)
+    with _mock_registry_with(provider):
+        client.post("/api/v1/validate", json={"components": comps})
+
+    raw = provider.validate.call_args.kwargs.get("raw_input")
+    assert raw is not None
+    assert json_mod.loads(raw) == comps
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -962,9 +975,7 @@ async def validate_address_v1(req: ValidateRequestV1, request: Request) -> Valid
 
     if req.components:
         comps = req.components
-        raw_input: str | None = json.dumps(
-            req.components, separators=(",", ":"), ensure_ascii=True
-        )
+        raw_input: str | None = json.dumps(req.components, separators=(",", ":"), ensure_ascii=True)
     else:
         # model_validator guarantees address is non-blank when components is absent
         parse_result = parse_address(req.address.strip(), country=req.country)  # type: ignore[union-attr]
@@ -1021,7 +1032,12 @@ git commit -m "#73 feat: extract raw_input in validate router and pass to provid
 Add to `tests/unit/test_admin_queries.py` (add `query_patterns` to the import at the top, from `address_validator.db.tables`):
 
 ```python
-from address_validator.db.tables import ERROR_STATUS_MIN, audit_log, audit_daily_stats, query_patterns
+from address_validator.db.tables import (
+    ERROR_STATUS_MIN,
+    audit_log,
+    audit_daily_stats,
+    query_patterns,
+)
 ```
 
 Add helper and test:
@@ -1120,7 +1136,12 @@ Expected: failure — `get_audit_rows` doesn't accept `raw_input` kwarg yet.
 Add `query_patterns` to the import from `db.tables`:
 
 ```python
-from address_validator.db.tables import ERROR_STATUS_MIN, audit_log, audit_daily_stats, query_patterns
+from address_validator.db.tables import (
+    ERROR_STATUS_MIN,
+    audit_log,
+    audit_daily_stats,
+    query_patterns,
+)
 ```
 
 Replace `get_audit_rows` with:

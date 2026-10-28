@@ -646,7 +646,11 @@ Add to `tests/unit/test_audit_service.py`:
 from unittest.mock import AsyncMock, patch
 
 from address_validator.models import StandardizeResponseV1, ValidateResponseV1, ValidationResult
-from address_validator.services.audit import get_audit_cache_hit, get_audit_provider, get_audit_validation_status
+from address_validator.services.audit import (
+    get_audit_cache_hit,
+    get_audit_provider,
+    get_audit_validation_status,
+)
 
 
 @pytest.mark.asyncio
@@ -943,7 +947,7 @@ from address_validator.middleware.audit import audit_middleware
 Add **before** the request_id_middleware line. Starlette LIFO means the last-added middleware is outermost. We need request_id_middleware to be outermost (runs first, sets ContextVar) and audit_middleware to be innermost (runs inside request_id's `call_next`, can read the ContextVar):
 
 ```python
-app.middleware("http")(audit_middleware)     # added first → innermost
+app.middleware("http")(audit_middleware)  # added first → innermost
 app.middleware("http")(request_id_middleware)  # added second → outermost
 ```
 
@@ -1002,8 +1006,9 @@ def test_get_admin_user_with_headers() -> None:
     app = FastAPI()
 
     @app.get("/test")
-    async def test_route(user = None) -> HTMLResponse:
+    async def test_route(user=None) -> HTMLResponse:
         from fastapi import Request
+
         return HTMLResponse("ok")
 
     # Better approach: test the dependency function directly
@@ -1347,9 +1352,7 @@ async def get_dashboard_stats(engine: AsyncEngine) -> dict:
 
     requests_today = row.today
     error_rate = (row.errors_today / requests_today * 100) if requests_today > 0 else None
-    cache_hit_rate = (
-        (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
-    )
+    cache_hit_rate = (cache_row.hits / cache_row.total * 100) if cache_row.total > 0 else None
 
     return {
         "requests_today": requests_today,
@@ -1500,9 +1503,7 @@ async def get_provider_stats(engine: AsyncEngine, provider_name: str) -> dict:
             )
         ).fetchall()
 
-    cache_hit_rate = (
-        (row.cache_hits / row.cache_total * 100) if row.cache_total > 0 else None
-    )
+    cache_hit_rate = (row.cache_hits / row.cache_total * 100) if row.cache_total > 0 else None
     return {
         "total": row.total,
         "today": row.today,
@@ -1532,9 +1533,9 @@ router = APIRouter()
 
 # Cache-bust CSS with git SHA
 try:
-    _css_version = (
-        subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
-    )
+    _css_version = subprocess.check_output(
+        ["git", "rev-parse", "--short", "HEAD"], text=True
+    ).strip()
 except Exception:
     _css_version = "dev"
 
@@ -1548,21 +1549,25 @@ def _get_quota_info() -> list[dict]:
         guard = usps._client._rate_limiter
         # Daily window is index 1
         if len(guard._windows) > 1:
-            quota.append({
-                "provider": "usps",
-                "remaining": int(guard._tokens[1]),
-                "limit": guard._windows[1].limit,
-            })
+            quota.append(
+                {
+                    "provider": "usps",
+                    "remaining": int(guard._tokens[1]),
+                    "limit": guard._windows[1].limit,
+                }
+            )
 
     google = factory._google_provider
     if google and hasattr(google, "_client") and hasattr(google._client, "_rate_limiter"):
         guard = google._client._rate_limiter
         if len(guard._windows) > 1:
-            quota.append({
-                "provider": "google",
-                "remaining": int(guard._tokens[1]),
-                "limit": guard._windows[1].limit,
-            })
+            quota.append(
+                {
+                    "provider": "google",
+                    "remaining": int(guard._tokens[1]),
+                    "limit": guard._windows[1].limit,
+                }
+            )
 
     return quota
 
@@ -1616,7 +1621,11 @@ from address_validator.routers.admin.router import admin_router
 After the existing `app.include_router(v1_validate.router)` line, add:
 ```python
 app.include_router(admin_router)
-app.mount("/static/admin", StaticFiles(directory="src/address_validator/static/admin"), name="admin-static")
+app.mount(
+    "/static/admin",
+    StaticFiles(directory="src/address_validator/static/admin"),
+    name="admin-static",
+)
 ```
 
 - [ ] **Step 8: Build Tailwind CSS (will now include classes from templates)**
@@ -2099,6 +2108,7 @@ Update `src/address_validator/routers/admin/router.py` — add import and includ
 
 ```python
 from address_validator.routers.admin.endpoints import router as endpoints_router
+
 admin_router.include_router(endpoints_router)
 ```
 
@@ -2335,6 +2345,7 @@ Update `src/address_validator/routers/admin/router.py` — add import and includ
 
 ```python
 from address_validator.routers.admin.providers import router as providers_router
+
 admin_router.include_router(providers_router)
 ```
 
@@ -2388,14 +2399,46 @@ async def _seed_rows(engine: AsyncEngine) -> None:
     """Insert sample audit_log rows for testing."""
     now = datetime.now(timezone.utc)
     rows = [
-        {"ts": now, "ip": "1.2.3.4", "method": "POST", "ep": "/api/v1/validate",
-         "status": 200, "provider": "usps", "vs": "confirmed", "cache": True},
-        {"ts": now, "ip": "1.2.3.4", "method": "POST", "ep": "/api/v1/validate",
-         "status": 200, "provider": "usps", "vs": "confirmed", "cache": False},
-        {"ts": now, "ip": "5.6.7.8", "method": "POST", "ep": "/api/v1/parse",
-         "status": 200, "provider": None, "vs": None, "cache": None},
-        {"ts": now, "ip": "5.6.7.8", "method": "POST", "ep": "/api/v1/parse",
-         "status": 400, "provider": None, "vs": None, "cache": None},
+        {
+            "ts": now,
+            "ip": "1.2.3.4",
+            "method": "POST",
+            "ep": "/api/v1/validate",
+            "status": 200,
+            "provider": "usps",
+            "vs": "confirmed",
+            "cache": True,
+        },
+        {
+            "ts": now,
+            "ip": "1.2.3.4",
+            "method": "POST",
+            "ep": "/api/v1/validate",
+            "status": 200,
+            "provider": "usps",
+            "vs": "confirmed",
+            "cache": False,
+        },
+        {
+            "ts": now,
+            "ip": "5.6.7.8",
+            "method": "POST",
+            "ep": "/api/v1/parse",
+            "status": 200,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+        },
+        {
+            "ts": now,
+            "ip": "5.6.7.8",
+            "method": "POST",
+            "ep": "/api/v1/parse",
+            "status": 400,
+            "provider": None,
+            "vs": None,
+            "cache": None,
+        },
     ]
     async with engine.begin() as conn:
         for r in rows:
@@ -2576,10 +2619,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 # Matches uvicorn access log format:
 # INFO:     1.2.3.4:0 - "POST /api/v1/validate HTTP/1.1" 200 OK
 _ACCESS_RE = re.compile(
-    r'INFO:\s+'
-    r'(?P<ip>[\d.]+):\d+\s+-\s+'
+    r"INFO:\s+"
+    r"(?P<ip>[\d.]+):\d+\s+-\s+"
     r'"(?P<method>\w+)\s+(?P<path>/\S+)\s+HTTP/[\d.]+"\s+'
-    r'(?P<status>\d+)'
+    r"(?P<status>\d+)"
 )
 
 # Only backfill API routes
@@ -2635,9 +2678,7 @@ async def main() -> None:
     # Check for existing backfill
     async with engine.connect() as conn:
         existing = (
-            await conn.execute(
-                text("SELECT COUNT(*) FROM audit_log WHERE request_id IS NULL")
-            )
+            await conn.execute(text("SELECT COUNT(*) FROM audit_log WHERE request_id IS NULL"))
         ).scalar()
         if existing and existing > 0:
             print(f"Skipping: {existing} backfilled rows already exist.")

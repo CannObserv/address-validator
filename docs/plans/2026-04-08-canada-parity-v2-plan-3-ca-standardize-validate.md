@@ -42,6 +42,7 @@
 ```python
 # tests/unit/test_canada_post_data.py
 """Tests for Canada Post data tables."""
+
 import pytest
 from address_validator.canada_post_data.provinces import PROVINCE_MAP
 from address_validator.canada_post_data.suffixes import CA_SUFFIX_MAP
@@ -69,7 +70,21 @@ class TestProvinceMap:
         assert PROVINCE_MAP.get("QC") == "QC"
 
     def test_all_13_provinces_and_territories_present(self) -> None:
-        expected_abbrs = {"AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"}
+        expected_abbrs = {
+            "AB",
+            "BC",
+            "MB",
+            "NB",
+            "NL",
+            "NS",
+            "NT",
+            "NU",
+            "ON",
+            "PE",
+            "QC",
+            "SK",
+            "YT",
+        }
         assert expected_abbrs <= set(PROVINCE_MAP.values())
 
 
@@ -118,27 +133,37 @@ Source: Canada Post Addressing Guidelines, Table 1.
 # Keys: uppercase full name or abbreviation.  Values: 2-letter abbreviation.
 PROVINCE_MAP: dict[str, str] = {
     # Abbreviation → abbreviation (identity; for normalising already-abbreviated input)
-    "AB": "AB", "BC": "BC", "MB": "MB", "NB": "NB", "NL": "NL",
-    "NS": "NS", "NT": "NT", "NU": "NU", "ON": "ON", "PE": "PE",
-    "QC": "QC", "SK": "SK", "YT": "YT",
+    "AB": "AB",
+    "BC": "BC",
+    "MB": "MB",
+    "NB": "NB",
+    "NL": "NL",
+    "NS": "NS",
+    "NT": "NT",
+    "NU": "NU",
+    "ON": "ON",
+    "PE": "PE",
+    "QC": "QC",
+    "SK": "SK",
+    "YT": "YT",
     # Full name → abbreviation
-    "ALBERTA":                    "AB",
-    "BRITISH COLUMBIA":           "BC",
-    "MANITOBA":                   "MB",
-    "NEW BRUNSWICK":              "NB",
-    "NEWFOUNDLAND AND LABRADOR":  "NL",
-    "NEWFOUNDLAND":               "NL",
-    "LABRADOR":                   "NL",
-    "NOVA SCOTIA":                "NS",
-    "NORTHWEST TERRITORIES":      "NT",
-    "NUNAVUT":                    "NU",
-    "ONTARIO":                    "ON",
-    "PRINCE EDWARD ISLAND":       "PE",
-    "QUEBEC":                     "QC",
-    "QUÉBEC":                     "QC",
-    "SASKATCHEWAN":               "SK",
-    "YUKON":                      "YT",
-    "YUKON TERRITORY":            "YT",
+    "ALBERTA": "AB",
+    "BRITISH COLUMBIA": "BC",
+    "MANITOBA": "MB",
+    "NEW BRUNSWICK": "NB",
+    "NEWFOUNDLAND AND LABRADOR": "NL",
+    "NEWFOUNDLAND": "NL",
+    "LABRADOR": "NL",
+    "NOVA SCOTIA": "NS",
+    "NORTHWEST TERRITORIES": "NT",
+    "NUNAVUT": "NU",
+    "ONTARIO": "ON",
+    "PRINCE EDWARD ISLAND": "PE",
+    "QUEBEC": "QC",
+    "QUÉBEC": "QC",
+    "SASKATCHEWAN": "SK",
+    "YUKON": "YT",
+    "YUKON TERRITORY": "YT",
 }
 ```
 
@@ -157,131 +182,190 @@ the bilingual equivalent for French types.
 
 CA_SUFFIX_MAP: dict[str, str] = {
     # English street types
-    "ALLEY":         "ALLEY",
-    "AVE":           "AVE",    "AVENUE":     "AVE",
-    "BAY":           "BAY",
-    "BEACH":         "BEACH",
-    "BEND":          "BEND",
-    "BLVD":          "BLVD",   "BOULEVARD":  "BLVD",
-    "BYPASS":        "BYPASS",
-    "CAMPUS":        "CAMPUS",
-    "CAPE":          "CAPE",
-    "CENTRE":        "CTR",    "CENTER":     "CTR",    "CTR": "CTR",
-    "CHASE":         "CHASE",
-    "CIRCLE":        "CIRC",   "CIRC":       "CIRC",
-    "CIRCUIT":       "CIRCT",  "CIRCT":      "CIRCT",
-    "CLOSE":         "CLOSE",
-    "COMMON":        "COMMON",
-    "CONCESSION":    "CONC",   "CONC":       "CONC",
-    "CORNERS":       "CRNRS",  "CRNRS":      "CRNRS",
-    "COURT":         "CRT",    "CRT":        "CRT",
-    "COVE":          "COVE",
-    "CRESCENT":      "CRES",   "CRES":       "CRES",
-    "CROSSING":      "CROSS",  "CROSS":      "CROSS",
-    "CUL-DE-SAC":    "CDS",    "CDS":        "CDS",
-    "DALE":          "DALE",
-    "DELL":          "DELL",
-    "DIVERSION":     "DIVERS", "DIVERS":     "DIVERS",
-    "DOWNS":         "DOWNS",
-    "DR":            "DR",     "DRIVE":      "DR",
-    "END":           "END",
-    "ESPLANADE":     "ESPL",   "ESPL":       "ESPL",
-    "ESTATES":       "ESTATE", "ESTATE":     "ESTATE",
-    "EXPRESSWAY":    "EXPY",   "EXPY":       "EXPY",
-    "EXTENSION":     "EXTEN",  "EXTEN":      "EXTEN",
-    "FARM":          "FARM",
-    "FIELD":         "FIELD",
-    "FOREST":        "FOREST",
-    "FREEWAY":       "FWY",    "FWY":        "FWY",
-    "FRONT":         "FRONT",
-    "GARDENS":       "GDNS",   "GDNS":       "GDNS",
-    "GATE":          "GATE",
-    "GLADE":         "GLADE",
-    "GLEN":          "GLEN",
-    "GREEN":         "GREEN",
-    "GROUNDS":       "GRNDS",  "GRNDS":      "GRNDS",
-    "GROVE":         "GROVE",
-    "HARBOUR":       "HARBR",  "HARBR":      "HARBR",
-    "HEATH":         "HEATH",
-    "HEIGHTS":       "HTS",    "HTS":        "HTS",
-    "HIGHLANDS":     "HGHLDS", "HGHLDS":     "HGHLDS",
-    "HIGHWAY":       "HWY",    "HWY":        "HWY",
-    "HILL":          "HILL",
-    "HOLLOW":        "HOLLOW",
-    "INLET":         "INLET",
-    "ISLAND":        "ISLAND",
-    "KEY":           "KEY",
-    "KNOLL":         "KNOLL",
-    "LANDING":       "LANDNG", "LANDNG":     "LANDNG",
-    "LANE":          "LANE",   "LN":         "LANE",
-    "LIMITS":        "LMTS",   "LMTS":       "LMTS",
-    "LINE":          "LINE",
-    "LINK":          "LINK",
-    "LOOKOUT":       "LKOUT",  "LKOUT":      "LKOUT",
-    "LOOP":          "LOOP",
-    "MALL":          "MALL",
-    "MANOR":         "MANOR",
-    "MAZE":          "MAZE",
-    "MEADOW":        "MEADOW",
-    "MEWS":          "MEWS",
-    "MOOR":          "MOOR",
-    "MOUNT":         "MOUNT",
-    "MOUNTAIN":      "MTN",    "MTN":        "MTN",
-    "ORCHARD":       "ORCH",   "ORCH":       "ORCH",
-    "PARADE":        "PARADE",
-    "PARK":          "PARK",   "PK":         "PARK",
-    "PARKWAY":       "PKY",    "PKY":        "PKY",
-    "PATH":          "PATH",
-    "PATHWAY":       "PTWAY",  "PTWAY":      "PTWAY",
-    "PL":            "PL",     "PLACE":      "PL",
-    "PLATEAU":       "PLAT",   "PLAT":       "PLAT",
-    "PLAZA":         "PLAZA",
-    "POINT":         "PT",     "PT":         "PT",
-    "PORT":          "PORT",
-    "PRIVATE":       "PVT",    "PVT":        "PVT",
-    "PROM":          "PROM",   "PROMENADE":  "PROM",
-    "QUAI":          "QUAI",   "QUAY":       "QUAY",
-    "RAMP":          "RAMP",
-    "RD":            "RD",     "ROAD":       "RD",
-    "RIDGE":         "RIDGE",
-    "RISE":          "RISE",
-    "RUN":           "RUN",
-    "ROW":           "ROW",
-    "RTE":           "RTE",
-    "SQUARE":        "SQ",     "SQ":         "SQ",
-    "ST":            "ST",     "STREET":     "ST",
-    "SUBDIVISION":   "SUBDIV", "SUBDIV":     "SUBDIV",
-    "TERRACE":       "TERR",   "TERR":       "TERR",
-    "THICKET":       "THICK",  "THICK":      "THICK",
-    "TOWERS":        "TOWERS",
-    "TOWNLINE":      "TLINE",  "TLINE":      "TLINE",
-    "TRAIL":         "TRAIL",
-    "TURNING":       "TRNING", "TRNING":     "TRNING",
-    "VALE":          "VALE",
-    "VIA":           "VIA",
-    "VIEW":          "VIEW",
-    "VILLAGE":       "VILLGE", "VILLGE":     "VILLGE",
-    "VILLAS":        "VILLAS",
-    "VISTA":         "VISTA",
-    "WAY":           "WAY",
-    "WOOD":          "WOOD",
-    "WYND":          "WYND",
+    "ALLEY": "ALLEY",
+    "AVE": "AVE",
+    "AVENUE": "AVE",
+    "BAY": "BAY",
+    "BEACH": "BEACH",
+    "BEND": "BEND",
+    "BLVD": "BLVD",
+    "BOULEVARD": "BLVD",
+    "BYPASS": "BYPASS",
+    "CAMPUS": "CAMPUS",
+    "CAPE": "CAPE",
+    "CENTRE": "CTR",
+    "CENTER": "CTR",
+    "CTR": "CTR",
+    "CHASE": "CHASE",
+    "CIRCLE": "CIRC",
+    "CIRC": "CIRC",
+    "CIRCUIT": "CIRCT",
+    "CIRCT": "CIRCT",
+    "CLOSE": "CLOSE",
+    "COMMON": "COMMON",
+    "CONCESSION": "CONC",
+    "CONC": "CONC",
+    "CORNERS": "CRNRS",
+    "CRNRS": "CRNRS",
+    "COURT": "CRT",
+    "CRT": "CRT",
+    "COVE": "COVE",
+    "CRESCENT": "CRES",
+    "CRES": "CRES",
+    "CROSSING": "CROSS",
+    "CROSS": "CROSS",
+    "CUL-DE-SAC": "CDS",
+    "CDS": "CDS",
+    "DALE": "DALE",
+    "DELL": "DELL",
+    "DIVERSION": "DIVERS",
+    "DIVERS": "DIVERS",
+    "DOWNS": "DOWNS",
+    "DR": "DR",
+    "DRIVE": "DR",
+    "END": "END",
+    "ESPLANADE": "ESPL",
+    "ESPL": "ESPL",
+    "ESTATES": "ESTATE",
+    "ESTATE": "ESTATE",
+    "EXPRESSWAY": "EXPY",
+    "EXPY": "EXPY",
+    "EXTENSION": "EXTEN",
+    "EXTEN": "EXTEN",
+    "FARM": "FARM",
+    "FIELD": "FIELD",
+    "FOREST": "FOREST",
+    "FREEWAY": "FWY",
+    "FWY": "FWY",
+    "FRONT": "FRONT",
+    "GARDENS": "GDNS",
+    "GDNS": "GDNS",
+    "GATE": "GATE",
+    "GLADE": "GLADE",
+    "GLEN": "GLEN",
+    "GREEN": "GREEN",
+    "GROUNDS": "GRNDS",
+    "GRNDS": "GRNDS",
+    "GROVE": "GROVE",
+    "HARBOUR": "HARBR",
+    "HARBR": "HARBR",
+    "HEATH": "HEATH",
+    "HEIGHTS": "HTS",
+    "HTS": "HTS",
+    "HIGHLANDS": "HGHLDS",
+    "HGHLDS": "HGHLDS",
+    "HIGHWAY": "HWY",
+    "HWY": "HWY",
+    "HILL": "HILL",
+    "HOLLOW": "HOLLOW",
+    "INLET": "INLET",
+    "ISLAND": "ISLAND",
+    "KEY": "KEY",
+    "KNOLL": "KNOLL",
+    "LANDING": "LANDNG",
+    "LANDNG": "LANDNG",
+    "LANE": "LANE",
+    "LN": "LANE",
+    "LIMITS": "LMTS",
+    "LMTS": "LMTS",
+    "LINE": "LINE",
+    "LINK": "LINK",
+    "LOOKOUT": "LKOUT",
+    "LKOUT": "LKOUT",
+    "LOOP": "LOOP",
+    "MALL": "MALL",
+    "MANOR": "MANOR",
+    "MAZE": "MAZE",
+    "MEADOW": "MEADOW",
+    "MEWS": "MEWS",
+    "MOOR": "MOOR",
+    "MOUNT": "MOUNT",
+    "MOUNTAIN": "MTN",
+    "MTN": "MTN",
+    "ORCHARD": "ORCH",
+    "ORCH": "ORCH",
+    "PARADE": "PARADE",
+    "PARK": "PARK",
+    "PK": "PARK",
+    "PARKWAY": "PKY",
+    "PKY": "PKY",
+    "PATH": "PATH",
+    "PATHWAY": "PTWAY",
+    "PTWAY": "PTWAY",
+    "PL": "PL",
+    "PLACE": "PL",
+    "PLATEAU": "PLAT",
+    "PLAT": "PLAT",
+    "PLAZA": "PLAZA",
+    "POINT": "PT",
+    "PT": "PT",
+    "PORT": "PORT",
+    "PRIVATE": "PVT",
+    "PVT": "PVT",
+    "PROM": "PROM",
+    "PROMENADE": "PROM",
+    "QUAI": "QUAI",
+    "QUAY": "QUAY",
+    "RAMP": "RAMP",
+    "RD": "RD",
+    "ROAD": "RD",
+    "RIDGE": "RIDGE",
+    "RISE": "RISE",
+    "RUN": "RUN",
+    "ROW": "ROW",
+    "RTE": "RTE",
+    "SQUARE": "SQ",
+    "SQ": "SQ",
+    "ST": "ST",
+    "STREET": "ST",
+    "SUBDIVISION": "SUBDIV",
+    "SUBDIV": "SUBDIV",
+    "TERRACE": "TERR",
+    "TERR": "TERR",
+    "THICKET": "THICK",
+    "THICK": "THICK",
+    "TOWERS": "TOWERS",
+    "TOWNLINE": "TLINE",
+    "TLINE": "TLINE",
+    "TRAIL": "TRAIL",
+    "TURNING": "TRNING",
+    "TRNING": "TRNING",
+    "VALE": "VALE",
+    "VIA": "VIA",
+    "VIEW": "VIEW",
+    "VILLAGE": "VILLGE",
+    "VILLGE": "VILLGE",
+    "VILLAS": "VILLAS",
+    "VISTA": "VISTA",
+    "WAY": "WAY",
+    "WOOD": "WOOD",
+    "WYND": "WYND",
     # French street types (bilingual Canada Post standard)
-    "ALLÉE":         "ALLÉE",  "ALLEE":      "ALLÉE",
-    "AV":            "AVE",
-    "CH":            "CH",     "CHEMIN":     "CH",
-    "CROIS":         "CROIS",  "CROISSANT":  "CROIS",
-    "CÔTE":          "CÔTE",   "COTE":       "CÔTE",
-    "IMP":           "IMP",    "IMPASSE":    "IMP",
-    "MONTÉE":        "MONTÉE", "MONTEE":     "MONTÉE",
-    "PASS":          "PASS",   "PASSAGE":    "PASS",
-    "RANG":          "RANG",
-    "ROUT":          "ROUT",   "ROUTE":      "ROUT",
-    "RUE":           "RUE",
-    "RUELLE":        "RUELLE",
-    "SENT":          "SENT",   "SENTIER":    "SENT",
-    "TRAV":          "TRAV",   "TRAVERSE":   "TRAV",
-    "VOIE":          "VOIE",
+    "ALLÉE": "ALLÉE",
+    "ALLEE": "ALLÉE",
+    "AV": "AVE",
+    "CH": "CH",
+    "CHEMIN": "CH",
+    "CROIS": "CROIS",
+    "CROISSANT": "CROIS",
+    "CÔTE": "CÔTE",
+    "COTE": "CÔTE",
+    "IMP": "IMP",
+    "IMPASSE": "IMP",
+    "MONTÉE": "MONTÉE",
+    "MONTEE": "MONTÉE",
+    "PASS": "PASS",
+    "PASSAGE": "PASS",
+    "RANG": "RANG",
+    "ROUT": "ROUT",
+    "ROUTE": "ROUT",
+    "RUE": "RUE",
+    "RUELLE": "RUELLE",
+    "SENT": "SENT",
+    "SENTIER": "SENT",
+    "TRAV": "TRAV",
+    "TRAVERSE": "TRAV",
+    "VOIE": "VOIE",
 }
 ```
 
@@ -328,12 +412,13 @@ Add to `tests/unit/test_standardizer.py`:
 class TestStandardizeCA:
     def test_province_abbreviation_normalised(self) -> None:
         from address_validator.services.standardizer import standardize
+
         comps = {
             "premise_number": "123",
             "thoroughfare_name": "MAIN",
             "thoroughfare_trailing_type": "ST",
             "locality": "TORONTO",
-            "administrative_area": "ONTARIO",   # full name
+            "administrative_area": "ONTARIO",  # full name
             "postcode": "M5V 2T6",
         }
         result = standardize(comps, country="CA")
@@ -342,13 +427,14 @@ class TestStandardizeCA:
 
     def test_postal_code_uppercase_and_spaced(self) -> None:
         from address_validator.services.standardizer import standardize
+
         comps = {
             "premise_number": "100",
             "thoroughfare_name": "OAK",
             "thoroughfare_trailing_type": "AVE",
             "locality": "VANCOUVER",
             "administrative_area": "BC",
-            "postcode": "v5k0a1",   # lowercase, no space
+            "postcode": "v5k0a1",  # lowercase, no space
         }
         result = standardize(comps, country="CA")
         assert result.components.values["postcode"] == "V5K 0A1"
@@ -356,10 +442,11 @@ class TestStandardizeCA:
 
     def test_suffix_normalised(self) -> None:
         from address_validator.services.standardizer import standardize
+
         comps = {
             "premise_number": "200",
             "thoroughfare_name": "ELM",
-            "thoroughfare_trailing_type": "STREET",   # full → ST
+            "thoroughfare_trailing_type": "STREET",  # full → ST
             "locality": "OTTAWA",
             "administrative_area": "ON",
             "postcode": "K1A 0A6",
@@ -369,6 +456,7 @@ class TestStandardizeCA:
 
     def test_spec_is_canada_post(self) -> None:
         from address_validator.services.standardizer import standardize
+
         comps = {
             "premise_number": "1",
             "thoroughfare_name": "TEST",
@@ -382,6 +470,7 @@ class TestStandardizeCA:
 
     def test_standardized_string_built(self) -> None:
         from address_validator.services.standardizer import standardize
+
         comps = {
             "premise_number": "123",
             "thoroughfare_name": "MAIN",
@@ -417,6 +506,7 @@ from address_validator.canada_post_data.spec import CANADA_POST_SPEC, CANADA_POS
 import re as _re
 
 # Add this function before standardize():
+
 
 def _std_postal_code_ca(raw: str) -> str:
     """Normalise a Canadian postal code to ``A1A 1A1`` format.
@@ -581,6 +671,7 @@ git commit -m "#90 feat: add _standardize_ca() with Canada Post province, postal
 ```python
 # tests/integration/test_v2_standardize_ca.py
 """Integration tests for POST /api/v2/standardize with country=CA."""
+
 from unittest.mock import AsyncMock, patch
 
 
@@ -701,8 +792,9 @@ Also pass `libpostal_client` to `parse_address()` when it is called (for CA raw 
 ```python
 libpostal_client = getattr(request.app.state, "libpostal_client", None)
 # ... in the address branch:
-parse_result = await parse_address(req.address.strip(), country=req.country,
-                                    libpostal_client=libpostal_client)
+parse_result = await parse_address(
+    req.address.strip(), country=req.country, libpostal_client=libpostal_client
+)
 ```
 
 Handle `LibpostalUnavailableError` with a 503 (same pattern as v2 parse router).
@@ -743,6 +835,7 @@ git commit -m "#90 feat: enable CA in v2 standardize endpoint"
 ```python
 # tests/integration/test_v2_validate_ca.py
 """Integration tests for POST /api/v2/validate with country=CA."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 

@@ -426,12 +426,14 @@ def set_candidate_data(
     recovered_components: dict[str, str] | None = None,
 ) -> None:
     """Set training candidate data for the current request context."""
-    _candidate_data.set({
-        "raw_address": raw_address,
-        "failure_type": failure_type,
-        "parsed_tokens": parsed_tokens,
-        "recovered_components": recovered_components,
-    })
+    _candidate_data.set(
+        {
+            "raw_address": raw_address,
+            "failure_type": failure_type,
+            "parsed_tokens": parsed_tokens,
+            "recovered_components": recovered_components,
+        }
+    )
 
 
 def get_candidate_data() -> dict[str, Any] | None:
@@ -466,18 +468,15 @@ In the `RepeatedLabelError` except block (after line 414, before the `logger.deb
 For post-parse recovery on the success path — add after line 433 (after both `_recover_*` calls), before the return:
 
 ```python
-    # Check if any recovery heuristic fired (indicated by warnings)
-    if any(
-        "Unit designator recovered" in w or "identifier fragment" in w.lower()
-        for w in warnings
-    ):
-        pre_recovery = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
-        set_candidate_data(
-            raw_address=raw,
-            failure_type="post_parse_recovery",
-            parsed_tokens=[(v, k) for k, v in tagged.items()],
-            recovered_components=component_values,
-        )
+# Check if any recovery heuristic fired (indicated by warnings)
+if any("Unit designator recovered" in w or "identifier fragment" in w.lower() for w in warnings):
+    pre_recovery = {TAG_NAMES.get(label, label): value for label, value in tagged.items()}
+    set_candidate_data(
+        raw_address=raw,
+        failure_type="post_parse_recovery",
+        parsed_tokens=[(v, k) for k, v in tagged.items()],
+        recovered_components=component_values,
+    )
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -559,14 +558,12 @@ from address_validator.services.training_candidates import (
 In the middleware's `__call__` method, in the section where `_background_tasks` is used to fire-and-forget the audit write, add after the audit write task creation:
 
 ```python
-            # Fire-and-forget training candidate write if parser flagged one
-            candidate = get_candidate_data()
-            if candidate is not None and engine is not None:
-                task = asyncio.create_task(
-                    write_training_candidate(engine=engine, **candidate)
-                )
-                _background_tasks.add(task)
-                task.add_done_callback(_background_tasks.discard)
+# Fire-and-forget training candidate write if parser flagged one
+candidate = get_candidate_data()
+if candidate is not None and engine is not None:
+    task = asyncio.create_task(write_training_candidate(engine=engine, **candidate))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 ```
 
 Also add `reset_candidate_data()` at the top of the request handling (alongside the existing `reset_audit_context()` call):
@@ -601,11 +598,10 @@ class TestCandidateCollectionIntegration:
         ]
         exc = usaddress.RepeatedLabelError("fake", fake_tokens, {})
 
-        with mock.patch(
-            "address_validator.services.parser.usaddress.tag", side_effect=exc
-        ), mock.patch(
-            "address_validator.middleware.audit.write_training_candidate"
-        ) as mock_write:
+        with (
+            mock.patch("address_validator.services.parser.usaddress.tag", side_effect=exc),
+            mock.patch("address_validator.middleware.audit.write_training_candidate") as mock_write,
+        ):
             client.post(
                 "/api/v1/parse",
                 json={"address": "995 9TH ST BLDG 201 ROOM 104"},
@@ -950,15 +946,19 @@ async def _export_csv(
 
     with open(outfile, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["id", "raw_address", "failure_type", "parsed_tokens", "recovered_components"])
+        writer.writerow(
+            ["id", "raw_address", "failure_type", "parsed_tokens", "recovered_components"]
+        )
         for row in rows:
-            writer.writerow([
-                row["id"],
-                row["raw_address"],
-                row["failure_type"],
-                json.dumps(row["parsed_tokens"]),
-                json.dumps(row["recovered_components"]) if row["recovered_components"] else "",
-            ])
+            writer.writerow(
+                [
+                    row["id"],
+                    row["raw_address"],
+                    row["failure_type"],
+                    json.dumps(row["parsed_tokens"]),
+                    json.dumps(row["recovered_components"]) if row["recovered_components"] else "",
+                ]
+            )
 
     print(f"Exported {len(rows)} candidates to {outfile}")
     return len(rows)
@@ -1007,7 +1007,11 @@ def main() -> None:
     if args.command == "summary":
         asyncio.run(_show_summary(dsn))
     elif args.command == "export":
-        asyncio.run(_export_csv(dsn, args.out, status=args.status, failure_type=args.failure_type, limit=args.limit))
+        asyncio.run(
+            _export_csv(
+                dsn, args.out, status=args.status, failure_type=args.failure_type, limit=args.limit
+            )
+        )
     elif args.command == "mark":
         asyncio.run(_update_status(dsn, args.ids, args.status))
 
@@ -1089,7 +1093,10 @@ def _label_with_claude(address: str) -> list[tuple[str, str]]:
     try:
         import anthropic
     except ImportError:
-        print("Error: anthropic package required for Claude labeling. Install with: uv add --dev anthropic", file=sys.stderr)
+        print(
+            "Error: anthropic package required for Claude labeling. Install with: uv add --dev anthropic",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
@@ -1134,9 +1141,11 @@ Important:
     return [(token, label) for token, label in pairs]
 
 
-def _format_diff(address: str, model_labels: list[tuple[str, str]], claude_labels: list[tuple[str, str]]) -> str:
+def _format_diff(
+    address: str, model_labels: list[tuple[str, str]], claude_labels: list[tuple[str, str]]
+) -> str:
     """Format a side-by-side diff of model vs Claude labels."""
-    lines = [f"\n{'='*60}", f"Address: {address}", f"{'='*60}"]
+    lines = [f"\n{'=' * 60}", f"Address: {address}", f"{'=' * 60}"]
     lines.append(f"{'Token':<20} {'Model':<30} {'Claude':<30} {'Match'}")
     lines.append("-" * 85)
 
@@ -1181,11 +1190,17 @@ def _write_xml(addresses: list[list[tuple[str, str]]], outfile: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Agent-assisted address labeling")
-    parser.add_argument("input_csv", help="CSV file with raw addresses (one per line, or column 'raw_address')")
+    parser.add_argument(
+        "input_csv", help="CSV file with raw addresses (one per line, or column 'raw_address')"
+    )
     parser.add_argument("output_xml", help="Output XML file for training data")
     parser.add_argument("--test-output", help="Output XML file for test data (subset)")
-    parser.add_argument("--model-only", action="store_true", help="Skip Claude labeling, use model labels only")
-    parser.add_argument("--claude-only", action="store_true", help="Skip model labeling, use Claude labels only")
+    parser.add_argument(
+        "--model-only", action="store_true", help="Skip Claude labeling, use model labels only"
+    )
+    parser.add_argument(
+        "--claude-only", action="store_true", help="Skip model labeling, use Claude labels only"
+    )
     args = parser.parse_args()
 
     # Read addresses from CSV
@@ -1328,8 +1343,11 @@ def _find_upstream_training_files() -> list[Path]:
             if xmls:
                 return xmls
 
-    print("Warning: Could not find upstream training data. "
-          "You may need to clone the usaddress repo or install from source.", file=sys.stderr)
+    print(
+        "Warning: Could not find upstream training data. "
+        "You may need to clone the usaddress repo or install from source.",
+        file=sys.stderr,
+    )
     return []
 
 
@@ -1349,7 +1367,9 @@ def _build_manifest(
     return {
         "id": f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}-{name}",
         "description": description,
-        "usaddress_version": usaddress.__version__ if hasattr(usaddress, "__version__") else "unknown",
+        "usaddress_version": usaddress.__version__
+        if hasattr(usaddress, "__version__")
+        else "unknown",
         "training_files": [f"{src}:{path}" for src, path in training_files],
         "test_files": test_files,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1361,10 +1381,20 @@ def _build_manifest(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Train custom usaddress model")
-    parser.add_argument("--name", required=True, help="Short name for this training run (e.g. 'multi-unit')")
-    parser.add_argument("--description", required=True, help="Description of what this training addresses")
-    parser.add_argument("--custom-only", action="store_true", help="Train on custom data only (no upstream)")
-    parser.add_argument("--files", nargs="*", help="Specific custom XML files to include (default: all in training/data/)")
+    parser.add_argument(
+        "--name", required=True, help="Short name for this training run (e.g. 'multi-unit')"
+    )
+    parser.add_argument(
+        "--description", required=True, help="Description of what this training addresses"
+    )
+    parser.add_argument(
+        "--custom-only", action="store_true", help="Train on custom data only (no upstream)"
+    )
+    parser.add_argument(
+        "--files",
+        nargs="*",
+        help="Specific custom XML files to include (default: all in training/data/)",
+    )
     args = parser.parse_args()
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1402,7 +1432,9 @@ def main() -> None:
 
     # Backup current model
     current_model = Path(usaddress.MODEL_PATH)
-    backup_path = MODELS_DIR / f"usaddr-backup-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.crfsuite"
+    backup_path = (
+        MODELS_DIR / f"usaddr-backup-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.crfsuite"
+    )
     if current_model.exists():
         shutil.copy2(current_model, backup_path)
         print(f"Backed up current model to {backup_path}")
@@ -1595,9 +1627,15 @@ def _run_tests(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Test a trained usaddress model")
     parser.add_argument("--model", required=True, help="Path to the .crfsuite model to test")
-    parser.add_argument("--compare-manifest", help="Manifest of old model to rebuild and compare against")
-    parser.add_argument("--test-dir", default=str(TEST_CASES_DIR), help="Directory containing test case CSVs")
-    parser.add_argument("--run-pytest", action="store_true", help="Also run the project pytest suite")
+    parser.add_argument(
+        "--compare-manifest", help="Manifest of old model to rebuild and compare against"
+    )
+    parser.add_argument(
+        "--test-dir", default=str(TEST_CASES_DIR), help="Directory containing test case CSVs"
+    )
+    parser.add_argument(
+        "--run-pytest", action="store_true", help="Also run the project pytest suite"
+    )
     args = parser.parse_args()
 
     # Load test cases
@@ -1614,9 +1652,9 @@ def main() -> None:
         all_cases.extend(cases)
 
     # Test new model
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Testing NEW model: {args.model}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     new_tagger = _load_tagger(args.model)
     new_passed, new_failed, new_details = _run_tests(new_tagger, all_cases, "NEW")
     for d in new_details:
@@ -1637,9 +1675,9 @@ def main() -> None:
             print(f"  python scripts/model/train.py --name {old_manifest['id']} ...")
             print("Skipping comparison.")
         else:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Testing OLD model: {old_model_path}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
             old_tagger = _load_tagger(str(old_model_path))
             old_passed, old_failed, old_details = _run_tests(old_tagger, all_cases, "OLD")
             for d in old_details:
@@ -1649,24 +1687,30 @@ def main() -> None:
             # Show improvement
             improvement_cases = [c for c in all_cases if c["should_fail_old"]]
             if improvement_cases:
-                print(f"\n{'='*60}")
+                print(f"\n{'=' * 60}")
                 print("Improvement targets (should_fail_old_model=true):")
-                print(f"{'='*60}")
+                print(f"{'=' * 60}")
                 for case in improvement_cases:
                     old_result = _parse_with_tagger(old_tagger, case["raw_address"])
                     new_result = _parse_with_tagger(new_tagger, case["raw_address"])
                     old_ok, _ = _compare_labels(old_result, case["expected_labels"])
                     new_ok, _ = _compare_labels(new_result, case["expected_labels"])
-                    status = "FIXED" if not old_ok and new_ok else "REGRESSION" if old_ok and not new_ok else "UNCHANGED"
+                    status = (
+                        "FIXED"
+                        if not old_ok and new_ok
+                        else "REGRESSION"
+                        if old_ok and not new_ok
+                        else "UNCHANGED"
+                    )
                     print(f"  {status}: {case['raw_address']}")
 
     # Optionally run pytest
     if args.run_pytest:
         import subprocess
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Running project test suite...")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         # Temporarily swap the model for pytest
         result = subprocess.run(
             ["uv", "run", "pytest", "--no-cov", "-x"],
@@ -1777,8 +1821,12 @@ def _update_manifest_deployed(model_name: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Deploy trained usaddress model")
     parser.add_argument("--model", required=True, help="Path to .crfsuite model to deploy")
-    parser.add_argument("--restart", action="store_true", help="Restart the address-validator service after deploy")
-    parser.add_argument("--smoke-test", action="store_true", help="Run smoke test against live API after restart")
+    parser.add_argument(
+        "--restart", action="store_true", help="Restart the address-validator service after deploy"
+    )
+    parser.add_argument(
+        "--smoke-test", action="store_true", help="Run smoke test against live API after restart"
+    )
     args = parser.parse_args()
 
     model_path = Path(args.model)

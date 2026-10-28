@@ -35,6 +35,7 @@ Shared module extracted from `usps_client.py` and extended:
 ```python
 class ProviderRateLimitedError(Exception):
     """Raised by a provider client after all 429 retries are exhausted."""
+
     def __init__(self, provider: str) -> None:
         self.provider = provider
         super().__init__(f"Provider '{provider}' rate-limited after retries")

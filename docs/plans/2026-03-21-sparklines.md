@@ -115,11 +115,11 @@ from __future__ import annotations
 from html import escape
 
 SPARKLINE_COLORS: dict[str, str] = {
-    "requests_all": "#6d4488",      # co-purple
-    "requests_week": "#2d9f9f",     # teal
-    "requests_today": "#4a7fbf",    # blue
-    "cache_hit_rate": "#d4882a",    # orange
-    "error_rate": "#c44e8a",        # magenta
+    "requests_all": "#6d4488",  # co-purple
+    "requests_week": "#2d9f9f",  # teal
+    "requests_today": "#4a7fbf",  # blue
+    "cache_hit_rate": "#d4882a",  # orange
+    "error_rate": "#c44e8a",  # magenta
 }
 
 # SVG dimensions (viewBox units — scales responsively).
@@ -152,7 +152,9 @@ def build_sparkline_svg(
     mn, mx = min(points), max(points)
     if mn == mx:
         full_label = f"{label}, steady" if label else "steady"
-        return _flat_line_svg(color=color, label=full_label, width=width, height=height, mid_y=mid_y)
+        return _flat_line_svg(
+            color=color, label=full_label, width=width, height=height, mid_y=mid_y
+        )
 
     # Normal case — build polyline.
     trend = _describe_trend(points)
@@ -265,8 +267,11 @@ async def test_get_sparkline_data_with_rows(db: AsyncEngine) -> None:
     await _seed_rows(db)
     data = await get_sparkline_data(db)
     assert set(data.keys()) == {
-        "requests_all", "requests_week", "requests_today",
-        "cache_hit_rate", "error_rate",
+        "requests_all",
+        "requests_week",
+        "requests_today",
+        "cache_hit_rate",
+        "error_rate",
     }
     # Each value is a list of floats.
     for key in data:
@@ -377,7 +382,9 @@ async def get_sparkline_data(engine: AsyncEngine) -> dict[str, list[float]]:
         by_hour = {r.bucket: float(r.cnt) for r in rows}
         return [by_hour.get(start + timedelta(hours=i), 0.0) for i in range(hours)]
 
-    def _fill_rate_daily(rows: list, start: datetime, days: int, num_col: str, den_col: str) -> list[float]:
+    def _fill_rate_daily(
+        rows: list, start: datetime, days: int, num_col: str, den_col: str
+    ) -> list[float]:
         by_day: dict = {}
         for r in rows:
             mapping = r._mapping  # noqa: SLF001

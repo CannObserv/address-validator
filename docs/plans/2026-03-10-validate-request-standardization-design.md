@@ -39,6 +39,7 @@ class ValidateRequestV1(CountryRequestMixin):
 
     When both fields are supplied, ``components`` takes precedence.
     """
+
     address: str | None = Field(None, max_length=1000)
     components: dict[str, str] | None = None
 ```
