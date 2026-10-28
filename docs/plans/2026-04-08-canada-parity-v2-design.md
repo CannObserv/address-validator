@@ -145,22 +145,23 @@ New module: `src/address_validator/services/component_profiles.py`
 ```python
 PROFILES: dict[str, dict[str, str]] = {
     "usps-pub28": {
-        "premise_number":              "AddressNumber",
-        "premise_name":                "BuildingName",
-        "thoroughfare_pre_direction":  "StreetNamePreDirectional",
-        "thoroughfare_leading_type":   "StreetNamePreType",
-        "thoroughfare_name":           "StreetName",
-        "thoroughfare_trailing_type":  "StreetNamePostType",
+        "premise_number": "AddressNumber",
+        "premise_name": "BuildingName",
+        "thoroughfare_pre_direction": "StreetNamePreDirectional",
+        "thoroughfare_leading_type": "StreetNamePreType",
+        "thoroughfare_name": "StreetName",
+        "thoroughfare_trailing_type": "StreetNamePostType",
         "thoroughfare_post_direction": "StreetNamePostDirectional",
-        "sub_premise_type":            "OccupancyType",
-        "sub_premise_number":          "OccupancyIdentifier",
-        "locality":                    "PlaceName",
-        "administrative_area":         "StateName",
-        "postcode":                    "ZipCode",
-        "general_delivery":            "USPSBoxType",
+        "sub_premise_type": "OccupancyType",
+        "sub_premise_number": "OccupancyIdentifier",
+        "locality": "PlaceName",
+        "administrative_area": "StateName",
+        "postcode": "ZipCode",
+        "general_delivery": "USPSBoxType",
     },
     "canada-post": {},  # identity map; reserved for future divergence
 }
+
 
 def translate_components(values: dict[str, str], profile: str) -> dict[str, str]:
     mapping = PROFILES.get(profile, {})
@@ -293,22 +294,43 @@ Canadian addresses, as well as Quebec directionals (`Ouest`, `Nord-Est`).
 # Each entry: normalised_form → position ("leading", "trailing", "either")
 STREET_TYPES: dict[str, str] = {
     # French — leading position
-    "rue": "leading", "boulevard": "either", "avenue": "either",
-    "chemin": "leading", "côte": "leading", "montée": "leading",
-    "rang": "leading", "route": "leading", "voie": "leading",
-    "place": "either", "allée": "leading", "impasse": "leading",
-    "promenade": "either", "quai": "leading", "ruelle": "leading",
-    "sentier": "leading", "traverse": "leading", "croissant": "either",
+    "rue": "leading",
+    "boulevard": "either",
+    "avenue": "either",
+    "chemin": "leading",
+    "côte": "leading",
+    "montée": "leading",
+    "rang": "leading",
+    "route": "leading",
+    "voie": "leading",
+    "place": "either",
+    "allée": "leading",
+    "impasse": "leading",
+    "promenade": "either",
+    "quai": "leading",
+    "ruelle": "leading",
+    "sentier": "leading",
+    "traverse": "leading",
+    "croissant": "either",
     # English — trailing position
-    "street": "trailing", "st": "trailing",
-    "avenue": "either",   "ave": "either",
-    "boulevard": "either","blvd": "either",
-    "drive": "trailing",  "dr": "trailing",
-    "road": "trailing",   "rd": "trailing",
-    "lane": "trailing",   "ln": "trailing",
-    "court": "trailing",  "crt": "trailing",
-    "crescent": "trailing","cres": "trailing",
-    "place": "either",    "pl": "either",
+    "street": "trailing",
+    "st": "trailing",
+    "avenue": "either",
+    "ave": "either",
+    "boulevard": "either",
+    "blvd": "either",
+    "drive": "trailing",
+    "dr": "trailing",
+    "road": "trailing",
+    "rd": "trailing",
+    "lane": "trailing",
+    "ln": "trailing",
+    "court": "trailing",
+    "crt": "trailing",
+    "crescent": "trailing",
+    "cres": "trailing",
+    "place": "either",
+    "pl": "either",
     "way": "trailing",
     # … full tables in canada_post_data/suffixes.py and usps_data/suffixes.py
 }
@@ -331,7 +353,7 @@ async def parse_address(
     libpostal_client: LibpostalClient | None = None,
 ) -> dict[str, str]:
     if country == "US":
-        return _parse_us(address)      # usaddress; output remapped to ISO 19160-4 keys
+        return _parse_us(address)  # usaddress; output remapped to ISO 19160-4 keys
     if country == "CA":
         if libpostal_client is None:
             raise LibpostalUnavailableError()

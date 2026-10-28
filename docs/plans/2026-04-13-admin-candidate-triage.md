@@ -79,10 +79,7 @@ def upgrade() -> None:
         "ADD COLUMN raw_address_hash TEXT "
         "GENERATED ALWAYS AS (encode(sha256(raw_address::bytea), 'hex')) STORED"
     )
-    op.execute(
-        "ALTER TABLE model_training_candidates "
-        "ALTER COLUMN raw_address_hash SET NOT NULL"
-    )
+    op.execute("ALTER TABLE model_training_candidates ALTER COLUMN raw_address_hash SET NOT NULL")
     op.create_index(
         "ix_model_training_candidates_raw_address_hash",
         "model_training_candidates",
@@ -135,7 +132,7 @@ git commit -m "#102 feat: add raw_address_hash generated column for candidate tr
 In `src/address_validator/db/tables.py`, add `raw_address_hash` to `model_training_candidates` — insert after the `raw_address` column. The column is generated, so from the app's perspective it's read-only; SQLAlchemy Core just needs to know it exists so queries can select on it.
 
 ```python
-sa.Column("raw_address_hash", sa.Text(), nullable=False),
+(sa.Column("raw_address_hash", sa.Text(), nullable=False),)
 ```
 
 Full Table definition for reference (place the new column on line 117 just below `raw_address`):
@@ -259,13 +256,33 @@ async def _seed(engine: AsyncEngine) -> None:
     now = datetime.now(UTC)
     rows = [
         # Group A: two `new` rows — rolls up to `new`
-        {"raw": "addr A", "ft": "repeated_label_error", "status": "new", "ts": now - timedelta(days=1)},
+        {
+            "raw": "addr A",
+            "ft": "repeated_label_error",
+            "status": "new",
+            "ts": now - timedelta(days=1),
+        },
         {"raw": "addr A", "ft": "repeated_label_error", "status": "new", "ts": now},
         # Group B: one `new` + one `reviewed` — rolls up to `mixed`
-        {"raw": "addr B", "ft": "post_parse_recovery", "status": "new", "ts": now - timedelta(days=2)},
-        {"raw": "addr B", "ft": "post_parse_recovery", "status": "reviewed", "ts": now - timedelta(hours=1)},
+        {
+            "raw": "addr B",
+            "ft": "post_parse_recovery",
+            "status": "new",
+            "ts": now - timedelta(days=2),
+        },
+        {
+            "raw": "addr B",
+            "ft": "post_parse_recovery",
+            "status": "reviewed",
+            "ts": now - timedelta(hours=1),
+        },
         # Group C: one `reviewed` row — rolls up to `reviewed`
-        {"raw": "addr C", "ft": "repeated_label_error", "status": "reviewed", "ts": now - timedelta(days=3)},
+        {
+            "raw": "addr C",
+            "ft": "repeated_label_error",
+            "status": "reviewed",
+            "ts": now - timedelta(days=3),
+        },
         # Group D: one `labeled` — must be EXCLUDED from all triage queries
         {"raw": "addr D", "ft": "repeated_label_error", "status": "labeled", "ts": now},
     ]
@@ -291,8 +308,9 @@ async def seeded_db(db: AsyncEngine) -> AsyncEngine:
 
 
 async def test_get_candidate_groups_rolls_up_status(seeded_db: AsyncEngine) -> None:
-    groups, total = await get_candidate_groups(seeded_db, status=None, failure_type=None,
-                                               since=None, until=None, limit=50, offset=0)
+    groups, total = await get_candidate_groups(
+        seeded_db, status=None, failure_type=None, since=None, until=None, limit=50, offset=0
+    )
     by_raw = {g["raw_address"]: g for g in groups}
     assert by_raw["addr A"]["rollup_status"] == "new"
     assert by_raw["addr A"]["count"] == 2
@@ -308,16 +326,23 @@ async def test_get_candidate_groups_rolls_up_status(seeded_db: AsyncEngine) -> N
 async def test_get_candidate_groups_filter_new_includes_mixed(seeded_db: AsyncEngine) -> None:
     # status='new' filter must include `new` rollups AND `mixed` rollups
     # (a mixed group has at least one `new` row — still something to triage).
-    groups, _ = await get_candidate_groups(seeded_db, status="new", failure_type=None,
-                                           since=None, until=None, limit=50, offset=0)
+    groups, _ = await get_candidate_groups(
+        seeded_db, status="new", failure_type=None, since=None, until=None, limit=50, offset=0
+    )
     raws = {g["raw_address"] for g in groups}
     assert raws == {"addr A", "addr B"}
 
 
 async def test_get_candidate_groups_filter_failure_type(seeded_db: AsyncEngine) -> None:
-    groups, _ = await get_candidate_groups(seeded_db, status=None,
-                                           failure_type="post_parse_recovery",
-                                           since=None, until=None, limit=50, offset=0)
+    groups, _ = await get_candidate_groups(
+        seeded_db,
+        status=None,
+        failure_type="post_parse_recovery",
+        since=None,
+        until=None,
+        limit=50,
+        offset=0,
+    )
     raws = {g["raw_address"] for g in groups}
     assert raws == {"addr B"}
 
@@ -442,11 +467,7 @@ async def get_candidate_groups(
     # Total count — wrap the grouped query as a subquery and count rows.
     count_stmt = sa.select(sa.func.count()).select_from(group_stmt.subquery())
 
-    list_stmt = (
-        group_stmt.order_by(sa.desc("last_seen"))
-        .limit(limit)
-        .offset(offset)
-    )
+    list_stmt = group_stmt.order_by(sa.desc("last_seen")).limit(limit).offset(offset)
 
     async with engine.connect() as conn:
         total = (await conn.execute(count_stmt)).scalar() or 0
@@ -476,9 +497,7 @@ async def get_candidate_group(engine: AsyncEngine, *, raw_hash: str) -> dict | N
     return dict(row) if row else None
 
 
-async def get_candidate_submissions(
-    engine: AsyncEngine, *, raw_hash: str
-) -> list[dict]:
+async def get_candidate_submissions(engine: AsyncEngine, *, raw_hash: str) -> list[dict]:
     """Return every non-labeled submission for a group, newest first."""
     stmt = (
         sa.select(
@@ -497,25 +516,19 @@ async def get_candidate_submissions(
         return [dict(r._mapping) for r in (await conn.execute(stmt))]  # noqa: SLF001
 
 
-async def update_candidate_status(
-    engine: AsyncEngine, *, raw_hash: str, status: str
-) -> int:
+async def update_candidate_status(engine: AsyncEngine, *, raw_hash: str, status: str) -> int:
     """Set status on every non-labeled row in the group. Returns rowcount."""
     if status not in {"new", "reviewed", "rejected"}:
         raise ValueError(f"invalid status: {status!r}")
     stmt = (
-        sa.update(mtc)
-        .where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash)
-        .values(status=status)
+        sa.update(mtc).where(_NON_LABELED, mtc.c.raw_address_hash == raw_hash).values(status=status)
     )
     async with engine.begin() as conn:
         result = await conn.execute(stmt)
     return result.rowcount or 0
 
 
-async def update_candidate_notes(
-    engine: AsyncEngine, *, raw_hash: str, notes: str | None
-) -> int:
+async def update_candidate_notes(engine: AsyncEngine, *, raw_hash: str, notes: str | None) -> int:
     """Set notes on every non-labeled row in the group. Returns rowcount."""
     normalized = notes if notes else None
     stmt = (
@@ -895,24 +908,36 @@ def test_candidates_detail_404_on_unknown_hash(client: TestClient, admin_headers
 
 
 def test_candidates_detail_renders(client: TestClient, admin_headers: dict) -> None:
-    group_mock = AsyncMock(return_value={
-        "raw_address": "123 MAIN ST STE 1, SMP - 2 SEATTLE WA 98101",
-        "raw_hash": "a" * 64,
-        "rollup_status": "new",
-        "failure_types": ["repeated_label_error"],
-        "count": 3,
-        "first_seen": None,
-        "last_seen": None,
-        "notes": None,
-    })
-    subs_mock = AsyncMock(return_value=[
-        {"id": 1, "raw_address": "x", "failure_type": "repeated_label_error",
-         "parsed_tokens": [["STE", "OccupancyIdentifier"]], "recovered_components": None,
-         "created_at": None, "status": "new"},
-    ])
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "123 MAIN ST STE 1, SMP - 2 SEATTLE WA 98101",
+            "raw_hash": "a" * 64,
+            "rollup_status": "new",
+            "failure_types": ["repeated_label_error"],
+            "count": 3,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": None,
+        }
+    )
+    subs_mock = AsyncMock(
+        return_value=[
+            {
+                "id": 1,
+                "raw_address": "x",
+                "failure_type": "repeated_label_error",
+                "parsed_tokens": [["STE", "OccupancyIdentifier"]],
+                "recovered_components": None,
+                "created_at": None,
+                "status": "new",
+            },
+        ]
+    )
     with (
         patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),
-        patch("address_validator.routers.admin.candidates.get_candidate_submissions", new=subs_mock),
+        patch(
+            "address_validator.routers.admin.candidates.get_candidate_submissions", new=subs_mock
+        ),
     ):
         r = client.get("/admin/candidates/" + "a" * 64, headers=admin_headers)
     assert r.status_code == 200
@@ -972,12 +997,22 @@ def test_candidates_status_post_updates_and_renders_partial(
     client: TestClient, admin_headers: dict
 ) -> None:
     update_mock = AsyncMock(return_value=2)
-    group_mock = AsyncMock(return_value={
-        "raw_address": "x", "raw_hash": "a" * 64, "rollup_status": "reviewed",
-        "failure_types": [], "count": 2, "first_seen": None, "last_seen": None, "notes": None,
-    })
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "x",
+            "raw_hash": "a" * 64,
+            "rollup_status": "reviewed",
+            "failure_types": [],
+            "count": 2,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": None,
+        }
+    )
     with (
-        patch("address_validator.routers.admin.candidates.update_candidate_status", new=update_mock),
+        patch(
+            "address_validator.routers.admin.candidates.update_candidate_status", new=update_mock
+        ),
         patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),
     ):
         r = client.post(
@@ -1003,15 +1038,20 @@ def test_candidates_status_post_rejects_invalid_status(
     assert r.status_code == 400
 
 
-def test_candidates_notes_post_round_trip(
-    client: TestClient, admin_headers: dict
-) -> None:
+def test_candidates_notes_post_round_trip(client: TestClient, admin_headers: dict) -> None:
     update_mock = AsyncMock(return_value=1)
-    group_mock = AsyncMock(return_value={
-        "raw_address": "x", "raw_hash": "a" * 64, "rollup_status": "new",
-        "failure_types": [], "count": 1, "first_seen": None, "last_seen": None,
-        "notes": "chained STE",
-    })
+    group_mock = AsyncMock(
+        return_value={
+            "raw_address": "x",
+            "raw_hash": "a" * 64,
+            "rollup_status": "new",
+            "failure_types": [],
+            "count": 1,
+            "first_seen": None,
+            "last_seen": None,
+            "notes": "chained STE",
+        }
+    )
     with (
         patch("address_validator.routers.admin.candidates.update_candidate_notes", new=update_mock),
         patch("address_validator.routers.admin.candidates.get_candidate_group", new=group_mock),

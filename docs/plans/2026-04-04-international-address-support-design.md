@@ -40,8 +40,9 @@ class CountryFieldDefinition(BaseModel):
     key: str
     label: str
     required: bool
-    options: list[str] | None = None   # region subdivisions when available
-    pattern: str | None = None          # postal_code regex hint when defined
+    options: list[str] | None = None  # region subdivisions when available
+    pattern: str | None = None  # postal_code regex hint when defined
+
 
 class CountryFormatResponse(BaseModel):
     country: str

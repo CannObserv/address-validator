@@ -131,34 +131,30 @@ def _sort_validation_statuses(vs_dict: dict) -> dict:
 Locate the main single-row aggregate inside `get_provider_stats()` (currently fetches `total`, `last_24h`, `cache_hits`, `cache_total`). Add a `last_7d` label:
 
 ```python
-        row = (
-            await conn.execute(
-                _from_live(
-                    [
-                        func.count().label("total"),
-                        func.count()
-                        .filter(audit_log.c.timestamp >= tb["last_24h"])
-                        .label("last_24h"),
-                        func.count()
-                        .filter(audit_log.c.timestamp >= tb["last_7d"])
-                        .label("last_7d"),
-                        func.count()
-                        .filter(
-                            audit_log.c.cache_hit.is_(True),
-                            audit_log.c.timestamp >= tb["last_7d"],
-                        )
-                        .label("cache_hits"),
-                        func.count()
-                        .filter(
-                            audit_log.c.cache_hit.isnot(None),
-                            audit_log.c.timestamp >= tb["last_7d"],
-                        )
-                        .label("cache_total"),
-                    ],
-                    audit_log.c.provider == provider_name,
+row = (
+    await conn.execute(
+        _from_live(
+            [
+                func.count().label("total"),
+                func.count().filter(audit_log.c.timestamp >= tb["last_24h"]).label("last_24h"),
+                func.count().filter(audit_log.c.timestamp >= tb["last_7d"]).label("last_7d"),
+                func.count()
+                .filter(
+                    audit_log.c.cache_hit.is_(True),
+                    audit_log.c.timestamp >= tb["last_7d"],
                 )
-            )
-        ).one()
+                .label("cache_hits"),
+                func.count()
+                .filter(
+                    audit_log.c.cache_hit.isnot(None),
+                    audit_log.c.timestamp >= tb["last_7d"],
+                )
+                .label("cache_total"),
+            ],
+            audit_log.c.provider == provider_name,
+        )
+    )
+).one()
 ```
 
 - [ ] **Step 5: Add `status_codes_7d` and `validation_statuses_7d` queries inside `get_provider_stats()`, after the existing `live_status_24h_rows` query**
@@ -266,7 +262,9 @@ def test_provider_table_has_result_column_header(client: TestClient, admin_heade
     assert "Result" in response.text
 
 
-def test_endpoint_table_has_no_result_column_header(client: TestClient, admin_headers: dict) -> None:
+def test_endpoint_table_has_no_result_column_header(
+    client: TestClient, admin_headers: dict
+) -> None:
     """Endpoint detail page does NOT have a Result column in the audit table header."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert response.status_code == 200
@@ -562,6 +560,7 @@ def test_provider_confirmed_missing_secondary_is_yellow(
     # Every occurrence of "confirmed_missing_secondary" text should be near yellow, not green.
     # Find the filter pill span for confirmed_missing_secondary.
     import re
+
     pill_match = re.search(
         r'value="confirmed_missing_secondary".*?<span class="([^"]*)"',
         html,
@@ -570,12 +569,12 @@ def test_provider_confirmed_missing_secondary_is_yellow(
     assert pill_match, "pill for confirmed_missing_secondary not found"
     pill_classes = pill_match.group(1)
     assert "yellow" in pill_classes, f"expected yellow in pill classes, got: {pill_classes}"
-    assert "green" not in pill_classes, f"green should not appear in pill classes, got: {pill_classes}"
+    assert "green" not in pill_classes, (
+        f"green should not appear in pill classes, got: {pill_classes}"
+    )
 
 
-def test_provider_not_confirmed_pill_is_last(
-    client: TestClient, admin_headers: dict
-) -> None:
+def test_provider_not_confirmed_pill_is_last(client: TestClient, admin_headers: dict) -> None:
     """not_confirmed filter pill appears after confirmed_bad_secondary in DOM order."""
     from unittest.mock import AsyncMock, patch
 

@@ -172,7 +172,11 @@ repos:
 ## Static File Serving
 
 ```python
-app.mount("/static/admin", StaticFiles(directory="src/address_validator/static/admin"), name="admin-static")
+app.mount(
+    "/static/admin",
+    StaticFiles(directory="src/address_validator/static/admin"),
+    name="admin-static",
+)
 ```
 
 Cache-control middleware adds `Cache-Control: public, max-age=31536000` to `/static/` responses.

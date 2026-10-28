@@ -240,9 +240,7 @@ class TestValidateConfig:
         with pytest.raises(ValueError, match="smarty"):
             validate_config()
 
-    def test_google_valid(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_google_valid(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         monkeypatch.setenv("VALIDATION_PROVIDER", "google")
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         validate_config()  # must not raise
@@ -261,9 +259,7 @@ class TestValidateConfig:
         monkeypatch.setenv("VALIDATION_CACHE_DSN", "postgresql+asyncpg://localhost/test")
         import logging
 
-        with caplog.at_level(
-            logging.INFO, logger="address_validator.services.validation.config"
-        ):
+        with caplog.at_level(logging.INFO, logger="address_validator.services.validation.config"):
             validate_config()
         assert any("usps" in r.message for r in caplog.records)
 
@@ -273,9 +269,7 @@ class TestValidateConfig:
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
         import logging
 
-        with caplog.at_level(
-            logging.INFO, logger="address_validator.services.validation.config"
-        ):
+        with caplog.at_level(logging.INFO, logger="address_validator.services.validation.config"):
             validate_config()
         assert any("none" in r.message for r in caplog.records)
 ```
@@ -284,6 +278,7 @@ Note: `mock_google_auth` is currently defined in the factory test file. We'll ne
 
 ```python
 from unittest.mock import MagicMock, patch
+
 
 @pytest.fixture()
 def mock_google_auth():
@@ -399,9 +394,7 @@ class ValidationConfig(BaseSettings):
     @classmethod
     def _budget_positive(cls, v: float) -> float:
         if v <= 0:
-            raise ValueError(
-                "VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')"
-            )
+            raise ValueError("VALIDATION_LATENCY_BUDGET_S must be a positive number (e.g. '1.0')")
         return v
 
     @field_validator("cache_ttl_days")
@@ -417,11 +410,7 @@ class ValidationConfig(BaseSettings):
     @property
     def provider_names(self) -> list[str]:
         """Parse CSV provider string into list, filtering out 'none'."""
-        return [
-            s
-            for n in self.provider.split(",")
-            if (s := n.strip().lower()) and s != "none"
-        ]
+        return [s for n in self.provider.split(",") if (s := n.strip().lower()) and s != "none"]
 
 
 def _check_provider_config(name: str) -> None:
@@ -465,9 +454,7 @@ def validate_config() -> None:
             "(e.g. 'postgresql+asyncpg://user:pass@localhost/address_validator')"
         )
 
-    logger.info(
-        "validate_config: provider=%s ttl=%d days", ",".join(names), val_cfg.cache_ttl_days
-    )
+    logger.info("validate_config: provider=%s ttl=%d days", ",".join(names), val_cfg.cache_ttl_days)
 ```
 
 - [ ] **Step 4: Run tests — expect PASS**
@@ -614,9 +601,7 @@ class TestGetProvider:
         with pytest.raises(ValueError, match="smarty"):
             reg.get_provider()
 
-    def test_unknown_provider_error_mentions_google(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unknown_provider_error_mentions_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
         reg = _make_registry(monkeypatch, provider="smarty")
         with pytest.raises(ValueError, match="google"):
             reg.get_provider()
@@ -638,9 +623,7 @@ class TestGetProvider:
         assert isinstance(result, CachingProvider)
         assert isinstance(result._inner, GoogleProvider)
 
-    def test_google_singleton(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_google_singleton(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(monkeypatch, provider="google")
         assert reg.get_provider() is reg.get_provider()
 
@@ -651,9 +634,7 @@ class TestGetProvider:
         assert isinstance(result, NullProvider)
         assert not isinstance(result, CachingProvider)
 
-    def test_chain_provider(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_chain_provider(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(
             monkeypatch,
             provider="usps,google",
@@ -720,9 +701,7 @@ class TestGetProvider:
         assert guard._windows[1].limit == 5000
         assert guard._windows[1].duration_s == 86_400.0
 
-    def test_google_rpm(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_google_rpm(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(
             monkeypatch,
             provider="google",
@@ -734,9 +713,7 @@ class TestGetProvider:
         assert guard._windows[0].limit == 10
         assert guard._windows[0].duration_s == 60.0
 
-    def test_google_daily_limit(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_google_daily_limit(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(monkeypatch, provider="google", GOOGLE_DAILY_LIMIT="80")
         result = reg.get_provider()
         google: GoogleProvider = result._inner  # type: ignore[assignment]
@@ -832,18 +809,14 @@ class TestGetQuotaInfo:
         assert "remaining" in quota[0]
         assert "limit" in quota[0]
 
-    def test_google_quota(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_google_quota(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(monkeypatch, provider="google")
         reg.get_provider()
         quota = reg.get_quota_info()
         assert len(quota) == 1
         assert quota[0]["provider"] == "google"
 
-    def test_chain_both_quotas(
-        self, monkeypatch: pytest.MonkeyPatch, mock_google_auth
-    ) -> None:
+    def test_chain_both_quotas(self, monkeypatch: pytest.MonkeyPatch, mock_google_auth) -> None:
         reg = _make_registry(
             monkeypatch,
             provider="usps,google",
@@ -1019,9 +992,7 @@ class ProviderRegistry:
         )
         return self._usps_provider
 
-    def _build_google_provider(
-        self, cfg: GoogleConfig, latency_budget_s: float
-    ) -> GoogleProvider:
+    def _build_google_provider(self, cfg: GoogleConfig, latency_budget_s: float) -> GoogleProvider:
         if self._google_provider is not None:
             return self._google_provider
 
@@ -1260,6 +1231,7 @@ with patch("address_validator.routers.v1.validate.get_provider", return_value=..
 to set up the mock on `app.state`:
 ```python
 from address_validator.main import app
+
 # In each test:
 app.state.registry = MagicMock()
 app.state.registry.get_provider.return_value = ...
@@ -1313,6 +1285,7 @@ Replace `get_quota_info()` in `_config.py` with a version that takes a `request`
 
 ```python
 from fastapi import Request
+
 
 def get_quota_info(request: Request) -> list[dict]:
     """Read current quota state from the provider registry."""

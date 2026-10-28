@@ -218,9 +218,7 @@ error_rows = (
         _from_live(
             [
                 day_bucket,
-                func.count()
-                .filter(is_error_expr(audit_log.c.status_code))
-                .label("errors"),
+                func.count().filter(is_error_expr(audit_log.c.status_code)).label("errors"),
                 func.count().label("total"),
             ],
             _API_ENDPOINT_FILTER,
@@ -331,20 +329,16 @@ archived = (
     await conn.execute(
         _from_archived(
             [
-                func.coalesce(func.sum(audit_daily_stats.c.request_count), 0).label(
-                    "total"
-                ),
+                func.coalesce(func.sum(audit_daily_stats.c.request_count), 0).label("total"),
                 func.coalesce(
                     func.sum(audit_daily_stats.c.error_count).filter(
-                        audit_daily_stats.c.status_code
-                        != sa.literal(429),
+                        audit_daily_stats.c.status_code != sa.literal(429),
                     ),
                     0,
                 ).label("errors"),
                 func.coalesce(
                     func.sum(audit_daily_stats.c.request_count).filter(
-                        audit_daily_stats.c.status_code
-                        == sa.literal(429),
+                        audit_daily_stats.c.status_code == sa.literal(429),
                     ),
                     0,
                 ).label("rate_limited"),

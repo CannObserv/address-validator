@@ -158,25 +158,37 @@ Source: Canada Post Addressing Guidelines §3.
 
 CA_DIRECTIONAL_MAP: dict[str, str] = {
     # English — single
-    "north": "N",  "n": "N",
-    "south": "S",  "s": "S",
-    "east":  "E",  "e": "E",
-    "west":  "W",  "w": "W",
+    "north": "N",
+    "n": "N",
+    "south": "S",
+    "s": "S",
+    "east": "E",
+    "e": "E",
+    "west": "W",
+    "w": "W",
     # English — compound
-    "northeast": "NE", "ne": "NE",
-    "northwest": "NW", "nw": "NW",
-    "southeast": "SE", "se": "SE",
-    "southwest": "SW", "sw": "SW",
+    "northeast": "NE",
+    "ne": "NE",
+    "northwest": "NW",
+    "nw": "NW",
+    "southeast": "SE",
+    "se": "SE",
+    "southwest": "SW",
+    "sw": "SW",
     # French — single
-    "nord":  "N",
-    "sud":   "S",
-    "est":   "E",
-    "ouest": "O",   # Canada Post uses O for Ouest
+    "nord": "N",
+    "sud": "S",
+    "est": "E",
+    "ouest": "O",  # Canada Post uses O for Ouest
     # French — compound
-    "nord-est":   "NE", "nordest":   "NE",
-    "nord-ouest": "NO", "nordouest": "NO",
-    "sud-est":    "SE", "sudest":    "SE",
-    "sud-ouest":  "SO", "sudouest":  "SO",
+    "nord-est": "NE",
+    "nordest": "NE",
+    "nord-ouest": "NO",
+    "nordouest": "NO",
+    "sud-est": "SE",
+    "sudest": "SE",
+    "sud-ouest": "SO",
+    "sudouest": "SO",
 }
 ```
 
@@ -202,6 +214,7 @@ Decomposes libpostal's composite `road` token into ISO 19160-4 thoroughfare elem
 ```python
 # tests/unit/test_street_splitter.py
 """Tests for the bilingual street component splitter."""
+
 import pytest
 from address_validator.services.street_splitter import split_road
 
@@ -331,81 +344,81 @@ from address_validator.canada_post_data.directionals import CA_DIRECTIONAL_MAP
 _STREET_TYPES: dict[str, tuple[str, str]] = {
     # token_lower: (position, abbreviation)
     # French leading
-    "rue":         ("leading",  "RUE"),
-    "chemin":      ("leading",  "CH"),
-    "côte":        ("leading",  "CÔTE"),
-    "cote":        ("leading",  "CÔTE"),
-    "montée":      ("leading",  "MONTÉE"),
-    "montee":      ("leading",  "MONTÉE"),
-    "rang":        ("leading",  "RANG"),
-    "route":       ("leading",  "ROUT"),
-    "voie":        ("leading",  "VOIE"),
-    "allée":       ("leading",  "ALLÉE"),
-    "allee":       ("leading",  "ALLÉE"),
-    "impasse":     ("leading",  "IMP"),
-    "ruelle":      ("leading",  "RUELLE"),
-    "sentier":     ("leading",  "SENT"),
-    "traverse":    ("leading",  "TRAV"),
+    "rue": ("leading", "RUE"),
+    "chemin": ("leading", "CH"),
+    "côte": ("leading", "CÔTE"),
+    "cote": ("leading", "CÔTE"),
+    "montée": ("leading", "MONTÉE"),
+    "montee": ("leading", "MONTÉE"),
+    "rang": ("leading", "RANG"),
+    "route": ("leading", "ROUT"),
+    "voie": ("leading", "VOIE"),
+    "allée": ("leading", "ALLÉE"),
+    "allee": ("leading", "ALLÉE"),
+    "impasse": ("leading", "IMP"),
+    "ruelle": ("leading", "RUELLE"),
+    "sentier": ("leading", "SENT"),
+    "traverse": ("leading", "TRAV"),
     # English trailing
-    "street":      ("trailing", "ST"),
-    "st":          ("trailing", "ST"),
-    "drive":       ("trailing", "DR"),
-    "dr":          ("trailing", "DR"),
-    "road":        ("trailing", "RD"),
-    "rd":          ("trailing", "RD"),
-    "lane":        ("trailing", "LANE"),
-    "ln":          ("trailing", "LANE"),
-    "court":       ("trailing", "CRT"),
-    "crt":         ("trailing", "CRT"),
-    "crescent":    ("trailing", "CRES"),
-    "cres":        ("trailing", "CRES"),
-    "way":         ("trailing", "WAY"),
-    "trail":       ("trailing", "TRAIL"),
-    "terrace":     ("trailing", "TERR"),
-    "terr":        ("trailing", "TERR"),
-    "heights":     ("trailing", "HTS"),
-    "hts":         ("trailing", "HTS"),
-    "close":       ("trailing", "CLOSE"),
-    "gate":        ("trailing", "GATE"),
-    "green":       ("trailing", "GREEN"),
-    "grove":       ("trailing", "GROVE"),
-    "heath":       ("trailing", "HEATH"),
-    "hollow":      ("trailing", "HOLLOW"),
-    "mews":        ("trailing", "MEWS"),
-    "park":        ("trailing", "PARK"),
-    "path":        ("trailing", "PATH"),
-    "rise":        ("trailing", "RISE"),
-    "run":         ("trailing", "RUN"),
-    "vale":        ("trailing", "VALE"),
-    "view":        ("trailing", "VIEW"),
-    "walk":        ("trailing", "WALK"),
-    "wood":        ("trailing", "WOOD"),
-    "woods":       ("trailing", "WOODS"),
+    "street": ("trailing", "ST"),
+    "st": ("trailing", "ST"),
+    "drive": ("trailing", "DR"),
+    "dr": ("trailing", "DR"),
+    "road": ("trailing", "RD"),
+    "rd": ("trailing", "RD"),
+    "lane": ("trailing", "LANE"),
+    "ln": ("trailing", "LANE"),
+    "court": ("trailing", "CRT"),
+    "crt": ("trailing", "CRT"),
+    "crescent": ("trailing", "CRES"),
+    "cres": ("trailing", "CRES"),
+    "way": ("trailing", "WAY"),
+    "trail": ("trailing", "TRAIL"),
+    "terrace": ("trailing", "TERR"),
+    "terr": ("trailing", "TERR"),
+    "heights": ("trailing", "HTS"),
+    "hts": ("trailing", "HTS"),
+    "close": ("trailing", "CLOSE"),
+    "gate": ("trailing", "GATE"),
+    "green": ("trailing", "GREEN"),
+    "grove": ("trailing", "GROVE"),
+    "heath": ("trailing", "HEATH"),
+    "hollow": ("trailing", "HOLLOW"),
+    "mews": ("trailing", "MEWS"),
+    "park": ("trailing", "PARK"),
+    "path": ("trailing", "PATH"),
+    "rise": ("trailing", "RISE"),
+    "run": ("trailing", "RUN"),
+    "vale": ("trailing", "VALE"),
+    "view": ("trailing", "VIEW"),
+    "walk": ("trailing", "WALK"),
+    "wood": ("trailing", "WOOD"),
+    "woods": ("trailing", "WOODS"),
     # Either position
-    "avenue":      ("either",   "AVE"),
-    "ave":         ("either",   "AVE"),
-    "boulevard":   ("either",   "BLVD"),
-    "blvd":        ("either",   "BLVD"),
-    "place":       ("either",   "PL"),
-    "pl":          ("either",   "PL"),
-    "promenade":   ("either",   "PROM"),
-    "prom":        ("either",   "PROM"),
-    "quai":        ("either",   "QUAI"),
-    "square":      ("either",   "SQ"),
-    "sq":          ("either",   "SQ"),
-    "croissant":   ("either",   "CROIS"),
-    "crois":       ("either",   "CROIS"),
-    "esplanade":   ("either",   "ESPL"),
-    "espl":        ("either",   "ESPL"),
-    "passage":     ("either",   "PASS"),
-    "pass":        ("either",   "PASS"),
-    "terr":        ("either",   "TERR"),
-    "circle":      ("either",   "CIRC"),
-    "circ":        ("either",   "CIRC"),
-    "bypass":      ("either",   "BYPASS"),
-    "line":        ("either",   "LINE"),
-    "concession":  ("either",   "CONC"),
-    "conc":        ("either",   "CONC"),
+    "avenue": ("either", "AVE"),
+    "ave": ("either", "AVE"),
+    "boulevard": ("either", "BLVD"),
+    "blvd": ("either", "BLVD"),
+    "place": ("either", "PL"),
+    "pl": ("either", "PL"),
+    "promenade": ("either", "PROM"),
+    "prom": ("either", "PROM"),
+    "quai": ("either", "QUAI"),
+    "square": ("either", "SQ"),
+    "sq": ("either", "SQ"),
+    "croissant": ("either", "CROIS"),
+    "crois": ("either", "CROIS"),
+    "esplanade": ("either", "ESPL"),
+    "espl": ("either", "ESPL"),
+    "passage": ("either", "PASS"),
+    "pass": ("either", "PASS"),
+    "terr": ("either", "TERR"),
+    "circle": ("either", "CIRC"),
+    "circ": ("either", "CIRC"),
+    "bypass": ("either", "BYPASS"),
+    "line": ("either", "LINE"),
+    "concession": ("either", "CONC"),
+    "conc": ("either", "CONC"),
 }
 
 # French article tokens that follow a leading type and belong to the name.
@@ -497,8 +510,7 @@ def split_road(road: str) -> dict[str, str]:
 
     # --- Fallback: if only directionals were extracted with no name ---
     if "thoroughfare_name" not in result and (
-        "thoroughfare_leading_type" not in result
-        and "thoroughfare_trailing_type" not in result
+        "thoroughfare_leading_type" not in result and "thoroughfare_trailing_type" not in result
     ):
         result = {"thoroughfare_name": road.upper()}
 
@@ -536,6 +548,7 @@ git commit -m "#90 feat: add bilingual street component splitter"
 ```python
 # tests/unit/test_libpostal_client.py
 """Unit tests for LibpostalClient — httpx calls are mocked."""
+
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch
@@ -602,16 +615,12 @@ class TestTagMapping:
         assert "country" not in result
 
     async def test_connection_error_raises_unavailable(self, client) -> None:
-        with patch.object(
-            client._http, "get", side_effect=httpx.ConnectError("refused")
-        ):
+        with patch.object(client._http, "get", side_effect=httpx.ConnectError("refused")):
             with pytest.raises(LibpostalUnavailableError):
                 await client.parse("123 Main St")
 
     async def test_timeout_raises_unavailable(self, client) -> None:
-        with patch.object(
-            client._http, "get", side_effect=httpx.TimeoutException("timeout")
-        ):
+        with patch.object(client._http, "get", side_effect=httpx.TimeoutException("timeout")):
             with pytest.raises(LibpostalUnavailableError):
                 await client.parse("123 Main St")
 ```
@@ -662,19 +671,19 @@ class LibpostalUnavailableError(RuntimeError):
 
 _TAG_MAP: dict[str, str] = {
     "house_number": "premise_number",
-    "house":        "premise_name",
+    "house": "premise_name",
     # "road" is handled separately via street_splitter
-    "unit":         "sub_premise_number",
-    "level":        "sub_premise_number",    # floor/level → sub-premise
-    "staircase":    "sub_premise_number",
-    "entrance":     "sub_premise_number",
-    "po_box":       "general_delivery",
-    "postcode":     "postcode",
-    "suburb":       "dependent_locality",
-    "city_district":"dependent_locality",
-    "city":         "locality",
-    "state_district":"dependent_locality",
-    "state":        "administrative_area",
+    "unit": "sub_premise_number",
+    "level": "sub_premise_number",  # floor/level → sub-premise
+    "staircase": "sub_premise_number",
+    "entrance": "sub_premise_number",
+    "po_box": "general_delivery",
+    "postcode": "postcode",
+    "suburb": "dependent_locality",
+    "city_district": "dependent_locality",
+    "city": "locality",
+    "state_district": "dependent_locality",
+    "state": "administrative_area",
     # "country" is intentionally excluded — already known from request
 }
 
@@ -723,9 +732,7 @@ class LibpostalClient:
         reached or returns a non-200 status.
         """
         try:
-            response = await self._http.get(
-                "/parse", params={"address": address}
-            )
+            response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
         except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
             logger.warning("libpostal sidecar unavailable: %s", exc)
@@ -871,12 +878,14 @@ In `src/address_validator/routers/v2/parse.py`:
 from address_validator.routers.v1.core import check_country_v2
 # ...
 
+
 async def parse(req, request, component_profile) -> ParseResponseV2:
     # ...
-    check_country_v2(req.country)   # was check_country()
+    check_country_v2(req.country)  # was check_country()
     libpostal_client = getattr(request.app.state, "libpostal_client", None)
-    result = await parse_address(req.address.strip(), country=req.country,
-                                  libpostal_client=libpostal_client)
+    result = await parse_address(
+        req.address.strip(), country=req.country, libpostal_client=libpostal_client
+    )
     # ...
 ```
 
@@ -957,6 +966,7 @@ These tests mock the libpostal client — no live sidecar required.
 ```python
 # tests/integration/test_v2_parse_ca.py
 """Integration tests for POST /api/v2/parse with country=CA."""
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -1005,6 +1015,7 @@ class TestV2ParseCA:
 
     def test_libpostal_unavailable_returns_503(self, client) -> None:
         from address_validator.services.libpostal_client import LibpostalUnavailableError
+
         with patch(
             "address_validator.services.libpostal_client.LibpostalClient.parse",
             new_callable=AsyncMock,

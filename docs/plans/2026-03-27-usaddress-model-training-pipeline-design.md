@@ -117,6 +117,7 @@ if custom_model_path:
     path = Path(custom_model_path)
     if path.exists():
         import pycrfsuite
+
         tagger = pycrfsuite.Tagger()
         tagger.open(str(path))
         usaddress.TAGGER = tagger

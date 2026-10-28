@@ -40,6 +40,7 @@ Add to the bottom of `tests/unit/test_validate_router.py` (or a new `tests/unit/
 ```python
 from models import ValidationResult, ValidateResponseV1
 
+
 class TestValidationResult:
     def test_confirmed_status(self) -> None:
         r = ValidationResult(status="confirmed", dpv_match_code="Y", provider="usps")
@@ -73,6 +74,7 @@ class TestValidateResponseV1Shape:
 
     def test_full_confirmed_response(self) -> None:
         from models import ComponentSet
+
         r = ValidateResponseV1(
             address_line_1="123 MAIN ST",
             address_line_2="",
@@ -84,8 +86,12 @@ class TestValidateResponseV1Shape:
             components=ComponentSet(
                 spec="usps-pub28",
                 spec_version="unknown",
-                values={"address_line_1": "123 MAIN ST", "city": "SPRINGFIELD",
-                        "region": "IL", "postal_code": "62701-1234"},
+                values={
+                    "address_line_1": "123 MAIN ST",
+                    "city": "SPRINGFIELD",
+                    "region": "IL",
+                    "postal_code": "62701-1234",
+                },
             ),
             validation=ValidationResult(status="confirmed", dpv_match_code="Y", provider="usps"),
             latitude=39.7817,
@@ -425,6 +431,7 @@ def test_map_response_without_zip_plus4(self) -> None:
     result = USPSClient._map_response(raw)
     assert result["postal_code"] == "62701"
 
+
 def test_map_response_merges_zip_plus4(self) -> None:
     raw = {
         "address": {
@@ -438,6 +445,7 @@ def test_map_response_merges_zip_plus4(self) -> None:
     }
     result = USPSClient._map_response(raw)
     assert result["postal_code"] == "62701-1234"
+
 
 def test_map_response_secondary_address(self) -> None:
     raw = {
@@ -453,6 +461,7 @@ def test_map_response_secondary_address(self) -> None:
     result = USPSClient._map_response(raw)
     assert result["address_line_2"] == "APT 4"
 
+
 def test_map_response_vacant_surfaced(self) -> None:
     raw = {
         "address": {"streetAddress": "123 MAIN ST", "city": "X", "state": "IL", "ZIPCode": "62701"},
@@ -460,6 +469,7 @@ def test_map_response_vacant_surfaced(self) -> None:
     }
     result = USPSClient._map_response(raw)
     assert result["vacant"] == "Y"
+
 
 def test_map_response_no_street_returns_no_address_fields(self) -> None:
     raw = {"address": {}, "addressAdditionalInfo": {"DPVConfirmation": "N"}}
@@ -681,9 +691,7 @@ class TestUSPSProvider:
         assert result.validated == "123 MAIN ST  SPRINGFIELD, IL 62701-1234"
 
     @pytest.mark.asyncio
-    async def test_lat_lng_are_none(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_lat_lng_are_none(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
@@ -691,9 +699,7 @@ class TestUSPSProvider:
         assert result.longitude is None
 
     @pytest.mark.asyncio
-    async def test_warnings_is_empty(
-        self, provider: USPSProvider, mock_client: AsyncMock
-    ) -> None:
+    async def test_warnings_is_empty(self, provider: USPSProvider, mock_client: AsyncMock) -> None:
         mock_client.validate_address.return_value = CLIENT_RESULT_Y
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         result = await provider.validate(req)
@@ -964,9 +970,13 @@ GOOGLE_RESPONSE_N = {
 
 GOOGLE_RESPONSE_WITH_SECONDARY = {
     "result": {
-        "verdict": {"validationGranularity": "SUB_PREMISE", "addressComplete": True,
-                    "hasInferredComponents": False, "hasReplacedComponents": True,
-                    "hasUnconfirmedComponents": False},
+        "verdict": {
+            "validationGranularity": "SUB_PREMISE",
+            "addressComplete": True,
+            "hasInferredComponents": False,
+            "hasReplacedComponents": True,
+            "hasUnconfirmedComponents": False,
+        },
         "geocode": {"location": {"latitude": 40.0, "longitude": -88.0}},
         "uspsData": {
             "standardizedAddress": {
@@ -985,9 +995,13 @@ GOOGLE_RESPONSE_WITH_SECONDARY = {
 
 GOOGLE_RESPONSE_INFERRED = {
     "result": {
-        "verdict": {"validationGranularity": "PREMISE", "addressComplete": True,
-                    "hasInferredComponents": True, "hasReplacedComponents": False,
-                    "hasUnconfirmedComponents": False},
+        "verdict": {
+            "validationGranularity": "PREMISE",
+            "addressComplete": True,
+            "hasInferredComponents": True,
+            "hasReplacedComponents": False,
+            "hasUnconfirmedComponents": False,
+        },
         "geocode": {"location": {"latitude": 39.7, "longitude": -89.6}},
         "uspsData": {
             "standardizedAddress": {
@@ -1096,9 +1110,7 @@ class TestGoogleClientValidateAddress:
         return resp
 
     @pytest.mark.asyncio
-    async def test_posts_to_correct_url(
-        self, client: GoogleClient, mock_http: AsyncMock
-    ) -> None:
+    async def test_posts_to_correct_url(self, client: GoogleClient, mock_http: AsyncMock) -> None:
         mock_http.post.return_value = self._make_response(GOOGLE_RESPONSE_Y)
         await client.validate_address(street_address="123 Main St", city="Springfield", state="IL")
         call_kwargs = mock_http.post.call_args
@@ -1485,7 +1497,9 @@ class TestGoogleProvider:
         assert result.warnings == []
 
     @pytest.mark.asyncio
-    async def test_http_error_raises(self, provider: GoogleProvider, mock_client: AsyncMock) -> None:
+    async def test_http_error_raises(
+        self, provider: GoogleProvider, mock_client: AsyncMock
+    ) -> None:
         mock_client.validate_address.side_effect = httpx.TimeoutException("timeout")
         req = ValidateRequestV1(address="123 Main St", city="Springfield", region="IL")
         with pytest.raises(httpx.TimeoutException):
@@ -1659,6 +1673,7 @@ Append to `TestGetProvider` in `test_provider_factory.py`:
 ```python
 from services.validation.google_provider import GoogleProvider
 
+
 # Also add to the reset fixture — reset _google_provider too:
 @pytest.fixture(autouse=True)
 def reset_singletons() -> None:
@@ -1668,27 +1683,32 @@ def reset_singletons() -> None:
     factory_module._usps_provider = None
     factory_module._google_provider = None
 
+
 # New tests:
 def test_google_keyword_gives_google_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VALIDATION_PROVIDER", "google")
     monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
     assert isinstance(get_provider(), GoogleProvider)
 
+
 def test_google_keyword_case_insensitive(self, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VALIDATION_PROVIDER", "GOOGLE")
     monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
     assert isinstance(get_provider(), GoogleProvider)
+
 
 def test_google_provider_is_singleton(self, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VALIDATION_PROVIDER", "google")
     monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
     assert get_provider() is get_provider()
 
+
 def test_google_missing_api_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VALIDATION_PROVIDER", "google")
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
         get_provider()
+
 
 def test_unknown_provider_error_includes_google(self, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VALIDATION_PROVIDER", "smarty")
@@ -1830,9 +1850,7 @@ def get_provider() -> ValidationProvider:
     if provider_name == "google":
         api_key = os.environ.get("GOOGLE_API_KEY", "").strip()
         if not api_key:
-            raise ValueError(
-                "GOOGLE_API_KEY must be set when VALIDATION_PROVIDER=google"
-            )
+            raise ValueError("GOOGLE_API_KEY must be set when VALIDATION_PROVIDER=google")
         logger.debug("get_provider: using GoogleProvider")
         return _get_google_provider(api_key)
 

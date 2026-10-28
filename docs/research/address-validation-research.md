@@ -810,15 +810,17 @@ import httpx
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create shared client on startup
     app.state.http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(10.0, connect=5.0),
-        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20)
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
     )
     yield
     await app.state.http_client.aclose()
+
 
 app = FastAPI(lifespan=lifespan)
 ```
@@ -845,30 +847,30 @@ import asyncio
 from collections import deque
 from time import time
 
+
 class RateLimiter:
     """Token bucket rate limiter."""
+
     def __init__(self, rate: float, burst: int):
         self.rate = rate  # requests per second
         self.burst = burst
         self.tokens = burst
         self.last_update = time()
         self._lock = asyncio.Lock()
-    
+
     async def acquire(self):
         async with self._lock:
             now = time()
-            self.tokens = min(
-                self.burst,
-                self.tokens + (now - self.last_update) * self.rate
-            )
+            self.tokens = min(self.burst, self.tokens + (now - self.last_update) * self.rate)
             self.last_update = now
-            
+
             if self.tokens < 1:
                 wait_time = (1 - self.tokens) / self.rate
                 await asyncio.sleep(wait_time)
                 self.tokens = 0
             else:
                 self.tokens -= 1
+
 
 # Usage
 usps_limiter = RateLimiter(rate=5.0, burst=10)  # 5/sec with burst of 10
@@ -904,6 +906,7 @@ smartly_limiter = RateLimiter(rate=100.0, burst=100)  # Higher limit
 ```python
 import hashlib
 
+
 def make_cache_key(address: str, city: str, state: str, zip_code: str) -> str:
     """Normalize and hash for cache key."""
     normalized = f"{address.upper().strip()}|{city.upper().strip()}|{state.upper().strip()}|{zip_code.strip()}"
@@ -923,20 +926,17 @@ def make_cache_key(address: str, city: str, state: str, zip_code: str) -> str:
 import redis.asyncio as redis
 import json
 
+
 class AddressCache:
     def __init__(self, redis_url: str):
         self.redis = redis.from_url(redis_url)
-    
+
     async def get(self, cache_key: str) -> dict | None:
         data = await self.redis.get(f"addr:{cache_key}")
         return json.loads(data) if data else None
-    
+
     async def set(self, cache_key: str, result: dict, ttl_seconds: int = 86400 * 30):
-        await self.redis.setex(
-            f"addr:{cache_key}",
-            ttl_seconds,
-            json.dumps(result)
-        )
+        await self.redis.setex(f"addr:{cache_key}", ttl_seconds, json.dumps(result))
 ```
 
 ---
@@ -950,24 +950,22 @@ from enum import Enum
 from typing import Optional
 import httpx
 
+
 class ValidationProvider(Enum):
     USPS = "usps"
     SMARTY = "smarty"
     GOOGLE = "google"
 
+
 class AddressValidator:
     def __init__(self, providers: list[ValidationProvider]):
         self.providers = providers  # Ordered by preference
-    
+
     async def validate(
-        self,
-        address: str,
-        city: str,
-        state: str,
-        zip_code: str
+        self, address: str, city: str, state: str, zip_code: str
     ) -> ValidationResult:
         last_error = None
-        
+
         for provider in self.providers:
             try:
                 result = await self._call_provider(provider, address, city, state, zip_code)
@@ -981,7 +979,7 @@ class AddressValidator:
                     last_error = e
                     continue
                 raise  # Don't fallback on other HTTP errors
-        
+
         raise ValidationUnavailable(f"All providers failed: {last_error}")
 ```
 
@@ -1152,51 +1150,49 @@ import httpx
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
+
 @dataclass
 class USPSToken:
     access_token: str
     expires_at: datetime
 
+
 class USPSClient:
     TOKEN_URL = "https://apis.usps.com/oauth2/v3/token"
     ADDRESS_URL = "https://apis.usps.com/addresses/v3/address"
-    
+
     def __init__(self, consumer_key: str, consumer_secret: str, client: httpx.AsyncClient):
         self.consumer_key = consumer_key
         self.consumer_secret = consumer_secret
         self.client = client
         self._token: USPSToken | None = None
-    
+
     async def _get_token(self) -> str:
         if self._token and self._token.expires_at > datetime.utcnow():
             return self._token.access_token
-        
+
         response = await self.client.post(
             self.TOKEN_URL,
             data={
                 "grant_type": "client_credentials",
                 "client_id": self.consumer_key,
                 "client_secret": self.consumer_secret,
-            }
+            },
         )
         response.raise_for_status()
         data = response.json()
-        
+
         self._token = USPSToken(
             access_token=data["access_token"],
-            expires_at=datetime.utcnow() + timedelta(seconds=data["expires_in"] - 60)
+            expires_at=datetime.utcnow() + timedelta(seconds=data["expires_in"] - 60),
         )
         return self._token.access_token
-    
+
     async def validate_address(
-        self,
-        street_address: str,
-        city: str,
-        state: str,
-        zip_code: str = ""
+        self, street_address: str, city: str, state: str, zip_code: str = ""
     ) -> dict:
         token = await self._get_token()
-        
+
         response = await self.client.post(
             self.ADDRESS_URL,
             headers={"Authorization": f"Bearer {token}"},
@@ -1205,7 +1201,7 @@ class USPSClient:
                 "city": city,
                 "state": state,
                 "ZIPCode": zip_code,
-            }
+            },
         )
         response.raise_for_status()
         return response.json()
@@ -1218,21 +1214,16 @@ class USPSClient:
 ```python
 import httpx
 
+
 class SmartyClient:
     BASE_URL = "https://us-street.api.smarty.com/street-address"
-    
+
     def __init__(self, auth_id: str, auth_token: str, client: httpx.AsyncClient):
         self.auth_id = auth_id
         self.auth_token = auth_token
         self.client = client
-    
-    async def validate_address(
-        self,
-        street: str,
-        city: str,
-        state: str,
-        zipcode: str = ""
-    ) -> dict:
+
+    async def validate_address(self, street: str, city: str, state: str, zipcode: str = "") -> dict:
         response = await self.client.get(
             self.BASE_URL,
             params={
@@ -1243,7 +1234,7 @@ class SmartyClient:
                 "state": state,
                 "zipcode": zipcode,
                 "match": "strict",  # or "enhanced" or "invalid"
-            }
+            },
         )
         response.raise_for_status()
         results = response.json()

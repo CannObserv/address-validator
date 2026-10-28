@@ -117,6 +117,7 @@ Append to `tests/unit/test_validate_router.py`:
 ```python
 # -- Non-US tests ----------------------------------------------------------
 
+
 class TestValidateNonUS:
     def test_non_us_raw_string_returns_422(self, client: TestClient) -> None:
         resp = client.post(
@@ -127,9 +128,7 @@ class TestValidateNonUS:
         body = resp.json()
         assert body["error"] == "country_not_supported"
 
-    def test_non_us_raw_string_error_message_mentions_components(
-        self, client: TestClient
-    ) -> None:
+    def test_non_us_raw_string_error_message_mentions_components(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/validate",
             json={"address": "10 Downing St, London SW1A 2AA", "country": "GB"},
@@ -158,9 +157,7 @@ class TestValidateNonUS:
         assert resp.status_code == 200
         provider.validate.assert_awaited_once()
 
-    def test_non_us_components_provider_receives_correct_country(
-        self, client: TestClient
-    ) -> None:
+    def test_non_us_components_provider_receives_correct_country(self, client: TestClient) -> None:
         provider = _make_null_provider(
             ValidateResponseV1(
                 country="GB",
@@ -182,9 +179,7 @@ class TestValidateNonUS:
         std_arg = provider.validate.call_args[0][0]
         assert std_arg.country == "GB"
 
-    def test_non_us_components_skips_usps_standardize(
-        self, client: TestClient
-    ) -> None:
+    def test_non_us_components_skips_usps_standardize(self, client: TestClient) -> None:
         # The provider should receive the raw component values, not USPS-munged ones
         provider = _make_null_provider(
             ValidateResponseV1(
@@ -209,9 +204,7 @@ class TestValidateNonUS:
         assert std_arg.city == "London"
         assert std_arg.address_line_1 == "10 Downing St"
 
-    def test_non_us_components_no_google_provider_returns_422(
-        self, client: TestClient
-    ) -> None:
+    def test_non_us_components_no_google_provider_returns_422(self, client: TestClient) -> None:
         # NullProvider (the default) cannot handle non-US — must 422
         resp = client.post(
             "/api/v1/validate",
@@ -335,9 +328,7 @@ from address_validator.services.validation.google_provider import GoogleProvider
 Add the helper function before the router definition:
 
 ```python
-def _build_non_us_std(
-    components: dict[str, str], country: str
-) -> StandardizeResponseV1:
+def _build_non_us_std(components: dict[str, str], country: str) -> StandardizeResponseV1:
     """Build a passthrough StandardizeResponseV1 from raw components for non-US addresses.
 
     Skips the USPS Pub 28 pipeline entirely.  Components are used verbatim.
@@ -348,7 +339,9 @@ def _build_non_us_std(
     city = components.get("city", "")
     region = components.get("region", "")
     postal_code = components.get("postal_code", "")
-    standardized = _build_validated_string(address_line_1, address_line_2, city, region, postal_code)
+    standardized = _build_validated_string(
+        address_line_1, address_line_2, city, region, postal_code
+    )
     return StandardizeResponseV1(
         address_line_1=address_line_1,
         address_line_2=address_line_2,
@@ -545,11 +538,13 @@ class TestMapResponseUsHasStatusKey:
 
     def test_confirmed_y_has_status(self) -> None:
         from tests.unit.validation.test_google_client import GOOGLE_RESPONSE_Y
+
         result = GoogleClient._map_response(GOOGLE_RESPONSE_Y)
         assert result["status"] == "confirmed"
 
     def test_not_confirmed_n_has_status(self) -> None:
         from tests.unit.validation.test_google_client import GOOGLE_RESPONSE_N
+
         result = GoogleClient._map_response(GOOGLE_RESPONSE_N)
         assert result["status"] == "not_confirmed"
 
@@ -678,67 +673,69 @@ Add the new `_map_response_international` static method after `_map_response`:
 Update `validate_address()` to accept a `country` parameter and route to the right mapper. Add `country: str = "US"` to the signature and update the request/response logic:
 
 ```python
-    async def validate_address(
-        self,
-        street_address: str,
-        city: str | None = None,
-        state: str | None = None,
-        zip_code: str | None = None,
-        country: str = "US",
-    ) -> dict[str, Any]:
-        """Validate a single address via the Google Address Validation API.
-        ...existing docstring...
-        """
-        address_lines = [street_address]
-        city_state_zip = " ".join(p for p in (city, state, zip_code) if p)
-        if city_state_zip:
-            address_lines.append(city_state_zip)
+async def validate_address(
+    self,
+    street_address: str,
+    city: str | None = None,
+    state: str | None = None,
+    zip_code: str | None = None,
+    country: str = "US",
+) -> dict[str, Any]:
+    """Validate a single address via the Google Address Validation API.
+    ...existing docstring...
+    """
+    address_lines = [street_address]
+    city_state_zip = " ".join(p for p in (city, state, zip_code) if p)
+    if city_state_zip:
+        address_lines.append(city_state_zip)
 
-        if country == "US":
-            payload: dict[str, Any] = {
-                "address": {"addressLines": address_lines},
-                "enableUspsCass": True,
-            }
-        else:
-            payload = {
-                "address": {
-                    "addressLines": address_lines,
-                    "regionCode": country,
-                },
-            }
+    if country == "US":
+        payload: dict[str, Any] = {
+            "address": {"addressLines": address_lines},
+            "enableUspsCass": True,
+        }
+    else:
+        payload = {
+            "address": {
+                "addressLines": address_lines,
+                "regionCode": country,
+            },
+        }
 
-        for attempt in range(_RETRY_MAX + 1):
-            await self._rate_limiter.acquire()
-            logger.debug("GoogleClient: validating address, %d lines, country=%s", len(address_lines), country)
-            resp = await self._http.post(
-                _VALIDATE_URL,
-                headers=await self._get_auth_headers(),
-                json=payload,
-            )
-            try:
-                resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
-                    if attempt < _RETRY_MAX:
-                        delay = _parse_retry_after(exc.response, attempt)
-                        logger.warning(
-                            "GoogleClient: 429 received, retrying in %.1fs (attempt %d/%d)",
-                            delay,
-                            attempt + 1,
-                            _RETRY_MAX,
-                        )
-                        await asyncio.sleep(delay)
-                        continue
+    for attempt in range(_RETRY_MAX + 1):
+        await self._rate_limiter.acquire()
+        logger.debug(
+            "GoogleClient: validating address, %d lines, country=%s", len(address_lines), country
+        )
+        resp = await self._http.post(
+            _VALIDATE_URL,
+            headers=await self._get_auth_headers(),
+            json=payload,
+        )
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == _HTTP_TOO_MANY_REQUESTS:
+                if attempt < _RETRY_MAX:
                     delay = _parse_retry_after(exc.response, attempt)
-                    raise ProviderRateLimitedError("google", retry_after_seconds=delay) from exc
-                raise
+                    logger.warning(
+                        "GoogleClient: 429 received, retrying in %.1fs (attempt %d/%d)",
+                        delay,
+                        attempt + 1,
+                        _RETRY_MAX,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                delay = _parse_retry_after(exc.response, attempt)
+                raise ProviderRateLimitedError("google", retry_after_seconds=delay) from exc
+            raise
 
-            raw: dict[str, Any] = resp.json()
-            if country == "US":
-                return self._map_response(raw)
-            return self._map_response_international(raw)
+        raw: dict[str, Any] = resp.json()
+        if country == "US":
+            return self._map_response(raw)
+        return self._map_response_international(raw)
 
-        raise ProviderRateLimitedError("google", retry_after_seconds=0.0)
+    raise ProviderRateLimitedError("google", retry_after_seconds=0.0)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1026,6 +1023,7 @@ Also remove the now-unused import of `_DPV_TO_STATUS` from `google_provider.py`:
 ```python
 # Remove this line:
 from address_validator.services.validation._helpers import _DPV_TO_STATUS, _build_validated_string
+
 # Replace with:
 from address_validator.services.validation._helpers import _build_validated_string
 ```

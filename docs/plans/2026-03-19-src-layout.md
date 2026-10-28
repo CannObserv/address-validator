@@ -372,10 +372,10 @@ env = {**os.environ, "API_KEY": "", "PYTHONPATH": str(Path(_PROJECT_ROOT) / "src
 
 ```python
 # Old:
-[sys.executable, "-c", "import auth"],
+([sys.executable, "-c", "import auth"],)
 
 # New:
-[sys.executable, "-c", "import address_validator.auth"],
+([sys.executable, "-c", "import address_validator.auth"],)
 ```
 
 Apply to both subprocess test methods.

@@ -220,10 +220,11 @@ uv run python scripts/model/test_model.py \
 **Quick verification before formal test run:** Test the model interactively:
 ```python
 import pycrfsuite, usaddress
+
 tagger = pycrfsuite.Tagger()
-tagger.open('training/models/usaddr-<name>.crfsuite')
+tagger.open("training/models/usaddr-<name>.crfsuite")
 usaddress.TAGGER = tagger
-usaddress.tag('<test address>')
+usaddress.tag("<test address>")
 ```
 
 **Iterate if needed:** If some patterns fail, return to Step 2 to winnow training

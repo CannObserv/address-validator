@@ -48,6 +48,7 @@
 ```python
 # tests/unit/test_component_profiles.py
 """Tests for component_profiles translation layer."""
+
 import pytest
 from address_validator.services.component_profiles import (
     VALID_PROFILES,
@@ -126,44 +127,44 @@ input dict and unknown keys always pass through unchanged.
 # Keys in this mapping are ISO 19160-4 element names.
 # Values are the target vocabulary keys for that profile.
 _USPS_PUB28: dict[str, str] = {
-    "premise_number":                  "address_number",
-    "premise_number_prefix":           "address_number_prefix",
-    "premise_number_suffix":           "address_number_suffix",
-    "premise_name":                    "building_name",
-    "thoroughfare_pre_direction":      "street_name_pre_directional",
-    "thoroughfare_pre_modifier":       "street_name_pre_modifier",
-    "thoroughfare_leading_type":       "street_name_pre_type",
-    "thoroughfare_name":               "street_name",
-    "thoroughfare_trailing_type":      "street_name_post_type",
-    "thoroughfare_post_direction":     "street_name_post_directional",
-    "thoroughfare_post_modifier":      "street_name_post_modifier",
-    "sub_premise_type":                "occupancy_type",
-    "sub_premise_number":              "occupancy_identifier",
-    "dependent_sub_premise_type":      "subaddress_type",
-    "dependent_sub_premise_number":    "subaddress_identifier",
-    "locality":                        "city",
-    "administrative_area":             "state",
-    "postcode":                        "zip_code",
-    "general_delivery_type":           "usps_box_type",
-    "general_delivery":                "usps_box_id",
-    "general_delivery_group_type":     "usps_box_group_type",
-    "general_delivery_group":          "usps_box_group_id",
-    "addressee":                       "recipient",
-    "landmark":                        "landmark_name",
-    "second_thoroughfare_name":        "second_street_name",
+    "premise_number": "address_number",
+    "premise_number_prefix": "address_number_prefix",
+    "premise_number_suffix": "address_number_suffix",
+    "premise_name": "building_name",
+    "thoroughfare_pre_direction": "street_name_pre_directional",
+    "thoroughfare_pre_modifier": "street_name_pre_modifier",
+    "thoroughfare_leading_type": "street_name_pre_type",
+    "thoroughfare_name": "street_name",
+    "thoroughfare_trailing_type": "street_name_post_type",
+    "thoroughfare_post_direction": "street_name_post_directional",
+    "thoroughfare_post_modifier": "street_name_post_modifier",
+    "sub_premise_type": "occupancy_type",
+    "sub_premise_number": "occupancy_identifier",
+    "dependent_sub_premise_type": "subaddress_type",
+    "dependent_sub_premise_number": "subaddress_identifier",
+    "locality": "city",
+    "administrative_area": "state",
+    "postcode": "zip_code",
+    "general_delivery_type": "usps_box_type",
+    "general_delivery": "usps_box_id",
+    "general_delivery_group_type": "usps_box_group_type",
+    "general_delivery_group": "usps_box_group_id",
+    "addressee": "recipient",
+    "landmark": "landmark_name",
+    "second_thoroughfare_name": "second_street_name",
     "second_thoroughfare_pre_direction": "second_street_name_pre_directional",
-    "second_thoroughfare_pre_modifier":  "second_street_name_pre_modifier",
-    "second_thoroughfare_leading_type":  "second_street_name_pre_type",
+    "second_thoroughfare_pre_modifier": "second_street_name_pre_modifier",
+    "second_thoroughfare_leading_type": "second_street_name_pre_type",
     "second_thoroughfare_post_direction": "second_street_name_post_directional",
-    "second_thoroughfare_post_modifier":  "second_street_name_post_modifier",
-    "second_thoroughfare_trailing_type":  "second_street_name_post_type",
+    "second_thoroughfare_post_modifier": "second_street_name_post_modifier",
+    "second_thoroughfare_trailing_type": "second_street_name_post_type",
 }
 
 # Profile registry.  ``iso-19160-4`` and ``canada-post`` use an empty
 # mapping (identity transform).  Add entries here as new profiles are needed.
 _PROFILES: dict[str, dict[str, str]] = {
     "iso-19160-4": {},
-    "usps-pub28":  _USPS_PUB28,
+    "usps-pub28": _USPS_PUB28,
     "canada-post": {},  # reserved; diverges from ISO as Canada Post spec requires
 }
 
@@ -310,41 +311,41 @@ Replace the entire `TAG_NAMES` block with:
 
 ```python
 TAG_NAMES: dict[str, str] = {
-    "AddressNumber":                    "premise_number",
-    "AddressNumberPrefix":              "premise_number_prefix",
-    "AddressNumberSuffix":              "premise_number_suffix",
-    "StreetNamePreDirectional":         "thoroughfare_pre_direction",
-    "StreetNamePreModifier":            "thoroughfare_pre_modifier",
-    "StreetNamePreType":                "thoroughfare_leading_type",
-    "StreetName":                       "thoroughfare_name",
-    "StreetNamePostDirectional":        "thoroughfare_post_direction",
-    "StreetNamePostModifier":           "thoroughfare_post_modifier",
-    "StreetNamePostType":               "thoroughfare_trailing_type",
-    "SubaddressType":                   "dependent_sub_premise_type",
-    "SubaddressIdentifier":             "dependent_sub_premise_number",
-    "OccupancyType":                    "sub_premise_type",
-    "OccupancyIdentifier":              "sub_premise_number",
-    "PlaceName":                        "locality",
-    "StateName":                        "administrative_area",
-    "ZipCode":                          "postcode",
-    "USPSBoxType":                      "general_delivery_type",
-    "USPSBoxID":                        "general_delivery",
-    "USPSBoxGroupType":                 "general_delivery_group_type",
-    "USPSBoxGroupID":                   "general_delivery_group",
-    "BuildingName":                     "premise_name",
-    "Recipient":                        "addressee",
-    "NotAddress":                       "not_address",
-    "IntersectionSeparator":            "intersection_separator",
-    "LandmarkName":                     "landmark",
-    "CornerOf":                         "corner_of",
+    "AddressNumber": "premise_number",
+    "AddressNumberPrefix": "premise_number_prefix",
+    "AddressNumberSuffix": "premise_number_suffix",
+    "StreetNamePreDirectional": "thoroughfare_pre_direction",
+    "StreetNamePreModifier": "thoroughfare_pre_modifier",
+    "StreetNamePreType": "thoroughfare_leading_type",
+    "StreetName": "thoroughfare_name",
+    "StreetNamePostDirectional": "thoroughfare_post_direction",
+    "StreetNamePostModifier": "thoroughfare_post_modifier",
+    "StreetNamePostType": "thoroughfare_trailing_type",
+    "SubaddressType": "dependent_sub_premise_type",
+    "SubaddressIdentifier": "dependent_sub_premise_number",
+    "OccupancyType": "sub_premise_type",
+    "OccupancyIdentifier": "sub_premise_number",
+    "PlaceName": "locality",
+    "StateName": "administrative_area",
+    "ZipCode": "postcode",
+    "USPSBoxType": "general_delivery_type",
+    "USPSBoxID": "general_delivery",
+    "USPSBoxGroupType": "general_delivery_group_type",
+    "USPSBoxGroupID": "general_delivery_group",
+    "BuildingName": "premise_name",
+    "Recipient": "addressee",
+    "NotAddress": "not_address",
+    "IntersectionSeparator": "intersection_separator",
+    "LandmarkName": "landmark",
+    "CornerOf": "corner_of",
     # Second street (intersections)
-    "SecondStreetName":                 "second_thoroughfare_name",
-    "SecondStreetNamePreDirectional":   "second_thoroughfare_pre_direction",
-    "SecondStreetNamePreModifier":      "second_thoroughfare_pre_modifier",
-    "SecondStreetNamePreType":          "second_thoroughfare_leading_type",
-    "SecondStreetNamePostDirectional":  "second_thoroughfare_post_direction",
-    "SecondStreetNamePostModifier":     "second_thoroughfare_post_modifier",
-    "SecondStreetNamePostType":         "second_thoroughfare_trailing_type",
+    "SecondStreetName": "second_thoroughfare_name",
+    "SecondStreetNamePreDirectional": "second_thoroughfare_pre_direction",
+    "SecondStreetNamePreModifier": "second_thoroughfare_pre_modifier",
+    "SecondStreetNamePreType": "second_thoroughfare_leading_type",
+    "SecondStreetNamePostDirectional": "second_thoroughfare_post_direction",
+    "SecondStreetNamePostModifier": "second_thoroughfare_post_modifier",
+    "SecondStreetNamePostType": "second_thoroughfare_trailing_type",
 }
 ```
 
@@ -360,14 +361,10 @@ _UNIT_SLOT_PAIRS = (
 )
 
 # Keys that represent unit-type fields (primary or sub-unit type).
-_UNIT_TYPE_KEYS: frozenset[str] = frozenset(
-    {"sub_premise_type", "dependent_sub_premise_type"}
-)
+_UNIT_TYPE_KEYS: frozenset[str] = frozenset({"sub_premise_type", "dependent_sub_premise_type"})
 
 # Keys that signal the end of the street portion of an address.
-_POST_STREET_KEYS: frozenset[str] = frozenset(
-    {"locality", "administrative_area", "postcode"}
-)
+_POST_STREET_KEYS: frozenset[str] = frozenset({"locality", "administrative_area", "postcode"})
 ```
 
 - [ ] **Step 3: Update internal key references in recovery functions**
@@ -546,6 +543,7 @@ Add import and apply translation:
 # At the top of src/address_validator/routers/v1/parse.py, add:
 from address_validator.services.component_profiles import translate_components
 
+
 # In the route handler, replace the direct return with:
 async def parse(req: ParseRequestV1, request: Request) -> ParseResponseV1:
     check_country(req.country)
@@ -685,6 +683,7 @@ git commit -m "#90 feat: add API-Version: 2 header for /api/v2/ responses"
 ```python
 # tests/integration/test_v2_parse.py
 """Integration tests for POST /api/v2/parse."""
+
 import pytest
 
 
@@ -840,6 +839,7 @@ Read `src/address_validator/main.py`, find where v1 routers are imported and inc
 
 ```python
 from address_validator.routers.v2 import parse as v2_parse
+
 # ...
 app.include_router(v2_parse.router)
 ```
@@ -1003,6 +1003,7 @@ async def standardize_address(
     comps = req.components or {}
     if req.address and not comps:
         from address_validator.services.parser import parse_address
+
         parse_result = parse_address(req.address.strip(), country=req.country)
         comps = parse_result.components.values
 
@@ -1032,6 +1033,7 @@ Read `src/address_validator/routers/v1/standardize.py` before writing to ensure 
 Add to `main.py`:
 ```python
 from address_validator.routers.v2 import standardize as v2_standardize
+
 app.include_router(v2_standardize.router)
 ```
 
@@ -1106,6 +1108,7 @@ Create `src/address_validator/routers/v2/validate.py` by copying v1 validate.py 
 ```python
 # main.py addition:
 from address_validator.routers.v2 import validate as v2_validate
+
 app.include_router(v2_validate.router)
 ```
 
@@ -1143,6 +1146,7 @@ The service layer (`services/country_format.py`) is unchanged and shared.
 ```python
 # main.py:
 from address_validator.routers.v2 import countries as v2_countries
+
 app.include_router(v2_countries.router)
 ```
 

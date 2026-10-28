@@ -38,6 +38,7 @@ def test_country_format_models_exist() -> None:
         CountryFormatResponse,
         CountrySubdivision,
     )
+
     sub = CountrySubdivision(code="AB", label="Alberta")
     assert sub.code == "AB"
     assert sub.label == "Alberta"
@@ -193,6 +194,7 @@ class TestGetCountryFormat:
         postal = next(f for f in result.fields if f.key == "postal_code")
         assert postal.pattern is not None
         import re
+
         assert re.match(postal.pattern, "95014")
 
     def test_us_address_line_2_is_optional(self) -> None:
@@ -262,6 +264,7 @@ class TestGetCountryFormat:
 
     def test_returns_none_for_library_error(self) -> None:
         from unittest.mock import patch
+
         with patch(
             "address_validator.services.country_format.get_validation_rules",
             side_effect=ValueError("bad code"),
@@ -397,13 +400,17 @@ def _build_field(lib_key: str, rules) -> CountryFieldDefinition | None:  # type:
 
     if lib_key == "country_area":
         label = _AREA_TYPE_LABELS.get(rules.country_area_type or "", "Region")
-        options = _deduplicate_choices(rules.country_area_choices) if rules.country_area_choices else None
+        options = (
+            _deduplicate_choices(rules.country_area_choices) if rules.country_area_choices else None
+        )
         return CountryFieldDefinition(key="region", label=label, required=required, options=options)
 
     if lib_key == "postal_code":
         label = _POSTAL_TYPE_LABELS.get(rules.postal_code_type or "", "Postal code")
         pattern = rules.postal_code_matchers[0].pattern if rules.postal_code_matchers else None
-        return CountryFieldDefinition(key="postal_code", label=label, required=required, pattern=pattern)
+        return CountryFieldDefinition(
+            key="postal_code", label=label, required=required, pattern=pattern
+        )
 
     return None
 
