@@ -16,7 +16,8 @@ repos:
         name: ruff format
         language: system
         entry: uv run --frozen ruff format --force-exclude
-        types_or: [python, pyi, jupyter]
+        # markdown: ruff 0.17 formats Python blocks in .md, and pre-ship checks `.` (#377)
+        types_or: [python, pyi, jupyter, markdown]
         require_serial: true
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1

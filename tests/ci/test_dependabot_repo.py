@@ -70,6 +70,15 @@ def test_ruff_hooks_run_the_locked_ruff(hook_id: str) -> None:
     )
 
 
+def test_ruff_format_hook_covers_markdown() -> None:
+    """ruff 0.17 formats Python blocks in Markdown and pre-ship checks `.` (#377)."""
+    (hook,) = [h for h in _hooks() if h["id"] == "ruff-format"]
+    assert "markdown" in hook.get("types_or", []), (
+        "ruff-format skips .md: a doc edit passes the commit hook, then fails pre-ship's "
+        "`ruff format --check .`"
+    )
+
+
 def _blocks(ecosystem: str) -> list[dict]:
     updates = yaml.safe_load(_CONFIG.read_text(encoding="utf-8")).get("updates") or []
     blocks = [u for u in updates if u.get("package-ecosystem") == ecosystem]
