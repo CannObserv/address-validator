@@ -199,6 +199,7 @@ class GoogleClient:
         city: str | None = None,
         state: str | None = None,
         zip_code: str | None = None,
+        *,
         country: str = "US",
         secondary_address: str | None = None,
     ) -> dict[str, Any]:

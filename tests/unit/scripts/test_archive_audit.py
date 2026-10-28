@@ -405,6 +405,7 @@ def _main_env(monkeypatch: pytest.MonkeyPatch, argv: list[str]) -> None:
     ],
 )
 def test_main_refuses_to_run_without_a_valid_key(
+    *,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     tmp_path: Path,

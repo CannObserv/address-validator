@@ -400,6 +400,7 @@ class TestGoogleClientValidateAddress:
     )
     async def test_unusable_body_raises_transient_error(
         self,
+        *,
         body: bytes,
         logged: str,
         country: str,
@@ -501,6 +502,7 @@ class TestGoogleClientValidateAddress:
     )
     async def test_wrong_typed_field_raises_transient_error(
         self,
+        *,
         country: str,
         body: bytes,
         logged: str,
