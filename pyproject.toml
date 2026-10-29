@@ -24,7 +24,7 @@ dependencies = [
     "jinja2>=3.1.6,<4",
     "google-i18n-address>=3.1.1,<4",
     "python-multipart>=0.0.32,<1",
-    "python-json-logger>=3.3,<5",
+    "python-json-logger>=4.2,<5",
     "notifier-client>=0.3.1,<1",
     "email-validator>=2.3,<3",  # FastAPI validates OpenAPI contact.email as EmailStr (#342)
 ]
