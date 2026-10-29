@@ -95,6 +95,7 @@ set -euo pipefail   # every command below is a gate; no `a && b`: set -e ignores
 GH_TOKEN=$(grep '^GH_TOKEN=' .env | cut -d= -f2); export GH_TOKEN   # split: export hides a failed grep
 MAIN=$PWD
 N=<pr>
+test "$(gh pr view $N --json state -q .state)" = OPEN   # closed: see "Replaced PRs" below
 # 1. Read the release notes for every version between, not just the diff.
 # 2. If main moved past the PR's base, rebase, and wait for a NEW head. Reading
 #    the old head right after the comment tests a commit that won't land.
@@ -106,7 +107,9 @@ if ! git merge-base --is-ancestor origin/main "$OLD"; then
   # Bounded: Dependabot won't rebase a PR someone else pushed to; it comments instead.
   for _ in $(seq 40); do
     sleep 30
-    SHA=$(gh pr view $N --json headRefOid -q .headRefOid)
+    P=$(gh pr view $N --json state,headRefOid -q '.state + " " + .headRefOid')
+    [ "${P%% *}" = OPEN ] || { echo "#$N closed by Dependabot: find its replacement" >&2; exit 1; }
+    SHA=${P#* }
     [ "$SHA" = "$OLD" ] || break
   done
   [ "$SHA" != "$OLD" ] || { echo "#$N: no new head in 20 min; read its comments" >&2; exit 1; }
@@ -135,6 +138,12 @@ bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --forc
 ```
 
 **A red gate leaves its worktree**, with `$BR` checked out, and a re-run then dies at `git fetch origin "+$BR:$BR"` ("refusing to fetch into branch … checked out"). Read the failure there first, then, from the main checkout: `bash .claude/skills/using-git-worktrees/scripts/worktree-destroy.sh "$BR" --force --descoped "red gate at <sha>"`.
+
+Three cases the first batch hit (#384):
+
+- **A PR from before the config can't be rebased.** Dependabot answers a security PR opened before `.github/dependabot.yml` existed with "the dependabot.yml entry that created this PR has been deleted", and asks for it to be closed. **Don't close it.** Closing records an ignore for that version, deletes the branch, and no replacement comes (#357). Land such PRs before pushing a config, or make the same bump by hand on its own branch, through this gate (#375). The recorded ignore stops mattering once `main` is on that version (gregoryfoster/skills#512).
+- **Replaced PRs.** When `main` moves some of a group's packages, Dependabot closes the group PR ("updatable in another way") and opens a smaller one (#371 → #379). The wait above stops on a closed PR. Run `gh pr list --author app/dependabot` and gate the replacement.
+- **A major bump's floor.** `increase-if-necessary` widens a major to `>=old,<new+1` (#373: `python-json-logger>=3.3,<5`). Before merging, set the floor to the new major (`>=4.2,<5`) in a commit on the PR, relock with the host uv, and re-gate the new head. `test_upper_bound_is_the_floors_next_major` fails the gate until you do.
 
 Then, by what the PR touched:
 

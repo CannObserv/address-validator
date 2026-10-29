@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 import yaml
 from packaging.requirements import Requirement
+from packaging.version import Version
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
@@ -46,6 +47,22 @@ def test_every_requirement_has_a_major_bound(spec: str) -> None:
     operators = {s.operator for s in Requirement(spec).specifier}
     assert ">=" in operators, f"{spec}: no floor"
     assert "<" in operators, f"{spec}: no upper bound; add <X+1 (docs/DEPENDENCY-POLICY.md)"
+
+
+@pytest.mark.parametrize("spec", _REQUIREMENTS)
+def test_upper_bound_is_the_floors_next_major(spec: str) -> None:
+    """``>=X.Y,<X+1`` exactly: one major per range (#384).
+
+    Dependabot's ``increase-if-necessary`` widens a major bump to ``>=old,<new+1``
+    (#373 wrote ``python-json-logger>=3.3,<5``), which the presence check above
+    passes.
+    """
+    bounds = {s.operator: Version(s.version) for s in Requirement(spec).specifier}
+    floor, upper = bounds[">="], bounds["<"]
+    assert upper == Version(str(floor.major + 1)), (
+        f"{spec}: the range spans more than one major; raise the floor to the new "
+        f"major (>={upper.major - 1}.x,<{upper.major}), per docs/DEPENDENCY-POLICY.md"
+    )
 
 
 def _hooks() -> list[dict]:
