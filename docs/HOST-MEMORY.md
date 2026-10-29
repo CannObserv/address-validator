@@ -252,14 +252,15 @@ it's fixed; any HTTP-level answer means it still trusts the chain.
 **SocratiCode's Qdrant was recreated by hand** (2026-10-23) so that its
 telemetry is off and its ports listen on loopback only. SocratiCode reuses a
 container named `socraticode-qdrant` if one exists. If none exists, it creates
-one with telemetry on and both ports on `0.0.0.0`. So if the container is ever
-removed (`docker system prune` removes stopped ones), recreate it before
-SocratiCode does. The index is in the named volume, so it survives:
+one with telemetry on and both ports on `0.0.0.0`. Since GH #383,
+`init-socraticode`'s `preflight.sh --check` (Gate 1b) fails a missing or wide
+container, and the daily health hook names any non-loopback listener on
+16333/16334/11435. If the container is ever removed (`docker system prune`
+removes stopped ones), create it before SocratiCode does; the index is in the
+named volume, so it survives. The script only creates what is missing:
 
 ```bash
-docker run -d --name socraticode-qdrant -p 127.0.0.1:16333:6333 -p 127.0.0.1:16334:6334 \
-  -v socraticode_qdrant_data:/qdrant/storage --restart unless-stopped \
-  -e QDRANT__TELEMETRY_DISABLED=true qdrant/qdrant:v1.17.0
+bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/loopback-containers.sh qdrant
 ```
 
 ## Upgrading ollama (GH #318)
