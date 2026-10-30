@@ -25,7 +25,7 @@ dependencies = [
     "google-i18n-address>=3.1.1,<4",
     "python-multipart>=0.0.32,<1",
     "python-json-logger>=4.2,<5",
-    "notifier-client>=0.3.1,<1",
+    "notifier-client>=0.3.2,<1",
     "email-validator>=2.3,<3",  # FastAPI validates OpenAPI contact.email as EmailStr (#342)
 ]
 
@@ -45,7 +45,7 @@ dev = [
 [tool.uv.sources]
 # Consumed as a pinned git tag, per CannObserv/notifier docs/RELEASING.md. uv does not
 # enforce the floor above against a git source; the tag is the pin (#232).
-notifier-client = { git = "https://github.com/CannObserv/notifier.git", subdirectory = "clients/python", tag = "v0.3.1" }
+notifier-client = { git = "https://github.com/CannObserv/notifier.git", subdirectory = "clients/python", tag = "v0.3.2" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

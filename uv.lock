@@ -63,7 +63,7 @@ requires-dist = [
     { name = "google-i18n-address", specifier = ">=3.1.1,<4" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jinja2", specifier = ">=3.1.6,<4" },
-    { name = "notifier-client", git = "https://github.com/CannObserv/notifier.git?subdirectory=clients%2Fpython&tag=v0.3.1" },
+    { name = "notifier-client", git = "https://github.com/CannObserv/notifier.git?subdirectory=clients%2Fpython&tag=v0.3.2" },
     { name = "pyarrow", specifier = ">=26.0,<27" },
     { name = "pycountry", specifier = ">=26.2.16,<27" },
     { name = "pydantic", specifier = ">=2.12,<3" },
@@ -1128,8 +1128,8 @@ wheels = [
 
 [[package]]
 name = "notifier-client"
-version = "0.3.1"
-source = { git = "https://github.com/CannObserv/notifier.git?subdirectory=clients%2Fpython&tag=v0.3.1#36537f730bb597d646a46677638646a2404350cc" }
+version = "0.3.2"
+source = { git = "https://github.com/CannObserv/notifier.git?subdirectory=clients%2Fpython&tag=v0.3.2#8e7c020b52e3c2d4b8cea9fa1bbe0e9be2e86e4f" }
 dependencies = [
     { name = "attrs" },
     { name = "httpx" },
