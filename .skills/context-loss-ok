@@ -90,3 +90,7 @@ AGENTS.md :: tighten :: - `warnings: list[str]` on all response models; empty on
 AGENTS.md :: tighten :: - `ValidationResult.status` vocabulary is defined in `core/validation_status.py` (single source of truth) and catalogued in `docs/VALIDATION-STATUS.md`; a drift test (`tests/unit/test_validation_status_catalogue.py`) enforces sync across the `Literal`, the `validated_addresses` `CheckConstraint`, the DPV→status map, and admin `VS_META` — never inline a new status literal. Adding a status also requires a new Alembic migration widening `ck_validated_addresses_status`
 AGENTS.md :: disproven :: | `/home/exedev/address-validator/.env` | Dev/agent secrets (`GH_TOKEN*` PATs) | systemd (optional with `-` prefix), manual `export` |
 docs/DEPLOYMENT.md :: disproven :: | `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN` | systemd (optional, `-` prefix), manual `export` |
+# 2026-10-30, GH #326: disk-hygiene retired for Provisioner's canonical disk GC; the facts
+# went with the tool. The GC's pointer lives in docs/DEPLOYMENT.md → docs/TIMERS.md.
+AGENTS.md :: disproven :: - Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC); preview with `infra/disk-hygiene.sh --dry-run`
+AGENTS.md :: disproven :: bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests

@@ -167,6 +167,32 @@ def test_every_timer_fires_inside_a_quiet_range_and_outside_the_window() -> None
                 assert not start <= at < end, f"{timer.name} fires inside a window"
 
 
+CANONICAL_GC_TIMER = Path("/usr/local/lib/systemd/system/cannobserv-disk-gc.timer")
+
+
+def test_the_canonical_disk_gc_fires_inside_a_quiet_range() -> None:
+    """Provisioner's GC timer (#326) isn't in infra/, so the test above can't see
+    it. Its whole span, OnCalendar= plus RandomizedDelaySec=, must sit in one
+    quiet range: an update that moved it goes red on the host."""
+    if socket.gethostname() != HOST:
+        pytest.skip("host state")
+    if not CANONICAL_GC_TIMER.exists():
+        pytest.skip(f"{CANONICAL_GC_TIMER} not installed (maintaining-host-disk)")
+    quiet = [_span(words[0]) for words in _named("quiet") if len(words) == 1]
+    windows = [_span(words[1]) for words in _named("window")]
+    (calendar,) = _setting(CANONICAL_GC_TIMER, "OnCalendar")
+    clock = re.search(r"(\d{2}:\d{2})", calendar)
+    assert clock, f"OnCalendar={calendar} names no HH:MM"
+    start = _minutes(clock.group(1))
+    delays = _setting(CANONICAL_GC_TIMER, "RandomizedDelaySec")
+    last = start + (_seconds(delays[0]) // 60 if delays else 0)
+    assert any(lo <= start and last < hi for lo, hi in quiet), (
+        f"cannobserv-disk-gc.timer's {start}-{last} min spans no single quiet range"
+    )
+    for lo, hi in windows:
+        assert last < lo or start >= hi, "cannobserv-disk-gc.timer fires inside a window"
+
+
 def test_each_frequent_probe_is_a_timer_with_a_reason() -> None:
     """No stale entry: a removed or renamed probe can't keep an exemption."""
     for name, reason in FREQUENT_PROBES.items():

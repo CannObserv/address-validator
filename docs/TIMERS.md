@@ -26,17 +26,9 @@ First-time timer installs still need `enable --now`:
 sudo infra/install-units.sh audit-archive.service audit-archive.timer \
   && sudo systemctl enable --now audit-archive.timer
 
-# Docker hygiene timer (weekly prune, Sun 03:30 UTC)
-sudo infra/install-units.sh docker-prune.service docker-prune.timer \
-  && sudo systemctl enable --now docker-prune.timer
-
 # Validation-cache TTL sweep timer (daily 04:00 UTC)
 sudo infra/install-units.sh cache-sweep.service cache-sweep.timer \
   && sudo systemctl enable --now cache-sweep.timer
-
-# Disk hygiene timer (weekly, Sun 05:00 UTC)
-sudo infra/install-units.sh disk-hygiene.service disk-hygiene.timer \
-  && sudo systemctl enable --now disk-hygiene.timer
 
 # Archive-age check (daily 06:00 UTC): alerts if audit-archive stops running (#249)
 sudo infra/install-units.sh archive-age-check.service archive-age-check.timer \
@@ -244,17 +236,25 @@ checkout first. Without `notifier-client` in its `.venv`, the import fails
 before any fail-open code runs, and the `-` prefix hides it: failures go
 journal-only, silently. Then `sudo infra/install-units.sh unit-failure@.service`.
 
-Docker prune does **not** use `-a` (active images are safe). Logs a journal warning if disk ≥ 85% after prune:
+**Disk GC and headroom sensor (#326).** Root-disk garbage collection is the cohort's canonical disk GC (CannObserv/provisioner#61), not this repo's: it replaced `disk-hygiene` and `docker-prune` (#326). Installed from the pinned `co-image-base` release by the vendored `/maintaining-host-disk` skill, whose `scripts/_pin.sh` is the only place the release is named; a skills-vendor bump that raises the pin's `VERSION` is how an update arrives. Files live under `/usr/local/lib/` (units in `/usr/local/lib/systemd/system/`), so `infra/install-units.sh` neither installs nor checks them. **Never edit the installed copy**: raise a change on Provisioner through the operator.
+
+| Unit | Schedule | Does |
+|---|---|---|
+| `cannobserv-disk-gc.timer` | daily 05:15 UTC + up to 30 min, no catch-up | prunes tooling garbage per the config's tiers, as root, `TimeoutStartSec=1800` |
+| `cannobserv-disk-headroom.timer` | every 10 min | reads `/` and the GC's last run; checks in to co-status (`co-address-validator-disk-headroom`, CannObserv/status#77) |
+
+Host config, root-owned, never in the repo:
+
+- `/etc/cannobserv/disk-gc/disk-gc.conf` (0644). Tiers: VS Code server builds and CLIs, old Claude Code extensions, the VSIX cache, the plugin cache, `_npx` (keeps every `SOCRATICODE_SPEC` from `.claude/settings.json` and the VS Code machine setting, [HOST-MEMORY.md](HOST-MEMORY.md)), the npm cache, pytest garbage, orphaned `.worktrees/` and `.claude/worktrees/` dirs (unregistered, untouched 60 min), `uv cache prune --force`, and `docker` (dangling images, build cache older than 168 h; never a container, a volume or a tagged image). Lines: alert at 80% used, clear at 75%. patching-hosts reads `[sensor] alert_at_percent` as a floor.
+- `/etc/cannobserv/disk-gc/checkin.key` (0600): a copy of `/etc/address-validator/status-checkin.key`, the `co-address-validator-live` tenant key. **A key rotation updates both files.**
+
+A failed GC run has no `OnFailure=`: it reaches the operator as the sensor's `gc-failed` on co-status, and a GC that stops running as `gc-stale` after 72 h. The GC's lines carry priorities; read them as root (this host's manager has `LogTarget=console`, so use `systemctl show` for results):
 
 ```bash
-journalctl -t docker-prune -p warning
-```
-
-Disk hygiene prunes stale VS Code server builds (keeps 2 newest + any running), old extension versions, VSIX cache >14d, npm cache + `_npx` >30d (keeps the pinned SocratiCode tree and any written <60min), uv (`--force`)/pre-commit caches, and orphaned worktree dirs (`.claude/worktrees/*`, `.worktrees/*` not in `git worktree list`, aged >30min). Never touches Docker, Postgres, or registered worktrees. Dry-run: `infra/disk-hygiene.sh --dry-run`. Sandbox test rig: `bash tests/shell/disk-hygiene-test.sh`. Bounded by `TimeoutStartSec=15min` (#322). Warnings (≥75% root-FS usage, unremovable paths, unreadable lru.json or SocratiCode spec) go to the journal at real warning priority, matching docker-prune:
-
-```bash
-journalctl -u disk-hygiene -p info      # full run log
-journalctl -t disk-hygiene -p warning   # warnings only
+sudo journalctl -u cannobserv-disk-gc -p warning     # warnings and errors only
+sudo journalctl -u cannobserv-disk-headroom -n 5     # expect "checked in ok (ok): HTTP 202"
+systemctl show cannobserv-disk-gc.service -p Result,ExecMainStatus
+sudo /usr/bin/python3 -I /usr/local/lib/cannobserv/disk-gc/disk-gc gc   # report only; removes nothing
 ```
 
 The cache sweep deletes `validated_addresses` rows (and their `query_patterns` pointers) older than `VALIDATION_CACHE_TTL_DAYS`. Dry-run any time with `PYTHONPATH=src uv run python infra/sweep_cache.py --dry-run` (`PYTHONPATH=src` is required — the package is not installed editable). Logs swept counts to the journal:

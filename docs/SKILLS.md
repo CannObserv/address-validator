@@ -101,6 +101,7 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 | Skill | Trigger | Purpose |
 |---|---|---|
 | `/patching-hosts` | "patch the host", "OS updates", "security updates", "needrestart" | Probes pending OS/package updates by class against the posture `.skills/patching-hosts` declares, then a gated, held-step apply with a recovery point, a detached reboot chain and post-boot checks. The knob and the first monthly run are [#311](https://github.com/CannObserv/address-validator/issues/311); until the knob lands the probe treats this host as report-only. Every step needs the owner's approval |
+| `/maintaining-host-disk` | "disk GC", "root disk is full", "disk headroom", "install/update the disk GC", "retire disk hygiene" | Pulls Provisioner's canonical disk GC + headroom sensor from the digest-pinned `co-image-base` release (`scripts/_pin.sh`), installs or updates it, turns it on per host (`/etc/cannobserv/disk-gc/`), and retires the host's own disk tooling only after `retire-check.sh`. Adoption here: [#326](https://github.com/CannObserv/address-validator/issues/326). Every host step needs the owner's approval; never edit the installed copy |
 
 ## Project-specific skills
 
