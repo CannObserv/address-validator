@@ -11,8 +11,10 @@ posture scheduled
 window Sun 17:00-19:00
 
 # Daily 02:30 address-validator-backup (#240; done by 02:45, its timeout),
-# 03:00 audit-archive, 04:00 cache-sweep, 06:00 archive-age-check
-# (After=audit-archive); Sun 03:30 docker-prune, Sun 05:00 disk-hygiene.
+# 03:00 audit-archive, 04:00 cache-sweep, 05:15 +30min cannobserv-disk-gc
+# (Provisioner's, #326), 06:00 archive-age-check (After=audit-archive).
+# cannobserv-disk-headroom.timer fires every 10 min, read-only like libpostal-probe;
+# it isn't in infra/, so FREQUENT_PROBES doesn't list it.
 # libpostal-probe.timer fires every 2 min and has no quiet range: a read-only
 # liveness probe, declared in FREQUENT_PROBES (the test) with its sizing (#256).
 quiet 02:30-06:15
@@ -27,8 +29,6 @@ service address-validator.service
 service libpostal.service
 exception ordering:libpostal.service 2027-01-31 stateless parser sidecar; never touches Postgres, so no After= on it
 
-# docker system prune + a disk check (docker-prune-check.sh); restarts nothing.
-exception not-restarter:docker-prune.service 2027-01-31 docker system prune -f removes stopped containers and dangling images only
 
 # No journal:volatile exception: the journal persists since #241 (flush unmasked,
 # 512M cap, infra/journald.conf.d/). The probe reads files under /var/log/journal,

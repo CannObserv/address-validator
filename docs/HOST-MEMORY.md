@@ -94,6 +94,8 @@ reservations follow it rather than inventing a second opinion:
 | `libpostal-probe.service` (every-2-min oneshot, #256) | — | none; **capped** at `MemoryHigh=24M` / `MemoryMax=32M`. bash + one `curl`. Measured (2026-10-17, four transient `systemd-run --wait` runs): **0.3–1.6 MB** cgroup memory peak; curl's own RSS is 11 MB, mostly shared library pages charged elsewhere. Headroom is deliberate: an OOM kill fails the run, and a failing run alerts on every tick |
 | `address-validator-liveness.service` (every-5-min oneshot, #255) | — | none; **capped** at `MemoryHigh=24M` / `MemoryMax=32M`. bash + `curl` + `jq`, as `libpostal-probe`. Measured (2026-10-20, four transient `systemd-run --wait` runs of the healthy path, the unit's user, credential and caps): **500–508 KB** cgroup memory peak, ~0.2 s, ~40 ms CPU; the journal keeps no per-unit `memory peak` line on this host. Pass the fallback as `-p 'SetCredential=status-checkin.key:\n'`, as the unit does: the empty value is invalid syntax on systemd 255 — `systemd-run -p` exits 1 before exec, and a unit file ignores the line (#354). Headroom is deliberate: an OOM kill fails the run, and a failing run alerts on every tick |
 | `address-validator-backup.service` (nightly 02:30 UTC oneshot, #240) | — | none; **capped** at `MemoryHigh=384M` / `MemoryMax=512M`: python + `google-cloud-storage`, `pg_dump`, two `pg_restore` reads and a ~7 MB upload. `pg_dump`'s server backend is charged to postgres, not here. **Measured 2026-10-26:** the first run's cgroup `memory.peak` was 79 MiB (83,759,104 bytes) for a 6.9 MB dump in about 2.5 s ([RECOVERY.md](RECOVERY.md#install-and-first-run)) |
+| `cannobserv-disk-gc.service` (daily 05:15 UTC + ≤30 min oneshot, Provisioner's, #326) | — | none; **capped** at `MemoryHigh=384M` / `MemoryMax=512M` by drop-in `infra/cannobserv-disk-gc-memory.conf` (install line in the file; never edit the installed unit). python + `uv cache prune --force` + the docker CLI. Measured 2026-10-30: report-only run **2.2 MB** cgroup peak, 0.7 s; the first pruning run is unmeasured |
+| `cannobserv-disk-headroom.service` (every-10-min oneshot, Provisioner's, #326) | — | none; **capped** at `MemoryHigh=96M` / `MemoryMax=128M` by drop-in `infra/cannobserv-disk-headroom-memory.conf`. python + one check-in. Headroom is deliberate: an OOM kill misses the check-in and co-status pages *has stopped reporting* |
 | everything else in `system.slice` | — | the 128M left undistributed after the two claims below |
 | `postgresql@16-main` (~281 MB) | `database: error` → **HTTP 503** | `MemoryLow=384M` |
 | `address-validator` (~150 MB) | the service itself | `MemoryLow=512M`, `OOMScoreAdjust=-500` |
@@ -188,8 +190,9 @@ Verified here 2026-09-24, extension 2.1.281: the session's server launched as
 machine setting alone carried it.
 
 An exact spec launches from its own npx tree — built on first launch, so warm
-it. Disk hygiene never prunes it: the keep-set is computed from both declared
-specs each run (#322). Install capped, with `choom`: sessions here sit at
+it. The disk GC never prunes it: its `npx` tier keeps `sha512(spec)[:16]` for
+both declared specs, recomputed each run, and an unreadable source keeps every
+tree (#322, #326; `npx_spec_files` in [TIMERS.md](TIMERS.md) → Disk GC). Install capped, with `choom`: sessions here sit at
 `oom_score_adj` -1000, where a cap stalls rather than kills.
 
 ```bash

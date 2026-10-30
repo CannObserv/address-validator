@@ -151,7 +151,7 @@ The cost of removing that coupling is negligible — measured, not estimated:
 
 `du` reports ~313 MiB for a worktree venv and is misleading: uv hardlinks out of
 `~/.cache/uv`, so the `df` delta across a full sync is ~4.6 MiB. Against the
-disk-hygiene budget that is noise.
+30G root that is noise. Root-disk GC (the canonical disk GC, #326): [TIMERS.md](TIMERS.md) → Disk GC and headroom sensor.
 
 That figure has a precondition: hardlinks require the cache and the worktree to
 sit on **one filesystem**. Both are under `/` here. Move `~/.cache/uv`, or put

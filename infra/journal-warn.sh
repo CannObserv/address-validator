@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Journal warnings for the shell timer scripts, attributed to their run (#246).
-# Sourced, not executed: disk-hygiene.sh, docker-prune-check.sh.
+# Sourced, not executed: libpostal-probe.sh, address-validator-liveness.sh.
 #
 # `logger` / `systemd-cat` run as short-lived children. journald looks up a
 # sender's cgroup after the fact, so once the child has exited its line carries
@@ -13,7 +13,7 @@
 # True when stderr is the stream systemd connected to journald. JOURNAL_STREAM
 # is `<dev>:<inode>` of that stream; a child whose stderr was redirected
 # elsewhere inherits the variable but not the stream. Without the check, a
-# terminal run (`disk-hygiene.sh --dry-run`) would print a literal `<4>`.
+# terminal run of a timer script would print a literal `<4>`.
 stderr_is_journal() {
   [[ -n "${JOURNAL_STREAM:-}" ]] || return 1
   [[ "$(stat -L -c '%d:%i' "/proc/$$/fd/2" 2>/dev/null)" == "$JOURNAL_STREAM" ]]

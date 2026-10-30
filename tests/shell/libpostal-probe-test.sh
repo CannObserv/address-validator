@@ -166,6 +166,21 @@ check "no RUNTIME_DIRECTORY: exits 2 (config error, alerts)" test "$RC" -eq 2
 check "no RUNTIME_DIRECTORY: says to run the unit" /bin/grep -q "libpostal-probe.service" "$ERR"
 check "no JOURNAL_STREAM: no priority prefix" lacks "^<" "$ERR"
 
+# --- journal-warn.sh's stream check (#246), moved from disk-hygiene-test.sh (#326) ---
+# A child whose stderr was redirected inherits JOURNAL_STREAM but not the stream:
+# its warnings must carry no <4>, and none may land on stdout.
+probe 0
+echo 7 >"$sandbox/curl.rc"
+: >"$OUT"
+: >"$ERR"
+out_stream=$(stat -L -c '%d:%i' "$OUT")
+PATH="$sandbox/bin:$PATH" RUNTIME_DIRECTORY=$STATE JOURNAL_STREAM=$out_stream \
+  "$SCRIPT" >"$OUT" 2>"$ERR" || true
+check "redirected stderr: warning still written" /bin/grep -q "^libpostal-probe: miss 1/3" "$ERR"
+check "redirected stderr: inherited JOURNAL_STREAM adds no prefix" lacks "^<" "$ERR"
+check "journal: warning is not duplicated on stdout" lacks "miss" "$OUT"
+probe 0
+
 # --- PII (docs/LOGGING.md): the address never reaches a log line ---
 probe 7
 probe 7

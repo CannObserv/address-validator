@@ -29,12 +29,6 @@ repos:
         files: ^(infra|tests/shell)/.*\.sh$
   - repo: local
     hooks:
-      - id: disk-hygiene-test
-        name: disk-hygiene sandbox tests
-        language: system
-        entry: bash tests/shell/disk-hygiene-test.sh
-        files: '^(infra/(disk-hygiene\.(sh|service)|journal-warn\.sh|docker-prune-check\.sh)|tests/shell/disk-hygiene-test\.sh)$'
-        pass_filenames: false
       - id: libpostal-probe-test
         name: libpostal-probe sandbox tests
         language: system

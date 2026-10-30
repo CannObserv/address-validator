@@ -83,7 +83,6 @@ Quick ops (full reference: `docs/DEPLOYMENT.md`):
 - Logs: `journalctl -u address-validator -f`
 - Re-install units: `sudo infra/install-units.sh [unit…]` (restart the service if its unit changed); `infra/install-units.sh --check` flags drift — re-run after moving any path a unit references (#228)
 - Pre-commit hooks: `uv run pre-commit install`
-- Disk hygiene: weekly timer (`infra/disk-hygiene.sh`, Sun 05:00 UTC); preview with `infra/disk-hygiene.sh --dry-run`
 
 ## Infrastructure
 
@@ -117,7 +116,6 @@ uv run pytest --no-cov -m "not integration"  # unit tests only (faster; coverage
 uv run ruff check .             # lint
 uv run ruff check . --fix       # lint + autofix
 uv run ruff format .            # format
-bash tests/shell/disk-hygiene-test.sh    # infra shell-script sandbox tests
 ```
 
 Admin JS (vitest, ESLint, Prettier): `npm run test:js`, `npm run lint:js`, `npm run format:js:check`, `npm run format:js`.
