@@ -313,9 +313,13 @@ The nightly Postgres backup, its provisioning, restore and drill: [RECOVERY.md](
 **NEVER** source `/etc/address-validator/.env` before `uv run pytest`. That file sets `VALIDATION_CACHE_DSN` to the production database; the audit middleware writes real rows on every `TestClient` request. For one-off scripts only:
 
 ```bash
-# set -a is required: the env file is systemd KEY=VALUE format with no `export`
-# statements, so a plain `source` sets shell-local vars the child python never sees.
-set -a && source /etc/address-validator/.env && set +a
+# Parse the env file, never source it (#388): sourcing runs it as shell code.
+# load_env reads plain KEY=value lines and exports them for the child python.
+# It is lifted in place from the vendored pre-ship.sh header, the one copy.
+# Run it in the same shell call as the commands below.
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"
+load_env /etc/address-validator/.env
 # PYTHONPATH=src is required for every command below — the package is not
 # installed editable, so `address_validator` is only importable from src/.
 export PYTHONPATH=src
@@ -369,7 +373,7 @@ uv run python infra/rehash_archive_ips.py --key-file <(sudo cat $K)
 |---|---|---|
 | `/etc/address-validator/.env` | Production secrets — `API_KEY`, DSN, provider creds, `CUSTOM_MODEL_PATH`, `NOTIFIER_*` (unit-failure dispatch, [TIMERS.md](TIMERS.md)) | systemd `EnvironmentFile=` (required) |
 | `/etc/address-validator/*.key` | Keys no environment may hold (root, 0600): `audit-ip-hmac.key` (archive IP HMAC, #352), `status-checkin.key` (liveness and backup check-ins, [TIMERS.md](TIMERS.md)); also `backup-gcs.json`, the backup's create-only GCS key ([RECOVERY.md](RECOVERY.md)) | systemd `LoadCredential=` on the one unit that uses each; by hand, `--key-file <(sudo cat …)` |
-| `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN*` PATs; `ANTHROPIC_API_KEY` for `curating-context`'s exact `count_tokens` run. A worktree has no `.env`: `export ANTHROPIC_API_KEY=$(grep '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env \| cut -d= -f2-)` first | systemd (optional, `-` prefix), manual `export` |
+| `/home/exedev/address-validator/.env` | Dev/agent secrets — `GH_TOKEN*` PATs; `ANTHROPIC_API_KEY` for `curating-context`'s exact `count_tokens` run. A worktree has no `.env`: `export ANTHROPIC_API_KEY=$(grep '^ANTHROPIC_API_KEY=' /home/exedev/address-validator/.env \| cut -d= -f2-)` first | Manual only; no unit loads it (#388) |
 
 ### CORS
 
