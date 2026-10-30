@@ -57,6 +57,12 @@ exception database:address_validator_test_rehearsal 2027-01-31 the backup rehear
 # from the repo by codebase_index; no snapshot.
 exception datastore:socraticode-qdrant 2027-01-31 dev-tool index rebuilt from the repo by codebase_index
 
+# nginx shipped with the exeuntu image (2026-02-18 build), never served a
+# request (empty logs since), and its default site listened on :8000. Purged
+# 2026-10-30 (#319); nginx.service stays masked so a reinstall can't start.
+# Drift from the image: the line stays while the image ships nginx.
+exception purged:nginx 2027-01-31 exeuntu image leftover, never used; default site bound :8000 (#319)
+
 # Third-party apt origins, maintenance lane. Scoped by pins in
 # /etc/apt/preferences.d/ (policy.md "Two lanes").
 origin deb.nodesource.com follow
