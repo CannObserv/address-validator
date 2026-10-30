@@ -32,7 +32,9 @@ match; anything else (``unknown``) is hashed as written, stripped.
 
 Look up a known IP:
 
-    set -a && source /etc/address-validator/.env && set +a    # the key ID
+    RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+    eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
+    load_env /etc/address-validator/.env    # the key ID
     PYTHONPATH=src .venv/bin/python infra/audit_ip_hmac.py \
         --key-file <(sudo cat /etc/address-validator/audit-ip-hmac.key)    # prompts, off-screen
     # -> "<key_id> <hmac>"; repeat with each older key you still hold

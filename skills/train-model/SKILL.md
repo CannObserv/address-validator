@@ -78,9 +78,11 @@ Always confirm before starting any execution.
 
 **Purpose:** Find addresses where the parser needed recovery.
 
-**Setup:** Load DB credentials:
+**Setup:** Load DB credentials, in the same shell call as the commands that need them:
 ```bash
-source /etc/address-validator/.env 2>/dev/null || true
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
+load_env /etc/address-validator/.env
 ```
 
 **Show summary:**
@@ -290,7 +292,9 @@ Resume this step with /train-model --step observe when you have sufficient data.
 
 **Check current metrics:**
 ```bash
-set -a && source /etc/address-validator/.env && set +a
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
+load_env /etc/address-validator/.env
 uv run python scripts/model/performance.py summary --since <deploy-date>
 ```
 
