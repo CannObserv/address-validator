@@ -50,6 +50,9 @@ health /home/exedev/address-validator/.venv/bin/python /home/exedev/address-vali
 # which would hold PII (audit_log.raw_input, raw client IPs) under $HOME.
 datastore postgres postgresql@16-main address_validator
 backup address-validator-backup.service postgresql@16-main
+# The restarter scan matches the usage docstring ("by hand only through
+# ``systemctl start``"), not a call: the backup starts and restarts nothing.
+exception not-restarter:address-validator-backup.service 2027-01-31 backup_db.py:39 is its usage docstring, not a call; the backup restarts nothing (#240)
 exception database:address_validator_test 2027-01-31 test fixtures only; rebuilt by alembic upgrade head on every test run
 exception database:address_validator_test_rehearsal 2027-01-31 the backup rehearsal's restore target; emptied and reloaded by every test run (#240)
 

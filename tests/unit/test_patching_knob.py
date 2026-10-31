@@ -11,6 +11,7 @@ Shape from CannObserv/broker's ``tests/deploy/test_patching_knob.py``.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shlex
@@ -231,6 +232,23 @@ def test_a_frequent_probe_restarts_nothing(name: str) -> None:
                 code = [ln for ln in lines if not ln.lstrip().startswith("#")]
                 hits = [ln for ln in code if SKILL_RESTART_RE.search(ln)]
                 assert hits == [], f"{script.name} reads as a restarter: {hits}"
+
+
+def test_the_backup_is_excepted_as_a_restarter_only_for_its_docstring() -> None:
+    """The scan reads backup_db.py's usage docstring as a restarter, so the knob
+    excepts it (#392). The reason must stay true: every scan hit sits inside the
+    module docstring, and the unit's own Exec lines match nothing."""
+    excepted = {words[0] for words in _named("exception")}
+    assert "not-restarter:address-validator-backup.service" in excepted
+    service = INFRA / "address-validator-backup.service"
+    for line in re.findall(r"^Exec\w*=(.*)$", service.read_text(), re.M):
+        assert not SKILL_RESTART_RE.search(line), f"{service.name}: {line}"
+    script = INFRA / "backup_db.py"
+    doc = ast.parse(script.read_text()).body[0]
+    assert isinstance(doc, ast.Expr) and isinstance(doc.value, ast.Constant)
+    for number, line in enumerate(script.read_text().splitlines(), start=1):
+        if not line.lstrip().startswith("#") and SKILL_RESTART_RE.search(line):
+            assert doc.lineno <= number <= doc.end_lineno, f"backup_db.py:{number}: {line}"
 
 
 def test_the_restart_pattern_matches_the_vendored_scan() -> None:
