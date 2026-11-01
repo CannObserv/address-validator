@@ -62,6 +62,6 @@ def test_the_probes_discriminate():
     assert _git("ls-files", "--error-unmatch", TRACKED_CONTROL).returncode == 0, (
         f"{TRACKED_CONTROL} is tracked, so the tracked probe is not answering"
     )
-    assert _git("check-ignore", "-q", TRACKED_CONTROL).returncode != 0, (
+    assert _git("check-ignore", "-q", TRACKED_CONTROL).returncode == 1, (
         f"{TRACKED_CONTROL} is not ignored, so the ignore probe is not answering"
     )
