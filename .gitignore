@@ -16,6 +16,8 @@ node_modules/
 *.egg-info/
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+# holds this host's QDRANT_API_KEY, the cohort's single global key (GH #381)
+/.claude/settings.local.json
 scratch/
 
 # brainstorming visual companion session content/state (skills/brainstorming)
