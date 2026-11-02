@@ -19,9 +19,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 INFRA = REPO / "infra"
-RECIPE = (
-    "skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh"
-)
+RECIPE = "skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh"
 SOURCED_ENV = re.compile(r"(?:\bsource|(?:^|[;&|]\s*)\.)\s+[^\s`]*\.env\b", re.M)
 
 

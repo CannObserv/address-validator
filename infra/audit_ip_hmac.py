@@ -32,7 +32,7 @@ match; anything else (``unknown``) is hashed as written, stripped.
 
 Look up a known IP:
 
-    RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+    RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh
     eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
     load_env /etc/address-validator/.env    # the key ID
     PYTHONPATH=src .venv/bin/python infra/audit_ip_hmac.py \

@@ -317,7 +317,7 @@ The nightly Postgres backup, its provisioning, restore and drill: [RECOVERY.md](
 # load_env reads plain KEY=value lines and exports them for the child python.
 # It is lifted in place from the vendored pre-ship.sh header, the one copy.
 # Run it in the same shell call as the commands below.
-RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh
 eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"
 load_env /etc/address-validator/.env
 # PYTHONPATH=src is required for every command below — the package is not

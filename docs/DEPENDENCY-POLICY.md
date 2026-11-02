@@ -125,7 +125,7 @@ npm ci                                      # npm PRs: else npm run finds the MA
 test "$(git rev-parse HEAD)" = "$SHA"
 uv run pre-commit clean
 uv run pre-commit run --all-files
-bash .claude/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+bash scripts/pre-ship.sh                     # wraps the vendored gate: PYTHONPATH=src
 uv audit --frozen                            # each advisory held in the Auditing table: --ignore <ID>
 uv lock --check
 # 4. Merge exactly the head that was gated, with nothing rewritten under it.
