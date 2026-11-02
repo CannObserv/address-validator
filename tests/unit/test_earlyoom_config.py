@@ -53,7 +53,8 @@ LIBPOSTAL_COMM = "wof-libpostal-s"  # pelias/libpostal-service's wof-libpostal-s
 
 # Userspace comms on the host, 2026-09-24: every /proc/<pid>/comm with a non-zero
 # VmRSS (kernel threads have none), less one-off commands (sleep, sort, tr).
-# SocratiCode's qdrant, ollama and llama-server left with the local store (#381).
+# SocratiCode's qdrant, ollama and llama-server left with the local store (#381);
+# tailscaled arrived after the snapshot (#232).
 HOST_COMMS = frozenset(
     {
         "(sd-pam)",
@@ -78,6 +79,7 @@ HOST_COMMS = frozenset(
         "systemd-journal",
         "systemd-logind",
         "systemd-timesyn",
+        "tailscaled",
         "uvicorn",
         LIBPOSTAL_COMM,
     }
@@ -184,6 +186,17 @@ def test_the_service_its_database_and_the_user_manager_are_avoided(comm: str) ->
     assert re.search(_flag("--avoid"), comm), (
         f"--avoid does not match {comm!r}. Unavoided, stock ordering puts postgres "
         "fifth (a 503) and the user manager third, and `systemd-run --user` caps need it"
+    )
+
+
+def test_tailscaled_is_avoided() -> None:
+    # With libpostal the only preferred name, tailscaled (adj 0) went third, after
+    # libpostal and dbus. Its unit is Restart=on-failure, and systemd counts a
+    # SIGTERM exit as clean, so earlyoom's SIGTERM would leave DNS and the
+    # notifier hop down for ~51 MB (HOST-MEMORY.md, #381 CR 1).
+    assert re.search(_flag("--avoid"), "tailscaled"), (
+        "--avoid does not match 'tailscaled'. It owns /etc/resolv.conf (MagicDNS) and "
+        "carries the notifier hop, and nothing restarts it after a SIGTERM"
     )
 
 
