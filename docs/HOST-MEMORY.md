@@ -132,8 +132,10 @@ postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
 start limit (see the table above). SocratiCode's `qdrant`, `ollama` and
 `llama-server` were preferred too, until the local store retired (#381; dry
 run 2026-11-02 still takes `wof-libpostal-s` first). It `--avoid`s the service,
-postgres and the user
-manager, which puts postgres behind every small daemon. `--avoid` is -300, a
+postgres and the user manager, which puts postgres behind every small daemon,
+and `tailscaled`: without those three, it went third, and its
+`Restart=on-failure` treats a SIGTERM as clean, leaving DNS and the notifier hop
+down. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
 `dbus.socket` restarts it on next use, so it goes second. The file's header
 gives the reason for each flag. Where sessions sit at -1000, `--prefer`
@@ -159,7 +161,7 @@ prints -1000 processes' scores from before the skip (upstream `init-socraticode`
 cd "$(mktemp -d)" && apt-get download earlyoom && dpkg-deb -x earlyoom_*.deb x
 timeout -s INT 2 ./x/usr/bin/earlyoom --dryrun -d -r 0 -m 99,98 -s 100,100 \
   --prefer '^(wof-libpostal)' \
-  --avoid '^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$' > dry.txt 2>&1
+  --avoid '^(uvicorn|postgres|systemd|[(]sd-pam[)]|tailscaled|sshd)$' > dry.txt 2>&1
 grep -m1 '^sending .* to process' dry.txt   # want wof-libpostal-s
 ```
 

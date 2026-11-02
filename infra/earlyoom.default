@@ -24,8 +24,11 @@
 #           /proc/<pid>/comm, which the kernel truncates to 15 chars, so
 #           libpostal is prefix-matched, never $-anchored.
 # --avoid   -300: the service (uvicorn), postgres, and the user manager
-#           (systemd, (sd-pam)), which `systemd-run --user` caps need; sshd in
-#           case sessions ever stop being -1000. -300 is a shift, not an
+#           (systemd, (sd-pam)), which `systemd-run --user` caps need;
+#           tailscaled, which owns DNS and the notifier hop and stays down after
+#           a SIGTERM (Restart=on-failure counts it clean; third without this,
+#           #381); sshd in case sessions ever stop being -1000. -300 is a shift,
+#           not an
 #           exemption: postgres drops from fifth to behind every small daemon.
 #           dbus-daemon is left out on purpose: dbus.socket restarts it on
 #           next use, so it goes second, after libpostal.
@@ -38,4 +41,4 @@
 # expansion itself: a space inside a regex makes it two arguments, and a
 # backslash is dropped (\. reaches earlyoom as ., matching anything). So no
 # spaces, no escapes, no inner quotes; a literal character is [(] or [.].
-EARLYOOM_ARGS="-r 3600 -m 10,5 -s 100,100 --prefer ^(wof-libpostal) --avoid ^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$"
+EARLYOOM_ARGS="-r 3600 -m 10,5 -s 100,100 --prefer ^(wof-libpostal) --avoid ^(uvicorn|postgres|systemd|[(]sd-pam[)]|tailscaled|sshd)$"
