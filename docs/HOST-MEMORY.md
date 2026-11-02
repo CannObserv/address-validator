@@ -290,8 +290,8 @@ disk. Docker stays for libpostal.
 
 Measured 2026-11-02, first index into `index` (2 shared vCPUs): 2,583 code
 chunks and 1,202 context chunks took **63 min** (code 41, context 22; on the
-local CPU embedder it was 53). The cost here is time, not memory: the server
-only. It can queue behind another repo's index.
+local CPU embedder it was 53). The cost here is time, not memory: embedding
+runs on `index`, not on this VM, and can queue behind another repo's index.
 
 **The way back**, if co-index is gone for good. Bring the local store up **on
 loopback, before any session does**. SocratiCode's own `docker run` publishes
