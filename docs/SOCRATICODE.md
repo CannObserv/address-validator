@@ -296,8 +296,10 @@ cleanly, and it is the only path to `docs/plans` rationale. Treat every
 
 ### The three collections, and what the generated Index scope leaves out
 
-Measured 2026-09-22 against the live Qdrant (`localhost:16333`), SocratiCode
-1.14.0. The generated section's "two stores" are three collections:
+Measured 2026-09-22 against the then-local Qdrant (`localhost:16333`),
+SocratiCode 1.14.0, and unchanged in the shared `co-index` store since #381,
+where `<id>` is the `projectId`, `address-validator`. The generated section's
+"two stores" are three collections:
 
 | Store | Collection | Built by | Governed by |
 |---|---|---|---|
@@ -333,6 +335,10 @@ first bullet of AGENTS.md's *Code Exploration Notes*). That routing is what
 makes E hold. Do not drop it from AGENTS.md without reopening #218.
 
 ### Measured graph yield (2026-09-23, SocratiCode v1.14.0)
+
+Re-measured 2026-11-02 after the first index into `co-index` (#381):
+`verdict: "ok"`, **484 edges across 303 files, 1.60 per file**, `unresolvedPct`
+68.8% (2,951 symbols, 13,569 call edges). The 2026-09-23 figures follow.
 
 `verdict: "ok"` — **377 edges across 243 files, 1.55 per file**, graph built
 by 1.14.0 (current), with `unresolvedPct` 72.2% (1,779 symbols, 8,425 call

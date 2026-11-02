@@ -9,10 +9,10 @@ FastAPI service — parses and standardizes US (USPS Pub 28) and Canadian (libpo
 <!-- BEGIN socraticode-policy -->
 ## Code Exploration Policy
 
-SocratiCode is the preferred semantic-search tool here once indexed (local
-Qdrant store + on-disk graph; manifest `.socraticodecontextartifacts.json`).
-Its MCP tools are **deferred** — schemas load only after the `ToolSearch`
-prefetch that `.claude/hooks/socraticode-reminder.sh` prints each session.
+SocratiCode is the preferred semantic-search tool here once indexed (manifest
+`.socraticodecontextartifacts.json`). Its MCP tools are **deferred** — schemas
+load only after the `ToolSearch` prefetch that
+`.claude/hooks/socraticode-reminder.sh` prints each session.
 
 **Negative rule.** Use SocratiCode MCP tools first for semantic questions
 ("where is X", "how does Y work", "what depends on Z"). Reach for `grep`/`rg`
@@ -31,6 +31,9 @@ Full tool table, prefetch query, per-tool guidance: [`docs/SOCRATICODE.md`](docs
 
 ## Code Exploration Notes (repo-specific)
 
+- **Store: shared `co-index`, key in the main checkout only** (#381). A worktree
+  session's `codebase_*` calls fail; search from a main-checkout session or
+  `grep` → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md#socraticodes-store-co-index-gh-381).
 - **Schema, status vocabularies, migrations → `codebase_search` or the source,
   never `codebase_context_search`.** No schema artifact is declared, so a
   context search answers these from dated `docs/plans` — wrongly (GH #218).
@@ -179,7 +182,7 @@ Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — request flow, module ownership
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — units, [timers](docs/TIMERS.md), DB scripts, env, worktree + dev-server
-- [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md) — memory reservations, OOM ordering, SocratiCode pins, ollama upgrades
+- [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md) — memory reservations, OOM ordering, SocratiCode pins, shared store + re-index
 - [docs/TAILNET.md](docs/TAILNET.md) — tailnet node, ACL, MagicDNS takeover, join/rejoin (notifier hop)
 - [docs/SENSITIVE-AREAS.md](docs/SENSITIVE-AREAS.md) — per-module risk table: what breaks silently; [infra/](docs/SENSITIVE-AREAS-INFRA.md)
 - [docs/VALIDATION-PROVIDERS.md](docs/VALIDATION-PROVIDERS.md) — provider env vars, DPV→status map, quotas

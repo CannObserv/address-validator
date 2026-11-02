@@ -128,14 +128,14 @@ A dry run on 2026-09-24 answered that: stock earlyoom takes
 the stock order rests on RSS alone. After libpostal came the user's session
 bus (`dbus-daemon`), the user manager (`systemd`, `(sd-pam)`) and then
 postgres, fifth: a 503. `infra/earlyoom.default` sets the order instead. It
-`--prefer`s libpostal, then SocratiCode's `qdrant`, `ollama` and ollama's model
-child `llama-server` (ollama 0.40.5 runs the model there; 0.21.2 didn't, #318).
-All are adj 0 and come back on their own: libpostal up to its start limit (see
-the table above), `llama-server` respawned by ollama on the next embed request.
-It `--avoid`s the service, postgres and the user
+`--prefer`s libpostal, which is adj 0 and comes back on its own, up to its
+start limit (see the table above). SocratiCode's `qdrant`, `ollama` and
+`llama-server` were preferred too, until the local store retired (#381; dry
+run 2026-11-02 still takes `wof-libpostal-s` first). It `--avoid`s the service,
+postgres and the user
 manager, which puts postgres behind every small daemon. `--avoid` is -300, a
 shift rather than an exemption. The session bus is left out on purpose:
-`dbus.socket` restarts it on next use, so it goes fourth. The file's header
+`dbus.socket` restarts it on next use, so it goes second. The file's header
 gives the reason for each flag. Where sessions sit at -1000, `--prefer`
 reaches nothing of theirs, so it names none of them.
 
@@ -158,7 +158,7 @@ prints -1000 processes' scores from before the skip (upstream `init-socraticode`
 ```bash
 cd "$(mktemp -d)" && apt-get download earlyoom && dpkg-deb -x earlyoom_*.deb x
 timeout -s INT 2 ./x/usr/bin/earlyoom --dryrun -d -r 0 -m 99,98 -s 100,100 \
-  --prefer '^(wof-libpostal|qdrant|ollama|llama-server)' \
+  --prefer '^(wof-libpostal)' \
   --avoid '^(uvicorn|postgres|systemd|[(]sd-pam[)]|sshd)$' > dry.txt 2>&1
 grep -m1 '^sending .* to process' dry.txt   # want wof-libpostal-s
 ```
@@ -252,83 +252,57 @@ already rejected it without a restart. To probe a client, connect it to
 `https://dv-g3b-noct-emudhra.we-have-a-problem.com/`. A certificate error means
 it's fixed; any HTTP-level answer means it still trusts the chain.
 
-**SocratiCode's Qdrant was recreated by hand** (2026-10-23) so that its
-telemetry is off and its ports listen on loopback only. SocratiCode reuses a
-container named `socraticode-qdrant` if one exists. If none exists, it creates
-one with telemetry on and both ports on `0.0.0.0`. Since GH #383,
-`init-socraticode`'s `preflight.sh --check` (Gate 1b) fails a missing or wide
-container, and the daily health hook names any non-loopback listener on
-16333/16334/11435. If the container is ever removed (`docker system prune`
-removes stopped ones), create it before SocratiCode does; the index is in the
-named volume, so it survives. The script only creates what is missing:
+## SocratiCode's store: co-index (GH #381)
 
-```bash
-bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/loopback-containers.sh qdrant
-```
+Since 2026-11-02 SocratiCode's vector store and embedder are remote: Qdrant
+and Ollama on `index`, the cohort's shared host (CannObserv/notifier#57). This
+VM runs neither. The local `socraticode-qdrant` container, its 2.9 GB volume
+and its image, `ollama.service` (~310 MiB resident), its 262 MB model store,
+its binaries and the `ollama` user were removed then. That freed about 3.5 GB of
+disk. Docker stays for libpostal.
 
-## Upgrading ollama (GH #318)
+- **Client config is committed.** `.socraticode.json` (`projectId`) and the
+  `env` block in `.claude/settings.json`, pinned by
+  `tests/unit/test_socraticode_config.py`. The one global `QDRANT_API_KEY`
+  sits only in the **main checkout's** git-ignored
+  `.claude/settings.local.json` (`tests/unit/test_settings_local_ignored.py`).
+  A worktree session carries the block but no key, so its `codebase_*` calls
+  fail. Search from a main-checkout session, or `grep`.
+- **Nothing on a production path depends on it.** If `index` is down, search
+  falls back to `grep`. A missing ACL grant shows up as DNS failure, not a
+  denial ([TAILNET.md](TAILNET.md)).
+- **Engine upgrades are co-index's.** A model or engine change there
+  (CannObserv/index#11: ollama 0.40 case-folds input, 0.21 didn't) means a full
+  re-index of every client. The watcher and `codebase_index` re-embed only
+  changed files, so neither one fixes mixed vectors.
 
-SocratiCode's embedder (`ollama.service`, `127.0.0.1:11434`) is a CPU-only
-manual install, outside apt. The tarball is ~1.4 G, nearly all of it GPU runner
-trees, which the `--exclude` drops. Stage it under `$HOME` (boot wipes `/tmp`).
-Back up `bin/` and `lib/` into separate directories: both are named `ollama`,
-so a single `cp` into one directory loses the second (#318). Replace
-`lib/ollama/` whole, so no library from the old version stays behind.
-
-```bash
-V=0.40.5 S=~/staging/ollama-$V B=/usr/local/lib/ollama-$(/usr/local/bin/ollama --version 2>&1 | awk '/version/{v=$NF} END{print v}').bak
-mkdir -p "$S/x" && cd "$S"
-curl -fLO https://github.com/ollama/ollama/releases/download/v$V/ollama-linux-amd64.tar.zst
-curl -fsL https://github.com/ollama/ollama/releases/download/v$V/sha256sum.txt | grep ' ./ollama-linux-amd64.tar.zst$' | sha256sum -c
-tar --zstd -xf ollama-linux-amd64.tar.zst -C x --exclude='lib/ollama/*/*'
-find x/lib/ollama -mindepth 1 -type d -empty -delete
-sudo systemctl stop ollama
-sudo install -d "$B/bin" "$B/lib" && sudo cp -a /usr/local/bin/ollama "$B/bin/" && sudo cp -a /usr/local/lib/ollama "$B/lib/"
-sudo rm -rf /usr/local/lib/ollama && sudo cp -a x/lib/ollama /usr/local/lib/ && sudo chown -R root:root /usr/local/lib/ollama
-sudo install -m 755 -o root -g root x/bin/ollama /usr/local/bin/ollama
-sudo systemctl start ollama
-```
-
-Verify, in order:
-- `curl -s localhost:11434/api/version` shows `$V`.
-- `/api/embed` with `nomic-embed-text:latest` returns 768 dimensions.
-- `pgrep -a llama-server` (or whatever child now holds the model) still matches
-  earlyoom's `--prefer`; `tests/unit/test_earlyoom_config.py` pins the names.
-
-**Roll back** the same way, from `$B/bin/ollama` and `$B/lib/ollama`. Delete
-`$B` and `$S` once the new version has run cleanly.
-
-**Never run its `install.sh`:** it rewrites the unit, including a `PATH=` copied
-from whatever shell ran it.
-
-In 0.40.5 the loaded model runs in a child process, `llama-server`, which is
-why the earlyoom `--prefer` above names it. It exists only while a model is
-loaded. In 0.21.2 the model ran in `ollama` itself; nobody has bisected the
-release where this changed.
-
-**A version change can change the vectors.** 0.40.5 case-folds input and
-0.21.2 didn't (same boundary, also unbisected), so the same model gives
-different vectors for any text with an uppercase letter. Plan a full re-index
-after an upgrade, or the index mixes vectors from both engines
-(CannObserv/index#11). The watcher re-embeds only changed files, and
-`codebase_index` skips any file whose hash is unchanged, so neither one fixes
-this.
-
-A full re-index has two steps:
-1. **Run `codebase_remove` on its own.** It drops all three stores (code, graph,
-   context). Then confirm with `curl -s localhost:16333/collections` that only
-   `socraticode_metadata` is left. Sent in the same batch as `codebase_index`,
-   it failed (`Unable to remove watcher: Invalid argument`) and removed nothing,
-   and the index pass then embedded 0 chunks in 2.3 s. Calling it again on its
-   own worked.
+**A full re-index** has two steps:
+1. **Run `codebase_remove` on its own.** It drops this project's code, graph and
+   context collections, and only those: the store holds every cohort repo.
+   Confirm with `codebase_list_projects` that `address-validator` is gone. Sent
+   in the same batch as `codebase_index`, it failed (`Unable to remove watcher:
+   Invalid argument`) and removed nothing, and the index pass then embedded 0
+   chunks in 2.3 s (2026-10-16).
 2. **Run `codebase_index`.** It rebuilds the code index, then the graph, then
-   every context artifact. There's no need for a separate
-   `codebase_context_index`.
+   every context artifact. No separate `codebase_context_index` is needed.
 
-Measured here, 2026-10-16 (0.40.5, CPU, server already running): 2160 code
-chunks and 1129 context chunks took **53 min** (code 34, context 19).
-`MemAvailable` never fell below **2,907 MB**; it was 2,922 MB at the start. The
-1.2 G above is broker's *install* + server + index. With a pre-installed server
-the cost is time, not memory. Check afterwards: re-embed a few stored chunks
-(`search_document: ` + `relativePath` + `\n` + `content`, cut at 2048 chars)
-and compare them with their Qdrant vectors. They should be at cosine 1.0.
+Measured 2026-11-02, first index into `index` (2 shared vCPUs): 2,583 code
+chunks and 1,202 context chunks took **63 min** (code 41, context 22; on the
+local CPU embedder it was 53). The cost here is time, not memory: the server
+only. It can queue behind another repo's index.
+
+**The way back**, if co-index is gone for good. Bring the local store up **on
+loopback, before any session does**. SocratiCode's own `docker run` publishes
+an unauthenticated Qdrant on `0.0.0.0` with telemetry on
+(gregoryfoster/skills#494). The script creates it on `127.0.0.1` with
+`QDRANT__TELEMETRY_DISABLED=true`:
+
+```bash
+bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/loopback-containers.sh qdrant ollama
+```
+
+Then drop the store keys (`QDRANT_*`, `OLLAMA_*`, `EMBEDDING_*`) from
+`.claude/settings.json` along with their test, put `qdrant` and `ollama` back in
+earlyoom's `--prefer`, restart Claude Code and run a full index. Keep
+`projectId`. The daily health hook names any non-loopback listener on
+16333/16334/11435, so a managed fallback that did go wide gets reported.
