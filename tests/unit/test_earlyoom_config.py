@@ -53,6 +53,8 @@ LIBPOSTAL_COMM = "wof-libpostal-s"  # pelias/libpostal-service's wof-libpostal-s
 
 # Userspace comms on the host, 2026-09-24: every /proc/<pid>/comm with a non-zero
 # VmRSS (kernel threads have none), less one-off commands (sleep, sort, tr).
+# SocratiCode's qdrant, ollama and llama-server left with the local store (#381);
+# tailscaled arrived after the snapshot (#232).
 HOST_COMMS = frozenset(
     {
         "(sd-pam)",
@@ -67,12 +69,9 @@ HOST_COMMS = frozenset(
         "docker-proxy",
         "dockerd",
         "earlyoom",
-        "llama-server",  # ollama 0.40.5 loads the model in this child; 0.21.2 didn't (#318)
         "npm exec socrat",
-        "ollama",
         "polkitd",
         "postgres",
-        "qdrant",
         "sh",
         "sshd",
         "sshd-session",
@@ -80,6 +79,7 @@ HOST_COMMS = frozenset(
         "systemd-journal",
         "systemd-logind",
         "systemd-timesyn",
+        "tailscaled",
         "uvicorn",
         LIBPOSTAL_COMM,
     }
@@ -161,14 +161,23 @@ def test_memory_alone_decides() -> None:
     )
 
 
-@pytest.mark.parametrize("comm", [LIBPOSTAL_COMM, "qdrant", "ollama", "llama-server"])
-def test_what_restarts_on_its_own_is_preferred(comm: str) -> None:
-    assert re.search(_flag("--prefer"), comm), (
-        f"--prefer does not match {comm!r}. libpostal is what HOST-MEMORY.md loses "
-        "first (it restarts on its own up to its #248 start limit), and SocratiCode's "
-        "qdrant and ollama (and ollama's llama-server model runner, #318) restart on "
-        "their own. The match is "
+def test_libpostal_is_preferred() -> None:
+    assert re.search(_flag("--prefer"), LIBPOSTAL_COMM), (
+        f"--prefer does not match {LIBPOSTAL_COMM!r}. libpostal is what HOST-MEMORY.md "
+        "loses first (it restarts on its own up to its #248 start limit). The match is "
         "against the 15-char comm, so never $-anchor a full binary name"
+    )
+
+
+def test_every_preferred_name_runs_here() -> None:
+    # A name nothing on the host carries is dead config that reads as an OOM
+    # order: qdrant, ollama and llama-server outlived their removal (#381).
+    m = re.fullmatch(r"\^\(([^()]*)\)", _flag("--prefer"))
+    assert m, f"--prefer {_flag('--prefer')!r} is not one ^(a|b|...) alternation"
+    stale = [alt for alt in m.group(1).split("|") if not any(re.match(alt, c) for c in HOST_COMMS)]
+    assert not stale, (
+        f"--prefer names {stale}, which no process on this host carries: drop them, "
+        "or add the comm to HOST_COMMS if it runs here again"
     )
 
 
@@ -177,6 +186,17 @@ def test_the_service_its_database_and_the_user_manager_are_avoided(comm: str) ->
     assert re.search(_flag("--avoid"), comm), (
         f"--avoid does not match {comm!r}. Unavoided, stock ordering puts postgres "
         "fifth (a 503) and the user manager third, and `systemd-run --user` caps need it"
+    )
+
+
+def test_tailscaled_is_avoided() -> None:
+    # With libpostal the only preferred name, tailscaled (adj 0) went third, after
+    # libpostal and dbus. Its unit is Restart=on-failure, and systemd counts a
+    # SIGTERM exit as clean, so earlyoom's SIGTERM would leave DNS and the
+    # notifier hop down for ~51 MB (HOST-MEMORY.md, #381 CR 1).
+    assert re.search(_flag("--avoid"), "tailscaled"), (
+        "--avoid does not match 'tailscaled'. It owns /etc/resolv.conf (MagicDNS) and "
+        "carries the notifier hop, and nothing restarts it after a SIGTERM"
     )
 
 
