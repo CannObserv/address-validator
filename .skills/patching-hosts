@@ -56,10 +56,6 @@ exception not-restarter:address-validator-backup.service 2027-01-31 backup_db.py
 exception database:address_validator_test 2027-01-31 test fixtures only; rebuilt by alembic upgrade head on every test run
 exception database:address_validator_test_rehearsal 2027-01-31 the backup rehearsal's restore target; emptied and reloaded by every test run (#240)
 
-# SocratiCode's semantic-search index (dev tooling, not production). Rebuilt
-# from the repo by codebase_index; no snapshot.
-exception datastore:socraticode-qdrant 2027-01-31 dev-tool index rebuilt from the repo by codebase_index
-
 # nginx shipped with the exeuntu image (2026-02-18 build), never served a
 # request (empty logs since), and its default site listened on :8000. Purged
 # 2026-10-30 (#319); nginx.service stays masked so a reinstall can't start.
