@@ -20,7 +20,7 @@
 # --prefer  +300: libpostal, adj 0, which comes back on its own (Restart=always,
 #           up to its #248 start limit). SocratiCode's qdrant, ollama and
 #           llama-server were here until the local store retired (#381); a
-#           local store brought back puts them back. Matched against
+#           local store brought back puts all three back. Matched against
 #           /proc/<pid>/comm, which the kernel truncates to 15 chars, so
 #           libpostal is prefix-matched, never $-anchored.
 # --avoid   -300: the service (uvicorn), postgres, and the user manager

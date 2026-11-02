@@ -304,7 +304,10 @@ bash skills-vendor/gregoryfoster-skills/skills/init-socraticode/scripts/loopback
 ```
 
 Then drop the store keys (`QDRANT_*`, `OLLAMA_*`, `EMBEDDING_*`) from
-`.claude/settings.json` along with their test, put `qdrant` and `ollama` back in
-earlyoom's `--prefer`, restart Claude Code and run a full index. Keep
+`.claude/settings.json` along with their test. Put `qdrant`, `ollama` and
+`llama-server` (where ollama ≥0.40 runs the model) back in earlyoom's
+`--prefer` and in `HOST_COMMS` in `tests/unit/test_earlyoom_config.py`, which
+fails on a preferred name it doesn't list. Then restart Claude Code and run a
+full index. Keep
 `projectId`. The daily health hook names any non-loopback listener on
 16333/16334/11435, so a managed fallback that did go wide gets reported.
