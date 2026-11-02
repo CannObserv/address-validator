@@ -80,7 +80,7 @@ Always confirm before starting any execution.
 
 **Setup:** Load DB credentials, in the same shell call as the commands that need them:
 ```bash
-RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh
 eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
 load_env /etc/address-validator/.env
 ```
@@ -292,7 +292,7 @@ Resume this step with /train-model --step observe when you have sufficient data.
 
 **Check current metrics:**
 ```bash
-RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh
 eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
 load_env /etc/address-validator/.env
 uv run python scripts/model/performance.py summary --since <deploy-date>

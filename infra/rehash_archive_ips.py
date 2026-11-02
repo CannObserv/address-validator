@@ -24,7 +24,7 @@ someone with restore permission); after that it is gone. Key rotation can't
 use this script: once rewritten, the raw IP no longer exists.
 
 Usage (main checkout, outside the quiet ranges; the key through a pipe, #352):
-    RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work-python-fastapi/scripts/pre-ship.sh
+    RECIPE=skills-vendor/gregoryfoster-skills/skills/shipping-work/scripts/pre-ship.sh
     eval "$(sed -n 's/^#   //; /^load_env() [{]/,/^[}]/p' "$RECIPE")"   # parse, never source (#388)
     load_env /etc/address-validator/.env
     K=/etc/address-validator/audit-ip-hmac.key
