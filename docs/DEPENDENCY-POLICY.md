@@ -69,6 +69,14 @@ rm -rf node_modules package-lock.json && npm install && npm audit
 
 This is the recipe that cleared the postcss / vite / ws findings during the Node 24 floor bump (#119).
 
+### Auditing
+
+The npm twin of the [Python table](#auditing-317). A dismissed Dependabot alert never reopens, so its row is the only reminder:
+
+| Advisory | Package | Fixed in | Held because |
+|---|---|---|---|
+| GHSA-g3hv-75wg-m249 (#402) | `minimatch` (dev, via `eslint` / `@eslint/config-array`) | 11.0.1 | Fix is a major no `eslint` release allows (eslint 10.14.0 `^10.2.6`, config-array 0.23.5 `^10.2.4`). No runtime exposure: runs only in `npm run lint:js`, on our own globs. **Exit:** when either allows `^11`, take that update and delete this row |
+
 ## Dependabot (#361)
 
 `.github/dependabot.yml` proposes version updates weekly for `uv`, `npm`, `pre-commit` and `github-actions`. Security updates arrive on an advisory, whatever the schedule. Design and rationale: `docs/plans/2026-10-27-dependabot-adoption-design.md`. Guarded by `tests/ci/test_dependabot.py` (the `adopting-dependabot` skill's asset: edit only its ADAPT block) and `tests/ci/test_dependabot_repo.py`.
@@ -148,7 +156,7 @@ Three cases the first batch hit (#384):
 Then, by what the PR touched:
 
 - **Runtime** (`runtime` group, a runtime major, or a security update to a runtime package): live only after the deploy, which is its own approval. Pull the main checkout, `uv sync`, then `sudo systemctl restart address-validator`, outside the `quiet` ranges in `.skills/patching-hosts` (re-read `date -u` first).
-- **Dev, npm, pre-commit**: no restart.
+- **Dev, npm, pre-commit**: no restart. On any `eslint` PR, check the [npm held rows](#auditing).
 - **`.github/workflows/`**: no PR runs a scheduled-only workflow, so dispatch it once (`gh workflow run context-cadence.yml`; the PAT can't, so the operator does) and read the run.
 
 A bump whose hooks or tests go red isn't landed by pinning it back: report it, and fix forward on a branch of its own. A major is checked against the `>=X.Y,<X+1` form above before merging.
