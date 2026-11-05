@@ -27,6 +27,20 @@ rotation, crypto-shredding and how to look up a known IP:
 ``audit_ip_hmac.py``. Files uploaded before #233 held the raw IP;
 ``rehash_archive_ips.py`` rewrites them in place, once, at the #233 deploy.
 
+Archived files expire under the bucket's lifecycle rule, not this script
+(#351): Delete at ``age`` 365 days, ``matchesPrefix: ["audit/"]``. ``age``
+counts from the object's creation time, and day D is uploaded on D+91 (the
+run after it leaves the 90-day hot window), so a file lives about 456 days
+(~15 months) past its date. An in-place rewrite gives the object a new
+creation time and restarts its clock. ``rehash_archive_ips.py`` did this once
+(#233, 2026-10-24) to every file through ``audit-2026-07-25``; those expire
+from 2027-10-24, up to 142 days late (``audit-2026-03-05``). Don't rewrite
+archived files again without accepting that. A new ``AUDIT_ARCHIVE_PREFIX``
+falls outside the rule. The archive's service account has no
+``storage.buckets.update``; the operator sets the rule from their own login
+and reads it back with
+``gcloud storage buckets describe gs://<bucket> --format="yaml(lifecycle_config)"``.
+
 Usage (by hand; the key through a pipe, never an env var):
     K=/etc/address-validator/audit-ip-hmac.key
     uv run python infra/archive_audit.py --key-file <(sudo cat $K)    # archive expired rows
