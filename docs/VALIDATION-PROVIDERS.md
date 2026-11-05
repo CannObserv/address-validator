@@ -80,6 +80,22 @@ When a provider is rate-limited (HTTP 429 after all retries), the next provider 
 - Register at https://developer.usps.com.
 - `USPSProvider` and its `_http_client` are module-level singletons in `factory.py` — reset in tests.
 
+### Billing and the spend ceiling (GH #404)
+
+Fees per the [Addresses API Tech Sheet](https://postalpro.usps.com/Addresses_API_Tech_Sheet) (2026-08-13), by calls per month:
+1–2,000 → $10 flat; 2,001–10,000 → $4.50/1K; 10,001–50,000 → $4.25/1K; over 50,000 → $4.00/1K.
+The whole month bills at **one** tier, and partial thousands round up (2,001 calls → $13.50). Debited
+from the EPS trust early in the month for the prior month. In the EPS transaction report, `Detail`
+on an "Addresses API Fee" row is that month's call count. It matches `audit_log` validate cache misses
+(all providers, plus errors: `provider` names the final answerer, so a USPS call that fell through
+to Google shows as `google`) within ~1%. No rate limits are published.
+
+- **Production runs `USPS_DAILY_LIMIT=140`** so the bill stays under $25 a month: 140 × 31 = 4,340 calls → $22.50.
+  The cap is a backstop, not a hard ceiling. `QuotaWindow` lives in memory and starts full on every
+  restart, and calls over the cap fall through to Google. The bill is held by the clients' own budgets
+  (wslcb-licensing-tracker's `DAILY_VALIDATION_LIMIT`).
+- Size any volume change in dollars, not quota. A 10,001-call month costs $46.75.
+
 ### Enhanced Addresses API switch — gap runbook (August 1, 2026)
 
 Effective 2026-08-01 (slipped from 2026-07-12; announced 2026-07-09) USPS
@@ -157,7 +173,7 @@ quota (default 160/day) becomes the binding limit — watch for
 | Variable | Default | Notes |
 |---|---|---|
 | `USPS_RATE_LIMIT_RPS` | `5.0` | USPS per-second window limit |
-| `USPS_DAILY_LIMIT` | `10000` | USPS per-day window limit (soft — queues up to latency budget) |
+| `USPS_DAILY_LIMIT` | `10000` | USPS per-day window limit (soft — queues up to latency budget). Production: `140`, a spend control ([Billing](#billing-and-the-spend-ceiling-gh-404)) |
 | `GOOGLE_PROJECT_ID` | — | GCP project ID; optional, auto-discovered from ADC if unset |
 | `GOOGLE_RATE_LIMIT_RPM` | `5` | Google per-minute window limit (soft) |
 | `GOOGLE_DAILY_LIMIT` | `160` | Google per-day limit; auto-discovered from Cloud Quotas API when available, env var is fallback |
