@@ -226,10 +226,11 @@ them, what to lose in order, and the SocratiCode launch pins.
 
 ## OS security updates
 
-The image masks the apt timers. Patching is a monthly run under the vendored
-`patching-hosts` skill (GH #311); its knob `.skills/patching-hosts` holds the window,
-datastore, callers, exceptions and the recovery check
-(`infra/patching_recovery_check.py`), pinned by `tests/unit/test_patching_knob.py`.
+The image masks the apt timers. Patching is a weekly run, Thursdays 18:00–21:00
+UTC, under the vendored `patching-hosts` skill (GH #311); its knob
+`.skills/patching-hosts` holds the window, datastore, callers, exceptions and the
+recovery check (`infra/patching_recovery_check.py`), pinned by
+`tests/unit/test_patching_knob.py`.
 
 apt's needrestart hook runs `needrestart -m u`, which Ubuntu turns into *automatic*
 restarts unless `$nrconf{restart}` is set. `infra/needrestart.conf.d/address-validator.conf`

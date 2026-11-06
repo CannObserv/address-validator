@@ -2,7 +2,7 @@
 
 ``.skills/patching-hosts`` tells the vendored ``patching-hosts`` skill what only
 this repo's owner knows. **A malformed line makes the host report-only**, which
-reads as "nothing to do" at the next monthly run rather than as an error, so the
+reads as "nothing to do" at the next weekly run rather than as an error, so the
 skill's own reader is run here. It ships in a submodule CI doesn't initialise:
 off this host that is a skip, on it a failure. The rest are pure parses.
 
@@ -89,12 +89,19 @@ def test_the_knob_reads_clean() -> None:
 TEMPORARY_WINDOWS: dict[tuple[str, str], int] = {}
 
 
+def test_the_cadence_is_weekly() -> None:
+    """Weekly (#272, 2026-11-06). Also the grammar's default; stated so the
+    knob says what it does."""
+    assert _named("cadence") == [["weekly"]]
+
+
 def test_the_window_is_the_owners_and_in_utc() -> None:
-    """2nd Sunday 17:00-19:00 UTC (#272, 2026-10-16). The grammar has no week of
-    the month, so the line admits every Sunday; UTC so DST never moves it. Any
-    other window is a declared temporary one."""
+    """Thursday 18:00-21:00 UTC (#272, 2026-11-06): runs are interactive, so the
+    window sits in Pacific working hours (10:00-13:00 PST, 11:00-14:00 PDT).
+    UTC, so DST moves only its Pacific reading. Any other window is a declared
+    temporary one."""
     windows = [tuple(words) for words in _named("window")]
-    assert windows[0] == ("Sun", "17:00-19:00")
+    assert windows[0] == ("Thu", "18:00-21:00")
     assert set(windows[1:]) == set(TEMPORARY_WINDOWS)
 
 
