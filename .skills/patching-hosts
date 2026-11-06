@@ -4,11 +4,13 @@
 
 class production
 posture scheduled
+cadence weekly
 
-# Monthly, 2nd Sunday 17:00-19:00 UTC (decided 2026-10-16, #272/#311); first
-# window 2026-11-08. The grammar has no week-of-month, so this admits every
-# Sunday: the run itself must fall on the 2nd. UTC, so DST never moves it.
-window Sun 17:00-19:00
+# Weekly, Thursday 18:00-21:00 UTC (decided 2026-11-06, #272/#311): runs are
+# interactive, so they sit in Pacific working hours, 10:00-13:00 PST and
+# 11:00-14:00 PDT. UTC, so DST moves the Pacific reading, never the window.
+# A week with nothing pending ends at the probe (run.md).
+window Thu 18:00-21:00
 
 # Daily 02:30 address-validator-backup (#240; done by 02:45, its timeout),
 # 03:00 audit-archive, 04:00 cache-sweep, 05:15 +30min cannobserv-disk-gc
