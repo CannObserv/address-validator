@@ -6,8 +6,7 @@ writes are dropped, and callers still get 200s. So ``/api/v2/health`` going
 green after a Postgres restart proves liveness, not that the database path came
 back. This proves it:
 
-1. Postgres accepts a connection. If not, exit 1 before any request: the skill
-   polls each ``health`` line every second through the outage, and every
+1. Postgres accepts a connection. If not, exit 1 before any request: a
    validate would miss the cache and spend provider quota.
 2. ``POST /api/v2/validate`` twice with one fixed address; both 200.
 3. Both requests' ``audit_log`` rows land (matched by ``X-Request-ID``), and the
@@ -19,8 +18,10 @@ made-up address risks an HTTP 400 from the provider, which is ``error``, never
 cached, and the repeat could never hit. The first call after the 30-day TTL
 spends one provider call; later ones are hits.
 
-A knob ``health`` line (``.skills/patching-hosts``): it runs as the invoking
-user, never root, under the skill's 60 s limit. ``API_KEY`` and
+A knob ``recovery`` line (``.skills/patching-hosts``), never a ``health`` one:
+it writes audit rows, so it runs only after a held step restarts Postgres and
+after the reboot (gregoryfoster/skills#423). It runs as the invoking user, never
+root, under the skill's 60 s limit. ``API_KEY`` and
 ``VALIDATION_CACHE_DSN`` come only from /etc/address-validator/.env
 (root:exedev 0640), the service's own ``EnvironmentFile=``, never the caller's
 environment: a shell still exporting the test DSN would read ``audit_log`` from
