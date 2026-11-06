@@ -20,9 +20,12 @@ window Thu 18:00-21:00
 # libpostal-probe.timer fires every 2 min and has no quiet range: a read-only
 # liveness probe, declared in FREQUENT_PROBES (the test) with its sizing (#256).
 quiet 02:30-06:15
-# wslcb-licensing-tracker's backfills call this host (~07:30, ~13:35 UTC).
-quiet 07:25-08:15
-quiet 13:25-14:15
+# wslcb-licensing-tracker calls this host from timers on America/Los_Angeles
+# time, so each range covers both UTC offsets (PDT -7, PST -8), 5 min before to
+# 45 min after: its scraper's backfills at 00:30 and 06:30 PT (07:30/08:30 and
+# 13:30/14:30 UTC) and its address validation at 02:00 PT (09:00/10:00 UTC).
+quiet 07:25-10:45
+quiet 13:25-15:15
 
 # First start after boot once failed on a not-yet-ready dependency and
 # Restart=on-failure recovered it (#239): --post-boot reads its NRestarts.
@@ -45,7 +48,10 @@ health curl -sf -o /dev/null --max-time 10 'http://localhost:4400/parse?address=
 # Recovery, not liveness: the app fails open while Postgres is down (step 0,
 # #235). One public address validated twice, both audit rows present, cache
 # hit on the repeat. Exits 1 before any request while Postgres isn't accepting.
-health /home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/patching_recovery_check.py
+# A recovery line, not a health line: it writes audit rows and can spend a
+# provider call, so it runs only after a step restarts Postgres and after the
+# reboot, never on every probe (knob.md, gregoryfoster/skills#423).
+recovery /home/exedev/address-validator/.venv/bin/python /home/exedev/address-validator/infra/patching_recovery_check.py
 
 # Recovery point: the nightly backup (#240, docs/RECOVERY.md). recovery-point.sh
 # starts it and needs that run to succeed, instead of writing its own dump,

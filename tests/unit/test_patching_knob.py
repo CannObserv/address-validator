@@ -344,28 +344,52 @@ FORBIDDEN_IN_COMMANDS = (
 
 
 def test_no_knob_command_escalates_or_holds_a_secret() -> None:
-    """``health``/``inflight`` run as the invoking user by design; a ``sudo`` in
-    one hands root to whoever commits the knob. The API key is read by the
-    recovery check from the env file, never written here."""
-    commands = [" ".join(words) for words in _named("health") + _named("inflight")]
+    """``health``/``recovery``/``inflight`` run as the invoking user by design; a
+    ``sudo`` in one hands root to whoever commits the knob. The API key is read
+    by the recovery check from the env file, never written here."""
+    commands = [
+        " ".join(words) for words in _named("health") + _named("recovery") + _named("inflight")
+    ]
     assert commands
     for command in commands:
         for word in FORBIDDEN_IN_COMMANDS:
             assert word not in command, f"{word!r} in a knob command: {command}"
 
 
-def test_health_proves_recovery_not_just_liveness() -> None:
-    """The app fails open while Postgres is down (#235)."""
-    commands = [shlex.split(" ".join(words)) for words in _named("health")]
+def test_recovery_is_proved_not_just_liveness() -> None:
+    """The app fails open while Postgres is down (#235), so a ``recovery`` line
+    proves the database path came back. It writes audit rows and can spend a
+    provider call, so it is never a ``health`` line, which every probe runs
+    (gregoryfoster/skills#423)."""
     script = "infra/patching_recovery_check.py"
-    recovery = [c for c in commands if any(w.endswith(script) for w in c)]
-    assert len(recovery) == 1
-    assert recovery[0] == [
-        f"{DEPLOY_ROOT}/.venv/bin/python",
-        f"{DEPLOY_ROOT}/infra/patching_recovery_check.py",
+    recovery = [shlex.split(" ".join(words)) for words in _named("recovery")]
+    assert recovery == [
+        [
+            f"{DEPLOY_ROOT}/.venv/bin/python",
+            f"{DEPLOY_ROOT}/infra/patching_recovery_check.py",
+        ]
     ]
     assert (INFRA / "patching_recovery_check.py").is_file()
-    assert any("/api/v2/health" in " ".join(c) for c in commands)
+    health = [shlex.split(" ".join(words)) for words in _named("health")]
+    assert not any(w.endswith(script) for c in health for w in c)
+    assert any("/api/v2/health" in " ".join(c) for c in health)
+
+
+# wslcb-licensing-tracker's timers run on America/Los_Angeles time (UTC-7 in
+# PDT, UTC-8 in PST); the knob is UTC, so each call must sit in a quiet range at
+# both offsets. Pacific (hour, minute) -> what calls.
+WSLCB_CALLS_PT = {(0, 30): "scraper backfill", (6, 30): "scraper backfill", (2, 0): "validation"}
+
+
+@pytest.mark.parametrize("offset_hours", [7, 8], ids=["PDT", "PST"])
+def test_wslcb_calls_fall_in_a_quiet_range_in_both_dst_offsets(offset_hours: int) -> None:
+    quiet = [_span(words[0]) for words in _named("quiet") if len(words) == 1]
+    for (hour, minute), what in WSLCB_CALLS_PT.items():
+        at = ((hour + offset_hours) % 24) * 60 + minute
+        assert any(start <= at and at + 30 <= end for start, end in quiet), (
+            f"wslcb {what} at {hour:02d}:{minute:02d} PT ({at // 60:02d}:{at % 60:02d} UTC) "
+            "has no quiet range covering its first 30 min"
+        )
 
 
 def test_the_datastore_is_the_production_database_only() -> None:
