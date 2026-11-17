@@ -267,7 +267,7 @@ or one with a field of the wrong JSON type, GH #278)
 and delegates to the next provider. It also catches `ProviderBadRequestError` (upstream HTTP
 400, e.g. USPS or Google rejecting a malformed input) and tries the next provider; only if every
 provider in the chain raises `ProviderBadRequestError` does the route handler return
-`validation.status="error"`. Nothing else is caught, so a client must never leak a raw `httpx`
+`validation.status="error"`. Nothing else is caught, so a client must never leak a raw `httpx2`
 exception: it would skip the remaining providers and return HTTP 500.
 
 ### Retry-After on exhaustion

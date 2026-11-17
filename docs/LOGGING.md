@@ -76,7 +76,7 @@ On the host, `journalctl -u address-validator -p warning` shows full tracebacks.
 | Google unrecognised `uspsData.dpvConfirmation`, mapped to `undetermined` (once per distinct code per process; all longer values share one line, GH #254) | `WARNING` | `services.validation.google_client` | the code (≤ 2 chars; longer: length only) + its length, `request_id` |
 | Google credential refresh failed transiently — token endpoint 5xx after google-auth's retries, or a metadata-server network failure (Compute Engine credentials), raised as `ProviderTransientError` (GH #257) | `WARNING` | `services.validation.google_client` | fixed message only — the exception carries the token endpoint's error body, `request_id` |
 | Google `uspsData.errorMessage` present — USPS processing suspended (once per `cassProcessed` value per process, GH #254) | `WARNING` | `services.validation.google_client` | `cassProcessed=` only; the message text is never logged, `request_id` |
-| Provider request failed — any `httpx.RequestError` (connect error, timeout, undecodable body) or google-auth `TransportError`, raised as `ProviderTransientError` (GH #257) | `WARNING` | `services.validation.usps_client` / `services.validation.google_client` | provider name, exception class name only — never `str(exc)`, `request_id` |
+| Provider request failed — any `httpx2.RequestError` (connect error, timeout, undecodable body) or google-auth `TransportError`, raised as `ProviderTransientError` (GH #257) | `WARNING` | `services.validation.usps_client` / `services.validation.google_client` | provider name, exception class name only — never `str(exc)`, `request_id` |
 | Provider 2xx body unusable — non-JSON, not a JSON object, a USPS token response without a usable `access_token`/`expires_in` (GH #271), or a field of the wrong JSON type or a non-finite number (GH #278); raised as `ProviderTransientError` | `WARNING` | `services.validation.usps_client` / `services.validation.google_client` | provider name, fixed reason, field name, JSON type name only — never the body, a field's value or decoder message (address; USPS token), `request_id` |
 | Provider rate-limited / at-capacity / transient / bad request (chain fallback) | `WARNING` | `services.validation.chain_provider` | provider class name, exception class name, retry-after seconds (all but bad request, GH #270), `request_id` |
 | Single provider (no chain) at-capacity / transient — returned as 429 (GH #268) | `WARNING` | `routers.v2.validate` | provider name, exception class name, retry-after seconds as sent in `Retry-After`, `request_id` |
@@ -89,9 +89,9 @@ On the host, `journalctl -u address-validator -p warning` shows full tracebacks.
 | Application startup failed (any exception before the lifespan `yield`; re-raised, so uvicorn exits) | `ERROR` | `main` | fixed message; `exc_info` + `exc_type` — the tail sends only `exc_type` (#252) |
 | libpostal sidecar reachable at boot | `INFO` | `main` | `libpostal_url` |
 | libpostal sidecar not reachable at boot (starts degraded; CA parse → 503) | `WARNING` | `main` | `libpostal_url`, reason — exception class name (`RemoteProtocolError`, `ConnectError`, `ReadTimeout`, `RuntimeError`) or `HTTP <status>`, never `str(exc)` (#244) |
-| libpostal sidecar unavailable (any `httpx.RequestError`, incl. disconnect during warmup — #239) | `WARNING` | `services.libpostal_client` | httpx error message (never carries the request URL), `request_id` |
+| libpostal sidecar unavailable (any `httpx2.RequestError`, incl. disconnect during warmup — #239) | `WARNING` | `services.libpostal_client` | httpx2 error message (never carries the request URL), `request_id` |
 | libpostal sidecar non-2xx | `WARNING` | `services.libpostal_client` | status code only — `str(HTTPStatusError)` embeds the address (#185), `request_id` |
-| libpostal client closed (`RuntimeError`) | `WARNING` | `services.libpostal_client` | httpx error message (fixed text, no URL), `request_id` |
+| libpostal client closed (`RuntimeError`) | `WARNING` | `services.libpostal_client` | httpx2 error message (fixed text, no URL), `request_id` |
 | libpostal sidecar non-JSON body / unexpected JSON shape | `WARNING` | `services.libpostal_client` | fixed message — the body is a parse of the address, `request_id` |
 
 ## Levels
@@ -100,7 +100,7 @@ On the host, `journalctl -u address-validator -p warning` shows full tracebacks.
 |---|---|---|
 | `address_validator.*` and every other app/library logger (via root) | `LOG_LEVEL` env var, applied by `configure_logging()` at `main` import | `INFO` |
 | `uvicorn`, `uvicorn.access`, `uvicorn.error` | uvicorn's `--log-level` flag; otherwise `log_config.json` | `INFO` |
-| `httpx`, `httpcore` | **pinned** — not configurable (see below) | `WARNING` |
+| `httpx2`, `httpcore2` | **pinned** — not configurable (see below) | `WARNING` |
 
 **`--log-level` does not affect app loggers.** Uvicorn applies it to `uvicorn.error`, `uvicorn.access`, and `uvicorn.asgi` only — it never touches the root logger. Use `LOG_LEVEL` for the app tree:
 
@@ -115,15 +115,15 @@ LOG_LEVEL=DEBUG
 
 ### Pinned loggers — a PII guard, not a noise filter
 
-`httpx` and `httpcore` are held at `WARNING` **regardless of `LOG_LEVEL`**, in `core/logging.py::PINNED_LOGGER_LEVELS` and mirrored in `log_config.json` so the uvicorn boot path applies them too.
+`httpx2` and `httpcore2` are held at `WARNING` **regardless of `LOG_LEVEL`**, in `core/logging.py::PINNED_LOGGER_LEVELS` and mirrored in `log_config.json` so the uvicorn boot path applies them too. They were `httpx` and `httpcore` until the process moved to httpx2 (#420), which renamed its loggers: a pin left on the old names silences nothing.
 
-`httpx` logs the full request URL at `INFO`, and the libpostal sidecar call is `GET /parse?address=<the user's address>` ([`services/libpostal_client.py`](../src/address_validator/services/libpostal_client.py)) — so an unpinned `httpx` writes Canadian address content verbatim into every log line, breaking the no-PII-at-INFO+ rule. `httpcore` adds connection and header detail at `DEBUG` for the same requests.
+`httpx2` logs the full request URL at `INFO`, and two calls carry the user's address in the query string: the libpostal sidecar's `GET /parse?address=<the user's address>` ([`services/libpostal_client.py`](../src/address_validator/services/libpostal_client.py)) and USPS's `GET …/addresses/v3/address?streetAddress=…` ([`services/validation/usps_client.py`](../src/address_validator/services/validation/usps_client.py)). An unpinned `httpx2` writes that address content verbatim into every log line, breaking the no-PII-at-INFO+ rule. `httpcore2` adds connection and header detail at `DEBUG` for the same requests.
 
-The pin is deliberately not derived from `LOG_LEVEL`: raising app verbosity to debug a parse must not be able to reopen a PII leak. Real transport failures still surface — `WARNING` and above pass through. `tests/unit/core/test_logging.py::TestPiiPinnedLoggers` pins all of this, including that the JSON config mirrors the Python constant.
+The pin is deliberately not derived from `LOG_LEVEL`: raising app verbosity to debug a parse must not be able to reopen a PII leak. Real transport failures still surface — `WARNING` and above pass through. `tests/unit/core/test_logging.py::TestPiiPinnedLoggers` pins all of this, including that the JSON config mirrors the Python constant and that a real httpx2 request logs nothing under `LOG_LEVEL=DEBUG`.
 
 A side benefit: because these two are pinned, `LOG_LEVEL=DEBUG` is effectively app-scoped and readable rather than drowned in per-request transport chatter.
 
-USPS and Google are unaffected — they `POST`, so the address is in the request body and `httpx` logs only method and URL.
+Only Google's address call and the USPS OAuth token call `POST`; their bodies, which `httpx2` never logs, carry the address and the client secret respectively. USPS's address call is a `GET` with the address in the query string, so it relies on the pin as much as libpostal does.
 
 Recon `extras=` carries structural labels only (key names, length buckets, type names) — never raw USPS values. PII safety is enforced by `_summarise_shape` in `services/validation/usps_client.py`.
 

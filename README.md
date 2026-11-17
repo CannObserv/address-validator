@@ -261,7 +261,7 @@ src/address_validator/
     audit.py                   # Audit ContextVars + write_audit_row
     training_candidates.py     # Training candidate ContextVars + write_training_candidate
     training_batches.py        # Batch lifecycle state machine + CRUD
-    libpostal_client.py        # Async httpx client for libpostal sidecar (port 4400)
+    libpostal_client.py        # Async httpx2 client for libpostal sidecar (port 4400)
     street_splitter.py         # Bilingual CA street component splitter
     spec.py                    # ISO 19160-4 spec identifiers
     component_profiles.py      # ISO 19160-4 ↔ USPS Pub 28 key translation
