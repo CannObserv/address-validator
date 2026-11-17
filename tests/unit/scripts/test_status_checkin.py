@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 import pytest
 import status_checkin as sc
 
@@ -113,7 +113,7 @@ def test_one_retry_on_a_5xx(creds):
 
 
 def test_one_retry_on_a_transport_error(creds, caplog):
-    post = Recorder(httpx.ConnectError("boom"), httpx.ConnectError("boom"))
+    post = Recorder(httpx2.ConnectError("boom"), httpx2.ConnectError("boom"))
     with caplog.at_level(logging.ERROR):
         assert not sc.post_checkin("ok", {}, environ=_env(creds), post=post)
     assert len(post.calls) == 2

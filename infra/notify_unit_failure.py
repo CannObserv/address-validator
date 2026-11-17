@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-import httpx
+import httpx2
 from journal_logging import configure_logging
 from notifier_client import NotifierClient, NotifierError
 from notifier_dispatch import ConfigError, NotifierConfig, dispatch
@@ -48,7 +48,7 @@ logger = logging.getLogger("notify_unit_failure")
 TEMPLATE_VAR = "NOTIFIER_UNIT_FAILURE_TEMPLATE_ID"
 TAIL_LINES = 10
 TAIL_LINE_CHARS = 500
-# httpx timeouts are per phase, so attempts alone do not bound a run. This does,
+# httpx2 timeouts are per phase, so attempts alone do not bound a run. This does,
 # with the 10s journalctl call still inside the unit's TimeoutStartSec=90.
 RUN_BUDGET_SECONDS = 60
 JOURNALCTL = "/usr/bin/journalctl"
@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None, env: Mapping[str, str] | None = None) ->
         failure = failure_from_env(unit, env)
         tail = journal_tail(failure)
         asyncio.run(_within_budget(notify(config, failure, tail, host=socket.gethostname())))
-    except (ConfigError, NotifierError, httpx.HTTPError, TimeoutError) as exc:
+    except (ConfigError, NotifierError, httpx2.HTTPError, TimeoutError) as exc:
         logger.warning(
             "notifier dispatch for %s failed (%s: %s); the journal line stands",
             unit,

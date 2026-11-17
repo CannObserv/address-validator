@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 from audit_retention import compute_cutoff, parse_retention_days
 from journal_logging import configure_logging
 from notifier_client import NotifierClient, NotifierError
@@ -155,7 +155,7 @@ async def _alert(
                 },
                 client_factory=client_factory,
             )
-    except (NotifierError, httpx.HTTPError, TimeoutError) as exc:
+    except (NotifierError, httpx2.HTTPError, TimeoutError) as exc:
         logger.warning(
             "archive-age dispatch failed (%s: %s)",
             type(exc).__name__,

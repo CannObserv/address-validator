@@ -43,9 +43,10 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import create_async_engine
+from tls import trusted
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -60,7 +61,7 @@ HTTP_TIMEOUT_S = 15
 AUDIT_WAIT_S = 10
 POLL_S = 0.25
 # The skill TERMs a knob command at 60 s and reports only "timed out", losing
-# the step. httpx's timeout bounds each phase (connect, read, ...), not a call,
+# the step. httpx2's timeout bounds each phase (connect, read, ...), not a call,
 # so the per-call limits don't add up to a bound: this does, with startup to
 # spare.
 CHECK_BUDGET_S = 45
@@ -127,7 +128,7 @@ async def _postgres_unready(engine: AsyncEngine) -> str | None:
     return None
 
 
-async def _validate_twice(client: httpx.AsyncClient, api_key: str) -> list[str] | str:
+async def _validate_twice(client: httpx2.AsyncClient, api_key: str) -> list[str] | str:
     """Both calls' request IDs, or the failed step."""
     request_ids: list[str] = []
     for n in (1, 2):
@@ -137,9 +138,9 @@ async def _validate_twice(client: httpx.AsyncClient, api_key: str) -> list[str] 
                 json={"address": ADDRESS, "country": "US"},
                 headers={"X-API-Key": api_key},
             )
-        except httpx.HTTPError as exc:
+        except httpx2.HTTPError as exc:
             return f"validate #{n} failed ({type(exc).__name__})"
-        if resp.status_code != httpx.codes.OK:
+        if resp.status_code != httpx2.codes.OK:
             return f"validate #{n} returned HTTP {resp.status_code}"
         request_id = resp.headers.get("x-request-id")
         if not request_id:
@@ -170,7 +171,7 @@ async def _audit_rows(
 
 
 async def check(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     engine: AsyncEngine,
     api_key: str,
     *,
@@ -208,7 +209,7 @@ async def run(
     env_file: Path = ENV_FILE,
     *,
     base_url: str = BASE_URL,
-    transport: httpx.AsyncBaseTransport | None = None,
+    transport: httpx2.AsyncBaseTransport | None = None,
     audit_wait_s: float = AUDIT_WAIT_S,
 ) -> int:
     try:
@@ -222,8 +223,8 @@ async def run(
         print(f"not recovered: config: VALIDATION_CACHE_DSN unusable ({type(exc).__name__})")
         return 1
     try:
-        async with httpx.AsyncClient(
-            base_url=base_url, transport=transport, timeout=HTTP_TIMEOUT_S
+        async with httpx2.AsyncClient(
+            base_url=base_url, transport=transport, timeout=HTTP_TIMEOUT_S, verify=trusted()
         ) as client:
             async with asyncio.timeout(CHECK_BUDGET_S):
                 reason = await check(client, engine, api_key, audit_wait_s=audit_wait_s)

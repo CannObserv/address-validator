@@ -39,18 +39,23 @@ DEFAULT_LOG_LEVEL = logging.INFO
 
 #: Third-party loggers pinned regardless of ``LOG_LEVEL``.
 #:
-#: ``httpx`` logs the full request URL at INFO, and the libpostal sidecar call is
-#: ``GET /parse?address=<the user's address>`` — so an unpinned ``httpx`` writes
-#: Canadian address content verbatim into every log line, which AGENTS.md
-#: forbids at INFO or above. ``httpcore`` dumps connection and header detail at
-#: DEBUG for the same requests.
+#: ``httpx2`` logs the full request URL at INFO, and two calls carry the user's
+#: address in the query string: the libpostal sidecar's
+#: ``GET /parse?address=<address>`` and USPS's ``GET …/address?streetAddress=…``.
+#: So an unpinned ``httpx2`` writes address content verbatim into every log line,
+#: which AGENTS.md forbids at INFO or above. ``httpcore2`` dumps connection and
+#: header detail at DEBUG for the same requests.
+#:
+#: httpx2 renamed httpx's loggers (``httpx`` → ``httpx2``, ``httpcore.*`` →
+#: ``httpcore2.*``); a pin on the old names silences nothing (#420). Nothing in
+#: the process loads httpx any more (``tests/ci/test_http_stack.py``).
 #:
 #: The pin is deliberately **not** derived from ``LOG_LEVEL``: raising app
 #: verbosity to debug a parse must not be able to reopen a PII leak. Mirrored in
 #: ``log_config.json`` so the uvicorn boot path applies it too.
 PINNED_LOGGER_LEVELS: dict[str, int] = {
-    "httpx": logging.WARNING,
-    "httpcore": logging.WARNING,
+    "httpx2": logging.WARNING,
+    "httpcore2": logging.WARNING,
 }
 
 

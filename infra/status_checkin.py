@@ -37,7 +37,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlsplit
 
-import httpx
+import httpx2
+from tls import trusted
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -62,7 +63,7 @@ _HTTP_OK_MIN, _HTTP_OK_MAX, _HTTP_SERVER_ERROR = 200, 299, 500
 
 def _http_post(url: str, payload: dict, headers: dict, timeout: float) -> int:
     """One POST, returning the status code. The seam the tests replace."""
-    with httpx.Client(timeout=timeout) as client:
+    with httpx2.Client(timeout=timeout, verify=trusted()) as client:
         return client.post(url, json=payload, headers=headers).status_code
 
 
@@ -139,7 +140,7 @@ def _post_checkin(  # noqa: PLR0911 — one return per refusal, each logged
     for _ in range(_ATTEMPTS):
         try:
             code = post(url, payload, {"X-API-Key": key}, TIMEOUT_SECONDS)
-        except httpx.TransportError as exc:
+        except httpx2.TransportError as exc:
             failure = type(exc).__name__
             continue
         if _HTTP_OK_MIN <= code <= _HTTP_OK_MAX:

@@ -1,8 +1,8 @@
-"""Unit tests for LibpostalClient — httpx calls are mocked."""
+"""Unit tests for LibpostalClient — httpx2 calls are mocked."""
 
 from unittest.mock import AsyncMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from address_validator.services.libpostal_client import (
@@ -10,12 +10,12 @@ from address_validator.services.libpostal_client import (
     LibpostalUnavailableError,
 )
 
-_FAKE_REQUEST = httpx.Request("GET", "http://localhost:4400/parse")
+_FAKE_REQUEST = httpx2.Request("GET", "http://localhost:4400/parse")
 
 
-def _ok_response(data: list[dict]) -> httpx.Response:
-    """Build an httpx.Response with the request set so raise_for_status() works."""
-    resp = httpx.Response(200, json=data, request=_FAKE_REQUEST)
+def _ok_response(data: list[dict]) -> httpx2.Response:
+    """Build an httpx2.Response with the request set so raise_for_status() works."""
+    resp = httpx2.Response(200, json=data, request=_FAKE_REQUEST)
     return resp
 
 
@@ -76,14 +76,14 @@ class TestTagMapping:
 
     async def test_connection_error_raises_unavailable(self, client: LibpostalClient) -> None:
         with (
-            patch.object(client._http, "get", side_effect=httpx.ConnectError("refused")),
+            patch.object(client._http, "get", side_effect=httpx2.ConnectError("refused")),
             pytest.raises(LibpostalUnavailableError),
         ):
             await client.parse("123 Main St")
 
     async def test_timeout_raises_unavailable(self, client: LibpostalClient) -> None:
         with (
-            patch.object(client._http, "get", side_effect=httpx.TimeoutException("timeout")),
+            patch.object(client._http, "get", side_effect=httpx2.TimeoutException("timeout")),
             pytest.raises(LibpostalUnavailableError),
         ):
             await client.parse("123 Main St")
@@ -91,14 +91,14 @@ class TestTagMapping:
     async def test_http_status_error_message_omits_the_address(
         self, client: LibpostalClient
     ) -> None:
-        """str(httpx.HTTPStatusError) embeds the full request URL, and the
+        """str(httpx2.HTTPStatusError) embeds the full request URL, and the
         sidecar is called as GET /parse?address=<user address>. The raised
         error must carry the status code only — the address must not ride along
         inside an exception message (GH #185)."""
         address = "4711 Yonge Street Apt 1203, Toronto ON M2N 6K8"
-        request = httpx.Request("GET", f"http://localhost:4400/parse?address={address}")
-        status_error = httpx.HTTPStatusError(
-            "boom", request=request, response=httpx.Response(400, request=request)
+        request = httpx2.Request("GET", f"http://localhost:4400/parse?address={address}")
+        status_error = httpx2.HTTPStatusError(
+            "boom", request=request, response=httpx2.Response(400, request=request)
         )
 
         with (
@@ -115,10 +115,10 @@ def _disconnecting_client() -> LibpostalClient:
     """A client whose transport drops the connection without a response —
     what Docker's port proxy does while the libpostal container warms up (GH #239)."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.RemoteProtocolError("Server disconnected without sending a response.")
 
-    return LibpostalClient(transport=httpx.MockTransport(handler))
+    return LibpostalClient(transport=httpx2.MockTransport(handler))
 
 
 class TestTransportErrors:
@@ -134,10 +134,10 @@ class TestTransportErrors:
         assert await client.health_check() is False
 
     async def test_parse_non_json_body_raises_unavailable(self) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text="<html>warming up</html>")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, text="<html>warming up</html>")
 
-        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        client = LibpostalClient(transport=httpx2.MockTransport(handler))
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
 
@@ -153,10 +153,10 @@ class TestTransportErrors:
         ids=["object", "list-of-strings", "string", "null-value", "unhashable-label"],
     )
     async def test_parse_wrong_shape_json_raises_unavailable(self, body: object) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=body)
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=body)
 
-        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        client = LibpostalClient(transport=httpx2.MockTransport(handler))
         with pytest.raises(LibpostalUnavailableError):
             await client.parse("123 Main St")
 
@@ -166,30 +166,30 @@ class TestProbe:
 
     @pytest.mark.parametrize(
         "exc_type",
-        [httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout],
+        [httpx2.RemoteProtocolError, httpx2.ConnectError, httpx2.ReadTimeout],
         ids=lambda t: t.__name__,
     )
     async def test_probe_transport_error_returns_class_name(
-        self, exc_type: type[httpx.RequestError]
+        self, exc_type: type[httpx2.RequestError]
     ) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
+        def handler(request: httpx2.Request) -> httpx2.Response:
             raise exc_type("detail that must not appear in the reason", request=request)
 
-        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        client = LibpostalClient(transport=httpx2.MockTransport(handler))
         assert await client.probe() == exc_type.__name__
 
     async def test_probe_non_2xx_returns_http_status(self) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(503)
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(503)
 
-        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        client = LibpostalClient(transport=httpx2.MockTransport(handler))
         assert await client.probe() == "HTTP 503"
 
     async def test_probe_2xx_returns_none(self) -> None:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=[])
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=[])
 
-        client = LibpostalClient(transport=httpx.MockTransport(handler))
+        client = LibpostalClient(transport=httpx2.MockTransport(handler))
         assert await client.probe() is None
 
     async def test_probe_after_aclose_returns_runtime_error(self, client: LibpostalClient) -> None:
@@ -198,7 +198,7 @@ class TestProbe:
 
 
 class TestClosedClient:
-    """httpx raises RuntimeError on a closed client (e.g. after lifespan shutdown)."""
+    """httpx2 raises RuntimeError on a closed client (e.g. after lifespan shutdown)."""
 
     async def test_parse_after_aclose_raises_unavailable(self, client: LibpostalClient) -> None:
         await client.aclose()

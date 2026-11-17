@@ -4,7 +4,7 @@ import os
 from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -88,7 +88,7 @@ def admin_headers() -> dict[str, str]:
 
 
 # -- Real providers whose network layer fails (GH #257) -----------------------
-# Real client + provider, mocked httpx: exercises the clients' error mapping,
+# Real client + provider, mocked httpx2: exercises the clients' error mapping,
 # not a stub's. Shared by the chain unit tests and the route integration tests.
 
 
@@ -102,9 +102,9 @@ def _quota_guard(name: str) -> QuotaGuard:
 
 def unreachable_usps() -> USPSProvider:
     """USPS provider whose every request is refused (token fetch and address call)."""
-    http = AsyncMock(spec=httpx.AsyncClient)
-    http.post.side_effect = httpx.ConnectError("refused")
-    http.get.side_effect = httpx.ConnectError("refused")
+    http = AsyncMock(spec=httpx2.AsyncClient)
+    http.post.side_effect = httpx2.ConnectError("refused")
+    http.get.side_effect = httpx2.ConnectError("refused")
     return USPSProvider(
         USPSClient(
             consumer_key="key",
@@ -117,8 +117,8 @@ def unreachable_usps() -> USPSProvider:
 
 def unreachable_google() -> GoogleProvider:
     """Google provider whose every request times out."""
-    http = AsyncMock(spec=httpx.AsyncClient)
-    http.post.side_effect = httpx.ReadTimeout("slow")
+    http = AsyncMock(spec=httpx2.AsyncClient)
+    http.post.side_effect = httpx2.ReadTimeout("slow")
     creds = MagicMock(valid=True, token="tok")
     return GoogleProvider(
         GoogleClient(credentials=creds, http_client=http, quota_guard=_quota_guard("google"))
@@ -133,16 +133,16 @@ UNUSABLE_BODY = b"<html><body>Gateway: 123 Main St</body></html>"
 _USPS_TOKEN_BODY = b'{"access_token": "tok", "expires_in": 3600}'
 
 
-def ok_response(content: bytes) -> httpx.Response:
+def ok_response(content: bytes) -> httpx2.Response:
     """A real HTTP 200 carrying *content*, so ``resp.json()`` decodes for real."""
-    return httpx.Response(200, content=content, request=httpx.Request("GET", "https://test"))
+    return httpx2.Response(200, content=content, request=httpx2.Request("GET", "https://test"))
 
 
 def unusable_usps(
     *, token: bytes = _USPS_TOKEN_BODY, address: bytes = UNUSABLE_BODY
 ) -> USPSProvider:
     """USPS provider whose token or address call answers 200 with an unusable body."""
-    http = AsyncMock(spec=httpx.AsyncClient)
+    http = AsyncMock(spec=httpx2.AsyncClient)
     http.post.return_value = ok_response(token)
     http.get.return_value = ok_response(address)
     return USPSProvider(
@@ -157,7 +157,7 @@ def unusable_usps(
 
 def unusable_google(body: bytes = UNUSABLE_BODY) -> GoogleProvider:
     """Google provider whose API call answers 200 with an unusable body."""
-    http = AsyncMock(spec=httpx.AsyncClient)
+    http = AsyncMock(spec=httpx2.AsyncClient)
     http.post.return_value = ok_response(body)
     creds = MagicMock(valid=True, token="tok")
     return GoogleProvider(

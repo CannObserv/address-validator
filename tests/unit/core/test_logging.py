@@ -2,11 +2,12 @@
 
 Pins six things:
 
-1. **The PII guard.** ``httpx``/``httpcore`` stay at WARNING regardless of
+1. **The PII guard.** ``httpx2``/``httpcore2`` stay at WARNING regardless of
    ``LOG_LEVEL``, and ``log_config.json`` mirrors the pin so the uvicorn boot
    path applies it too. The libpostal sidecar is called as
-   ``GET /parse?address=<user address>`` and httpx logs full request URLs at
-   INFO, so an unpinned httpx writes address content into every log line.
+   ``GET /parse?address=<user address>``, USPS as ``GET …?streetAddress=…``,
+   and httpx2 logs full request URLs at INFO, so an unpinned httpx2 writes
+   address content into every log line (#185; the names moved with #420).
 2. App records render as JSON carrying ``{timestamp, level, logger, message,
    request_id}``. A bare ``JsonFormatter()`` derives its keys from the default
    ``"%(message)s"`` fmt and silently drops level, logger, and timestamp.
@@ -31,6 +32,7 @@ import os
 import sys
 from pathlib import Path
 
+import httpx2
 import pytest
 
 from address_validator.core.logging import (
@@ -196,9 +198,13 @@ class TestLogLevel:
 
 
 class TestPiiPinnedLoggers:
-    """`httpx` logs the full request URL at INFO, and the libpostal sidecar call
-    is `GET /parse?address=<user address>` — so an unpinned httpx writes address
-    content into every line, which AGENTS.md forbids at INFO+."""
+    """`httpx2` logs the full request URL at INFO, and the libpostal sidecar call
+    is `GET /parse?address=<user address>` (USPS's is a GET too) — so an
+    unpinned httpx2 writes address content into every line, which AGENTS.md
+    forbids at INFO+.
+
+    httpx2 renamed httpx's loggers: `httpx` → `httpx2`, `httpcore.*` →
+    `httpcore2.*`. A pin left on the old names silences nothing (#420)."""
 
     #: Shaped exactly like the real leaked line (see libpostal_client.py:96).
     LEAK = (
@@ -206,9 +212,9 @@ class TestPiiPinnedLoggers:
         '+Apt+1203%2C+Toronto+ON+M2N+6K8 "HTTP/1.1 200 OK"'
     )
 
-    def test_address_bearing_httpx_record_is_suppressed(self, capsys, restore_root_logger) -> None:
+    def test_address_bearing_httpx2_record_is_suppressed(self, capsys, restore_root_logger) -> None:
         configure_logging()
-        logging.getLogger("httpx").info(self.LEAK)
+        logging.getLogger("httpx2").info(self.LEAK)
 
         out = capsys.readouterr().out
         assert out == "", f"address content reached the log: {out!r}"
@@ -220,15 +226,31 @@ class TestPiiPinnedLoggers:
         monkeypatch.setenv(LOG_LEVEL_ENV, "DEBUG")
         configure_logging()
 
-        logging.getLogger("httpx").info(self.LEAK)
-        logging.getLogger("httpcore.connection").debug("connect_tcp.started host=...")
+        logging.getLogger("httpx2").info(self.LEAK)
+        logging.getLogger("httpcore2.connection").debug("connect_tcp.started host=...")
+        logging.getLogger("httpcore2.http11").debug("send_request_headers.started")
 
         assert capsys.readouterr().out == ""
+
+    async def test_a_real_httpx2_request_logs_nothing_under_debug(
+        self, monkeypatch: pytest.MonkeyPatch, capsys, restore_root_logger
+    ) -> None:
+        """Whatever logger httpx2 really uses: a pin on a name it doesn't use
+        passes the cases above and leaks here."""
+        monkeypatch.setenv(LOG_LEVEL_ENV, "DEBUG")
+        configure_logging()
+
+        transport = httpx2.MockTransport(lambda request: httpx2.Response(200, json=[]))
+        async with httpx2.AsyncClient(transport=transport) as client:
+            await client.get("http://localhost:4400/parse", params={"address": "4711 Yonge Street"})
+
+        out = capsys.readouterr().out
+        assert "Yonge" not in out, f"address content reached the log: {out!r}"
 
     def test_pinned_loggers_still_report_real_problems(self, capsys, restore_root_logger) -> None:
         """WARNING, not silence — a sidecar failure must still surface."""
         configure_logging()
-        logging.getLogger("httpx").warning("sidecar unreachable")
+        logging.getLogger("httpx2").warning("sidecar unreachable")
 
         assert json.loads(capsys.readouterr().out)["message"] == "sidecar unreachable"
 

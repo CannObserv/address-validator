@@ -3,7 +3,7 @@
 import logging
 from unittest.mock import AsyncMock, patch
 
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -89,11 +89,11 @@ class TestLifespanLibpostal:
         WARNING, not exit (GH #239)."""
         monkeypatch.delenv("VALIDATION_PROVIDER", raising=False)
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.RemoteProtocolError("Server disconnected without sending a response.")
 
         def disconnecting_client(base_url: str) -> LibpostalClient:
-            return LibpostalClient(base_url=base_url, transport=httpx.MockTransport(handler))
+            return LibpostalClient(base_url=base_url, transport=httpx2.MockTransport(handler))
 
         # Engine isolation: see TestLifespanValidateConfig.test_valid_none_provider_starts_cleanly.
         with (

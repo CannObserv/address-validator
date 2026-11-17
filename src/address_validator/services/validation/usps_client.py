@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
+import httpx2
 
 from address_validator.services.validation._helpers import _DPV_CODE_MAX_LOG_LEN
 from address_validator.services.validation._rate_limit import (
@@ -124,7 +124,7 @@ class USPSClient:
     consumer_secret:
         OAuth2 client secret.
     http_client:
-        Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
+        Shared :class:`httpx2.AsyncClient` instance (caller owns lifecycle).
     quota_guard:
         A :class:`~services.validation._rate_limit.QuotaGuard` instance
         for rate limiting.
@@ -143,7 +143,7 @@ class USPSClient:
         self,
         consumer_key: str,
         consumer_secret: str,
-        http_client: httpx.AsyncClient,
+        http_client: httpx2.AsyncClient,
         quota_guard: QuotaGuard,
         api_base: str = _DEFAULT_API_BASE,
     ) -> None:
@@ -189,7 +189,7 @@ class USPSClient:
             )
             try:
                 resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
+            except httpx2.HTTPStatusError as exc:
                 # Token endpoint failures share the same operator-vs-outage
                 # semantics as the address endpoint: 401/403 → bad-request
                 # (creds bad), 5xx → transient (USPS outage).
@@ -276,12 +276,12 @@ class USPSClient:
                     headers={"Authorization": f"Bearer {token}"},
                     params=params,
                 )
-            except httpx.RequestError as exc:
+            except httpx2.RequestError as exc:
                 # Covers the token fetch too: both are network calls (GH #257).
                 _raise_for_request_error(exc, provider="usps", logger=logger)
             try:
                 resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
+            except httpx2.HTTPStatusError as exc:
                 if exc.response.status_code == _HTTP_BAD_REQUEST:
                     logger.warning("USPSClient: 400 Bad Request from USPS API")
                     raise ProviderBadRequestError("usps", detail="HTTP 400") from exc

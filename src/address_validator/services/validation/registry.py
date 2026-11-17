@@ -6,9 +6,10 @@ instance is created in the FastAPI lifespan and stored on ``app.state``.
 
 import logging
 
-import httpx
+import httpx2
 from pydantic import ValidationError
 
+from address_validator.core.tls import trusted
 from address_validator.db import engine as db_engine
 from address_validator.services.validation._rate_limit import (
     FixedResetQuotaWindow,
@@ -48,7 +49,7 @@ class ProviderRegistry:
     def __init__(self, config: ValidationConfig) -> None:
         self._config = config
         self._provider: ValidationProvider | None = None
-        self._http_client: httpx.AsyncClient | None = None
+        self._http_client: httpx2.AsyncClient | None = None
         self._usps_provider: USPSProvider | None = None
         self._google_provider: GoogleProvider | None = None
         self._reconciliation_params: dict | None = None
@@ -82,11 +83,13 @@ class ProviderRegistry:
 
     # -- Private construction methods ------------------------------------------
 
-    def _get_http_client(self) -> httpx.AsyncClient:
+    def _get_http_client(self) -> httpx2.AsyncClient:
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(15.0, connect=5.0),
-                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            self._http_client = httpx2.AsyncClient(
+                timeout=httpx2.Timeout(15.0, connect=5.0),
+                limits=httpx2.Limits(max_connections=20, max_keepalive_connections=10),
+                # certifi, not httpx2's OS-store default (#420): see core/tls.py.
+                verify=trusted(),
             )
         return self._http_client
 

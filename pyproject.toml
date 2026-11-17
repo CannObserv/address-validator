@@ -11,7 +11,7 @@ dependencies = [
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.16,<3",
     "pycountry>=26.2.16,<27",
-    "httpx>=0.28,<1",
+    "httpx2>=2.16.2,<3",  # the whole process, notifier-client 0.4.0 included (#420)
     "python-ulid>=4.0,<5",
     "sqlalchemy[asyncio]>=2.0,<3",
     "asyncpg>=0.30,<1",
@@ -25,13 +25,13 @@ dependencies = [
     "google-i18n-address>=3.1.1,<4",
     "python-multipart>=0.0.32,<1",
     "python-json-logger>=4.2,<5",
-    "notifier-client>=0.3.2,<1",
+    "notifier-client>=0.4.0,<1",
+    "certifi>=2026.10.19,<2027",  # trusted() roots, not httpx2's OS store; floor #343 (#420)
     "email-validator>=2.3,<3",  # FastAPI validates OpenAPI contact.email as EmailStr (#342)
 ]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1,<1",
     "packaging>=26.3,<27",  # tests/ci imports it directly (#361)
     "parserator>=0.6.9,<1",
     "pre-commit>=4.5.1,<5",
@@ -45,7 +45,7 @@ dev = [
 [tool.uv.sources]
 # Consumed as a pinned git tag, per CannObserv/notifier docs/RELEASING.md. uv does not
 # enforce the floor above against a git source; the tag is the pin (#232).
-notifier-client = { git = "https://github.com/CannObserv/notifier.git", subdirectory = "clients/python", tag = "v0.3.2" }
+notifier-client = { git = "https://github.com/CannObserv/notifier.git", subdirectory = "clients/python", tag = "v0.4.0" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

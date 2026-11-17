@@ -19,7 +19,7 @@ from time import monotonic
 from typing import Any, Literal, NoReturn
 from zoneinfo import ZoneInfo
 
-import httpx
+import httpx2
 
 from address_validator.services.validation.errors import (
     ProviderAtCapacityError,
@@ -296,7 +296,7 @@ class QuotaGuard:
 
 
 def _raise_for_unexpected_status(
-    exc: httpx.HTTPStatusError,
+    exc: httpx2.HTTPStatusError,
     *,
     provider: str,
     logger: logging.Logger,
@@ -305,7 +305,7 @@ def _raise_for_unexpected_status(
 
     Callers handle HTTP 400 (``ProviderBadRequestError``) and 429
     (``ProviderRateLimitedError``) directly; this helper covers everything
-    else so raw :class:`httpx.HTTPStatusError` never escapes the client:
+    else so raw :class:`httpx2.HTTPStatusError` never escapes the client:
 
     * **401 / 403** — credentials/IAM problem.  Logged at ``ERROR`` (operator
       action required) and raised as ``ProviderBadRequestError`` so the
@@ -363,7 +363,7 @@ def _raise_for_unusable_body(
 
 
 def _json_object(
-    resp: httpx.Response,
+    resp: httpx2.Response,
     *,
     provider: str,
     logger: logging.Logger,
@@ -471,7 +471,7 @@ def _raise_for_request_error(
     """Map a failed request (no usable HTTP response) to ``ProviderTransientError``.
 
     The request-layer counterpart of :func:`_raise_for_unexpected_status`:
-    a raw :class:`httpx.RequestError` — connect error, timeout, protocol
+    a raw :class:`httpx2.RequestError` — connect error, timeout, protocol
     error, undecodable body — or google-auth's own ``TransportError`` from a
     credential refresh never escapes the client, so the chain provider falls
     through to the next provider (GH #257).  ``RequestError``, not
@@ -485,7 +485,7 @@ def _raise_for_request_error(
     ) from exc
 
 
-def _parse_retry_after(response: httpx.Response, attempt: int) -> float:
+def _parse_retry_after(response: httpx2.Response, attempt: int) -> float:
     """Return the number of seconds to wait before retrying after a 429.
 
     Reads the ``Retry-After`` header when present (integer seconds only).
