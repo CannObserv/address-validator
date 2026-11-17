@@ -75,7 +75,7 @@ The npm twin of the [Python table](#auditing-317). A dismissed Dependabot alert 
 
 | Advisory | Package | Fixed in | Held because |
 |---|---|---|---|
-| GHSA-g3hv-75wg-m249 (#402) | `minimatch` (dev, via `eslint` / `@eslint/config-array`) | 11.0.1 | Fix is a major no `eslint` release allows (eslint 10.14.0 `^10.2.6`, config-array 0.23.5 `^10.2.4`). No runtime exposure: runs only in `npm run lint:js`, on our own globs. **Exit:** when either allows `^11`, take that update and delete this row |
+| _none held_ | | | |
 
 ## Dependabot (#361)
 
