@@ -6,7 +6,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
@@ -24,7 +24,7 @@ from address_validator.services.validation.usps_client import (
 )
 from tests.conftest import UNUSABLE_BODY, ok_response
 
-# An httpx error message can embed the request URL, and with it the address.
+# An httpx2 error message can embed the request URL, and with it the address.
 _ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
 
 TOKEN_RESPONSE = {
@@ -72,7 +72,7 @@ class TestUSPSToken:
 class TestUSPSClient:
     @pytest.fixture()
     def mock_http(self) -> AsyncMock:
-        return AsyncMock(spec=httpx.AsyncClient)
+        return AsyncMock(spec=httpx2.AsyncClient)
 
     @pytest.fixture()
     def _default_guard(self) -> QuotaGuard:
@@ -92,7 +92,7 @@ class TestUSPSClient:
         )
 
     def _make_response(self, json_data: dict, status_code: int = 200) -> MagicMock:
-        resp = MagicMock(spec=httpx.Response)
+        resp = MagicMock(spec=httpx2.Response)
         resp.status_code = status_code
         resp.json.return_value = json_data
         resp.raise_for_status = MagicMock()
@@ -238,9 +238,9 @@ class TestUSPSClient:
         """GH-115: USPS 5xx must map to ProviderTransientError so the chain
         falls through, mirroring the 429 path."""
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = status
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -258,9 +258,9 @@ class TestUSPSClient:
         """GH-115: 401/403 from USPS (bad OAuth creds) maps to
         ProviderBadRequestError + ERROR log so operators get paged."""
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = status
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -278,11 +278,11 @@ class TestUSPSClient:
     async def test_unexpected_status_raises_transient_error(
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
-        """GH-115: never leak raw httpx.HTTPStatusError for unhandled status codes."""
+        """GH-115: never leak raw httpx2.HTTPStatusError for unhandled status codes."""
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 418
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "418", request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -297,9 +297,9 @@ class TestUSPSClient:
     ) -> None:
         """GH-115: 5xx from the OAuth2 token endpoint must also map cleanly —
         previously this propagated as raw HTTPStatusError through _get_token."""
-        token_fail = MagicMock(spec=httpx.Response)
+        token_fail = MagicMock(spec=httpx2.Response)
         token_fail.status_code = status
-        token_fail.raise_for_status.side_effect = httpx.HTTPStatusError(
+        token_fail.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=token_fail
         )
         mock_http.post.return_value = token_fail
@@ -317,9 +317,9 @@ class TestUSPSClient:
     ) -> None:
         """Token endpoint 401/403 (wrong consumer_key/secret) follows the same
         operator-action path as the address endpoint."""
-        token_fail = MagicMock(spec=httpx.Response)
+        token_fail = MagicMock(spec=httpx2.Response)
         token_fail.status_code = status
-        token_fail.raise_for_status.side_effect = httpx.HTTPStatusError(
+        token_fail.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=token_fail
         )
         mock_http.post.return_value = token_fail
@@ -333,16 +333,16 @@ class TestUSPSClient:
     @pytest.mark.parametrize(
         "exc",
         [
-            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
-            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
-            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
+            httpx2.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx2.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx2.DecodingError(_ADDRESS_IN_MESSAGE),
         ],
     )
     async def test_request_error_raises_transient_error(
-        self, exc: httpx.RequestError, client: USPSClient, mock_http: AsyncMock, caplog
+        self, exc: httpx2.RequestError, client: USPSClient, mock_http: AsyncMock, caplog
     ) -> None:
         """GH #257: a network failure maps to ProviderTransientError so the chain
-        falls through — the raw httpx error surfaced as HTTP 500."""
+        falls through — the raw httpx2 error surfaced as HTTP 500."""
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
         mock_http.get.side_effect = exc
 
@@ -361,7 +361,7 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         """GH #257: the OAuth2 token fetch is a network call too."""
-        mock_http.post.side_effect = httpx.ConnectTimeout("slow")
+        mock_http.post.side_effect = httpx2.ConnectTimeout("slow")
 
         with pytest.raises(ProviderTransientError) as exc_info:
             await client.validate_address("123 Main St", "Springfield", "IL")
@@ -481,10 +481,10 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 400
         bad_resp.text = "Invalid address"
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "400 Bad Request", request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -547,10 +547,10 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -568,10 +568,10 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         mock_http.get.return_value = bad_resp
@@ -590,10 +590,10 @@ class TestUSPSClient:
         self, client: USPSClient, mock_http: AsyncMock
     ) -> None:
         mock_http.post.return_value = self._make_response(TOKEN_RESPONSE)
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         good_resp = self._make_response(VALID_ADDRESS_RESPONSE)

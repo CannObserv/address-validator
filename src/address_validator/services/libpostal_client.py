@@ -4,7 +4,7 @@
 Translates libpostal tag labels to ISO 19160-4 element names and
 decomposes the composite ``road`` token via the bilingual street splitter.
 
-The client holds a persistent ``httpx.AsyncClient`` connection.  Call
+The client holds a persistent ``httpx2.AsyncClient`` connection.  Call
 ``aclose()`` during application shutdown (wired via lifespan in main.py).
 """
 
@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 
+from address_validator.core.tls import trusted
 from address_validator.services.street_splitter import split_road
 
 logger = logging.getLogger(__name__)
@@ -93,15 +94,17 @@ class LibpostalClient:
     def __init__(
         self,
         base_url: str = "http://localhost:4400",
-        transport: httpx.AsyncBaseTransport | None = None,
+        transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
-        """*transport* overrides httpx's network transport (tests pass
-        ``httpx.MockTransport``); ``None`` uses the default."""
+        """*transport* overrides httpx2's network transport (tests pass
+        ``httpx2.MockTransport``); ``None`` uses the default."""
         self._base_url = base_url.rstrip("/")
-        self._http = httpx.AsyncClient(
+        self._http = httpx2.AsyncClient(
             base_url=self._base_url,
-            timeout=httpx.Timeout(5.0),
+            timeout=httpx2.Timeout(5.0),
             transport=transport,
+            # Plain http today; passed anyway so no client is exempt (#420).
+            verify=trusted(),
         )
 
     async def parse(self, address: str) -> dict[str, str]:
@@ -115,16 +118,16 @@ class LibpostalClient:
         try:
             response = await self._http.get("/parse", params={"address": address})
             response.raise_for_status()
-        except httpx.RequestError as exc:
+        except httpx2.RequestError as exc:
             # RequestError, not NetworkError/TimeoutException: Docker's port proxy
             # accepts then drops the connection while the container warms up,
             # raising RemoteProtocolError (a ProtocolError, not a NetworkError).
             # See GH #239.
             logger.warning("libpostal sidecar unavailable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
-        except httpx.HTTPStatusError as exc:
+        except httpx2.HTTPStatusError as exc:
             logger.warning("libpostal sidecar returned %s", exc.response.status_code)
-            # Status code only, never str(exc): httpx embeds the full request URL
+            # Status code only, never str(exc): httpx2 embeds the full request URL
             # in HTTPStatusError's message, and this request is
             # GET /parse?address=<the user's address>. Nothing logs this message
             # today, but it travels up through three call sites and a
@@ -134,7 +137,7 @@ class LibpostalClient:
                 f"libpostal sidecar returned {exc.response.status_code}"
             ) from exc
         except RuntimeError as exc:
-            # httpx raises RuntimeError when the client is closed (e.g. during shutdown)
+            # httpx2 raises RuntimeError when the client is closed (e.g. during shutdown)
             logger.warning("libpostal client not usable: %s", exc)
             raise LibpostalUnavailableError(str(exc)) from exc
 
@@ -168,13 +171,13 @@ class LibpostalClient:
         the response body is not inspected, so an empty parse result does
         not cause a false negative.
 
-        ``httpx.HTTPStatusError`` is intentionally absent: we do not call
+        ``httpx2.HTTPStatusError`` is intentionally absent: we do not call
         ``raise_for_status()``, so non-2xx responses are handled via
         ``response.is_success`` rather than raising.
         """
         try:
             response = await self._http.get("/parse", params={"address": "1 main st"})
-        except (httpx.RequestError, RuntimeError) as exc:
+        except (httpx2.RequestError, RuntimeError) as exc:
             return type(exc).__name__
         return None if response.is_success else f"HTTP {response.status_code}"
 

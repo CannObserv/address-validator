@@ -75,7 +75,7 @@ services/spec.py                 ISO 19160-4 spec identifiers (ISO_19160_4_SPEC,
 services/component_profiles.py  ISO 19160-4 ↔ USPS Pub28 key translation; translate_components() / translate_components_to_iso(); VALID_PROFILES frozenset; identity pass-through for unknown profiles/keys
 services/validation/pipeline.py  parse → standardize → provider-selection pipeline; build_non_us_std() (shared passthrough std for non-US components), run_us_pipeline() (US path, accepts component_profile param), run_non_us_pipeline() (CA raw strings via libpostal, other non-US via components-only); all return (std, raw_input, provider); raises APIError on validation failures
 services/validation/secondary.py provider_secondary(): the one Pub 28 unit of a multi-unit address_line_2 sent to providers (GH #287), or the first unit of a range/list (GH #289; `&`/`AND` lists GH #297); compared with full_secondary() for the response warning and _make_pattern_key
-services/libpostal_client.py  async httpx client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
+services/libpostal_client.py  async httpx2 client for pelias/libpostal-service (port 4400); maps libpostal tags → ISO 19160-4; LibpostalUnavailableError on failure; aclose() in lifespan
 services/street_splitter.py  bilingual street component splitter; decomposes libpostal road token into thoroughfare ISO elements; English trailing-type + French leading-type + CA directionals
 canada_post_data/directionals.py  bilingual EN/FR directional lookup (CA_DIRECTIONAL_MAP) for Canadian addresses; used by street_splitter
 canada_post_data/provinces.py  Canada Post province/territory table (PROVINCE_MAP): full names + abbreviations → 2-letter abbreviation; used by _standardize_ca()
@@ -91,6 +91,7 @@ logging_filter.py   RequestIdFilter — injects request_id into every LogRecord;
 core/journal.py     sd-daemon priority map + journal-stream test; stdlib only, shared with infra/journal_logging.py (#252)
 core/logging.py     build_json_formatter() (single source of truth for the JSON schema; JournalJsonFormatter adds exc_type + journal <N> prefix) + build_stdout_handler() + configure_logging()
 core/log_config.json  uvicorn --log-config dictConfig — routes uvicorn/uvicorn.access/uvicorn.error through build_json_formatter()
+core/tls.py         trusted() — the certifi-only SSLContext every httpx2 client passes as verify= (#420); infra/tls.py is its twin for the ops scripts
 templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)

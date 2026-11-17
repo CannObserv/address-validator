@@ -20,7 +20,7 @@
     "uvicorn": { "level": "INFO", "handlers": ["stdout"], "propagate": false },
     "uvicorn.error": { "level": "INFO", "handlers": ["stdout"], "propagate": false },
     "uvicorn.access": { "level": "INFO", "handlers": ["stdout"], "propagate": false },
-    "httpx": { "level": "WARNING" },
-    "httpcore": { "level": "WARNING" }
+    "httpx2": { "level": "WARNING" },
+    "httpcore2": { "level": "WARNING" }
   }
 }

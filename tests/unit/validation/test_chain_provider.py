@@ -745,7 +745,7 @@ class TestChainWeakVerdict:
 class TestChainTransportErrors:
     """GH #257: the clients wrap a network failure (connect error, timeout) in
     ProviderTransientError, so the chain falls through on it like a 5xx.
-    The raw httpx.TransportError used to escape the chain as HTTP 500."""
+    The raw httpx2.TransportError used to escape the chain as HTTP 500."""
 
     @pytest.mark.asyncio
     async def test_unreachable_primary_falls_back(self, std_address: object) -> None:

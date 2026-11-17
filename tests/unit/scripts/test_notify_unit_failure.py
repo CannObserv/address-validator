@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
+import httpx2
 import notify_unit_failure as nuf
 import pytest
 from notifier_client import AuthError
@@ -363,20 +363,25 @@ def test_main_dispatches(monkeypatch, no_journal):
 
 
 @pytest.mark.parametrize(
-    "exc",
+    ("exc", "unexpected"),
     [
-        httpx.ConnectError("unreachable"),
-        AuthError("bad key", status_code=401),
-        RuntimeError("unexpected"),
+        # httpx2's, not httpx's: notifier-client 0.4.0 re-raises httpx2's
+        # exceptions, and a fake raising the old class would pass against the
+        # old clause (#420).
+        (httpx2.ConnectError("unreachable"), False),
+        (AuthError("bad key", status_code=401), False),
+        (RuntimeError("unexpected"), True),
     ],
     ids=["unreachable", "rejected", "unexpected"],
 )
-def test_main_fails_open(monkeypatch, no_journal, caplog, exc):
+def test_main_fails_open(monkeypatch, no_journal, caplog, exc, unexpected):
+    """Every failure fails open; only an unknown one is reported as unexpected."""
     factory, _ = _factory(raises=exc)
     monkeypatch.setattr(nuf, "NotifierClient", factory)
     with caplog.at_level(logging.WARNING, logger="notify_unit_failure"):
         assert nuf.main([UNIT], env={**CONFIG_ENV, **MONITOR_ENV}) == 0
     assert "the journal line stands" in caplog.text
+    assert ("failed unexpectedly" in caplog.text) is unexpected
 
 
 def test_main_stalled_notifier_is_bounded(monkeypatch, no_journal, caplog):
@@ -420,3 +425,5 @@ def test_main_real_sdk_unreachable_notifier_fails_open(no_journal, caplog):
     with caplog.at_level(logging.WARNING, logger="notify_unit_failure"):
         assert nuf.main([UNIT], env=env) == 0
     assert "ConnectError" in caplog.text
+    # The unexpected path's traceback names ConnectError too (#420).
+    assert "failed unexpectedly" not in caplog.text

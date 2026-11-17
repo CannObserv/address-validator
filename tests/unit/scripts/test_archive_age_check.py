@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 import archive_age_check as aac
 import archive_audit
 import audit_retention
-import httpx
+import httpx2
 import pytest
 from sqlalchemy import text
 
@@ -213,23 +213,32 @@ async def test_breach_with_incomplete_notifier_config_is_journal_only(db: AsyncE
 
 
 @pytest.mark.parametrize(
-    "fake_kwargs",
+    ("fake_kwargs", "unexpected"),
     [
-        {"raises": httpx.ConnectError("unreachable")},
-        {"raises": RuntimeError("unexpected")},
-        {"environment": "development"},
-        {"status": "failed"},
+        # httpx2's, not httpx's: notifier-client 0.4.0 re-raises httpx2's
+        # exceptions (#420).
+        ({"raises": httpx2.ConnectError("unreachable")}, False),
+        ({"raises": RuntimeError("unexpected")}, True),
+        ({"environment": "development"}, False),
+        ({"status": "failed"}, False),
     ],
     ids=["unreachable", "unexpected", "non-production", "delivered-nowhere"],
 )
-async def test_breach_that_reaches_no_channel_exits_1(db: AsyncEngine, caplog, fake_kwargs):
-    """The breach WARNING stands, and unit-failure@ reports the run (#249)."""
+async def test_breach_that_reaches_no_channel_exits_1(
+    db: AsyncEngine, caplog, fake_kwargs, unexpected
+):
+    """The breach WARNING stands, and unit-failure@ reports the run (#249).
+
+    Only an unknown failure is reported as unexpected: an unreachable notifier
+    is an expected one.
+    """
     await _seed(db, BREACHING)
     factory, _ = _factory(**fake_kwargs)
     with caplog.at_level(logging.WARNING):
         code = await aac.run({**DB_ENV, **NOTIFIER_ENV}, now=NOW, client_factory=factory)
     assert code == 1
     assert "past AUDIT_RETENTION_DAYS" in caplog.text
+    assert ("dispatch failed unexpectedly" in caplog.text) is unexpected
 
 
 async def test_partial_delivery_exits_0(db: AsyncEngine):
@@ -264,6 +273,8 @@ async def test_real_sdk_unreachable_notifier(db: AsyncEngine, caplog):
         code = await aac.run(env, now=NOW)
     assert code == 1
     assert "ConnectError" in caplog.text
+    # The unexpected path's traceback names ConnectError too (#420).
+    assert "dispatch failed unexpectedly" not in caplog.text
 
 
 # --- config errors: the checker failed --------------------------------------

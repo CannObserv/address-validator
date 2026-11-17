@@ -4,7 +4,7 @@ import copy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import google.auth.exceptions
-import httpx
+import httpx2
 import pytest
 
 from address_validator.services.validation._rate_limit import _RETRY_MAX, QuotaGuard, QuotaWindow
@@ -17,7 +17,7 @@ from address_validator.services.validation.errors import (
 from address_validator.services.validation.google_client import GoogleClient
 from tests.conftest import UNUSABLE_BODY, ok_response
 
-# An httpx error message can embed the request URL, and with it the address.
+# An httpx2 error message can embed the request URL, and with it the address.
 _ADDRESS_IN_MESSAGE = "GET /validate?streetAddress=123 Main St"
 
 # Minimal realistic Google Address Validation API response for a confirmed address.
@@ -206,7 +206,7 @@ class TestGoogleClientValidateAddress:
 
     @pytest.fixture()
     def mock_http(self) -> AsyncMock:
-        return AsyncMock(spec=httpx.AsyncClient)
+        return AsyncMock(spec=httpx2.AsyncClient)
 
     @pytest.fixture()
     def _default_guard(self) -> QuotaGuard:
@@ -237,7 +237,7 @@ class TestGoogleClientValidateAddress:
         )
 
     def _make_response(self, json_data: dict, status_code: int = 200) -> MagicMock:
-        resp = MagicMock(spec=httpx.Response)
+        resp = MagicMock(spec=httpx2.Response)
         resp.status_code = status_code
         resp.json.return_value = json_data
         resp.raise_for_status = MagicMock()
@@ -309,9 +309,9 @@ class TestGoogleClientValidateAddress:
         """GH-115: 401/403 from Google (expired creds, missing IAM) must map
         to ProviderBadRequestError so the chain falls through, while logging
         at ERROR so operators get paged."""
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = status
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -332,9 +332,9 @@ class TestGoogleClientValidateAddress:
     ) -> None:
         """GH-115: Google 5xx must map to ProviderTransientError so the chain
         falls through (research doc: 'transient → fallback')."""
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = status
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             str(status), request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -349,10 +349,10 @@ class TestGoogleClientValidateAddress:
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
         """GH-115: any non-2xx outside 400/401/403/429/5xx still maps cleanly
-        — never let raw httpx.HTTPStatusError escape the client."""
-        bad_resp = MagicMock(spec=httpx.Response)
+        — never let raw httpx2.HTTPStatusError escape the client."""
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 418  # I'm a teapot
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "418", request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -364,16 +364,16 @@ class TestGoogleClientValidateAddress:
     @pytest.mark.parametrize(
         "exc",
         [
-            httpx.ConnectError(_ADDRESS_IN_MESSAGE),
-            httpx.ReadTimeout(_ADDRESS_IN_MESSAGE),
-            httpx.DecodingError(_ADDRESS_IN_MESSAGE),
+            httpx2.ConnectError(_ADDRESS_IN_MESSAGE),
+            httpx2.ReadTimeout(_ADDRESS_IN_MESSAGE),
+            httpx2.DecodingError(_ADDRESS_IN_MESSAGE),
         ],
     )
     async def test_request_error_raises_transient_error(
-        self, exc: httpx.RequestError, client: GoogleClient, mock_http: AsyncMock, caplog
+        self, exc: httpx2.RequestError, client: GoogleClient, mock_http: AsyncMock, caplog
     ) -> None:
         """GH #257: a network failure maps to ProviderTransientError so the chain
-        falls through — the raw httpx error surfaced as HTTP 500."""
+        falls through — the raw httpx2 error surfaced as HTTP 500."""
         mock_http.post.side_effect = exc
 
         with caplog.at_level("WARNING"), pytest.raises(ProviderTransientError) as exc_info:
@@ -586,7 +586,7 @@ class TestGoogleClientValidateAddress:
         self, mock_http: AsyncMock, _default_guard: QuotaGuard
     ) -> None:
         """GH #257: an ADC token refresh that cannot reach its endpoint raises
-        google-auth's own TransportError (it runs on ``requests``, not httpx)."""
+        google-auth's own TransportError (it runs on ``requests``, not httpx2)."""
         expired_creds = MagicMock()
         expired_creds.valid = False
         expired_creds.refresh.side_effect = google.auth.exceptions.TransportError("unreachable")
@@ -661,9 +661,9 @@ class TestGoogleClientValidateAddress:
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
         """GH-114: Google 400 must be translated, not propagated as raw HTTPStatusError."""
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 400
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "400 Bad Request", request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -675,10 +675,10 @@ class TestGoogleClientValidateAddress:
     async def test_429_raises_provider_rate_limited_error_after_retries(
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -695,10 +695,10 @@ class TestGoogleClientValidateAddress:
     async def test_429_retries_before_giving_up(
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         mock_http.post.return_value = bad_resp
@@ -714,10 +714,10 @@ class TestGoogleClientValidateAddress:
     async def test_429_then_success_returns_result(
         self, client: GoogleClient, mock_http: AsyncMock
     ) -> None:
-        bad_resp = MagicMock(spec=httpx.Response)
+        bad_resp = MagicMock(spec=httpx2.Response)
         bad_resp.status_code = 429
         bad_resp.headers = {}
-        bad_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        bad_resp.raise_for_status.side_effect = httpx2.HTTPStatusError(
             "429", request=MagicMock(), response=bad_resp
         )
         good_resp = self._make_response(GOOGLE_RESPONSE_Y)

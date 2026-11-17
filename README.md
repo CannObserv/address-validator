@@ -249,6 +249,7 @@ src/address_validator/
     errors.py                  # APIError, api_error_response()
     logging.py                 # build_json_formatter() — single source of the JSON log schema
     log_config.json            # uvicorn --log-config (dictConfig) sharing that formatter
+    tls.py                     # trusted() — certifi-only SSLContext for every httpx2 client
   routers/
     deps.py                    # Shared FastAPI dependencies (registry, libpostal client)
     v2/                        # ISO 19160-4 surface; component_profile query param
@@ -261,7 +262,7 @@ src/address_validator/
     audit.py                   # Audit ContextVars + write_audit_row
     training_candidates.py     # Training candidate ContextVars + write_training_candidate
     training_batches.py        # Batch lifecycle state machine + CRUD
-    libpostal_client.py        # Async httpx client for libpostal sidecar (port 4400)
+    libpostal_client.py        # Async httpx2 client for libpostal sidecar (port 4400)
     street_splitter.py         # Bilingual CA street component splitter
     spec.py                    # ISO 19160-4 spec identifiers
     component_profiles.py      # ISO 19160-4 ↔ USPS Pub 28 key translation

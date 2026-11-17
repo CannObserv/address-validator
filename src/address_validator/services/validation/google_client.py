@@ -15,7 +15,7 @@ import logging
 from typing import Any, NamedTuple
 
 import google.auth.exceptions
-import httpx
+import httpx2
 from google.auth.credentials import Credentials
 from google.auth.transport.requests import Request as AuthRequest
 
@@ -141,7 +141,7 @@ class GoogleClient:
     credentials:
         Google ADC credentials object used for bearer token authentication.
     http_client:
-        Shared :class:`httpx.AsyncClient` instance (caller owns lifecycle).
+        Shared :class:`httpx2.AsyncClient` instance (caller owns lifecycle).
     quota_guard:
         :class:`~services.validation._rate_limit.QuotaGuard` instance
         managing rate limits and quota constraints.
@@ -150,7 +150,7 @@ class GoogleClient:
     def __init__(
         self,
         credentials: Credentials,
-        http_client: httpx.AsyncClient,
+        http_client: httpx2.AsyncClient,
         quota_guard: QuotaGuard,
     ) -> None:
         self._credentials = credentials
@@ -276,13 +276,13 @@ class GoogleClient:
                     headers=await self._get_auth_headers(),
                     json=payload,
                 )
-            except (httpx.RequestError, google.auth.exceptions.TransportError) as exc:
+            except (httpx2.RequestError, google.auth.exceptions.TransportError) as exc:
                 # google-auth raises its own TransportError when a credential
                 # refresh cannot reach its token endpoint (GH #257).
                 _raise_for_request_error(exc, provider="google", logger=logger)
             try:
                 resp.raise_for_status()
-            except httpx.HTTPStatusError as exc:
+            except httpx2.HTTPStatusError as exc:
                 if exc.response.status_code == _HTTP_BAD_REQUEST:
                     logger.warning("GoogleClient: 400 Bad Request from Google API")
                     raise ProviderBadRequestError("google", detail="HTTP 400") from exc

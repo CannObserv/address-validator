@@ -6,7 +6,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
-import httpx
+import httpx2
 import pytest
 
 from address_validator.services.validation._rate_limit import (
@@ -458,8 +458,8 @@ class TestAtCapacityRetryAfter:
 
 
 class TestParseRetryAfter:
-    def _make_response(self, headers: dict) -> httpx.Response:
-        resp = MagicMock(spec=httpx.Response)
+    def _make_response(self, headers: dict) -> httpx2.Response:
+        resp = MagicMock(spec=httpx2.Response)
         resp.headers = headers
         return resp
 

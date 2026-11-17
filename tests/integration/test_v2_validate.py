@@ -4,7 +4,7 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
-import httpx
+import httpx2
 import pytest
 
 from address_validator.core import warnings as warning_catalogue
@@ -297,7 +297,7 @@ class TestV2ValidateQuotaExhausted:
             USPSClient(
                 consumer_key="key",
                 consumer_secret="secret",
-                http_client=AsyncMock(spec=httpx.AsyncClient),
+                http_client=AsyncMock(spec=httpx2.AsyncClient),
                 quota_guard=guard,
             )
         )
@@ -316,7 +316,7 @@ class TestV2ValidateQuotaExhausted:
         return GoogleProvider(
             GoogleClient(
                 credentials=MagicMock(valid=True, token="tok"),
-                http_client=AsyncMock(spec=httpx.AsyncClient),
+                http_client=AsyncMock(spec=httpx2.AsyncClient),
                 quota_guard=guard,
             )
         )

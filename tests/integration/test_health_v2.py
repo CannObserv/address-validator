@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-import httpx
+import httpx2
 import pytest
 
 from address_validator.services.libpostal_client import LibpostalClient
@@ -96,10 +96,10 @@ class TestHealthV2:
         """A sidecar that drops the connection mid-warmup (RemoteProtocolError)
         reports 'unavailable' with HTTP 200 — never an unhandled 500 (GH #239)."""
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            raise httpx2.RemoteProtocolError("Server disconnected without sending a response.")
 
-        libpostal = LibpostalClient(transport=httpx.MockTransport(handler))
+        libpostal = LibpostalClient(transport=httpx2.MockTransport(handler))
         monkeypatch.setattr(client.app.state, "libpostal_client", libpostal)
         response = client.get("/api/v2/health")
 

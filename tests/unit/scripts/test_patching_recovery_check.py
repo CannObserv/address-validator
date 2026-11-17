@@ -1,6 +1,6 @@
 """Tests for the patching-hosts recovery check (GH #311).
 
-The app is an ``httpx.MockTransport`` standing in for port 8000: each request it
+The app is an ``httpx2.MockTransport`` standing in for port 8000: each request it
 answers can write its own ``audit_log`` row into the test DB, as the real audit
 middleware would, or not, as a fail-open app does while Postgres is down. No
 request reaches the production service or a provider.
@@ -13,7 +13,7 @@ import itertools
 import socket
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 import patching_recovery_check as prc
 import pytest
 from sqlalchemy import text
@@ -43,7 +43,7 @@ def _app(
     ids = itertools.count(1)
     calls = itertools.count()
 
-    async def handler(request: httpx.Request) -> httpx.Response:
+    async def handler(request: httpx2.Request) -> httpx2.Response:
         n = next(calls)
         if seen is not None:
             seen.append(request)
@@ -63,13 +63,13 @@ def _app(
                         "verdict": verdicts[n],
                     },
                 )
-        return httpx.Response(statuses[n], json={}, headers={"x-request-id": request_id})
+        return httpx2.Response(statuses[n], json={}, headers={"x-request-id": request_id})
 
-    return httpx.MockTransport(handler)
+    return httpx2.MockTransport(handler)
 
 
-async def _check(engine: AsyncEngine, transport: httpx.MockTransport, **kwargs) -> str | None:
-    async with httpx.AsyncClient(transport=transport, base_url=prc.BASE_URL) as client:
+async def _check(engine: AsyncEngine, transport: httpx2.MockTransport, **kwargs) -> str | None:
+    async with httpx2.AsyncClient(transport=transport, base_url=prc.BASE_URL) as client:
         return await prc.check(client, engine, API_KEY, audit_wait_s=0.5, poll_s=0.05, **kwargs)
 
 
@@ -105,14 +105,14 @@ async def test_missing_audit_rows_are_not_recovered(db: AsyncEngine):
 
 async def test_a_non_200_stops_before_the_repeat(db: AsyncEngine):
     """A stale pooled connection serves a 503 just after Postgres is ready (#235)."""
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
     reason = await _check(db, _app(db, statuses=(503, 200), seen=seen))
     assert reason == "validate #1 returned HTTP 503"
     assert len(seen) == 1
 
 
 async def test_a_response_without_a_request_id_is_not_recovered(db: AsyncEngine):
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, json={}))
+    transport = httpx2.MockTransport(lambda request: httpx2.Response(200, json={}))
     assert await _check(db, transport) == "validate #1 carried no X-Request-ID"
 
 
@@ -123,7 +123,7 @@ async def test_postgres_down_sends_no_request():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     engine = prc.make_engine(f"postgresql+asyncpg://u:p@127.0.0.1:{port}/x")
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
     try:
         reason = await _check(engine, _app(None, seen=seen))
     finally:
@@ -135,7 +135,7 @@ async def test_postgres_down_sends_no_request():
 
 
 async def test_requests_carry_the_key_and_the_synthetic_address(db: AsyncEngine):
-    seen: list[httpx.Request] = []
+    seen: list[httpx2.Request] = []
     await _check(db, _app(db, seen=seen))
     assert [(r.method, r.url.path) for r in seen] == [("POST", "/api/v2/validate")] * 2
     for request in seen:
@@ -226,12 +226,12 @@ def test_the_whole_check_fits_the_skills_limit():
 async def test_a_stalled_step_is_reported_inside_the_budget(
     db: AsyncEngine, tmp_path: Path, monkeypatch, capsys
 ):
-    async def stall(request: httpx.Request) -> httpx.Response:
+    async def stall(request: httpx2.Request) -> httpx2.Response:
         await asyncio.sleep(5)
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
     monkeypatch.setattr(prc, "CHECK_BUDGET_S", 0.2)
-    assert await prc.run(_env_file(tmp_path), transport=httpx.MockTransport(stall)) == 1
+    assert await prc.run(_env_file(tmp_path), transport=httpx2.MockTransport(stall)) == 1
     assert capsys.readouterr().out == "not recovered: timed out after 0.2s\n"
 
 
