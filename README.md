@@ -249,6 +249,7 @@ src/address_validator/
     errors.py                  # APIError, api_error_response()
     logging.py                 # build_json_formatter() — single source of the JSON log schema
     log_config.json            # uvicorn --log-config (dictConfig) sharing that formatter
+    tls.py                     # trusted() — certifi-only SSLContext for every httpx2 client
   routers/
     deps.py                    # Shared FastAPI dependencies (registry, libpostal client)
     v2/                        # ISO 19160-4 surface; component_profile query param
