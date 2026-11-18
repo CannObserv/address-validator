@@ -1,12 +1,12 @@
 """Integration tests for admin dashboard views."""
 
 import re
-from html import unescape
 from unittest.mock import AsyncMock, patch
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from starlette.testclient import TestClient
+
+from tests.unit.routers.admin._pagination_helpers import pagination_query
 
 
 @pytest.fixture(autouse=True)
@@ -779,15 +779,6 @@ def test_dashboard_quota_tile_shows_requests_today(client: TestClient, admin_hea
 
 # --- HTMX filter swap must carry pagination with it (#425) ---
 
-_NEXT_HREF = re.compile(r'<a href="([^"]*)"[^>]*>Next')
-
-
-def _next_query(html: str) -> dict[str, list[str]]:
-    """Return the parsed query of the pagination "Next" link in *html*."""
-    match = _NEXT_HREF.search(html)
-    assert match, "no Next pagination link rendered"
-    return parse_qs(urlsplit(unescape(match.group(1))).query)
-
 
 def test_audit_filter_partial_carries_filters_into_pagination(
     client: TestClient, admin_headers: dict
@@ -807,7 +798,7 @@ def test_audit_filter_partial_carries_filters_into_pagination(
     assert response.status_code == 200
     assert "<body" not in response.text
     assert "Page 1 of 3" in response.text
-    query = _next_query(response.text)
+    query = pagination_query(response.text)
     assert query["page"] == ["2"]
     assert query["status_min"] == ["400"]
 
@@ -833,7 +824,7 @@ def test_audit_full_page_pagination_keeps_filters(client: TestClient, admin_head
             params={"page": "2", "status_min": "400", "client_ip": "10.0.0.1&x=y"},
             headers=admin_headers,
         )
-    query = _next_query(response.text)
+    query = pagination_query(response.text)
     assert query["page"] == ["3"]
     assert query["status_min"] == ["400"]
     assert query["client_ip"] == ["10.0.0.1&x=y"]
@@ -852,7 +843,7 @@ def test_endpoint_filter_partial_carries_filters_into_pagination(
         )
     assert response.status_code == 200
     assert "<body" not in response.text
-    query = _next_query(response.text)
+    query = pagination_query(response.text)
     assert query["page"] == ["2"]
     assert query["status_code"] == ["400", "422"]
 
@@ -870,6 +861,6 @@ def test_provider_filter_partial_carries_filters_into_pagination(
         )
     assert response.status_code == 200
     assert "<body" not in response.text
-    query = _next_query(response.text)
+    query = pagination_query(response.text)
     assert query["page"] == ["2"]
     assert query["validation_status"] == ["not_found"]
