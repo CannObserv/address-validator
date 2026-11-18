@@ -54,9 +54,11 @@ def page_url(request: Request, page: int) -> str:
 
     Derived from the request rather than a per-view filter dict so every filter —
     multi-valued ones included — survives pagination, and a newly added filter
-    cannot be forgotten (#425). Blank params (unfilled form fields) are dropped.
+    cannot be forgotten (#425). Blank params are kept verbatim: a blank can differ
+    from an absent param (candidates' ``since=`` means all time, absent means 7d),
+    and any blank that reached rendering was already accepted by the handler.
     """
-    params = [(k, v) for k, v in request.query_params.multi_items() if k != "page" and v != ""]
+    params = [(k, v) for k, v in request.query_params.multi_items() if k != "page"]
     return "?" + urlencode([("page", str(page)), *params])
 
 

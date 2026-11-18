@@ -320,3 +320,16 @@ def test_candidates_filter_partial_carries_filters_into_pagination(
     assert query["page"] == ["2"]
     assert query["status"] == ["rejected"]
     assert query["since"] == ["30d"]
+
+
+def test_candidates_pagination_keeps_blank_since(client: TestClient, admin_headers: dict) -> None:
+    """A blank ``since`` (all time) must not fall back to the 7d default on page 2 (#425)."""
+    with patch(
+        "address_validator.routers.admin.candidates.get_candidate_groups",
+        new=AsyncMock(return_value=([], 120)),
+    ):
+        r = client.get("/admin/candidates/?since=", headers=admin_headers)
+    match = re.search(r'<a href="([^"]*)"[^>]*>Next', r.text)
+    assert match, "no Next pagination link rendered"
+    query = parse_qs(urlsplit(unescape(match.group(1))).query, keep_blank_values=True)
+    assert query["since"] == [""]
