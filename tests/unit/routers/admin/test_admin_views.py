@@ -824,10 +824,11 @@ def test_audit_full_page_pagination_keeps_filters(client: TestClient, admin_head
             params={"page": "2", "status_min": "400", "client_ip": "10.0.0.1&x=y"},
             headers=admin_headers,
         )
-    query = pagination_query(response.text)
-    assert query["page"] == ["3"]
-    assert query["status_min"] == ["400"]
-    assert query["client_ip"] == ["10.0.0.1&x=y"]
+    for label, expected_page in (("Next", "3"), ("Prev", "1")):
+        query = pagination_query(response.text, label)
+        assert query["page"] == [expected_page]
+        assert query["status_min"] == ["400"]
+        assert query["client_ip"] == ["10.0.0.1&x=y"]
 
 
 def test_endpoint_filter_partial_carries_filters_into_pagination(
