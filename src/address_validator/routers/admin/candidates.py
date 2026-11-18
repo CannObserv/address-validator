@@ -83,11 +83,12 @@ async def candidates_list(
     total_pages = max(1, math.ceil(total / _PER_PAGE))
     filters = {"status": status, "failure_type": failure_type, "since": since}
 
+    # HTMX filter swap — table + pagination (skip for boosted nav; #425)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             request,
-            "admin/candidates/_rows.html",
-            {"rows": rows},
+            "admin/candidates/_results.html",
+            {"rows": rows, "page": page, "total_pages": total_pages},
         )
 
     return templates.TemplateResponse(

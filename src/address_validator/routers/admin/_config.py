@@ -3,6 +3,7 @@
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -46,6 +47,20 @@ CANDIDATE_STATUS_META: dict[str, dict[str, str]] = {
 }
 
 templates.env.globals["cs_meta"] = CANDIDATE_STATUS_META
+
+
+def page_url(request: Request, page: int) -> str:
+    """Return a pagination href: the request's own query string with ``page`` replaced.
+
+    Derived from the request rather than a per-view filter dict so every filter —
+    multi-valued ones included — survives pagination, and a newly added filter
+    cannot be forgotten (#425). Blank params (unfilled form fields) are dropped.
+    """
+    params = [(k, v) for k, v in request.query_params.multi_items() if k != "page" and v != ""]
+    return "?" + urlencode([("page", str(page)), *params])
+
+
+templates.env.globals["page_url"] = page_url
 
 
 @lru_cache(maxsize=1)

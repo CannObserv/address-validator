@@ -1,0 +1,13 @@
+{#- Audit table + pagination: the filter form's swap target content (#425).
+    Context: request, rows, show_result, show_provider, page, total_pages. -#}
+<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <table class="w-full text-left">
+        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            {% include "admin/audit/_thead.html" %}
+        </thead>
+        <tbody id="audit-rows">
+            {% include "admin/audit/_rows.html" %}
+        </tbody>
+    </table>
+</div>
+{% include "admin/_pagination.html" %}

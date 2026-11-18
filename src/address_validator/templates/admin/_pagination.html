@@ -1,0 +1,15 @@
+{#- Prev / Next pagination. Context: request, page, total_pages.
+    Must render inside the filter form's hx-target container so an HTMX filter
+    swap re-renders it with the active filters (#425). -#}
+{% if total_pages > 1 %}
+{% set page_link_cls = "px-3 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-co-purple-700 dark:focus:ring-co-purple-100" %}
+<nav class="flex items-center gap-2 mt-4 text-sm" aria-label="Pagination">
+    {% if page > 1 %}
+    <a href="{{ page_url(request, page - 1) }}" class="{{ page_link_cls }}">&laquo; Prev</a>
+    {% endif %}
+    <span class="text-gray-500 dark:text-gray-400">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ page_url(request, page + 1) }}" class="{{ page_link_cls }}">Next &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}

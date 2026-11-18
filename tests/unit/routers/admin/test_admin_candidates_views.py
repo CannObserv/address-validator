@@ -1,7 +1,10 @@
 """Integration tests for admin candidate triage views."""
 
+import re
 from datetime import UTC, datetime, timedelta
+from html import unescape
 from unittest.mock import AsyncMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from starlette.testclient import TestClient
@@ -295,3 +298,25 @@ def test_candidates_unassign_batch_404_on_unknown_slug(
             headers=admin_headers,
         )
     assert r.status_code == 404
+
+
+def test_candidates_filter_partial_carries_filters_into_pagination(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Filtering via the HTMX form re-renders pagination with the filter (#425)."""
+    with patch(
+        "address_validator.routers.admin.candidates.get_candidate_groups",
+        new=AsyncMock(return_value=([], 120)),
+    ):
+        r = client.get(
+            "/admin/candidates/?status=rejected&failure_type=&since=30d",
+            headers={**admin_headers, "HX-Request": "true"},
+        )
+    assert r.status_code == 200
+    assert "<body" not in r.text
+    match = re.search(r'<a href="([^"]*)"[^>]*>Next', r.text)
+    assert match, "no Next pagination link rendered"
+    query = parse_qs(urlsplit(unescape(match.group(1))).query)
+    assert query["page"] == ["2"]
+    assert query["status"] == ["rejected"]
+    assert query["since"] == ["30d"]

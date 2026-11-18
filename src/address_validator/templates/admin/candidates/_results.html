@@ -1,0 +1,22 @@
+{#- Candidates table + pagination: the filter form's swap target content (#425).
+    Context: request, rows, page, total_pages. -#}
+<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <table class="w-full text-left">
+        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            <tr>
+                <th class="px-3 py-2">Raw Address</th>
+                <th class="px-3 py-2">Status</th>
+                <th class="px-3 py-2">Batches</th>
+                <th class="px-3 py-2">Failure</th>
+                <th class="px-3 py-2 text-right">Count</th>
+                <th class="px-3 py-2">First Seen</th>
+                <th class="px-3 py-2">Last Seen</th>
+                <th class="px-3 py-2">Notes</th>
+            </tr>
+        </thead>
+        <tbody id="candidate-rows">
+            {% include "admin/candidates/_rows.html" %}
+        </tbody>
+    </table>
+</div>
+{% include "admin/_pagination.html" %}

@@ -92,7 +92,7 @@ core/journal.py     sd-daemon priority map + journal-stream test; stdlib only, s
 core/logging.py     build_json_formatter() (single source of truth for the JSON schema; JournalJsonFormatter adds exc_type + journal <N> prefix) + build_stdout_handler() + configure_logging()
 core/log_config.json  uvicorn --log-config dictConfig — routes uvicorn/uvicorn.access/uvicorn.error through build_json_formatter()
 core/tls.py         trusted() — the certifi-only SSLContext every httpx2 client passes as verify= (#420); infra/tls.py is its twin for the ops scripts
-templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials
+templates/admin/    Jinja2 templates (base, dashboard, audit, endpoints, providers); _thead.html + _rows.html shared partials; _results.html (table + _pagination.html) is each filter form's HTMX swap target
 static/admin/css/   Tailwind CSS (input.css + built tailwind.css)
 static/admin/js/    ES modules — theme.js (dark mode), nav.js (hamburger)
 tests/js/           Vitest + jsdom tests for admin JS (npm run test:js)

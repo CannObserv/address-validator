@@ -1,7 +1,9 @@
 """Integration tests for admin dashboard views."""
 
 import re
+from html import unescape
 from unittest.mock import AsyncMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from starlette.testclient import TestClient
@@ -133,11 +135,11 @@ def test_audit_htmx_boosted_returns_full_page(client: TestClient, admin_headers:
 
 
 def test_audit_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
-    """In-page HTMX request to /admin/audit/ returns rows partial."""
+    """In-page HTMX request to /admin/audit/ returns the results partial (no layout)."""
     headers = {**admin_headers, "HX-Request": "true"}
     response = client.get("/admin/audit/", headers=headers)
     assert response.status_code == 200
-    assert "<nav" not in response.text
+    assert "<body" not in response.text
 
 
 def test_audit_filter_form_blank_status_min(client: TestClient, admin_headers: dict) -> None:
@@ -258,45 +260,45 @@ def test_audit_list_renders_window_select(client: TestClient, admin_headers: dic
 
 
 def test_audit_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
-    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-results target."""
     response = client.get("/admin/audit/", headers=admin_headers)
     html = response.text
-    # Find the Clear link — it should target body, not inherit #audit-rows from the form
+    # Find the Clear link — it should target body, not inherit #audit-results from the form
     assert 'hx-target="body"' in html
     # Verify the form still targets the partial swap container
-    assert 'hx-target="#audit-rows"' in html
+    assert 'hx-target="#audit-results"' in html
 
 
 def test_endpoint_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
-    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-results target."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     html = response.text
     assert 'hx-target="body"' in html
-    assert 'hx-target="#audit-rows"' in html
+    assert 'hx-target="#audit-results"' in html
 
 
 def test_provider_clear_link_overrides_hx_target(client: TestClient, admin_headers: dict) -> None:
-    """Clear link must set hx-target=body to avoid inheriting the form's #audit-rows target."""
+    """Clear link must set hx-target=body to avoid inheriting the form's #audit-results target."""
     response = client.get("/admin/providers/usps", headers=admin_headers)
     html = response.text
     assert 'hx-target="body"' in html
-    assert 'hx-target="#audit-rows"' in html
+    assert 'hx-target="#audit-results"' in html
 
 
 def test_endpoint_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
-    """In-page HTMX request to /admin/endpoints/parse returns rows partial."""
+    """In-page HTMX request to /admin/endpoints/parse returns the results partial (no layout)."""
     headers = {**admin_headers, "HX-Request": "true"}
     response = client.get("/admin/endpoints/parse", headers=headers)
     assert response.status_code == 200
-    assert "<nav" not in response.text
+    assert "<body" not in response.text
 
 
 def test_provider_htmx_nonboosted_returns_partial(client: TestClient, admin_headers: dict) -> None:
-    """In-page HTMX request to /admin/providers/usps returns rows partial."""
+    """In-page HTMX request to /admin/providers/usps returns the results partial (no layout)."""
     headers = {**admin_headers, "HX-Request": "true"}
     response = client.get("/admin/providers/usps", headers=headers)
     assert response.status_code == 200
-    assert "<nav" not in response.text
+    assert "<body" not in response.text
 
 
 def test_endpoint_htmx_boosted_returns_full_page(client: TestClient, admin_headers: dict) -> None:
@@ -430,8 +432,8 @@ def test_endpoint_detail_has_filter_toggle_section(client: TestClient, admin_hea
     """Filter bar renders (even if empty when no status codes exist in dataset)."""
     response = client.get("/admin/endpoints/parse", headers=admin_headers)
     assert response.status_code == 200
-    # The form with hx-target=#audit-rows is present
-    assert 'hx-target="#audit-rows"' in response.text
+    # The form with hx-target=#audit-results is present
+    assert 'hx-target="#audit-results"' in response.text
 
 
 def test_endpoint_detail_filter_toggles_with_status_codes(
@@ -773,3 +775,101 @@ def test_dashboard_quota_tile_shows_requests_today(client: TestClient, admin_hea
     assert "10000" in html
     # Old "remaining" label must be gone
     assert "Daily Quota" not in html
+
+
+# --- HTMX filter swap must carry pagination with it (#425) ---
+
+_NEXT_HREF = re.compile(r'<a href="([^"]*)"[^>]*>Next')
+
+
+def _next_query(html: str) -> dict[str, list[str]]:
+    """Return the parsed query of the pagination "Next" link in *html*."""
+    match = _NEXT_HREF.search(html)
+    assert match, "no Next pagination link rendered"
+    return parse_qs(urlsplit(unescape(match.group(1))).query)
+
+
+def test_audit_filter_partial_carries_filters_into_pagination(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Filtering via the HTMX form must re-render pagination with the filter (#425).
+
+    The swap used to replace only <tbody>, leaving the initial unfiltered Next link.
+    """
+    headers = {**admin_headers, "HX-Request": "true"}
+    mock_rows = AsyncMock(return_value=([], 120))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/audit/",
+            params={"client_ip": "", "endpoint": "", "status_min": "400", "raw_input": ""},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert "<body" not in response.text
+    assert "Page 1 of 3" in response.text
+    query = _next_query(response.text)
+    assert query["page"] == ["2"]
+    assert query["status_min"] == ["400"]
+
+
+def test_audit_filter_form_targets_results_container(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """The form's swap target must enclose the pagination nav (#425)."""
+    mock_rows = AsyncMock(return_value=([], 120))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        html = client.get("/admin/audit/", headers=admin_headers).text
+    assert 'hx-target="#audit-results"' in html
+    container = html.index('id="audit-results"')
+    assert container < html.index('aria-label="Pagination"')
+
+
+def test_audit_full_page_pagination_keeps_filters(client: TestClient, admin_headers: dict) -> None:
+    """Full-page render (boosted Next/Prev) keeps every filter in the links (#425)."""
+    mock_rows = AsyncMock(return_value=([], 120))
+    with patch("address_validator.routers.admin.audit_views.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/audit/",
+            params={"page": "2", "status_min": "400", "client_ip": "10.0.0.1&x=y"},
+            headers=admin_headers,
+        )
+    query = _next_query(response.text)
+    assert query["page"] == ["3"]
+    assert query["status_min"] == ["400"]
+    assert query["client_ip"] == ["10.0.0.1&x=y"]
+
+
+def test_endpoint_filter_partial_carries_filters_into_pagination(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """Multi-valued status_code filters survive into the partial's pagination (#425)."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    mock_rows = AsyncMock(return_value=([], 120))
+    with patch("address_validator.routers.admin.endpoints.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/endpoints/parse?status_code=400&status_code=422&client_ip=",
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert "<body" not in response.text
+    query = _next_query(response.text)
+    assert query["page"] == ["2"]
+    assert query["status_code"] == ["400", "422"]
+
+
+def test_provider_filter_partial_carries_filters_into_pagination(
+    client: TestClient, admin_headers: dict
+) -> None:
+    """validation_status filters survive into the partial's pagination (#425)."""
+    headers = {**admin_headers, "HX-Request": "true"}
+    mock_rows = AsyncMock(return_value=([], 120))
+    with patch("address_validator.routers.admin.providers.get_audit_rows", mock_rows):
+        response = client.get(
+            "/admin/providers/usps?validation_status=not_found&client_ip=",
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert "<body" not in response.text
+    query = _next_query(response.text)
+    assert query["page"] == ["2"]
+    assert query["validation_status"] == ["not_found"]

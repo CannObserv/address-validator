@@ -60,12 +60,18 @@ async def provider_detail(
             quota = {**q, "requests_today": daily_usage.get(name, 0)}
             break
 
-    # HTMX partial — return just the rows (skip for boosted nav)
+    # HTMX filter swap — table + pagination (skip for boosted nav; #425)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             request,
-            "admin/audit/_rows.html",
-            {"rows": rows, "show_result": True, "show_provider": False},
+            "admin/audit/_results.html",
+            {
+                "rows": rows,
+                "page": page,
+                "total_pages": total_pages,
+                "show_result": True,
+                "show_provider": False,
+            },
         )
 
     return templates.TemplateResponse(

@@ -43,12 +43,18 @@ async def endpoint_detail(
     total_pages = max(1, math.ceil(total / _PER_PAGE))
     filters = {"client_ip": client_ip, "status_codes": status_code or []}
 
-    # HTMX partial — return just the rows (skip for boosted nav)
+    # HTMX filter swap — table + pagination (skip for boosted nav; #425)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             request,
-            "admin/audit/_rows.html",
-            {"rows": rows, "show_result": False, "show_provider": True},
+            "admin/audit/_results.html",
+            {
+                "rows": rows,
+                "page": page,
+                "total_pages": total_pages,
+                "show_result": False,
+                "show_provider": True,
+            },
         )
 
     return templates.TemplateResponse(

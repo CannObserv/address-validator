@@ -82,11 +82,18 @@ async def audit_list(
         "raw_input_days": raw_input_days,
     }
 
+    # HTMX filter swap — table + pagination (skip for boosted nav; #425)
     if request.headers.get("HX-Request") and not request.headers.get("HX-Boosted"):
         return templates.TemplateResponse(
             request,
-            "admin/audit/_rows.html",
-            {"rows": rows, "show_result": False, "show_provider": True},
+            "admin/audit/_results.html",
+            {
+                "rows": rows,
+                "page": page,
+                "total_pages": total_pages,
+                "show_result": False,
+                "show_provider": True,
+            },
         )
 
     return templates.TemplateResponse(
