@@ -157,7 +157,7 @@ Then, by what the PR touched:
 
 - **Runtime** (`runtime` group, a runtime major, or a security update to a runtime package): live only after the deploy, which is its own approval. Pull the main checkout, `uv sync`, then `sudo systemctl restart address-validator`, outside the `quiet` ranges in `.skills/patching-hosts` (re-read `date -u` first).
 - **Dev, npm, pre-commit**: no restart. On any `eslint` PR, check the [npm held rows](#auditing).
-- **`.github/workflows/`**: no PR runs a scheduled-only workflow, so dispatch it once (`gh workflow run context-cadence.yml`; the PAT can't, so the operator does) and read the run.
+- **`.github/workflows/`**: no PR runs a scheduled-only workflow, so dispatch it once (`gh workflow run context-cadence.yml`, or **Run workflow** in the Actions tab; the PAT can't, so the operator does) and read the run. Never **Re-run** an old run: it replays that run's commit, workflow included (#426: a re-run of a pre-`pr` run pushed straight to `main`).
 
 A bump whose hooks or tests go red isn't landed by pinning it back: report it, and fix forward on a branch of its own. A major is checked against the `>=X.Y,<X+1` form above before merging.
 
