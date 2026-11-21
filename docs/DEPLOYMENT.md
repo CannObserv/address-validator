@@ -307,7 +307,7 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 `.skills/merge_mode` is `pr`: work reaches `main` only through a PR merged on GitHub, never a local merge here. Skills read it from the primary checkout, so a worktree reads `direct` until the knob's merge is pulled; `tests/unit/test_merge_mode_knob.py` pins it. Procedure: `skills/shipping-work/references/pr-mode.md`. Host specifics:
 
-- **PR pass** ("ship it" on the branch): `scripts/pre-ship.sh` on the final SHA is the only gate (no PR CI). Edit a PR body with `gh api -X PATCH repos/CannObserv/address-validator/pulls/<n> -F body=@<file>`, then read it back; the PAT's `gh pr edit` silently no-ops. `Refs #<n>`, not `Closes`, for an issue about what production runs.
+- **PR pass** ("ship it" on the branch): `scripts/pre-ship.sh` on the final SHA is the only gate (no PR CI). Edit a PR body with `gh api -X PATCH repos/CannObserv/address-validator/pulls/<n> -F body=@<file>`, then read it back; the PAT's `gh pr edit` silently no-ops.
 - **Merge**: on GitHub, the owner's call. Merge commit today.
 - **Post-merge pass** ("ship it" again): `git switch main && git pull --ff-only` in the main checkout. **The pull is the deploy**: the unit, infra oneshots and the API all run from this checkout. Then the [Deploy row](#unit-file-and-code-must-move-together) as needed, then `worktree-destroy.sh <branch> --force`.
 - **Skills refresh hook**: on `main` in the main checkout, opens or updates one `skills/submodule-refresh` PR per UTC day instead of pushing; someone merges it. Worktree sessions never refresh.
