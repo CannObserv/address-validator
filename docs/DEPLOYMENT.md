@@ -303,6 +303,16 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 
 **Worktrees that have had `.skills/doctor.sh` run in them need `worktree-destroy.sh <branch> --force`.** The doctor heals dangling vendor symlinks by running `git submodule update --init`, and git refuses to remove a worktree containing checked-out submodules (`fatal: working trees containing submodules cannot be moved or removed`). The `/reviewing-code-python-fastapi` preflight invokes the doctor automatically, so any worktree that has been through a code review is in this state. Note `--force` also bypasses git's dirty-tree check — commit or stash first. The Claude Code harness creates its own worktrees at `.claude/worktrees/` when an Agent runs with `isolation: "worktree"` — that is harness-owned state and outside this convention; leave it alone.
 
+## Merge mode: `pr` (#426)
+
+`.skills/merge_mode` is `pr`: work reaches `main` only through a PR merged on GitHub, never a local merge here. Skills read it from the primary checkout, so a worktree reads `direct` until the knob's merge is pulled; `tests/unit/test_merge_mode_knob.py` pins it. Procedure: `skills/shipping-work/references/pr-mode.md`. Host specifics:
+
+- **PR pass** ("ship it" on the branch): `scripts/pre-ship.sh` on the final SHA is the only gate (no PR CI). Edit a PR body with `gh api -X PATCH repos/CannObserv/address-validator/pulls/<n> -F body=@<file>`, then read it back; the PAT's `gh pr edit` silently no-ops. `Refs #<n>`, not `Closes`, for an issue about what production runs.
+- **Merge**: on GitHub, the owner's call. Merge commit today.
+- **Post-merge pass** ("ship it" again): `git switch main && git pull --ff-only` in the main checkout. **The pull is the deploy**: the unit, infra oneshots and the API all run from this checkout. Then the [Deploy row](#unit-file-and-code-must-move-together) as needed, then `worktree-destroy.sh <branch> --force`.
+- **Skills refresh hook**: on `main` in the main checkout, opens or updates one `skills/submodule-refresh` PR per UTC day instead of pushing; someone merges it. Worktree sessions never refresh.
+- **`context-cadence.yml`** renders per mode: after any knob change, re-run `install-cadence.sh` and land the diff in its own PR (`doc-check.sh` flags it).
+
 ## Scheduled timers
 
 Unit install (`infra/install-units.sh`), every timer's schedule, alerting and journal queries: [TIMERS.md](TIMERS.md).

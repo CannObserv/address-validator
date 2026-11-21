@@ -1,0 +1,5 @@
+# Work lands on main through a pull request merged on GitHub (#426).
+# Read from the primary checkout by shipping-work, using-git-worktrees, the
+# skills refresh hook and install-cadence.sh (gregoryfoster/skills#342, #560).
+# Absent: `direct`. Pinned by tests/unit/test_merge_mode_knob.py.
+pr
