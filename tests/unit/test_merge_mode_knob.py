@@ -111,3 +111,17 @@ def test_the_vendored_reader_reads_pr(reader: Path, tmp_path: Path) -> None:
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout == "pr\n"
+
+
+CADENCE = REPO_ROOT / ".github" / "workflows" / "context-cadence.yml"
+
+
+def test_the_cadence_workflow_is_rendered_for_pr() -> None:
+    """A ``direct`` render pushes straight to ``main``, which a PR-only ruleset
+    refuses and loses the week's row (gregoryfoster/skills#560). The marker is
+    the step ``install-cadence.sh --check`` itself looks for; a re-render under
+    the wrong mode, or a hand edit, fails here first."""
+    workflow = CADENCE.read_text()
+    assert "- name: Read the merge mode" in workflow
+    assert "PR_BRANCH=context/weekly-measurement" in workflow
+    assert "pull-requests: write" in workflow
