@@ -61,7 +61,8 @@ def test_the_knob_says_pr() -> None:
 
 def test_the_knob_is_committed_not_ignored() -> None:
     """An ignored knob exists only in the checkout that wrote it: every other
-    clone, and CI's render of the cadence workflow, would read ``direct``."""
+    clone reads ``direct``, and so does the ``pr``-rendered cadence workflow,
+    which reads the committed knob from its Actions checkout at run time."""
     if shutil.which("git") is None:
         pytest.skip("no git")
     in_repo = subprocess.run(
