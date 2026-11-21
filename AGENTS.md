@@ -93,8 +93,7 @@ Single-VM dev+prod model ([exe.dev](https://exe.dev)):
 - Port 8000 = systemd production service (main worktree) — **never** start uvicorn on it by hand
 - Port 8001 = dev server (active git worktree, `--reload`), at `https://address-validator.exe.xyz:8001/`
 - **No swap**; a session can't be OOM-killed, so *services* die instead — never run a big install unreserved → [docs/HOST-MEMORY.md](docs/HOST-MEMORY.md)
-- All development in `.worktrees/<branch-slug>/`, via the `using-git-worktrees` scripts (never `git worktree remove`); never modify the main worktree
-- `.skills/merge_mode` `pr`: land by GitHub PR merge; pulling the main checkout deploys
+- All development in `.worktrees/<branch-slug>/` via the `using-git-worktrees` scripts (never `git worktree remove`), landed by GitHub PR (`.skills/merge_mode` `pr`); the main checkout only pulls, which deploys
 - New worktree bootstrap: `uv sync` **and** `bash .skills/doctor.sh` (~2 s) — no `.venv` is linked in (`.skills/worktree_venv=none`: under the `link` default a worktree's `uv sync` *prunes* the port-8000 service's venv), and every vendored skill/hook symlink dangles until the doctor initializes submodules ([docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Dev server: from the worktree root, `PYTHONPATH=src` + `--log-config` both mandatory (boot fails without)
 - A worktree that has run `doctor.sh` needs `worktree-destroy.sh <branch> --force`; full worktree + dev-server reference → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
@@ -154,7 +153,7 @@ Critical gotchas (per-module table: `docs/SENSITIVE-AREAS.md`):
 
 All triggers: `docs/SKILLS.md`. Repo-specific:
 
-- `/using-git-worktrees`, `/shipping-work` — every branch; `pr` ship → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#merge-mode-pr-426)
+- `/using-git-worktrees`, `/shipping-work` — [two-pass `pr` ship](docs/DEPLOYMENT.md#merge-mode-pr-426)
 - `/curating-context` — AGENTS.md + docs vs the 6,000-token budget; weekly
 - `/using-mayfly-chat` — never commit the channel URL
 - `socraticode:codebase-exploration` / `socraticode:codebase-management` — [docs/SOCRATICODE.md](docs/SOCRATICODE.md)
