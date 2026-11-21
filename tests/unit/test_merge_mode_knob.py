@@ -64,6 +64,14 @@ def test_the_knob_is_committed_not_ignored() -> None:
     clone, and CI's render of the cadence workflow, would read ``direct``."""
     if shutil.which("git") is None:
         pytest.skip("no git")
+    in_repo = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--git-dir"],
+        capture_output=True,
+        check=False,
+        env=GIT_ENV,
+    )
+    if in_repo.returncode != 0:
+        pytest.skip("not a git checkout (a source export): nothing to be tracked in")
     tracked = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", ".skills/merge_mode"],
         capture_output=True,
