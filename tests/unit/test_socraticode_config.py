@@ -54,6 +54,21 @@ COLLECTION_PREFIX = "QDRANT_COLLECTION_PREFIX"
 #: six-collection set per branch.
 BRANCH_AWARE = "SOCRATICODE_BRANCH_AWARE"
 
+#: What the code index walks beyond the server's built-in extension set: the
+#: systemd units, timers and drop-ins under infra/, where schedules and memory
+#: limits are actually declared. There is no per-project file for this (only
+#: ``projectId`` is read from .socraticode.json), so it rides the env block.
+#: Every launcher must carry it: a server walking without it sees these files
+#: as deleted and ``codebase_update`` prunes them (docs/SOCRATICODE.md).
+EXTRA_EXTENSIONS = ".service,.timer,.conf,.default"
+
+#: The built-in extensions infra/ uses (constants.js SUPPORTED_EXTENSIONS).
+INFRA_BUILTIN_SUFFIXES = {".py", ".sh", ".json"}
+
+#: Tracked infra/ files the index cannot see: no extension to name, and the
+#: server's content detection does not recognise apt preferences.
+INFRA_UNINDEXED = {"infra/apt-preferences.d/address-validator"}
+
 #: Everywhere a variable could reach the MCP server's environment on this host.
 #: /etc/address-validator/.env is absent on purpose: only systemd loads it.
 NAMESPACE_GUARD_FILES = [
@@ -98,6 +113,25 @@ def test_env_block_points_at_co_index(env):
     """Each key compared on its own, so a failure names the one that drifted."""
     for key, want in CLIENT_ENV.items():
         assert env.get(key) == want, f"settings.json env.{key}={env.get(key)!r}, want {want!r}"
+
+
+def test_env_block_indexes_the_infra_units(env):
+    """Compared whole: the server lowercases and splits it, nothing validates it."""
+    assert env.get("EXTRA_EXTENSIONS") == EXTRA_EXTENSIONS
+
+
+def test_every_infra_file_is_indexed_or_named():
+    """A new unit type (.path, .socket, .slice) is skipped silently by the walker.
+
+    The answer then comes from a doc describing the unit, not the unit. Add the
+    extension to EXTRA_EXTENSIONS, or name the file in INFRA_UNINDEXED.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "infra"], check=True, capture_output=True, text=True, cwd=REPO_ROOT
+    ).stdout.split()
+    indexed = INFRA_BUILTIN_SUFFIXES | set(EXTRA_EXTENSIONS.split(","))
+    unseen = {f for f in tracked if Path(f).suffix.lower() not in indexed}
+    assert unseen == INFRA_UNINDEXED
 
 
 def test_env_block_has_no_qdrant_host(env):

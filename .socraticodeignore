@@ -38,3 +38,45 @@ docs/plans/
 # The ISO 19160 PDF beside it was never indexed (binary, unsupported
 # extension) and is unaffected either way.
 docs/research/
+
+# --- Data, generated output and vendored specs (measured 2026-11-20, 1.14.0) ---
+# Together 379 of the code index's 2,611 chunks (14.5%), none of it code an
+# agent should be steered to. Each line was dry-run against the server's own
+# getIndexableFiles: the 7 files below leave and nothing else moves.
+
+# CRF training data: token-tagged <AddressString> XML. `upstream/labeled.xml`
+# alone was 266 chunks (10.2%), more than half of all of src/ (502). It is
+# rows, not prose or code; `grep` finds a labelled example exactly, and an
+# embedding of 30 tagged addresses answers nothing. Each batch's rationale.md
+# and manifest.json stay indexed: those are the first-party record.
+training/**/*.xml
+
+# This service's OpenAPI schema, generated from the app and drift-tested
+# (#276). 29 chunks that restated models.py and outranked it: "validate
+# endpoint response model fields and status enum" returned openapi.json's
+# ValidationResult above the model's own definition. Still searchable where it
+# belongs, as the `service-api-spec` context artifact (a single-file artifact
+# is read verbatim and skips every ignore file).
+/openapi.json
+
+# Vendored USPS OpenAPI specs, 57 chunks. Third-party contracts, not our code,
+# and both are context artifacts (`usps-api-spec`, `usps-enhanced-api-spec`),
+# so nothing leaves the store. Same terms as docs/research/ above.
+docs/usps-*.yaml
+
+# Minified Tailwind build output (scripts/build/build-css.sh writes it from
+# input.css + tailwind.config.js, which stay indexed). 11 chunks of utility
+# classes on one 20 KB line.
+src/address_validator/static/admin/css/tailwind.css
+
+# --- Re-included: dropped by a built-in default, not by choice ---
+# The built-in `build` pattern matches at any depth, so it took scripts/build/
+# and its three first-party scripts (build-css.sh, download-tailwind.sh,
+# pre-commit-tailwind.sh) with it. This file is read last, so a negation wins.
+# scripts/build/bin/ (the downloaded tailwindcss binary) stays out: .gitignore
+# names it, and the negation re-includes only the directory itself.
+!scripts/build/
+
+# NOT decided here: which extensions and dotfiles the walk admits is server env
+# (EXTRA_EXTENSIONS, set for the infra/ units; INCLUDE_DOT_FILES, not set).
+# See docs/SOCRATICODE.md -> "Beyond the built-in extensions".

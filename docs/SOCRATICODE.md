@@ -400,6 +400,49 @@ deliberately **not** `skills/` — the first-party skill
 indexer does not follow symlinks, so excluding `skills-vendor/` already drops the
 vendored content.
 
+Also out since 2026-11-20 (1.14.0), 379 of 2,611 code chunks (14.5%):
+
+| Pattern | Chunks | Why | Still reachable by |
+|---|---|---|---|
+| `training/**/*.xml` | 282 | CRF training rows, not prose or code | `grep`; batch `rationale.md` + `manifest.json` stay indexed |
+| `/openapi.json` | 29 | generated from `models.py`, and outranked it | `service-api-spec` artifact |
+| `docs/usps-*.yaml` | 57 | vendored third-party specs | the two `usps-*-api-spec` artifacts |
+| `…/css/tailwind.css` | 11 | minified build output | `input.css`, `tailwind.config.js` |
+
+One negation, `!scripts/build/`: the built-in `build` default matches at any
+depth and had dropped three first-party scripts. The file is read last
+(defaults → `.gitignore` → it), so the negation wins; `scripts/build/bin/`
+stays out through `.gitignore`.
+
+Dry-run a change with the server's own walker, which matched the live
+collection file-for-file. Then `codebase_update` from a main-checkout session
+drops the chunks of files that left and embeds those that joined:
+
+```bash
+D=$(command ls -d ~/.npm/_npx/*/node_modules/socraticode/dist | head -1)
+node --input-type=module -e 'const { getIndexableFiles } = await import(process.argv[1] + "/services/indexer.js");
+console.log((await getIndexableFiles(process.argv[2])).sort().join("\n"));' "$D" "$PWD"
+```
+
+### Beyond the built-in extensions
+
+Two things no ignore rule decides. Both are server env, in the `env` block of
+`.claude/settings.json` (pinned by `tests/unit/test_socraticode_config.py`):
+
+| What | Cause | Files | Knob | State |
+|---|---|---|---|---|
+| `infra/` units, timers, `.conf` drop-ins, `earlyoom.default` | extension not built in | 24, 30 KB | `EXTRA_EXTENSIONS=.service,.timer,.conf,.default` | **set** 2026-11-21 |
+| `.github/`, `.pre-commit-config.yaml`, `.claude/settings.json` | the walk is `dot: false` | 14, 4 of them hook symlinks | `INCLUDE_DOT_FILES=true` | not set: `grep` |
+
+Before it, "nightly database backup schedule and memory limit" returned
+`RECOVERY.md` and `TIMERS.md`, never the timer or the unit's `MemoryMax=`.
+
+**Every launcher must carry the value.** A server walking without it sees the
+24 files as deleted and `codebase_update` prunes them. A session and its hooks
+get it from the settings block, after a Claude Code restart. The driver's
+`update` and `index` from a plain shell do not: export it first. A new unit
+type (`.path`, `.socket`) fails the drift test until it is added or named.
+
 ### Duplicate-config trap
 
 If a session shows BOTH `mcp__plugin_socraticode_socraticode__*` and a standalone

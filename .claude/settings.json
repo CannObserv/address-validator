@@ -6,6 +6,7 @@
     "OLLAMA_URL": "http://index:11434",
     "EMBEDDING_MODEL": "nomic-embed-text",
     "EMBEDDING_DIMENSIONS": "768",
+    "EXTRA_EXTENSIONS": ".service,.timer,.conf,.default",
     "SOCRATICODE_SPEC": "socraticode@1.14.0"
   },
   "hooks": {
