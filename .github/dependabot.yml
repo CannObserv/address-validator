@@ -13,8 +13,9 @@ updates:
   - package-ecosystem: "github-actions"
     # "/" scans .github/workflows/; "/.github/workflows" is silence.
     # context-cadence.yml is generated (install-cadence.sh) and scheduled-only:
-    # a re-render writes older pins back (gregoryfoster/skills#373), and no PR
-    # runs it, so dispatch it once after landing a bump.
+    # a re-render keeps its SHA pin or a newer tag (gregoryfoster/skills#373,
+    # #675), but check its diff; no PR runs it, so dispatch it once after
+    # landing a bump.
     directory: "/"
     # Without an interval Dependabot rejects the block, visibly only in its tab.
     schedule:
