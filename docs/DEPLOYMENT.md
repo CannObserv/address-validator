@@ -311,7 +311,7 @@ PYTHONPATH=src uv run uvicorn address_validator.main:app --host 0.0.0.0 --port 8
 - **Merge**: on GitHub, the owner's call. Merge commit today.
 - **Post-merge pass** ("ship it" again): `git switch main && git pull --ff-only` in the main checkout. **The pull is the deploy**: the unit, infra oneshots and the API all run from this checkout. Then the [Deploy row](#unit-file-and-code-must-move-together) as needed (restart outside `.skills/patching-hosts`' `quiet` ranges; re-read `date -u` first), then `worktree-destroy.sh <branch> --force`.
 - **Skills refresh hook**: on `main` in the main checkout, opens or updates one `skills/submodule-refresh` PR per UTC day instead of pushing; someone merges it. Worktree sessions never refresh.
-- **`context-cadence.yml`** renders per mode: after any knob change, re-run `install-cadence.sh` and land the diff in its own PR (`doc-check.sh` flags it). In `pr` mode each run appends to one standing `context/weekly-measurement` PR; someone merges it. It needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests" (owner-only; the PAT gets 403), or the run fails with its row left on the branch.
+- **`context-cadence.yml`** renders per mode: after any knob change, re-run `install-cadence.sh` and land the diff in its own PR (`doc-check.sh` flags it). In `pr` mode each run appends to one standing `context/weekly-measurement` PR; someone merges it. It needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests" (owner-only; the PAT gets 403), or the run fails with its row left on the branch. A `pr` run dispatched on any branch but `main` stops before measuring (gregoryfoster/skills#683).
 
 ## Scheduled timers
 
