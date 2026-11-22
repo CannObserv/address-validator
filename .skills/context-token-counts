@@ -5,8 +5,8 @@
 # file never counted exactly or since drifted far from the size recorded here.
 13644 5978 AGENTS.md
 12326 4715 docs/ARCHITECTURE.md
-11911 4781 docs/DEPENDENCY-POLICY.md
-24006 9565 docs/DEPLOYMENT.md
+12090 4850 docs/DEPENDENCY-POLICY.md
+24235 9652 docs/DEPLOYMENT.md
 22733 9374 docs/HOST-MEMORY.md
 20330 7896 docs/LOGGING.md
 17269 7064 docs/RECOVERY.md
