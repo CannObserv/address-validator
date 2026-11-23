@@ -92,6 +92,10 @@ def test_the_knob_is_committed_not_ignored() -> None:
     _require_checkout()
     tracked = _git("ls-files", "--error-unmatch", KNOB_REL)
     assert tracked.returncode == 0, tracked.stderr
+    # push.sh reads the mode from the commit, not the work tree: a knob staged
+    # as a symlink (120000) is exit 2 at the push whatever the disk shows.
+    staged = _git("ls-files", "-s", "--", KNOB_REL)
+    assert staged.stdout.split()[:1] in (["100644"], ["100755"]), staged.stdout
     ignored = _git("check-ignore", "-q", "--no-index", KNOB_REL)
     assert ignored.returncode == 1, f"{KNOB_REL} matches a .gitignore pattern"
 
