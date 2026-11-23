@@ -1,0 +1,7 @@
+# shipping-work's push.sh gates the exact clean tree, then posts the commit
+# status gate/local = success on the SHA it pushed (gregoryfoster/skills#688,
+# #427). No PR CI here: it is evidence on each PR head, never a required
+# check. Read from the commit being shipped; export GH_TOKEN before push.sh.
+# Absent or `off`: no attestation. Pinned by
+# tests/unit/test_attest_local_gate_knob.py.
+on
