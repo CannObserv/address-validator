@@ -15,6 +15,7 @@
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 CLAUDE_SKILLS = REPO_ROOT / ".claude" / "skills"
 SKILLS = REPO_ROOT / "skills"
+
+# A key (any indent) whose value is an unquoted plain scalar (not "…", '…', | or >).
+PLAIN_SCALAR = re.compile(r"^\s*[\w-]+:\s+([^\s\"'|>].*)$")
 
 ALLOWED = {"on", "name-only", "user-invocable-only", "off"}
 
@@ -100,3 +104,8 @@ def test_in_repo_frontmatter_is_strict_yaml(skill_dir):
     assert fm["name"] == skill_dir.name
     desc = fm["description"]
     assert desc.count('"') % 2 == 0, f"unbalanced quote — truncated description? {desc[-60:]!r}"
+    # The quote count misses a " #" cut outside quotes, so check the raw text:
+    # in an unquoted plain scalar, " #" starts a comment and drops the rest.
+    for line in text.split("---", 2)[1].splitlines():
+        m = PLAIN_SCALAR.match(line)
+        assert not (m and " #" in m.group(1)), f"unquoted ' #' truncates: {line[:80]!r}"
