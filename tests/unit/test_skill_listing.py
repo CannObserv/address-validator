@@ -5,13 +5,18 @@
   skill would otherwise drop back into the listing at full cost, and the stale
   key would hide nothing. Built-ins are keyed by skill name, not slash alias
   (``/ship`` is ``ship-local``).
-- A skill another skill hands off to through the Skill tool must stay callable
-  by Claude, so it may be ``name-only`` but never ``user-invocable-only`` or
-  ``off``.
+- ``BUILTIN`` holds no name without an override, so the allowlist cannot
+  quietly widen what the stale-key check accepts.
+- A skill that a skill or tool hands off to through the Skill tool
+  (``DELEGATED_TO``) must stay callable by Claude, so it may be ``name-only``
+  but never ``user-invocable-only`` or ``off``.
+- Built-ins in ``KEEP_ON`` stay fully listed: Claude must trigger them from
+  the user's wording (GH #442).
 - In-repo SKILL.md frontmatter (real directories under ``skills/``, not
   vendored symlinks) parses as strict YAML. An unquoted ``: `` or `` #`` in a
   plain scalar breaks the parse or silently truncates the value
-  (gregoryfoster/skills#709).
+  (gregoryfoster/skills#709); ``" #"`` is checked in the raw text, since the
+  parsed value no longer shows it.
 """
 
 import json
