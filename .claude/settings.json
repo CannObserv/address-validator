@@ -21,7 +21,17 @@
     "managing-skills": "name-only",
     "subagent-driven-development": "name-only",
     "using-mayfly-chat": "name-only",
-    "writing-skills": "name-only"
+    "writing-skills": "name-only",
+    "code-review": "user-invocable-only",
+    "dataviz": "user-invocable-only",
+    "fewer-permission-prompts": "user-invocable-only",
+    "keybindings-help": "user-invocable-only",
+    "ship-local": "user-invocable-only",
+    "steward": "user-invocable-only",
+    "claude-api": "name-only",
+    "run": "name-only",
+    "simplify": "name-only",
+    "workflow-authoring": "name-only"
   },
   "hooks": {
     "SessionStart": [

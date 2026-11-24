@@ -1,8 +1,10 @@
 """Guards for the session skill listing (docs/SKILLS.md → Listing overrides).
 
 - Every ``skillOverrides`` key in ``.claude/settings.json`` names a skill under
-  ``.claude/skills/``: a renamed skill would otherwise drop back into the
-  listing at full cost, and the stale key would hide nothing.
+  ``.claude/skills/`` or a Claude Code built-in listed in ``BUILTIN``: a renamed
+  skill would otherwise drop back into the listing at full cost, and the stale
+  key would hide nothing. Built-ins are keyed by skill name, not slash alias
+  (``/ship`` is ``ship-local``).
 - A skill another skill hands off to through the Skill tool must stay callable
   by Claude, so it may be ``name-only`` but never ``user-invocable-only`` or
   ``off``.
@@ -25,8 +27,30 @@ SKILLS = REPO_ROOT / "skills"
 
 ALLOWED = {"on", "name-only", "user-invocable-only", "off"}
 
-# skill -> the skill that invokes it via the Skill tool.
-DELEGATED_TO = {"enforcing-architecture": "reviewing-architecture"}
+# Claude Code built-in skills this repo overrides (GH #442). Not on disk, so
+# listed here; add a name only with the override that uses it.
+BUILTIN = {
+    "claude-api",
+    "code-review",
+    "dataviz",
+    "fewer-permission-prompts",
+    "keybindings-help",
+    "run",
+    "ship-local",
+    "simplify",
+    "steward",
+    "workflow-authoring",
+}
+
+# Built-ins kept fully listed on purpose (GH #442): Claude must trigger them
+# from the user's wording ("every 5 minutes", "from now on when X").
+KEEP_ON = {"loop", "schedule", "update-config"}
+
+# skill -> what invokes it via the Skill tool, so it must stay model-callable.
+DELEGATED_TO = {
+    "enforcing-architecture": "reviewing-architecture",
+    "workflow-authoring": "the Workflow tool's instructions",
+}
 
 
 def _overrides() -> dict[str, str]:
@@ -34,9 +58,19 @@ def _overrides() -> dict[str, str]:
 
 
 def test_override_keys_name_existing_skills():
-    known = {p.name for p in CLAUDE_SKILLS.iterdir()}
+    known = {p.name for p in CLAUDE_SKILLS.iterdir()} | BUILTIN
     stale = sorted(set(_overrides()) - known)
-    assert not stale, f"skillOverrides keys with no .claude/skills/ entry: {stale}"
+    assert not stale, f"skillOverrides keys naming no repo skill or BUILTIN: {stale}"
+
+
+def test_builtin_list_has_no_unused_names():
+    unused = sorted(BUILTIN - set(_overrides()))
+    assert not unused, f"BUILTIN names with no override: {unused}"
+
+
+@pytest.mark.parametrize("skill", sorted(KEEP_ON))
+def test_kept_builtins_stay_listed(skill):
+    assert _overrides().get(skill, "on") == "on", f"{skill} is kept fully listed (GH #442)"
 
 
 def test_override_values_are_valid():

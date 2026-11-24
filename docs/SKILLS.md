@@ -105,12 +105,17 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 
 ## Listing overrides
 
-Every session pays for each listed skill's name + description; the body loads only on invocation. `skillOverrides` in `.claude/settings.json` trims that listing without editing vendored `SKILL.md`:
+Every session pays for each listed skill's name + description; the body loads only on invocation. `skillOverrides` in `.claude/settings.json` trims that listing without editing vendored `SKILL.md`. Method, evidence and per-skill decisions (reusable by cohort repos): [GH #442](https://github.com/CannObserv/address-validator/issues/442).
 
-- `user-invocable-only` — hidden from Claude, `/name` still works: `adopting-dependabot`, `auditing-ci-cost`, `init-socraticode`, `maintaining-host-disk`, `orchestrating-issue-backlog`. One-off adoptions or rare re-runs; type the slash command when needed.
-- `name-only` — name listed, description dropped, Claude can still call it: `coordinating-epics`, `dispatching-parallel-agents`, `enforcing-architecture` (`/reviewing-architecture` delegates to it via the Skill tool, so never `user-invocable-only`), `managing-skills`, `subagent-driven-development`, `using-mayfly-chat`, `writing-skills`.
+- `user-invocable-only` — hidden from Claude, `/name` still works:
+  - repo: `adopting-dependabot`, `auditing-ci-cost`, `init-socraticode`, `maintaining-host-disk`, `orchestrating-issue-backlog` — one-off adoptions or rare re-runs
+  - built-in: `code-review`, `dataviz`, `fewer-permission-prompts`, `keybindings-help`, `ship-local` (`/ship`), `steward`
+- `name-only` — name listed, description dropped, Claude can still call it:
+  - repo: `coordinating-epics`, `dispatching-parallel-agents`, `enforcing-architecture` (`/reviewing-architecture` delegates to it via the Skill tool, so never `user-invocable-only`), `managing-skills`, `subagent-driven-development`, `using-mayfly-chat`, `writing-skills`
+  - built-in: `claude-api`, `run`, `simplify`, `workflow-authoring` (the Workflow tool loads it first, so it stays callable)
+- Kept fully listed on purpose: built-ins `loop`, `schedule`, `update-config` — Claude must trigger them from the user's wording.
 
-Measured 2026-11-24 (`count_tokens`, `claude-opus-5-5`): repo skill listing 3,519 → ~1,540 tokens per session. Triggers in the tables above still apply to hidden skills — invoke them by name. `tests/unit/test_skill_listing.py` fails on a stale override key or a delegated skill made uncallable. Re-weigh when a skill's use changes (e.g. `coordinating-epics` once epic #272 closes).
+Built-ins are keyed by skill name, not slash alias (`/ship` is `ship-local`); the `/skills` menu shows the real key. Not covered: plugin skills (`/plugin`) and claude.ai `anthropic-skills:*` (claude.ai skill settings, or `syncClaudeAiSkills: false` in `.claude/settings.local.json`). Measured 2026-11-24 (`count_tokens`, `claude-opus-5-5`): repo skills 3,519 → ~1,540 tokens per session, built-ins 2,677 → ~690. The slash commands in the tables above still work when hidden. `tests/unit/test_skill_listing.py` fails on a stale override key, a delegated skill made uncallable, or a kept built-in overridden. Re-weigh when a skill's use changes (e.g. `coordinating-epics` once epic #272 closes).
 
 ## Project-specific skills
 
