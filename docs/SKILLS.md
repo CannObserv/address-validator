@@ -103,6 +103,20 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 | `/patching-hosts` | "patch the host", "OS updates", "security updates", "needrestart" | Probes pending OS/package updates by class against the posture `.skills/patching-hosts` declares, then a gated, held-step apply with a recovery point, a detached reboot chain and post-boot checks. The knob (weekly, Thursdays) and the first run are [#311](https://github.com/CannObserv/address-validator/issues/311). Every step needs the owner's approval |
 | `/maintaining-host-disk` | "disk GC", "root disk is full", "disk headroom", "install/update the disk GC", "retire disk hygiene" | Pulls Provisioner's canonical disk GC + headroom sensor from the digest-pinned `co-image-base` release (`scripts/_pin.sh`), installs or updates it, turns it on per host (`/etc/cannobserv/disk-gc/`), and retires the host's own disk tooling only after `retire-check.sh`. Adoption here: [#326](https://github.com/CannObserv/address-validator/issues/326). Every host step needs the owner's approval; never edit the installed copy |
 
+## Listing overrides
+
+Every session pays for each listed skill's name + description; the body loads only on invocation. `skillOverrides` in `.claude/settings.json` trims that listing without editing vendored `SKILL.md`. Method, evidence and per-skill decisions (reusable by cohort repos): [GH #442](https://github.com/CannObserv/address-validator/issues/442).
+
+- `user-invocable-only` — hidden from Claude, `/name` still works:
+  - repo: `adopting-dependabot`, `auditing-ci-cost`, `init-socraticode`, `maintaining-host-disk`, `orchestrating-issue-backlog` — one-off adoptions or rare re-runs
+  - built-in: `code-review`, `dataviz`, `fewer-permission-prompts`, `keybindings-help`, `ship-local` (`/ship`), `steward`
+- `name-only` — name listed, description dropped, Claude can still call it:
+  - repo: `coordinating-epics`, `dispatching-parallel-agents`, `enforcing-architecture` (`/reviewing-architecture` delegates to it via the Skill tool, so never `user-invocable-only`), `managing-skills`, `subagent-driven-development`, `using-mayfly-chat`, `writing-skills`
+  - built-in: `claude-api`, `run`, `simplify`, `workflow-authoring` (the Workflow tool loads it first, so it stays callable)
+- Kept fully listed on purpose: built-ins `loop`, `schedule`, `update-config` — Claude must trigger them from the user's wording.
+
+Built-ins are keyed by skill name, not slash alias (`/ship` is `ship-local`); the `/skills` menu shows the real key. Not covered: plugin skills (`/plugin`) and claude.ai `anthropic-skills:*` (claude.ai skill settings, or `syncClaudeAiSkills: false` in `.claude/settings.local.json`). Measured 2026-11-24 (`count_tokens`, `claude-opus-5-5`): repo skills 3,519 → ~1,540 tokens per session, built-ins 2,677 → ~665. Hiding drops the trigger phrases: the Trigger columns above route by phrase only for fully listed skills. For a `name-only` or `user-invocable-only` skill, type `/name` — e.g. a #272 check-in ("I finished #N") needs `/coordinating-epics`. `tests/unit/test_skill_listing.py` fails on a stale override key, a delegated skill made uncallable, or a kept built-in overridden. Re-weigh when a skill's use changes (e.g. `coordinating-epics` once epic #272 closes).
+
 ## Project-specific skills
 
 | Skill | Trigger | Purpose |
