@@ -1,7 +1,7 @@
 ---
 name: train-model
 description: Interactive pipeline for training custom usaddress CRF models. Use when the user says "train model", "retrain usaddress", "fix parsing", or "/train-model". Walks through identify, label, train, test, deploy, observe, and contribute steps with operator confirmation at each gate.
-compatibility: Designed for Claude. Requires Python 3.12, uv, parserator, pycrfsuite, usaddress, PostgreSQL (for candidate collection). Optional: ANTHROPIC_API_KEY for Claude-assisted labeling.
+compatibility: "Designed for Claude. Requires Python 3.12, uv, parserator, pycrfsuite, usaddress, PostgreSQL (for candidate collection). Optional: ANTHROPIC_API_KEY for Claude-assisted labeling."
 metadata:
   author: gregoryfoster
   version: "2.0"

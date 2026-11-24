@@ -9,6 +9,20 @@
     "EXTRA_EXTENSIONS": ".service,.timer,.conf,.default",
     "SOCRATICODE_SPEC": "socraticode@1.14.0"
   },
+  "skillOverrides": {
+    "adopting-dependabot": "user-invocable-only",
+    "auditing-ci-cost": "user-invocable-only",
+    "init-socraticode": "user-invocable-only",
+    "maintaining-host-disk": "user-invocable-only",
+    "orchestrating-issue-backlog": "user-invocable-only",
+    "coordinating-epics": "name-only",
+    "dispatching-parallel-agents": "name-only",
+    "enforcing-architecture": "name-only",
+    "managing-skills": "name-only",
+    "subagent-driven-development": "name-only",
+    "using-mayfly-chat": "name-only",
+    "writing-skills": "name-only"
+  },
   "hooks": {
     "SessionStart": [
       {

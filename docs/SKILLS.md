@@ -103,6 +103,15 @@ BRAINSTORM_PORT=3900 BRAINSTORM_TOKEN=$(openssl rand -hex 32) \
 | `/patching-hosts` | "patch the host", "OS updates", "security updates", "needrestart" | Probes pending OS/package updates by class against the posture `.skills/patching-hosts` declares, then a gated, held-step apply with a recovery point, a detached reboot chain and post-boot checks. The knob (weekly, Thursdays) and the first run are [#311](https://github.com/CannObserv/address-validator/issues/311). Every step needs the owner's approval |
 | `/maintaining-host-disk` | "disk GC", "root disk is full", "disk headroom", "install/update the disk GC", "retire disk hygiene" | Pulls Provisioner's canonical disk GC + headroom sensor from the digest-pinned `co-image-base` release (`scripts/_pin.sh`), installs or updates it, turns it on per host (`/etc/cannobserv/disk-gc/`), and retires the host's own disk tooling only after `retire-check.sh`. Adoption here: [#326](https://github.com/CannObserv/address-validator/issues/326). Every host step needs the owner's approval; never edit the installed copy |
 
+## Listing overrides
+
+Every session pays for each listed skill's name + description; the body loads only on invocation. `skillOverrides` in `.claude/settings.json` trims that listing without editing vendored `SKILL.md`:
+
+- `user-invocable-only` — hidden from Claude, `/name` still works: `adopting-dependabot`, `auditing-ci-cost`, `init-socraticode`, `maintaining-host-disk`, `orchestrating-issue-backlog`. One-off adoptions or rare re-runs; type the slash command when needed.
+- `name-only` — name listed, description dropped, Claude can still call it: `coordinating-epics`, `dispatching-parallel-agents`, `enforcing-architecture` (`/reviewing-architecture` delegates to it via the Skill tool, so never `user-invocable-only`), `managing-skills`, `subagent-driven-development`, `using-mayfly-chat`, `writing-skills`.
+
+Measured 2026-11-24 (`count_tokens`, `claude-opus-5-5`): repo skill listing 3,519 → ~1,540 tokens per session. Triggers in the tables above still apply to hidden skills — invoke them by name. `tests/unit/test_skill_listing.py` fails on a stale override key or a delegated skill made uncallable. Re-weigh when a skill's use changes (e.g. `coordinating-epics` once epic #272 closes).
+
 ## Project-specific skills
 
 | Skill | Trigger | Purpose |
